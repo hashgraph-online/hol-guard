@@ -7,17 +7,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..evidence_drains.hook_evidence_dispatch import run_hook_evidence
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_render import native_recording_only_for_binding
+from ..native_payload_facts import native_hook_facts
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
 )
 from ..native_resident_revival import native_unavailable_reason
 from ..native_runtime import NativeRuntimeStatus
+from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_availability_policy import availability_harness_response
 from .hook_fail_closed import render_recording_only_pre_tool
 from .hook_native_review_approval import (
@@ -25,7 +26,6 @@ from .hook_native_review_approval import (
 )
 from .hook_native_saved_approval import native_exact_command_block_response
 from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
-from .hook_request_parsing import pre_tool_command
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -119,7 +119,7 @@ def _record_native_pre_activity(
         # The hook has its verdict; the activity row records it. The writer
         # lives in the resident, so submitting here would spend a round trip
         # in front of the response rather than behind it.
-        run_hook_evidence(
+        run_resident_evidence(
             host,
             lambda: submit(
                 harness=harness,
@@ -197,7 +197,7 @@ def _record_unavailable_native(
         writer = host.activity_writer
         submit = getattr(writer, "submit_command_activity", None)
         if callable(submit):
-            run_hook_evidence(
+            run_resident_evidence(
                 host,
                 lambda: submit(
                     harness=harness,
@@ -394,7 +394,7 @@ class HookWorkerNativeMixin:
         if accepted_receipt is not None and callable(submit) and edge.get("receipt_recorded") is not True:
             # Ordered in front of this hook's activity row, which links to the
             # receipt by its decision id. An edge that queued it says so.
-            run_hook_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
+            run_resident_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
         if accepted_receipt is not None and capture_receipts is not None and native_harness == "codex":
             capture_receipts.append(accepted_receipt)
         if native_event == "UserPromptSubmit":
@@ -471,13 +471,33 @@ class HookWorkerNativeMixin:
             # A saved or Guard Cloud block on this exact command outranks the
             # edge's allow; Watch records the call and lets it run.
             if not recording_only:
+                edge_hint = edge.get("exact_command_block")
+                facts = (
+                    native_hook_facts(payload, guard_home, deadline=deadline)
+                    if edge_hint is not False
+                    else None
+                )
+                if facts is None and edge_hint is not False:
+                    return (
+                        _record_unavailable_native(
+                            self,
+                            payload,
+                            harness=native_harness,
+                            event_name="PreToolUse",
+                            reason_code="native_payload_facts_unavailable",
+                            reason="HOL Guard could not identify this command safely.",
+                            guard_home=guard_home,
+                            deadline=deadline,
+                        ),
+                        False,
+                    )
                 command_block = native_exact_command_block_response(
                     self.store,
                     harness=native_harness,
-                    command=pre_tool_command(payload),
+                    command=facts.command if facts is not None else None,
                     native_result=native_result,
                     workspace=workspace,
-                    edge_hint=edge.get("exact_command_block"),
+                    edge_hint=edge_hint,
                 )
                 if command_block is not None:
                     return (

@@ -8,7 +8,7 @@ Facts about the baseline are indexed in [Source evidence](source-evidence.md). T
 
 At v3.55.1, managed hooks and harness launchers enter a Python transport layer, then the Rust edge and resident. Rust owns normalization, classification, decision-critical reads, policy admission, approval validation, replay state, and the final approval consume fence. Python handles bounded transport and presentation. Production native failure produces the existing fail-safe response; it does not restore a Python semantic evaluator. See [native ownership](../native-hook-data-plane-ownership.md).
 
-Evidence already has a background path. `HookEvidenceDispatch` orders completed-hook submissions, `ResidentEvidenceClient` transports them, and the resident owns the queue, journal, and store. Direct-hook evidence has its own bounded queue. CIGAR should consume admitted records after this path; it should not take over the writer or its acknowledgement mechanism.
+Evidence already has a background path. `ResidentEvidenceDispatch` orders completed submissions, `ResidentEvidenceClient` transports them, and the resident owns the queue, journal, and store. Direct evidence has its own bounded queue. CIGAR should consume admitted records after this path; it should not take over the writer or its acknowledgement mechanism.
 
 The older `runtime/hook_enrichment_queue.py` is not a ready integration engine: its `drain_once` removes tasks without performing enrichment. Building on that placeholder would miss the active native evidence path.
 

@@ -17,13 +17,14 @@ from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..hook_review.hook_availability_policy import (
     availability_harness_response,
+    canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
 )
 from ..hook_review.hook_fail_closed import fail_closed_response
-from ..hook_review.hook_request_parsing import runtime_hook_event_name
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
+from ..native_payload_facts import native_hook_event
 from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
@@ -142,6 +143,7 @@ def try_native_hook_authority(
     workspace: Path | None,
     store: GuardStore,
     deadline: float | None = None,
+    event_name: str | None = None,
 ) -> dict[str, Any]:
     """Review one hook with the same fail-closed worker the daemon uses.
 
@@ -164,15 +166,16 @@ def try_native_hook_authority(
             guard_home=guard_home,
             workspace=workspace,
             deadline=deadline,
+            event_name=event_name,
         )
     except Exception as error:
         _record_native_hook_exception(
             guard_home,
             harness=harness,
-            event_name=runtime_hook_event_name(payload),
+            event_name=event_name or canonical_hook_event_name(payload),
         )
         _log_worker_exception(error, harness=harness)
-        event_name = runtime_hook_event_name(payload)
+        event_name = event_name or canonical_hook_event_name(payload)
         response = availability_harness_response(
             harness=harness,
             event_name=event_name,
@@ -324,10 +327,11 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = runtime_hook_event_name(payload)
+    event_name = canonical_hook_event_name(payload)
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)
+        event_name = native_hook_event(payload, context.guard_home, deadline=deadline)
         payload = dict(payload)
         # This process runs in the shell the command is about to run in, so its
         # environment is the caller context the daemon would get from a bridge.
@@ -341,14 +345,17 @@ def route_native_hook(
             workspace=runtime_workspace or _payload_workspace(payload),
             store=store,
             deadline=deadline,
+            event_name=event_name,
         )
         if not isinstance(response, dict):
+            event_name = event_name or canonical_hook_event_name(payload)
             response = availability_harness_response(
                 harness=args.harness,
                 event_name=event_name,
                 reason_code="native_hook_worker_unavailable",
                 reason="HOL Guard could not complete the native hook decision safely.",
             )
+        event_name = event_name or canonical_hook_event_name(payload)
         return emit_hook_review(
             args.harness,
             response,
@@ -358,6 +365,7 @@ def route_native_hook(
             deadline=deadline,
         )
     except Exception as error:
+        event_name = event_name or canonical_hook_event_name(payload)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
         response = availability_harness_response(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 # Native review covers tool events and supported prompt callbacks. Other
 # lifecycle events remain inventory-only: failing them closed freezes a turn
 # without adding enforcement. Unreviewable prompts pause protected hosts;
@@ -32,6 +34,37 @@ _LIFECYCLE_CANONICAL_BY_COMPACT = {
     "userpromptsubmitted": "UserPromptSubmit",
     "subagentend": "SubagentStop",
 }
+
+
+def canonical_hook_event_name(payload: Mapping[str, object]) -> str:
+    """Recover only the wire event label for an outage response.
+
+    Normal hook semantics use the resident's normalized event fact. This
+    bounded alias lookup exists solely to preserve the harness response shape
+    when the resident cannot be reached.
+    """
+
+    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
+        value = payload.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        compact = _compact_hook_event_name(value)
+        if compact in {
+            "pretool", "pretooluse", "pretoolcall", "beforeshellexecution", "beforereadfile",
+            "beforewritefile", "beforemcpexecution",
+        }:
+            return "PreToolUse"
+        if compact in {
+            "posttool", "posttooluse", "posttoolcall", "aftershellexecution", "afterreadfile",
+            "afterwritefile", "aftermcpexecution",
+        }:
+            return "PostToolUse"
+        if compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}:
+            return "PermissionRequest"
+        if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
+            return "UserPromptSubmit"
+        return value.strip()
+    return "PreToolUse"
 
 
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:

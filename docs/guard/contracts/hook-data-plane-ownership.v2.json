@@ -293,10 +293,10 @@
    "paths": [
     "src/codex_plugin_scanner/guard/routes/request_handler.py",
     "src/codex_plugin_scanner/guard/routes/hook_calls.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
+    "src/codex_plugin_scanner/guard/native_payload_facts.py",
     "src/codex_plugin_scanner/guard/hook_deadline.py"
    ],
-   "current": "HTTP authentication, JSON envelope interpretation, fast-path selection, and fallback routing",
+   "current": "HTTP authentication and resident request transport with response-shape validation",
    "target": "authentication and byte transport only"
   },
   {
@@ -554,7 +554,7 @@
    "class": "persistence_only",
    "paths": [
     "src/codex_plugin_scanner/guard/route_metrics.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
+    "src/codex_plugin_scanner/guard/resident_route_counters.py",
     "rust/crates/guard-command/src/hook_evidence_writer.rs",
     "rust/crates/guard-command/src/hook_evidence_journal_fs.rs",
     "rust/crates/guard-command/src/hook_evidence_batch.rs",
@@ -562,7 +562,7 @@
     "src/codex_plugin_scanner/guard/resident_evidence_client.py",
     "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
     "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
-    "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
+    "src/codex_plugin_scanner/guard/resident_evidence_dispatch.py",
     "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
     "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
     "src/codex_plugin_scanner/guard/store.py",

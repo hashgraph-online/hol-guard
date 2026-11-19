@@ -37,7 +37,7 @@ import time
 from collections.abc import Callable
 from typing import Final
 
-from ..native_resident_client_pool import background_resident_requests
+from .native_resident_client_pool import background_resident_requests
 
 # The label the resident request log counts this traffic under. The hook
 # budget test reads it to tell a hook's own round trips from the ones a
@@ -57,7 +57,7 @@ _ENQUEUE_WAIT_SECONDS: Final = 0.05
 _LOGGER: Final = logging.getLogger(__name__)
 
 
-class HookEvidenceDispatch:
+class ResidentEvidenceDispatch:
     """A single ordered worker for evidence a finished hook left behind."""
 
     def __init__(self, *, max_pending: int = _MAX_PENDING) -> None:
@@ -144,14 +144,14 @@ def _run_quietly(work: Callable[[], object]) -> None:
         _LOGGER.debug("Hook evidence was not recorded.", exc_info=True)
 
 
-def run_hook_evidence(host: object, work: Callable[[], object]) -> None:
+def run_resident_evidence(host: object, work: Callable[[], object]) -> None:
     """Hand `work` to `host`'s dispatch, or run it here when it has none."""
 
     dispatch = getattr(host, "evidence_dispatch", None)
-    if isinstance(dispatch, HookEvidenceDispatch):
+    if isinstance(dispatch, ResidentEvidenceDispatch):
         dispatch.run(work)
         return
     _run_quietly(work)
 
 
-__all__ = ["BACKGROUND_LABEL", "HookEvidenceDispatch", "run_hook_evidence"]
+__all__ = ["BACKGROUND_LABEL", "ResidentEvidenceDispatch", "run_resident_evidence"]

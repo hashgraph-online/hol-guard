@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
+from codex_plugin_scanner.guard.resident_evidence_dispatch import ResidentEvidenceDispatch
 from scripts import bench_guard_cigar_contention as contention
 from scripts import cigar_slo_activity as activity_module
 from scripts import native_slo_session as sessions
@@ -38,7 +38,7 @@ def fixture(tmp_path, monkeypatch, *, daemon_stop):
 def test_actual_ordered_evidence_drains_against_the_live_resident_before_stop(tmp_path, monkeypatch):
     entered, release, native_alive = threading.Event(), threading.Event(), threading.Event()
     native_alive.set()
-    dispatch = HookEvidenceDispatch()
+    dispatch = ResidentEvidenceDispatch()
     recorded, stop_observations = [], []
 
     def receipt():

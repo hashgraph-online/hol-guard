@@ -34,21 +34,20 @@ from typing import TYPE_CHECKING, Protocol, cast, final
 
 from ..codex_hook_launch_runtime import hook_processes_contained
 from ..config import load_guard_config
-from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
+from ..native_payload_facts import native_hook_event
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
+from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
+from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
-from .hook_direct_counters import HookCounterLog
-from .hook_request_parsing import (
-    runtime_hook_event_name,
-)
+from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 from .hook_worker_native import HookWorkerNativeMixin
 from .hook_worker_readiness import prepare_workspace_policy
 
@@ -109,7 +108,7 @@ class HookWorker(HookWorkerNativeMixin):
         workspace: Path | None = None,
         home_dir: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
-        evidence_dispatch: HookEvidenceDispatch | None = None,
+        evidence_dispatch: ResidentEvidenceDispatch | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
@@ -127,7 +126,7 @@ class HookWorker(HookWorkerNativeMixin):
         from ..route_metrics import RouteMetricsRecorder
 
         self.metrics = RouteMetricsRecorder()
-        self.hook_counters = HookCounterLog()
+        self.hook_counters = RouteCounterLog()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         # Resolve adapter modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy
@@ -296,6 +295,7 @@ class HookWorker(HookWorkerNativeMixin):
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None = None,
+        event_name: str | None = None,
         claim_saved_approval: bool = True,
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
@@ -314,7 +314,16 @@ class HookWorker(HookWorkerNativeMixin):
         payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
-        event_name = self._hook_event_name(payload)
+        event_name = event_name or self._hook_event_name(payload, deadline)
+        if event_name is None:
+            # The resident owns event identity. This label only selects the
+            # fixed outage response and never enters semantic routing.
+            return availability_harness_response(
+                harness=harness,
+                event_name=canonical_hook_event_name(payload),
+                reason_code="native_hook_event_unavailable",
+                reason="HOL Guard could not identify this hook event safely.",
+            )
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)
             if answered is not None:
@@ -454,7 +463,7 @@ class HookWorker(HookWorkerNativeMixin):
                     succeeded=succeeded,
                 )
 
-        run_hook_evidence(self, record)
+        run_resident_evidence(self, record)
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:
         values = params.get("runtime-harness", [])
@@ -462,8 +471,10 @@ class HookWorker(HookWorkerNativeMixin):
             return values[-1].strip()
         return None
 
-    def _hook_event_name(self, payload: Mapping[str, object]) -> str:
-        return runtime_hook_event_name(payload)
+    def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str:
+        # Event identity is a resident-owned fact. A missing fact stays
+        # unavailable so callers can shape an outage response separately.
+        return native_hook_event(payload, self.store.guard_home, deadline=deadline)
 
 
 __all__ = [
