@@ -42,8 +42,6 @@ pub(crate) type Timeouts = (f64, f64);
 /// Upload bodies stay below the broker's request-body limit
 /// (`EGRESS_MAX_NEED_BODY_BYTES`).
 pub(crate) const EVENTS_BODY_LIMIT: usize = guard_contracts::EGRESS_MAX_NEED_BODY_BYTES - 1024;
-/// `{"events":[]}`.
-const EVENTS_BODY_OVERHEAD: usize = 13;
 /// The time one upload, retries and rate-limit waits included, may take.
 const UPLOAD_BUDGET_SECONDS: f64 = 300.0;
 /// `_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES`.
@@ -77,6 +75,12 @@ pub(crate) struct Progress {
     /// The warning counts as of the last saved pain-signal cursor, so a
     /// rerun round resumes the same per-call dedupe instead of starting over.
     pub(crate) pain_warn_counts: Option<Value>,
+    /// The listed count and rows of an event batch whose upload a broker
+    /// round left pending. The next round sends the same rows, so it can use
+    /// the answer, instead of listing again and picking up newer events.
+    pub(crate) held_events: Option<(usize, Vec<Value>)>,
+    /// The cursor and candidates of a pending pain-signal batch, likewise.
+    pub(crate) held_pain_signals: Option<(i64, Vec<Value>)>,
 }
 
 impl EventStore<'_> {
@@ -118,11 +122,15 @@ impl EventStore<'_> {
         self.home.join(STORE_FILE_NAME)
     }
 
-    pub(crate) fn payload(&self, key: &str) -> Option<Value> {
-        self.bundle.resident.get_sync_payload(key)
+    /// A saved sync payload. A busy gate is an error, not an absent payload,
+    /// so a cursor is never read as unset while a recovery holds the store.
+    pub(crate) fn payload(&self, key: &str) -> Result<Option<Value>, SyncError> {
+        let _gate = self.hold_gate()?;
+        Ok(self.bundle.resident.get_sync_payload(key))
     }
 
     pub(crate) fn save(&self, key: &str, payload: &Value, now: &str) -> Result<(), SyncError> {
+        let _gate = self.hold_gate()?;
         self.bundle.set_payload(key, payload, now)
     }
 }
@@ -136,11 +144,21 @@ pub(crate) fn trusted_base(auth: &Map<String, Value>) -> Result<String, SyncErro
 }
 
 /// A sync URL a caller supplied is checked before sign-in resolution, which
-/// would otherwise report the same refusal as an expired sign-in.
+/// would otherwise report the same refusal as an expired sign-in. A supplied
+/// issuer must match the sync URL's origin as well.
 pub(crate) fn screen_supplied(supplied: Option<&Map<String, Value>>) -> Result<(), SyncError> {
-    match supplied {
-        Some(auth) if auth.get("sync_url").is_some_and(Value::is_string) => {
-            trusted_base(auth).map(|_| ())
+    let Some(auth) = supplied.filter(|auth| auth.get("sync_url").is_some_and(Value::is_string))
+    else {
+        return Ok(());
+    };
+    let base = trusted_base(auth)?;
+    match auth.get("issuer").and_then(Value::as_str) {
+        Some(issuer) if !issuer.trim().is_empty() => {
+            gst::validate_guard_sync_endpoint(&base, Some(issuer))
+                .map(|_| ())
+                .map_err(|reason| {
+                    SyncError::EndpointUntrusted(format!("{RECONNECT_MESSAGE} {reason}"))
+                })
         }
         _ => Ok(()),
     }
@@ -204,13 +222,15 @@ pub(crate) fn post(
     })
 }
 
+/// Cloud's message for a refused upload, redacted: it is returned to the
+/// caller and may echo a credential.
 pub(crate) fn answer_text(answer: Option<&Value>, key: &str, status: u16) -> String {
     answer
         .and_then(|answer| answer.get(key))
         .and_then(Value::as_str)
         .map_or_else(
             || format!("Guard sync failed with HTTP {status}."),
-            str::to_owned,
+            redact_sensitive_text,
         )
 }
 
@@ -340,46 +360,12 @@ fn guard_events_refusal(
     Err(SyncError::Failed(redact_sensitive_text(&message)))
 }
 
-/// The leading events whose upload body fits the egress broker's request limit;
-/// the rest go in the next round. One event always goes; [`too_large_alone`]
-/// tells whether that one can go at all.
-fn batch_within_body_limit(pending: &[Value]) -> Vec<Value> {
-    let mut size = EVENTS_BODY_OVERHEAD;
-    let mut payloads = Vec::new();
-    for event in pending {
-        let payload = event.get("payload").cloned().unwrap_or(Value::Null);
-        size += serde_json::to_vec(&payload).map_or(0, |bytes| bytes.len()) + 1;
-        if !payloads.is_empty() && size > EVENTS_BODY_LIMIT {
-            break;
-        }
-        payloads.push(payload);
-    }
-    payloads
-}
-
-/// The id of a lone event no upload body can carry: the broker refuses a body
-/// above its limit before any request, so the event could never leave and
-/// would hold back every event queued after it.
-fn too_large_alone(payloads: &[Value]) -> Option<String> {
-    let [payload] = payloads else {
-        return None;
-    };
-    let size = EVENTS_BODY_OVERHEAD + serde_json::to_vec(payload).map_or(0, |bytes| bytes.len());
-    if size <= EVENTS_BODY_LIMIT {
-        return None;
-    }
-    payload
-        .get("eventId")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-}
-
 /// `sync_guard_events`: push the pending GuardEventV1 envelopes.
 pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncError> {
     screen_supplied(store.bundle.auth.as_ref())?;
     let auth = resolve_auth(&store.bundle.resident, false, store.bundle.auth.as_ref())?;
     let url = route_url("guard_events", &trusted_base(&auth)?)?;
-    let previous = store.payload(GUARD_EVENTS_SUMMARY_KEY);
+    let previous = store.payload(GUARD_EVENTS_SUMMARY_KEY)?;
     let carried = store.progress.borrow().clone();
     let mut totals = Totals {
         events: carried.events,
@@ -387,11 +373,18 @@ pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncErr
     };
     let mut last_synced_at = carried.synced_at.unwrap_or_else(utc_now_iso);
     loop {
-        let pending = store.call(
-            "list_guard_events_v1",
-            json!({"uploaded": false, "limit": GUARD_EVENTS_BATCH, "now": utc_now_iso()}),
-        )?;
-        let pending = pending.as_array().cloned().unwrap_or_default();
+        let held = store.progress.borrow_mut().held_events.take();
+        let (listed, pending) = match held {
+            Some(held) => held,
+            None => {
+                let pending = store.call(
+                    "list_guard_events_v1",
+                    json!({"uploaded": false, "limit": GUARD_EVENTS_BATCH, "now": utc_now_iso()}),
+                )?;
+                let pending = pending.as_array().cloned().unwrap_or_default();
+                (pending.len(), pending)
+            }
+        };
         if pending.is_empty() {
             if let Some(previous) = previous.as_ref().filter(|previous| {
                 totals.events == 0
@@ -403,7 +396,6 @@ pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncErr
             }
             break;
         }
-        let listed = pending.len();
         let payloads = batch_within_body_limit(&pending);
         let pending = &pending[..payloads.len()];
         if let Some(event_id) = too_large_alone(&payloads) {
@@ -428,6 +420,10 @@ pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncErr
             EVENT_TIMEOUTS,
         ) {
             Ok(answer) => answer.unwrap_or(Value::Null),
+            Err(Err(SyncError::Pending)) => {
+                store.progress.borrow_mut().held_events = Some((listed, pending.to_vec()));
+                return Err(SyncError::Pending);
+            }
             Err(Err(error)) => return Err(error),
             Err(Ok(refusal)) => {
                 return guard_events_refusal(store, &totals, listed, &last_synced_at, refusal);
@@ -469,6 +465,10 @@ pub(crate) fn event_store<'a>(guard_home: &Path, bundle: &'a BundleStore) -> Eve
         progress: std::cell::RefCell::new(Progress::default()),
     }
 }
+
+#[path = "cloud_event_batch.rs"]
+mod batch;
+use batch::{batch_within_body_limit, too_large_alone};
 
 #[cfg(test)]
 #[path = "cloud_event_sync_tests.rs"]

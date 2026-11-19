@@ -106,6 +106,27 @@ mod tests {
     }
 
     #[test]
+    fn a_sync_url_that_does_not_match_its_issuer_is_untrusted() {
+        let home = tempfile::tempdir().unwrap();
+        for action in ["supply_chain", "network"] {
+            let request = json!({
+                "guardHome": home.path(),
+                "action": action,
+                "authContext": {
+                    "sync_url": "https://staging.hol.org/api/guard/receipts/sync",
+                    "issuer": "https://hol.org",
+                },
+            });
+            let answer = run_command(&serde_json::to_vec(&request).unwrap());
+            assert_eq!(
+                answer["outcome"],
+                json!("endpoint_untrusted"),
+                "{action}: {answer}"
+            );
+        }
+    }
+
+    #[test]
     fn unreadable_request_is_a_failure() {
         let answer = run_command(b"{\"guardHome\": 1}");
         assert_eq!(answer["ok"], json!(false));

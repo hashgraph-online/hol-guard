@@ -49,6 +49,7 @@ pub(crate) fn sync_runtime_session(
         ));
     }
     let supplied = store.bundle.auth.as_ref().filter(|auth| !auth.is_empty());
+    crate::cloud_event_sync::screen_supplied(supplied)?;
     let auth = resolve_auth(&store.bundle.resident, false, supplied)?;
     let url = route_url("runtime_sessions", &trusted_base(&auth)?)?;
     let refusal = match post(

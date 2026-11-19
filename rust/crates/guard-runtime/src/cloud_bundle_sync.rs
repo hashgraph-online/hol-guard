@@ -131,10 +131,13 @@ struct PartitionSync {
     total: usize,
 }
 
+/// A signed bundle answer for `workspace_id`: one signed for another
+/// workspace is refused even before a keyring is saved.
 fn verify(
     raw: &Value,
     trusted: Option<&[SupplyChainVerificationKey]>,
     cached_version: Option<&str>,
+    workspace_id: &str,
 ) -> Result<SupplyChainBundleResponse, String> {
     let response = load_supply_chain_bundle_response(raw).map_err(|error| error.to_string())?;
     verify_supply_chain_bundle_response(
@@ -145,6 +148,9 @@ fn verify(
         &RingRsaPssVerify,
     )
     .map_err(|error| error.to_string())?;
+    if response.bundle.workspace_id != workspace_id {
+        return Err("the signed bundle is for another workspace".to_owned());
+    }
     Ok(response)
 }
 
@@ -221,7 +227,8 @@ fn incremental(
             })
             .and_then(|cached| cached.get("response"))
             .filter(|response| response.is_object())
-            .and_then(|response| verify(response, trusted, cached_version).ok());
+            .and_then(|response| verify(response, trusted, cached_version, workspace_id).ok())
+            .filter(|response| response.payload_hash == payload_hash);
         let response = match reused {
             Some(response) => response,
             None => {
@@ -240,7 +247,18 @@ fn incremental(
                     Err(FetchError::Sync(SyncError::Pending)) => return Err(SyncError::Pending),
                     Err(_) => return Ok(None),
                 };
-                let Ok(response) = verify(&payload, trusted, cached_version) else {
+                // A partition whose signed hash is not the one the index
+                // names would be cached under the wrong label: the full
+                // bundle is fetched instead.
+                let Ok(response) = verify(&payload, trusted, cached_version, workspace_id)
+                    .and_then(|response| {
+                        if response.payload_hash == payload_hash {
+                            Ok(response)
+                        } else {
+                            Err(String::new())
+                        }
+                    })
+                else {
                     return Ok(None);
                 };
                 refreshed += 1;
@@ -280,9 +298,10 @@ fn full_bundle(
     bundle_url: &str,
     trusted: Option<&[SupplyChainVerificationKey]>,
     cached_version: Option<&str>,
+    workspace_id: &str,
 ) -> Result<SupplyChainBundleResponse, SyncError> {
     let payload = fetch_bundle(auth, bundle_url).map_err(SyncError::from)?;
-    verify(&payload, trusted, cached_version).map_err(|error| bundle_failed(&error))
+    verify(&payload, trusted, cached_version, workspace_id).map_err(|error| bundle_failed(&error))
 }
 
 /// `runner.sync_supply_chain_bundle`, one round.
@@ -313,23 +332,25 @@ pub(crate) fn sync_supply_chain(store: &BundleStore) -> Result<Value, SyncError>
     )?;
     let response = match (&partitions, &cached) {
         (Some(partitions), Some(cached)) if partitions.refreshed == 0 && cached.is_object() => {
-            match verify(cached, trusted, cached_version) {
+            match verify(cached, trusted, cached_version, &workspace_id) {
                 Ok(response) => response,
-                Err(_) => match full_bundle(&auth, &bundle_url, trusted, cached_version) {
-                    Ok(response) => response,
-                    Err(error @ (SyncError::NotAvailable { .. } | SyncError::Pending)) => {
-                        return Err(error)
+                Err(_) => {
+                    match full_bundle(&auth, &bundle_url, trusted, cached_version, &workspace_id) {
+                        Ok(response) => response,
+                        Err(error @ (SyncError::NotAvailable { .. } | SyncError::Pending)) => {
+                            return Err(error)
+                        }
+                        Err(SyncError::Failed(message))
+                            if message.starts_with("Guard supply-chain") =>
+                        {
+                            return Err(SyncError::Failed(message))
+                        }
+                        Err(error) => return Err(bundle_failed(&error.message())),
                     }
-                    Err(SyncError::Failed(message))
-                        if message.starts_with("Guard supply-chain") =>
-                    {
-                        return Err(SyncError::Failed(message))
-                    }
-                    Err(error) => return Err(bundle_failed(&error.message())),
-                },
+                }
             }
         }
-        _ => full_bundle(&auth, &bundle_url, trusted, cached_version)?,
+        _ => full_bundle(&auth, &bundle_url, trusted, cached_version, &workspace_id)?,
     };
     let synced_at = utc_now_iso();
     store.cache_bundle(&workspace_id, &response, &synced_at)?;

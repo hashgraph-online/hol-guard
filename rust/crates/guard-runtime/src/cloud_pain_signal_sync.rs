@@ -96,7 +96,7 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
         &route_url("receipts", &trusted_base(&auth)?)?,
     )?;
     let mut current = store
-        .payload(PAIN_SIGNAL_CURSOR_KEY)
+        .payload(PAIN_SIGNAL_CURSOR_KEY)?
         .and_then(|cursor| cursor.get("event_id").and_then(Value::as_i64))
         .filter(|id| *id > 0)
         .unwrap_or(0);
@@ -113,7 +113,11 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
         )
     };
     loop {
-        let candidates = pain_signal_candidates(store, current)?;
+        let held = store.progress.borrow_mut().held_pain_signals.take();
+        let candidates = match held {
+            Some((cursor, held)) if cursor == current => held,
+            _ => pain_signal_candidates(store, current)?,
+        };
         if candidates.is_empty() {
             break;
         }
@@ -127,6 +131,11 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
                 PAIN_SIGNAL_TIMEOUTS,
             ) {
                 Ok(_) => uploaded += items.len(),
+                Err(Err(SyncError::Pending)) => {
+                    // The next round sends this batch again to read its answer.
+                    store.progress.borrow_mut().held_pain_signals = Some((current, candidates));
+                    return Err(SyncError::Pending);
+                }
                 Err(Err(error)) => return Err(error),
                 Err(Ok(Refusal::Http {
                     status: 404 | 429, ..

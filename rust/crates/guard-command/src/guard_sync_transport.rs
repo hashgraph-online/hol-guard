@@ -1242,26 +1242,31 @@ pub enum OAuthRefreshOutcome {
 
 /// I/O failures that clear up on their own (`_is_network_outage_error`). TLS
 /// failures are not among them.
-const OUTAGE_IO_KINDS: [&str; 8] = [
-    "ConnectionRefused",
-    "ConnectionReset",
-    "ConnectionAborted",
-    "HostUnreachable",
-    "NetworkUnreachable",
-    "NetworkDown",
-    "TimedOut",
-    "NotConnected",
+const OUTAGE_IO_KINDS: [std::io::ErrorKind; 8] = [
+    std::io::ErrorKind::ConnectionRefused,
+    std::io::ErrorKind::ConnectionReset,
+    std::io::ErrorKind::ConnectionAborted,
+    std::io::ErrorKind::HostUnreachable,
+    std::io::ErrorKind::NetworkUnreachable,
+    std::io::ErrorKind::NetworkDown,
+    std::io::ErrorKind::TimedOut,
+    std::io::ErrorKind::NotConnected,
 ];
 
 /// Whether a transport failure reason names a network outage rather than a
-/// failure that will not clear up on its own.
+/// failure that will not clear up on its own. The egress broker reports an
+/// I/O failure as `io: ` and the kind's display text (`connection refused`);
+/// the variant name (`ConnectionRefused`) is accepted as well.
 pub fn is_network_outage_reason(reason: &str) -> bool {
     if reason.starts_with("timeout:") || reason == "host not found" {
         return true;
     }
-    reason
-        .strip_prefix("io: ")
-        .is_some_and(|kind| OUTAGE_IO_KINDS.contains(&kind.trim()))
+    let Some(kind) = reason.strip_prefix("io: ").map(str::trim) else {
+        return false;
+    };
+    OUTAGE_IO_KINDS
+        .iter()
+        .any(|known| kind == known.to_string() || kind == format!("{known:?}"))
 }
 
 /// `urllib.parse.urlencode` parity — percent-encode every byte outside the
