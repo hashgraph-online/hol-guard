@@ -293,7 +293,7 @@
    "paths": [
     "src/codex_plugin_scanner/guard/routes/request_handler.py",
     "src/codex_plugin_scanner/guard/routes/hook_calls.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
+    "src/codex_plugin_scanner/guard/native_payload_facts.py",
     "src/codex_plugin_scanner/guard/hook_deadline.py"
    ],
    "current": "HTTP authentication, JSON envelope interpretation, fast-path selection, and fallback routing",
