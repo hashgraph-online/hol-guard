@@ -64,9 +64,24 @@ fn list_separator(chars: &[char], index: usize) -> bool {
         // `;;` and `;&` end a `case` arm.
         ';' => previous != Some(&';') && !matches!(next, Some(';' | '&')),
         '\n' => true,
-        '&' | '|' => previous == Some(&current) || next == Some(&current),
+        // An escaped twin is a literal character, so `\||` is a word and a
+        // pipe, not `||`.
+        '&' | '|' => {
+            (previous == Some(&current) && !escaped(chars, index - 1)) || next == Some(&current)
+        }
         _ => false,
     }
+}
+
+/// Whether an odd run of backslashes right before `index` escapes it.
+fn escaped(chars: &[char], index: usize) -> bool {
+    chars[..index]
+        .iter()
+        .rev()
+        .take_while(|character| **character == '\\')
+        .count()
+        % 2
+        == 1
 }
 
 /// Remove a plain `< path` input redirect, recording the file it reads and

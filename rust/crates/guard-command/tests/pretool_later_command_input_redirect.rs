@@ -50,6 +50,10 @@ fn a_later_command_may_read_a_project_file_through_an_input_redirect() {
             // A pipe, group or substitution before the redirect, or a second
             // input redirect, leaves which command reads the file unclear.
             ("ls | wc -l < run.log".to_owned(), false),
+            // An escaped twin is a literal: these are a pipe and a
+            // background `&`, not `||` and `&&`.
+            (r"echo \|| wc -c < run.log".to_owned(), false),
+            (r"echo \&& wc -c < run.log".to_owned(), false),
             ("echo $(id); wc -l < run.log".to_owned(), false),
             ("(echo x); wc -l < run.log".to_owned(), false),
             ("echo x; wc -l < run.log < src/main.rs".to_owned(), false),
