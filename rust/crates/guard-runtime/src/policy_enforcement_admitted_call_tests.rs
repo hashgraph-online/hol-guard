@@ -424,9 +424,13 @@ fn guards_own_safety_guide_output_is_not_held_by_the_subprocess_floor() {
     request.harness = "codex".into();
     request.home_dir = home.to_string_lossy().into_owned();
     assert!(crate::policy_enforcement::post::own_approval_wait(&request));
-    let passed = post_for(&request, || {
-        crate::policy_enforcement::post::own_approval_wait(&request)
-    });
+    let passed = post_for(
+        &request,
+        PostAdmission {
+            approved: false,
+            inspection: crate::policy_enforcement::post::own_approval_wait(&request),
+        },
+    );
     assert_eq!(passed.decision, "allow");
 
     request.payload["tool_input"]["command"] = json!("cat ~/notes.md");
