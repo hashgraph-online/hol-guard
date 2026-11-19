@@ -2,7 +2,7 @@
 //! (`runner.sync_network_protection_bundle`) and the status the CLI reads from
 //! the saved copy.
 
-use guard_command::local_supply_chain::utc_now_iso;
+use guard_command::local_supply_chain::{utc_now_iso, SupplyChainStore};
 use guard_command::network_protection_bundle::verify_network_protection_response;
 use guard_command::supply_chain_bundle::RingRsaPssVerify;
 use serde_json::{json, Value};
