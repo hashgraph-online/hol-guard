@@ -168,13 +168,17 @@ def test_the_flagged_prompt_case_runs_on_every_harness_that_claims_prompt_screen
     contract = load_contract()
     claims_path = Path(__file__).resolve().parents[1] / "docs/guard/generated/harness-claims.v1.json"
     claims = json.loads(claims_path.read_text())
+    # omp's guard is an in-process extension with no registered command to replay; every
+    # other harness the lane replays must honour its claim.
+    replayed = {name for name, harness in contract["harnesses"].items() if harness.get("replay")}
     screening = {
         claim["harness"]
         for claim in claims["claims"]
-        if claim["event"] == "UserPromptSubmit"
-        and claim["mode"] == "screening"
-        and "UserPromptSubmit" in contract["harnesses"].get(claim["harness"], {}).get("replay_events", [])
+        if claim["event"] == "UserPromptSubmit" and claim["mode"] == "screening" and claim["harness"] in replayed
     }
+    assert screening
+    for harness in screening:
+        assert "UserPromptSubmit" in contract["harnesses"][harness].get("replay_events", []), harness
     flagged = [case for case in contract["replay_cases"] if case["expect"] == "notice"]
     assert flagged and all(set(case["harnesses"]) == screening for case in flagged)
 
@@ -187,6 +191,23 @@ def test_a_permission_hook_that_names_its_event_then_fails_is_no_defer(tmp_path:
     hook.write_text(
         "import json, sys\nprint(json.dumps({'hookSpecificOutput': {'hookEventName': 'PermissionRequest'}}))\n"
         "sys.exit(1)\n",
+        encoding="utf-8",
+    )
+    result = replay_case(
+        [sys.executable, str(hook)], case, home=tmp_path, guard_home=tmp_path, workspace=tmp_path, repeat=1
+    )
+    assert result["runs"][0]["decision"] == "unknown"
+    assert any("permission dialog was not left to the harness" in failure for failure in result["failures"])
+
+
+def test_a_permission_hook_that_stops_and_fails_is_no_defer(tmp_path: Path) -> None:
+    """A failing exit is no defer even when the answer also carries ``continue: false``."""
+
+    case = {"id": "defer", "event": "PermissionRequest", "expect": "defer", "payload": {}}
+    hook = tmp_path / "hook.py"
+    hook.write_text(
+        "import json, sys\nprint(json.dumps({'continue': False, "
+        "'hookSpecificOutput': {'hookEventName': 'PermissionRequest'}}))\nsys.exit(2)\n",
         encoding="utf-8",
     )
     result = replay_case(

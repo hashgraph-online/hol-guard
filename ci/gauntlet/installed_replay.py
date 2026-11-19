@@ -285,10 +285,10 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     else:
         decision, reason = _decision_from(response)
         if (
-            decision in {"allow", "defer"}
+            decision == "allow"
             and completed.returncode
             and _no_opinion(response, response.get("hookSpecificOutput"), None)
-        ):
+        ) or (decision == "defer" and completed.returncode):
             # Harnesses read a non-zero exit (Codex and Claude Code block on 2) before an
             # event-only envelope, so a hook that names its event and then fails is no allow,
             # and a permission dialog it fails on was not left to the harness.
