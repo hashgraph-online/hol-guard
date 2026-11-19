@@ -101,10 +101,13 @@ pub(super) fn reviewable_substitutions(text: &str) -> Option<BoundedSubstitution
 /// unescaped backtick is left in place for the callers to refuse.
 pub(super) fn without_escaped_backticks(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    // Nested substitutions and ANSI-C quotes can desynchronize a shallow quote
-    // reader. Preserve ambiguous backticks for the fail-closed downstream rule.
-    let ambiguous_quoting =
-        text.contains("$(") || text.as_bytes().windows(2).any(|pair| pair == [0x24, 0x27]);
+    // Nested substitutions, ANSI-C quotes and shell comments can desynchronize
+    // this shallow quote reader. An apostrophe inside a comment is not a quote
+    // to the shell; conservatively preserve backticks whenever `#` appears.
+    // The downstream classifier then fails closed on any active substitution.
+    let ambiguous_quoting = text.contains("$(")
+        || text.contains('#')
+        || text.as_bytes().windows(2).any(|pair| pair == [0x24, 0x27]);
     let (mut single, mut double) = (false, false);
     let mut chars = text.chars();
     while let Some(character) = chars.next() {
