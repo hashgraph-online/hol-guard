@@ -251,6 +251,7 @@ def _review_native_edge_once(
                 claimed_saved_allow_hash=claimed_saved_allow_hash,
                 claimed_approval_request_id=claimed_approval_request_id,
                 capture_receipts=capture_receipts,
+                defer_accepted_recording=claimed_saved_allow_hash is not None,
             )
             # A deadline that passed while this decision was being reached
             # says the host was busy, not that the answer is stale, and
@@ -277,7 +278,11 @@ def _review_native_edge_once(
                 guard_home=guard_home,
                 workspace=workspace,
             )
-        if response.get("approval_reuse_status") == "accepted" and claimed_saved_allow_hash is not None:
+        if (
+            response.get("approval_reuse_status") == "accepted"
+            and claimed_saved_allow_hash is not None
+            and claim_saved_approval
+        ):
             facts = native_hook_facts(payload, guard_home, deadline=deadline)
             spent = None
             if facts is not None:
@@ -308,6 +313,9 @@ def _review_native_edge_once(
                     guard_home=guard_home,
                     workspace=workspace,
                 )
+            from .hook_worker_native import _record_native_pre_activity
+
+            response = _record_native_pre_activity(worker, harness, payload, response, None)
         if capture_receipts and worker.capture_writer is not None:
             with suppress(Exception):
                 _ = worker.capture_writer.submit_native_capture(

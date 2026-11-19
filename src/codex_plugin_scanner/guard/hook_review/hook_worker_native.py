@@ -289,6 +289,7 @@ class HookWorkerNativeMixin:
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
         capture_receipts: list[Mapping[str, object]] | None = None,
+        defer_accepted_recording: bool = False,
     ) -> tuple[dict[str, object], bool]:
         from ..runtime_transition_hook_probe import transition_hook_probe
 
@@ -319,7 +320,10 @@ class HookWorkerNativeMixin:
                 **({"request_id": probe[1]} if probe is not None else {}),
                 local_cli_rules=True,
                 observe_local_cli=True,
-                record_receipt=callable(getattr(self.activity_writer, "submit_native_decision_receipt", None)),
+                record_receipt=(
+                    not defer_accepted_recording
+                    and callable(getattr(self.activity_writer, "submit_native_decision_receipt", None))
+                ),
                 # The edge rewrites a call it routes to the contained sink in
                 # the same answer.
                 containment_sink=True,
@@ -452,6 +456,8 @@ class HookWorkerNativeMixin:
                     exact_command_block=edge.get("exact_command_block"),
                     review_evidence=cast("Mapping[str, object] | None", edge.get("review_evidence")),
                 )
+                if defer_accepted_recording:
+                    return response, True
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
             # The edge settled the custom extension rules; a block it found
             # answers an allowed call (in Watch, as a recorded continue).

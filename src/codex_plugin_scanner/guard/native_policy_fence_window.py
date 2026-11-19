@@ -27,7 +27,7 @@ def record_policy_fence_window(
 ) -> Mapping[str, object] | Sequence[Mapping[str, object]] | None:
     """Update resident fence-window state and return completed events, if any."""
 
-    if action not in {"enter", "leave", "absorb_direct"}:
+    if action not in {"enter", "leave", "attempt", "absorb_direct"}:
         return None
     try:
         canonical_home = guard_home.resolve(strict=False)

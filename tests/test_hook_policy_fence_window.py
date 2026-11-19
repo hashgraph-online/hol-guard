@@ -105,6 +105,22 @@ def test_wait_deadline_and_attempt_margins_remain_bounded(tmp_path: Path, monkey
     assert wait.attempt_deadline is None
 
 
+def test_attempt_lease_reaches_the_native_bridge(tmp_path: Path, monkeypatch) -> None:
+    clock = Clock()
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(fence, "record_policy_fence_window", lambda _home, **kwargs: calls.append(kwargs) or {})
+    wait = fence.PolicySourceFenceWait(
+        clock.monotonic() + 2.0,
+        store=Store(tmp_path),
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert wait.pause() is True
+    assert wait.attempt_deadline is not None
+    assert [call["action"] for call in calls] == ["enter", "attempt"]
+    assert isinstance(calls[1]["attempt_until_micros"], int)
+
+
 def test_late_poll_sleep_exhausts_without_an_extra_attempt(tmp_path: Path, monkeypatch) -> None:
     clock = Clock()
     store = Store(tmp_path)

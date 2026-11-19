@@ -329,14 +329,14 @@ class HookWorker(HookWorkerNativeMixin):
             if answered is not None:
                 return answered
         if (
-            event_name == "PermissionRequest"
+            event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
         ):
             # These harnesses ask this only for a call their PreToolUse hook
             # already sent to Guard. A deny here would refuse every approval
             # the harness asks for, so the decision stays with the harness's
             # own approval prompt.
-            return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
+            return {"hookSpecificOutput": {"hookEventName": event_name}}
         if event_name == "PreToolUse" and harness.strip().lower() == "cursor":
             from .cursor_shell_route import cursor_shell_route_response
 

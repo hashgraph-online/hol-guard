@@ -286,10 +286,22 @@ class StoreSecretPolicyIntegrityMixin:
             )
         return self._get_secret_from_store(store, secret_id)
 
-    def _get_policy_integrity_secret_from_store(self, secret_id: str) -> str | None:
+    def _get_policy_integrity_secret_from_store(self, secret_id: str, *, strict: bool = False) -> str | None:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
+        if strict:
+            if isinstance(secret_store, FallbackSecretStore):
+                fallback_value = secret_store.fallback.get_secret(secret_id)
+                if fallback_value is not None:
+                    return fallback_value
+                return secret_store.primary.get_secret(secret_id)
+            if isinstance(secret_store, SystemKeyringSecretStore):
+                return secret_store.get_secret_with_timeout(
+                    secret_id,
+                    timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
+                )
+            return secret_store.get_secret(secret_id)
         if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
             return secret_store.get_secret(secret_id)
         if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
@@ -544,7 +556,7 @@ class StoreSecretPolicyIntegrityMixin:
             return None
         return self._load_policy_integrity_control_state(create=False)
 
-    def _read_policy_integrity_control_state_uncached(self) -> dict[str, object] | None:
+    def _read_policy_integrity_control_state_uncached(self, *, strict: bool = False) -> dict[str, object] | None:
         """Read the secret-backed generation without consulting the cache."""
 
         secret_store = self._policy_integrity_secret_store
@@ -552,7 +564,10 @@ class StoreSecretPolicyIntegrityMixin:
             return None
         if self._should_skip_policy_integrity_keychain_access(secret_store):
             return None
-        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
+        payload_json = self._get_policy_integrity_secret_from_store(
+            self._policy_integrity_control_ref,
+            strict=strict,
+        )
         payload: dict[str, object] | None = None
         if payload_json is not None:
             try:
@@ -588,14 +603,26 @@ class StoreSecretPolicyIntegrityMixin:
         if normalized is None:
             return False
         with self.hold_policy_integrity_generation_lock():
-            current = self._read_policy_integrity_control_state_uncached()
+            try:
+                current = self._read_policy_integrity_control_state_uncached(strict=True)
+            except Exception:
+                return False
             normalized_generation = normalized.get("generation")
             current_generation = current.get("generation") if current is not None else None
-            if (
-                isinstance(normalized_generation, int)
-                and isinstance(current_generation, int)
-                and normalized_generation < current_generation
-            ):
+            normalized_pending = normalized.get("pending_generation")
+            current_pending = current.get("pending_generation") if current is not None else None
+            if isinstance(normalized_generation, int) and isinstance(current_generation, int):
+                if normalized_generation < current_generation:
+                    return False
+                if normalized_generation == current_generation and normalized_pending != current_pending:
+                    return False
+                if (
+                    isinstance(normalized_pending, int)
+                    and isinstance(current_pending, int)
+                    and normalized_pending < current_pending
+                ):
+                    return False
+            elif current is not None:
                 return False
             return self._store_policy_integrity_control_state(normalized)
 
