@@ -1056,6 +1056,7 @@ mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_action;
 mod package_approval_hash_op;
+mod package_approval_key;
 mod package_audit_projection_op;
 mod package_authority_config;
 mod package_authority_op;

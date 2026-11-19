@@ -107,6 +107,20 @@ fn grok_repeated_install_does_not_back_up_its_own_hooks() {
 }
 
 #[test]
+fn grok_uninstall_removes_hooks_but_marks_config_cleanup_incomplete_without_ownership_state() {
+    let home = Home::new();
+    let config = home.home().join(".grok/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "[permission]\ndeny = [\"user-rule\"]\n").unwrap();
+
+    let answer = home.ask("grok", "prepare_uninstall", json!({}));
+
+    assert_eq!(answer["refusal"], Value::Null);
+    assert_eq!(answer["finish"]["cleanup_incomplete"], true);
+    assert!(answer["deletes"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn zcode_install_writes_the_desktop_surface_only_until_the_cli_migrates() {
     let home = Home::new();
     let answer = home.ask(

@@ -1041,6 +1041,15 @@ fn evaluate_envelope(
             result.reason = reason;
         }
     }
+    if result.reason_code == "native_pre_tool_unknown_review"
+        && matches!(harness, "omp" | "pi")
+        && signals.tool_name.as_deref() == Some("eval")
+    {
+        // Same review; the reason names the one-cell draft form Guard checks.
+        if let Some(reason) = omp::earlier_cell_draft_reason(payload) {
+            result.reason = reason.into();
+        }
+    }
     // A header Oh My Pi reads as a tagged file that does not exist cannot
     // apply. Blocking it at once, with how to write the header, keeps the
     // agent from waiting on an approval for an edit that would fail.

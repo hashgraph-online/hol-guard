@@ -19,6 +19,16 @@
   "sites": [
     {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
+      "func": "_save_package_decision",
+      "root": "none",
+      "reading": "records-approval",
+      "actions": [
+        "allow"
+      ],
+      "note": "Files the package-key half of the user's Always allow; written only when the resident's resolution plan names a package decision."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/approvals.py",
       "func": "apply_approval_resolution",
       "root": "none",
       "reading": "records-approval",

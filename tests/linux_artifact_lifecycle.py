@@ -17,7 +17,7 @@ from enum import Enum
 from pathlib import PurePosixPath
 from typing import cast, final
 
-from codex_plugin_scanner.guard.runtime.execution_assurance_contract import framed_digest
+from tests.execution_assurance_contract import framed_digest
 from tests.linux_artifact_ownership import (
     LinuxArtifactMetadata,
     LinuxArtifactOwnershipReceipt,
