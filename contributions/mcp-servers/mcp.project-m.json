@@ -28,7 +28,7 @@
   "tools": [
     {
       "name": "get_project_board",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "get_recent_context",
@@ -43,7 +43,7 @@
       "state": "inherit"
     },
     {
-      "name": "search_context",
+      "name": "search_historical_context",
       "state": "inherit"
     },
     {
@@ -69,6 +69,6 @@
   ],
   "saferAlternatives": [
     "Keep update_task and record_decision on Review: these modify the shared SQLite blackboard and decision ledger.",
-    "Read-only tools like get_project_board, get_recent_context, and search_context inherit standard execution."
+    "Read-only tools like get_recent_context, get_turn, get_project_summary, and search_historical_context inherit standard execution; get_project_board is on Review because it synchronizes other agents' transcripts into the shared board."
   ]
 }
