@@ -849,6 +849,7 @@ mod hook_evidence_writer_op;
 mod hook_launch_cli;
 mod hook_path_rules;
 mod hook_payload_facts_op;
+mod hook_policy_admission_op;
 mod hook_policy_config;
 mod hook_policy_fence_window_op;
 mod hook_process_spawn;
