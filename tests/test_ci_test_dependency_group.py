@@ -72,7 +72,10 @@ def test_staged_evaluator_compiler_uses_a_fast_non_shipping_profile() -> None:
     job = workflow["jobs"]["staged-evaluator-wheel"]
     assert job["timeout-minutes"] == 15
     assert job["strategy"]["fail-fast"] is False
-    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-24.04", "macos-15"}
+    matrix_os = job["strategy"]["matrix"]["os"]
+    assert "github.event_name == 'pull_request'" in matrix_os
+    assert '["ubuntu-24.04"]' in matrix_os
+    assert '["ubuntu-24.04", "macos-15"]' in matrix_os
     verification = next(step for step in job["steps"] if step.get("name", "").startswith("Verify installed"))
     assert "-I scripts/ci/check_evaluation_wheel.py" in verification["run"]
     assert not verification.get("continue-on-error", False)
