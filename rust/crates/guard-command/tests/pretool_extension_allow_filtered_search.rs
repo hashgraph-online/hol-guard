@@ -16,29 +16,6 @@ use fixture::FixtureCleanup;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-fn git(home: &Path, directory: &Path, arguments: &[&str]) {
-    let mut command = std::process::Command::new("git");
-    for name in [
-        "GIT_DIR",
-        "GIT_WORK_TREE",
-        "GIT_COMMON_DIR",
-        "GIT_INDEX_FILE",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_NAMESPACE",
-    ] {
-        command.env_remove(name);
-    }
-    let status = command
-        .env("HOME", home)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .arg("-C")
-        .arg(directory)
-        .args(arguments)
-        .status()
-        .unwrap();
-    assert!(status.success(), "git {arguments:?}");
-}
-
 /// `root/project` on `main`, one commit deep, with a source directory for the
 /// search to filter.
 fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
@@ -49,47 +26,18 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
     let _ = std::fs::remove_dir_all(&root);
     let project = root.join("project");
     std::fs::create_dir_all(project.join("src")).unwrap();
-    git(&root, &project, &["init", "--quiet", "-b", "main"]);
-    git(&root, &project, &["config", "user.name", "Guard Fixture"]);
-    git(
+    fixture::git(&root, &project, &["init", "--quiet", "-b", "main"]);
+    fixture::git(&root, &project, &["config", "user.name", "Guard Fixture"]);
+    fixture::git(
         &root,
         &project,
         &["config", "user.email", "guard-fixture@example.invalid"],
     );
     std::fs::write(project.join("src/index.tsx"), "export const a = 1;\n").unwrap();
-    git(&root, &project, &["add", "-A"]);
-    git(&root, &project, &["commit", "--quiet", "-m", "fixture"]);
+    fixture::git(&root, &project, &["add", "-A"]);
+    fixture::git(&root, &project, &["commit", "--quiet", "-m", "fixture"]);
     let root = fixture::canonical_spelling(&root);
     (root.clone(), FixtureCleanup(root))
-}
-
-/// Every permission in the packaged catalog set to `state`, as the Extensions
-/// page writes it when the user allows each pattern.
-fn every_permission(
-    state: &str,
-) -> guard_command::native_command_controls::CompiledNativeCommandControls {
-    let program = guard_command::native_command_program::packaged_command_program().unwrap();
-    let controls: Vec<_> = program
-        .extensions
-        .iter()
-        .flat_map(|extension| extension.permissions.iter())
-        .map(|permission| {
-            json!({"target_kind":"permission", "target_id":permission.permission_id, "state":state})
-        })
-        .collect();
-    let value = json!({
-        "schema":"guard.native-command-control-binding.v1",
-        "program_digest":program.program_digest, "catalog_digest":program.catalog_digest,
-        "trust_digest":program.trust_digest, "health":"protected", "revision":1,
-        "managed_revision":0, "effective_digest":"", "layers":[{
-            "schema_version":"1.0.0", "kind":"local-admin", "catalog_digest":program.catalog_digest,
-            "global_lockdown":false, "controls":controls
-        }]
-    });
-    let mut binding: guard_contracts::NativeCommandControlBindingV1 =
-        serde_json::from_value(value).unwrap();
-    binding.effective_digest = binding.compute_effective_digest().unwrap();
-    guard_command::native_command_controls::CompiledNativeCommandControls::new(&binding).unwrap()
 }
 
 fn decide(
@@ -117,7 +65,7 @@ const HARNESSES: &[&str] = &["omp", "zcode", "codex", "claude-code"];
 #[test]
 fn an_allowed_step_keeps_its_allow_beside_a_filtered_search() {
     let (root, _cleanup) = checkout("allow");
-    let controls = every_permission("enabled");
+    let controls = fixture::every_permission_enabled();
     for command in [
         "git worktree remove ../review --force; grep -rn needle src --include=*.tsx -l",
         "git worktree remove ../review --force && grep -rn needle src --include=*.tsx -l",
@@ -139,7 +87,7 @@ fn an_allowed_step_keeps_its_allow_beside_a_filtered_search() {
 #[test]
 fn a_filter_that_reaches_a_credential_keeps_its_floor() {
     let (root, _cleanup) = checkout("floor");
-    let controls = every_permission("enabled");
+    let controls = fixture::every_permission_enabled();
     for command in [
         "git worktree remove ../review --force && grep -rn needle src --include=.env* -l",
         "git worktree remove ../review --force && grep -rn needle src --include=*.env -l",

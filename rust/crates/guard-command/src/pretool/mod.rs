@@ -648,8 +648,6 @@ fn sensitive_literal_path(value: &str) -> bool {
     })
 }
 
-/// A field name such as `if`, `query` or `user.name`: no glob or brace
-/// character, so the `=` after it cannot be part of a pattern.
 /// Whether `name` is an option's name -- `--include`, `-I` -- rather than a
 /// path or a field name. A leading-dash word spelled with ordinary option
 /// characters qualifies; `--a/b` and `-./x` keep their path reading.
@@ -664,6 +662,8 @@ fn option_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
 }
 
+/// A field name such as `if`, `query` or `user.name`: no glob or brace
+/// character, so the `=` after it cannot be part of a pattern.
 fn plain_field_name(name: &str) -> bool {
     !name.is_empty()
         && name
