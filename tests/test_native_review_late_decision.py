@@ -94,7 +94,7 @@ def _unleased_worker(tmp_path: Any, monkeypatch: Any, tokens: list[object]) -> H
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.hook_review.hook_worker_native_review.published_binding_token",
-        lambda _publisher: tokens.pop(0),
+        lambda _publisher, **_kwargs: tokens.pop(0),
     )
     return worker
 
@@ -134,7 +134,7 @@ def test_an_unleased_allow_on_an_unchanged_binding_is_delivered(tmp_path, monkey
 def test_durable_control_token_changes_without_a_publisher_generation_change(monkeypatch) -> None:
     import codex_plugin_scanner.guard.hook_review.hook_native_review_fence as fence
 
-    def published(marker, identity, revision, _home):
+    def published(marker, identity, revision, _home, **_kwargs):
         return (
             marker.get("epoch"),
             marker.get("mutation_revision"),
@@ -201,7 +201,7 @@ def test_a_marker_frozen_mid_mutation_leaves_no_token(monkeypatch) -> None:
     monkeypatch.setattr(
         fence,
         "native_hook_review_binding",
-        lambda marker, identity, revision, _home: None
+        lambda marker, identity, revision, _home, **_kwargs: None
         if marker.get("phase") != "committed"
         else (marker.get("epoch"), marker.get("mutation_revision"), marker.get("phase"), identity, revision),
     )
@@ -235,7 +235,7 @@ def test_a_home_without_control_authority_still_has_a_token(monkeypatch) -> None
     monkeypatch.setattr(
         fence,
         "native_hook_review_binding",
-        lambda marker, identity, revision, _home: (None, None, None, None, None, None, identity, revision),
+        lambda marker, identity, revision, _home, **_kwargs: (None, None, None, None, None, None, identity, revision),
     )
     published_binding_token = fence.published_binding_token
 

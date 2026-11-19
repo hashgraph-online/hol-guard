@@ -154,6 +154,7 @@ pub(crate) fn claude_turn_stop_direct(
     let foreign_key = std::cell::Cell::new(false);
     let env = Env {
         connection: &connection,
+        guard_home: None,
         key: key.map(|(bytes, _)| zeroize::Zeroizing::new(bytes.to_vec())),
         key_id: key.map(|(_, id)| id),
         now,

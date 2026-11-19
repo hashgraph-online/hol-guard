@@ -207,6 +207,10 @@ def native_connector_lookup(
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
     lookup = result.get("connector_lookup") if isinstance(result, Mapping) else None
+    if lookup is None and isinstance(result, Mapping) and "connector_lookup" in result:
+        if status.identity is not None:
+            native_record_resident_success(status.identity.sha256, guard_home)
+        return None
     if not isinstance(lookup, Mapping):
         if status.identity is not None:
             native_record_resident_failure(

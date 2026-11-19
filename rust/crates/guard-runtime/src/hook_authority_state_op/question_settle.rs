@@ -65,6 +65,17 @@ impl Env<'_> {
         if !matches!(policy_action, "allow" | "block") {
             return Err(ERROR_INVALID);
         }
+        if let Some(guard_home) = self.guard_home {
+            crate::approval_gate_consumers::require_policy_write(
+                guard_home,
+                crate::approval_gate_op::grants(),
+                policy_action,
+                "artifact",
+                None,
+                Some(self.now),
+            )
+            .map_err(|_| ERROR_STORE)?;
+        }
         for event in plan.events.iter().filter(|event| event.before_policy) {
             if !self.add_event_checked(&event.name, &Value::Object(event.payload.clone())) {
                 return Err(ERROR_STORE);
@@ -95,7 +106,7 @@ impl Env<'_> {
             );
             args.insert("integrity_key_id".to_owned(), json!(key_id));
         }
-        crate::guard_store_policy_upsert::upsert_policy(
+        let policy_result = crate::guard_store_policy_upsert::upsert_policy(
             self.connection,
             &crate::guard_store_args::Args(&args),
         )
@@ -107,7 +118,11 @@ impl Env<'_> {
         }
         let pending_key = claude_pending_key(session_id, &artifact_id);
         self.claude_remove_pending(session_id, &pending_key);
-        Ok(json!({ "valid": true, "saved": true }))
+        Ok(json!({
+            "valid": true,
+            "saved": true,
+            "next_control_state": policy_result.get("next_control_state").cloned().unwrap_or(Value::Null),
+        }))
     }
 
     /// `question` is the hook's projection (`event`, `tool_name`,

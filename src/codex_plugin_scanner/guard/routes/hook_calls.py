@@ -165,6 +165,21 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
     return key
 
 
+def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Finalize Rust's policy-integrity generation in the secret store."""
+
+    next_control_state = args.get("next_control_state")
+    if next_control_state is None:
+        return {"finalized": True}
+    if not isinstance(next_control_state, dict):
+        return {"finalized": False}
+    try:
+        store._finalize_policy_integrity_control_state(next_control_state)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return {"finalized": False}
+    return {"finalized": True}
+
+
 def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
 
@@ -201,7 +216,12 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
             "plan": args.get("plan"),
         },
     )
-    return reply if isinstance(reply, dict) else {"valid": False}
+    if not isinstance(reply, dict) or reply.get("saved") is not True:
+        return {"valid": False}
+    finalized = hook_integrity_finalize(store, {"next_control_state": reply.get("next_control_state")})
+    if finalized.get("finalized") is not True:
+        return {"valid": False}
+    return reply
 
 
 _LIVE_DECISION_REVIEW_SECONDS = 1.45
@@ -277,6 +297,7 @@ HOOK_CALLS = {
     "hook.claude_question_save": hook_claude_question_save,
     "hook.codex_live_decision": codex_live_decision,
     "hook.integrity_key": hook_integrity_key,
+    "hook.integrity_finalize": hook_integrity_finalize,
     "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,

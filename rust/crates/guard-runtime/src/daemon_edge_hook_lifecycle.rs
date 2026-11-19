@@ -257,13 +257,20 @@ impl Hook<'_> {
                 save.insert("session_id".to_owned(), session_id.into());
                 // The resident consumes the pending permission and writes the
                 // policy plan in the same authority-state transaction.
-                self.authority_op(QUESTION_SAVE, &save, expires, |request| {
+                let saved = self.authority_op(QUESTION_SAVE, &save, expires, |request| {
                     request.payload = Some(Value::Object(save.clone()));
-                })?
-                .get("saved")
-                .and_then(Value::as_bool)
-                .filter(|saved| *saved)
-                .map(|_| json!({}))
+                })?;
+                if saved.get("saved") != Some(&Value::Bool(true)) {
+                    return None;
+                }
+                let finalized = self.call_within(
+                    "hook.integrity_finalize",
+                    json!({
+                        "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
+                    }),
+                    super::budget_left(expires),
+                )?;
+                (finalized.get("finalized") == Some(&Value::Bool(true))).then(|| json!({}))
             }
         }
     }

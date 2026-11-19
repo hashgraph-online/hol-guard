@@ -28,6 +28,7 @@ fn cases() -> Vec<Value> {
 fn env(connection: &Connection) -> Env<'_> {
     Env {
         connection,
+        guard_home: None,
         key: Some(zeroize::Zeroizing::new(KEY.to_vec())),
         key_id: Some("test-key"),
         now: NOW,
@@ -235,7 +236,9 @@ fn question_save_persists_the_plan_and_consumes_pending_state() {
     let saved = env(&connection)
         .claude_question_save(SESSION, &save)
         .expect("save");
-    assert_eq!(saved, json!({ "valid": true, "saved": true }));
+    assert_eq!(saved["valid"], true);
+    assert_eq!(saved["saved"], true);
+    assert!(saved["next_control_state"].is_object());
     assert!(env(&connection)
         .claude_load_single_pending(SESSION)
         .is_none());
