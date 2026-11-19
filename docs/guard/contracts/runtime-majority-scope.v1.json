@@ -423,12 +423,11 @@
       {
         "id": "plugin-telemetry-cli",
         "category": "separate_product_cli",
-        "reason": "hol-guard telemetry plugins: opt-in consent, the device key file, the public index download and the weekly report POST. Not a Guard runtime route. Installed-plugin discovery, listing matching and counting keys run in the native plugin-telemetry command. cli.py reaches the package only through main() for the `telemetry` subcommand, and the daemon only through send_if_due, which does nothing until opt-in. hol-guard plugin updates downloads the public listing and release indexes and the native updates request compares installed versions on the device; it sends nothing and runs only when the user runs it.",
+        "reason": "hol-guard telemetry plugins and hol-guard plugin updates: argument parsing and text rendering only. Consent, the device key, the index downloads, the weekly report, its POST and the update comparison all run in the native plugin-telemetry-host command, which the daemon also runs for the weekly send. host.py only starts that command and returns its answer.",
         "path": [
           "src/codex_plugin_scanner/guard/plugin_telemetry/__init__.py",
           "src/codex_plugin_scanner/guard/plugin_telemetry/cli.py",
-          "src/codex_plugin_scanner/guard/plugin_telemetry/report.py",
-          "src/codex_plugin_scanner/guard/plugin_telemetry/state.py",
+          "src/codex_plugin_scanner/guard/plugin_telemetry/host.py",
           "src/codex_plugin_scanner/guard/plugin_telemetry/updates.py"
         ]
       },

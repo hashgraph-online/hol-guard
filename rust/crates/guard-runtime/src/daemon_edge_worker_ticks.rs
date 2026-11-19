@@ -51,6 +51,22 @@ fn reap_when_due() {
     let _ = crate::orphaned_worker_reap::reap_from_daemon(std::process::id(), REAP_BUDGET);
 }
 
+/// Sends the weekly plugin install report when counts are on and the week
+/// has not been sent. Off, not due and failed sends all wait for the next
+/// tick; the scheduler only needs to know whether the pass ran cleanly.
+fn plugin_telemetry(config: &ReadConfig) -> Value {
+    let Some(home) = config.user_home.as_deref() else {
+        return json!({"ok": false});
+    };
+    let sent = crate::plugin_telemetry_weekly::send_if_due(
+        &crate::plugin_telemetry_host::LiveHol,
+        config.guard_home(),
+        std::path::Path::new(home),
+        &crate::plugin_telemetry_weekly::current_week(),
+    );
+    json!({"ok": sent.is_ok()})
+}
+
 /// Runs `call` natively when the daemon owns it: `None` for a call that
 /// still goes to the Guard library, otherwise the pass's answer.
 pub(super) fn native(
@@ -63,6 +79,7 @@ pub(super) fn native(
         "worker.runtime_heartbeat" => heartbeat(reads, config, args),
         "worker.idle_holds" => Some(json!({"ok": true, "hold": idle_holds(reads, config)})),
         "worker.maintain_activity" => Some(json!({"ok": maintain(reads, config)})),
+        "worker.plugin_telemetry" => Some(plugin_telemetry(config)),
         _ => return None,
     };
     Some(answer)

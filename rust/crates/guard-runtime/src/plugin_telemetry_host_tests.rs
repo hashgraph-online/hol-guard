@@ -51,3 +51,43 @@ fn runtime_homes_name_only_directories_that_exist() {
     );
     assert!(!homes.contains_key("cursor"));
 }
+
+#[test]
+fn hol_reply_counts_accepted_entries() {
+    assert_eq!(accepted_from(b""), Some(0));
+    assert_eq!(accepted_from(br#"{"accepted": 3}"#), Some(3));
+    assert_eq!(accepted_from(br#"{"accepted": "3"}"#), Some(0));
+    assert_eq!(accepted_from(br#"[1]"#), Some(0));
+    assert_eq!(accepted_from(b"<html>"), None);
+}
+
+#[test]
+fn a_request_the_host_does_not_know_is_refused() {
+    let answer = run_command(br#"{"command": "upload", "guardHome": "/nowhere"}"#);
+    assert_eq!(answer["ok"], json!(false));
+    assert_eq!(
+        answer["error"],
+        json!("The plugin telemetry request was not understood.")
+    );
+}
+
+#[test]
+fn status_on_and_off_round_trip_through_the_host() {
+    let guard_home = tempfile::tempdir().expect("guard home");
+    let home = guard_home.path().to_string_lossy().into_owned();
+    let request = |command: &str| {
+        run_command(
+            json!({"command": command, "guardHome": home})
+                .to_string()
+                .as_bytes(),
+        )
+    };
+    assert_eq!(
+        request("status")["result"],
+        json!({"enabled": false, "lastWeek": null})
+    );
+    assert_eq!(request("on")["result"], json!({"enabled": true}));
+    assert_eq!(request("status")["result"]["enabled"], json!(true));
+    assert_eq!(request("off")["result"], json!({"enabled": false}));
+    assert_eq!(request("status")["result"]["enabled"], json!(false));
+}
