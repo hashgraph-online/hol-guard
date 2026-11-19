@@ -172,10 +172,10 @@ def try_native_hook_authority(
         _record_native_hook_exception(
             guard_home,
             harness=harness,
-            event_name=event_name or canonical_hook_event_name(payload),
+            event_name=event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline),
         )
         _log_worker_exception(error, harness=harness)
-        event_name = event_name or canonical_hook_event_name(payload)
+        event_name = event_name or canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
         response = availability_harness_response(
             harness=harness,
             event_name=event_name,
@@ -279,7 +279,7 @@ def emit_hook_review(
             with suppress(OSError, ValueError):
                 print(stderr, file=sys.stderr)
         return exit_code
-    if not response and not hook_event_pauses_when_unavailable(event_name):
+    if not response and not hook_event_pauses_when_unavailable(event_name, guard_home=guard_home, deadline=deadline):
         # An empty answer to an event that cannot pause the turn carries no
         # decision; writing nothing lets the harness continue on its own.
         return 0
@@ -308,7 +308,11 @@ def emit_hook_review(
         # Claude reads a hook's JSON only on exit 0; any other status discards
         # the document, a PostToolUse block and its reason included.
         return 0
-    policy_action = "block" if hook_event_pauses_when_unavailable(event_name) else "allow"
+    policy_action = (
+        "block"
+        if hook_event_pauses_when_unavailable(event_name, guard_home=guard_home, deadline=deadline)
+        else "allow"
+    )
     return native_hook_verdict_exit_code(canonical, policy_action, event_name=event_name)
 
 
@@ -327,7 +331,7 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = canonical_hook_event_name(payload)
+    event_name = canonical_hook_event_name(payload, guard_home=context.guard_home)
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)
@@ -348,14 +352,16 @@ def route_native_hook(
             event_name=event_name,
         )
         if not isinstance(response, dict):
-            event_name = event_name or canonical_hook_event_name(payload)
+            event_name = event_name or canonical_hook_event_name(
+                payload, guard_home=context.guard_home, deadline=deadline
+            )
             response = availability_harness_response(
                 harness=args.harness,
                 event_name=event_name,
                 reason_code="native_hook_worker_unavailable",
                 reason="HOL Guard could not complete the native hook decision safely.",
             )
-        event_name = event_name or canonical_hook_event_name(payload)
+        event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         return emit_hook_review(
             args.harness,
             response,
@@ -365,7 +371,7 @@ def route_native_hook(
             deadline=deadline,
         )
     except Exception as error:
-        event_name = event_name or canonical_hook_event_name(payload)
+        event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
         response = availability_harness_response(

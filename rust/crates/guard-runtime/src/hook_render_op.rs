@@ -72,6 +72,44 @@ fn cli_payload(outcome: CliOutcome) -> Value {
 
 fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
+    if request.kind == "availability" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+        let event_name = availability_event_name(payload);
+        let compact = event_name
+            .to_lowercase()
+            .chars()
+            .filter(|character| *character != '_' && *character != '-')
+            .collect::<String>();
+        let pauses = if matches!(compact.as_str(), "userpromptsubmit" | "userpromptsubmitted") {
+            true
+        } else if matches!(
+            compact.as_str(),
+            "sessionstart"
+                | "sessionend"
+                | "subagentstart"
+                | "subagentstop"
+                | "stop"
+                | "notification"
+                | "taskstart"
+                | "taskerror"
+                | "sessionshutdown"
+                | "permissiondenied"
+        ) {
+            false
+        } else {
+            !matches!(compact.as_str(), "posttooluse" | "posttool") && !compact.starts_with("after")
+        };
+        let permission_request = matches!(
+            compact.as_str(),
+            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
+        );
+        let mut response = Object::new();
+        response.insert("event_name".into(), Value::String(event_name));
+        response.insert("pauses".into(), Value::Bool(pauses));
+        response.insert("permission_request".into(), Value::Bool(permission_request));
+        return Ok(json!({ "response": Value::Object(response) }));
+    }
     if request.kind == "claude_approval_copy" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let which = params
@@ -317,6 +355,68 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         });
     }
     render_edge(request).map(|response| json!({ "response": Value::Object(response) }))
+}
+
+fn availability_event_name(payload: &Object) -> String {
+    for key in [
+        "event",
+        "eventName",
+        "hook_event_name",
+        "hookEventName",
+        "hook_name",
+        "hookName",
+    ] {
+        let Some(raw) = payload.get(key).and_then(Value::as_str) else {
+            continue;
+        };
+        let raw = crate::claude_hook_bridge_render::py_strip(raw);
+        if raw.is_empty() {
+            continue;
+        }
+        let compact = raw
+            .to_lowercase()
+            .chars()
+            .filter(|character| *character != '_' && *character != '-')
+            .collect::<String>();
+        if matches!(
+            compact.as_str(),
+            "pretool"
+                | "pretooluse"
+                | "pretoolcall"
+                | "beforeshellexecution"
+                | "beforereadfile"
+                | "beforewritefile"
+                | "beforemcpexecution"
+        ) {
+            return "PreToolUse".to_owned();
+        }
+        if matches!(
+            compact.as_str(),
+            "posttool"
+                | "posttooluse"
+                | "posttoolcall"
+                | "aftershellexecution"
+                | "afterreadfile"
+                | "afterwritefile"
+                | "aftermcpexecution"
+        ) {
+            return "PostToolUse".to_owned();
+        }
+        if matches!(
+            compact.as_str(),
+            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
+        ) {
+            return "PermissionRequest".to_owned();
+        }
+        if matches!(
+            compact.as_str(),
+            "prompt" | "userpromptsubmit" | "userpromptsubmitted"
+        ) {
+            return "UserPromptSubmit".to_owned();
+        }
+        return raw.to_owned();
+    }
+    "PreToolUse".to_owned()
 }
 
 fn render_edge(request: &HookRenderRequestV1) -> Result<Object, &'static str> {

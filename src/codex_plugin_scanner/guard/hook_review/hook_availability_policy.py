@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 
 # Native review covers tool events and supported prompt callbacks. Other
 # lifecycle events remain inventory-only: failing them closed freezes a turn
@@ -36,7 +37,9 @@ _LIFECYCLE_CANONICAL_BY_COMPACT = {
 }
 
 
-def canonical_hook_event_name(payload: Mapping[str, object]) -> str:
+def canonical_hook_event_name(
+    payload: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> str:
     """Recover only the wire event label for an outage response.
 
     Normal hook semantics use the resident's normalized event fact. This
@@ -44,6 +47,13 @@ def canonical_hook_event_name(payload: Mapping[str, object]) -> str:
     when the resident cannot be reached.
     """
 
+    if guard_home is not None:
+        from ..native_hook_render import native_hook_availability
+
+        native = native_hook_availability(payload, guard_home=guard_home, deadline=deadline)
+        event = native.get("event_name") if isinstance(native, dict) else None
+        if isinstance(event, str) and event:
+            return event
     for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
         value = payload.get(key)
         if not isinstance(value, str) or not value.strip():
@@ -67,13 +77,22 @@ def canonical_hook_event_name(payload: Mapping[str, object]) -> str:
     return "PreToolUse"
 
 
-def hook_event_pauses_when_unavailable(event_name: str) -> bool:
+def hook_event_pauses_when_unavailable(
+    event_name: str, *, guard_home: Path | None = None, deadline: float | None = None
+) -> bool:
     """True when native miss must pause the harness instead of continuing the turn.
 
     This answer cannot come from the resident: it is the policy for the turns
     where the resident is the thing that could not be reached.
     """
 
+    if guard_home is not None:
+        from ..native_hook_render import native_hook_availability
+
+        native = native_hook_availability({"event": event_name}, guard_home=guard_home, deadline=deadline)
+        pauses = native.get("pauses") if isinstance(native, dict) else None
+        if isinstance(pauses, bool):
+            return pauses
     compact = _compact_hook_event_name(event_name)
     if compact in {"userpromptsubmit", "userpromptsubmitted"}:
         return True
@@ -86,7 +105,16 @@ def hook_event_pauses_when_unavailable(event_name: str) -> bool:
 _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
 
 
-def hook_event_is_permission_request(event_name: str) -> bool:
+def hook_event_is_permission_request(
+    event_name: str, *, guard_home: Path | None = None, deadline: float | None = None
+) -> bool:
+    if guard_home is not None:
+        from ..native_hook_render import native_hook_availability
+
+        native = native_hook_availability({"event": event_name}, guard_home=guard_home, deadline=deadline)
+        permission_request = native.get("permission_request") if isinstance(native, dict) else None
+        if isinstance(permission_request, bool):
+            return permission_request
     return _compact_hook_event_name(event_name) in _PERMISSION_REQUEST_EVENTS
 
 

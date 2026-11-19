@@ -23,7 +23,7 @@ def unavailable_event_response(
 ) -> dict[str, object]:
     """Return a fail-safe response after the resident misses event identity."""
 
-    fallback_event = canonical_hook_event_name(payload)
+    fallback_event = canonical_hook_event_name(payload, guard_home=guard_home)
     if fallback_event == "PostToolUse":
         from ..cli.commands_support_command_activity import hook_post_succeeded
 

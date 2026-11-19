@@ -53,6 +53,26 @@ fn recording_only_response_continues() {
 }
 
 #[test]
+fn availability_is_resident_owned() {
+    let mut req = request("availability");
+    req.cli = Some(json!({"payload": {"hook_event_name": "copilotPermissionRequest"}}));
+    let response = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload")["response"]
+        .clone();
+    assert_eq!(response["event_name"], "PermissionRequest");
+    assert_eq!(response["pauses"], true);
+    assert_eq!(response["permission_request"], true);
+
+    req.cli = Some(json!({"payload": {"hook_event_name": "PostToolUse"}}));
+    let response = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload")["response"]
+        .clone();
+    assert_eq!(response["pauses"], false);
+}
+
+#[test]
 fn missing_verdict_and_unknown_kind_are_invalid() {
     for kind in ["pre_tool", "pre_tool_review", "other"] {
         let result = decode(evaluate_hook_render_request(&request(kind)).expect("encoded"));
