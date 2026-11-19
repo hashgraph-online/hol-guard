@@ -20,6 +20,7 @@ use std::sync::LazyLock;
 
 const BEGIN_PATCH: &str = "*** Begin Patch";
 const END_MARKERS: [&str; 2] = ["*** End Patch", "*** Abort"];
+const SENTINELS: [&str; 2] = ["Begin Patch", "End Patch"];
 const TAG_LENGTH: usize = 4;
 const SHOWN_CHARS: usize = 120;
 
@@ -97,8 +98,12 @@ pub(super) fn missing_header_reason(header: &MissingHeader) -> String {
 fn omp_header(line: &str) -> Option<(String, bool)> {
     let body = line.strip_prefix('[')?.strip_suffix(']')?;
     // JavaScript's `trim` also drops a byte order mark; leave such a line,
-    // and one with control characters, unproven.
-    if body.chars().any(|c| c.is_control() || c == '\u{feff}') {
+    // and one with control characters, unproven. Newer Oh My Pi releases
+    // unwrap a bracketed `*** Begin Patch` or `*** End Patch` inside a header
+    // row, so a row holding either is left unproven too.
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}')
+        || SENTINELS.iter().any(|sentinel| body.contains(sentinel))
+    {
         return None;
     }
     let (path, tagged) = strict_header(body).or_else(|| recovery_header(body))?;
@@ -163,8 +168,13 @@ fn missing_target(path: &str, workspace: &Path) -> bool {
     let scheme = path
         .split_once(":/")
         .is_some_and(|(name, _)| !name.is_empty() && !name.contains(['/', '\\', ' ']));
+    // Oh My Pi resolves `..` before it opens the path, so a missing folder
+    // before `..` proves nothing.
     if path.starts_with('~')
         || scheme
+        || Path::new(path)
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
         || path.len() > 4096
         || path.chars().any(char::is_control)
         || super::sensitive_command(path)

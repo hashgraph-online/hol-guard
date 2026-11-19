@@ -192,10 +192,6 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
             "`[FILE: src/a.ts#0AC4]`",
         ),
-        (
-            patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[*** Begin Patch] [src/a.ts#0AC4]`",
-        ),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(
@@ -208,6 +204,16 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "{}",
             result.reason
         );
+    }
+    // Newer Oh My Pi unwraps a bracketed patch sentinel in a header row and
+    // resolves `..` before it opens a path, so these may apply. They keep
+    // their review.
+    for input in [
+        patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        patch(&["[*** Update File: ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(result.minimum_action, "review", "{input} {result:?}");
     }
     // Only Oh My Pi's edit tool takes a hashline patch.
     let result = evaluate("claude-code", &patch(&[put_a]));

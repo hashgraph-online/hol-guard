@@ -38,14 +38,6 @@ fn leaked_reasoning_headers_read_as_missing_files() {
             "*** Begin Patch\n[7C0C? no] WAIT invalid tool namespace? Use [src/a.py#038E]\nPUT 76.=76:\n+    p.append(x)\n*** End Patch\n",
             "7C0C? no] WAIT invalid tool namespace? Use [src/a.py",
         ),
-        (
-            "*** Begin Patch\n[** Begin Patch]*** Update File: src/a.py (2C82) replace 60-62 with [filename#FC1D]\nPUT 61.=61:\n+...\n*** End Patch\n",
-            "Begin Patch]*** Update File: src/a.py (2C82) replace 60-62 with [filename",
-        ),
-        (
-            "*** Begin Patch\n[*** Begin Patch] [src/a.py#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
-            "Begin Patch] [src/a.py",
-        ),
         ("[FILE: src/a.py#0AC4]\nPUT 1.=1:\n+x\n", "FILE: src/a.py"),
         // Noise is stripped and quotes dropped, as Oh My Pi does, before the
         // path is looked up.
@@ -78,6 +70,14 @@ fn other_headers_keep_their_review() {
         "[*** Update File: local://notes.md#0AC4]\nPUT >$:\n+x\n",
         // Oh My Pi stops reading at the end marker.
         "[src/a.py#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n[FILE: src/a.py#0AC4]\n",
+        // Newer Oh My Pi unwraps a bracketed patch sentinel in a header row.
+        "*** Begin Patch\n[*** Begin Patch] [src/a.py#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
+        "*** Begin Patch\n[** Begin Patch]*** Update File: src/a.py (2C82) replace 60-62 with [filename#FC1D]\nPUT 61.=61:\n+...\n*** End Patch\n",
+        "[src/a.py#0AC4] [*** End Patch]\nPUT 1.=1:\n+x\n",
+        // Oh My Pi resolves `..` first, so a missing folder before it proves
+        // nothing.
+        "[ghost/../src/a.py#0AC4]\nPUT 1.=1:\n+x\n",
+        "[*** Update File: ghost/../src/a.py#0AC4]\nPUT 1.=1:\n+x\n",
         // An indented bracket row is body text to Oh My Pi.
         "[src/a.py#0AC4]\nPUT 1.=1:\n  [FILE: src/a.py#0AC4]\n",
     ] {
