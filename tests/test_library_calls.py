@@ -272,9 +272,10 @@ def test_handler_post_records_the_reply_each_handler_writes(tmp_path: Path) -> N
 
 
 def test_handler_post_keeps_the_no_store_header(tmp_path: Path) -> None:
-    answer = _handler_post(tmp_path, "/v1/context-assistance/codex-lean", {"enabled": "yes"})
-    assert answer["ok"]["status"] == 400  # type: ignore[index]
-    assert answer["ok"]["no_store"] is True  # type: ignore[index]
+    for path in ("/v1/context-assistance/codex-lean", "/v1/context-assistance/codex-short-replies"):
+        answer = _handler_post(tmp_path, path, {"enabled": "yes"})
+        assert answer["ok"]["status"] == 400, path  # type: ignore[index]
+        assert answer["ok"]["no_store"] is True, path  # type: ignore[index]
 
 
 def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:

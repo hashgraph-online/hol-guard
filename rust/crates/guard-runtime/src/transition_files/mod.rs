@@ -43,6 +43,7 @@ mod publication_inverse_publish;
 mod publication_inverse_registry;
 mod publication_io;
 mod publication_lean;
+mod publication_short_replies;
 mod publication_observe;
 mod publication_observe_check;
 mod publication_observe_legacy;
