@@ -11,12 +11,13 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import guard_cli_attestation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from tests.cline_test_support import hook_state, install_plugin, uninstall
 from tests.cline_test_support import plugin_source as _plugin_source
 from tests.cline_worker_config import worker_config as _worker_config
+from tests.native_bounded_runtime import BOUNDED_FEATURES
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -85,15 +86,17 @@ def _run_plugin(source: str, tmp_path: Path, expression: str) -> subprocess.Comp
     )
 
 
-def _install_hooks(context: HarnessContext, tmp_path: Path, *, runtime_script: str = "") -> dict[str, Any]:
+def _install_hooks(
+    context: HarnessContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, runtime_script: str = ""
+) -> dict[str, Any]:
     runtime = tmp_path / "native-runtime"
     if runtime_script:
         runtime.write_text(f"#!/bin/sh\n{runtime_script}\n", encoding="utf-8")
         runtime.chmod(0o755)
     else:
         runtime.write_bytes(b"")
-    facts = {"python": True, "runtime": str(runtime), "hook_argv": ["guard", "hook"], "identity": None}
-    return ask("install_transport", context, harness="cline", transport="hooks", frozen=False, facts=facts)
+    stamp_native_runtime(monkeypatch, runtime, (*BOUNDED_FEATURES, "cline-hook-worker-v1"))
+    return ask("install_transport", context, harness="cline", transport="hooks", frozen=False)
 
 
 def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, monkeypatch) -> None:
@@ -101,8 +104,8 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     executable = tmp_path / "HOL Guard"
     executable.write_bytes(b"signed-frozen-core")
     executable.chmod(0o755)
-    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
 
     manifest = install_plugin(context)
     source = Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8")
@@ -115,11 +118,11 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="the stand-in runtime is a POSIX shell script")
-def test_cline_canary_runs_only_the_canonical_managed_slot(tmp_path: Path) -> None:
+def test_cline_canary_runs_only_the_canonical_managed_slot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path / "home parent with spaces")
     log = tmp_path / "runtime.log"
     script = f"printf '%s\\n' \"$@\" > '{log}'; cat >> '{log}'; printf '{{\"cancel\": false}}\\n'"
-    installed = _install_hooks(context, tmp_path, runtime_script=script)
+    installed = _install_hooks(context, tmp_path, monkeypatch, runtime_script=script)
 
     assert installed["probe"]["canary"] == {"returncode": 0, "stdout": '{"cancel": false}\n', "error": None}
     worker = context.guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.json"
@@ -132,7 +135,7 @@ def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, mon
     context = _context(tmp_path / "home parent")
     custom_root = context.home_dir / "custom cline data" / "hooks"
     monkeypatch.setenv("CLINE_DATA_DIR", str(custom_root.parent))
-    installed = _install_hooks(context, tmp_path)
+    installed = _install_hooks(context, tmp_path, monkeypatch)
     assert installed["manifest"]["managed_hooks_root"] == str(custom_root)
     monkeypatch.delenv("CLINE_DATA_DIR")
 

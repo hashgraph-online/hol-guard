@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::json;
 
 fn argv(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
@@ -138,4 +139,49 @@ fn short_names_are_read_from_the_request() {
     let malformed = json!({"short_names": {"C:\\a b": ["C:\\AB~1"]}});
     assert!(short_names(malformed.as_object().unwrap()).is_err());
     assert!(short_names(&Map::new()).ok().unwrap().is_empty());
+}
+
+#[test]
+fn names_the_request_supplies_are_used_without_a_lookup() {
+    let command = argv(&["C:\\a b\\py.exe", "hook"]);
+    let fields =
+        json!({"short_names": {"C:\\a b\\py.exe": ["C:\\AB~1\\py.exe", "C:\\a b\\py.exe"]}});
+    let found = names_for(fields.as_object().unwrap(), [&command[..]], true)
+        .ok()
+        .unwrap();
+    assert_eq!(
+        render(&command, true, &found).ok().unwrap(),
+        "C:\\AB~1\\py.exe hook"
+    );
+    // A POSIX render needs no short name at all.
+    assert!(names_for(&Map::new(), [&command[..]], false)
+        .ok()
+        .unwrap()
+        .is_empty());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn a_windows_render_from_another_host_has_no_short_name_to_give() {
+    let missing = "C:\\a b\\py.exe";
+    let command = argv(&[missing, "hook"]);
+    let found = names_for(&Map::new(), [&command[..]], true).ok().unwrap();
+    assert_eq!(found.get(missing), Some(&(None, None)));
+    assert!(render(&command, true, &found)
+        .ok()
+        .unwrap()
+        .starts_with("& '"));
+}
+
+#[cfg(windows)]
+#[test]
+fn a_windows_host_names_a_missing_path_itself() {
+    let missing = "C:\\no such guard path\\py.exe";
+    let command = argv(&[missing, "hook"]);
+    let found = names_for(&Map::new(), [&command[..]], true).ok().unwrap();
+    assert_eq!(found.get(missing), Some(&(None, None)));
+    assert!(render(&command, true, &found)
+        .ok()
+        .unwrap()
+        .starts_with("& '"));
 }

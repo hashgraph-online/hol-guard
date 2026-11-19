@@ -20,7 +20,6 @@ from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
-from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     GuardTrustAttestationSigningConfig,
@@ -32,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
 )
 from codex_plugin_scanner.models import Finding, Severity
 from codex_plugin_scanner.trust_models import TrustDomainScore
+from tests.python_oracles.evidence_hash import guard_evidence_hash
 from tests.trust_attestation_verify_support import (
     build_trust_attestation_verification_key,
     verify_trust_attestation,

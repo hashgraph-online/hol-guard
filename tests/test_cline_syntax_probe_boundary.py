@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 
 def _context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:

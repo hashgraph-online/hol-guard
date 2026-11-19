@@ -105,6 +105,59 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
     assert store.calls == 1
 
 
+def test_a_pending_migration_backoff_keeps_refresh_from_blocking(tmp_path, monkeypatch) -> None:
+    sentinel = object()
+    clock = [100.0]
+    attempts = 0
+
+    def fail_migration(*_args, **_kwargs) -> bool:
+        nonlocal attempts
+        attempts += 1
+        return False
+
+    server = SimpleNamespace(
+        store=SimpleNamespace(guard_home=tmp_path),
+        _installed_authority_pending=True,
+        _installed_authority_retry_at=0.0,
+        runtime=SimpleNamespace(current=lambda: sentinel),
+    )
+    monkeypatch.setattr(extension_control_host, "migrate_installed_authority", fail_migration)
+    monkeypatch.setattr(extension_control_host.time, "monotonic", lambda: clock[0])
+    server._migrate_installed_authority = lambda: ExtensionControlHost._migrate_installed_authority(server)
+
+    assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert server._installed_authority_retry_at == 105.0
+    assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert attempts == 1
+
+
+def test_a_busy_migration_turn_reports_busy_without_marking_failure(tmp_path) -> None:
+    store = _SlowStore(tmp_path, seconds=0.0)
+    busy: list[bool] = []
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held is True
+        assert migrate_installed_authority(store, wait_seconds=0.0, on_busy=lambda: busy.append(True)) is False
+
+    assert busy == [True]
+    assert store.calls == 0
+
+
+def test_a_failed_migration_starts_backoff_after_the_attempt(tmp_path, monkeypatch) -> None:
+    server = SimpleNamespace(
+        store=SimpleNamespace(guard_home=tmp_path),
+        _installed_authority_pending=False,
+        _installed_authority_retry_at=0.0,
+    )
+    monkeypatch.setattr(extension_control_host, "migrate_installed_authority", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(extension_control_host.time, "monotonic", lambda: 10.0)
+
+    with pytest.raises(_InstalledAuthorityMigrationError):
+        ExtensionControlHost._migrate_installed_authority(server)  # pyright: ignore[reportArgumentType]
+
+    assert server._installed_authority_retry_at == 15.0
+
+
 def test_the_worker_host_waits_for_another_process_to_finish(tmp_path) -> None:
     store = _SlowStore(tmp_path, seconds=0.0)
     ready = tmp_path / "held"

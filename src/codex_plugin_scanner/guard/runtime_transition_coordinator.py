@@ -6,16 +6,16 @@ the durable protocol owns all planned file and managed-install publication.
 
 from __future__ import annotations
 
-import math
 import time
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import ExitStack, contextmanager
+from itertools import count
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
-from .adapters.codex_lifecycle_lock import codex_publication_locks
 from .approval_gate import ApprovalGateGrant
-from .codex_install_transaction import codex_install_transaction
+from .native_owned import codex_install_transaction, codex_publication_locks
+from .native_transition_files import coordinate, prepare_request, require_deadline
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
@@ -48,8 +48,7 @@ class RuntimeTransitionCoordinator:
 
     @staticmethod
     def _check_deadline(deadline: float) -> None:
-        if time.monotonic() >= deadline:
-            raise TransitionError("deadline_exceeded")
+        require_deadline(deadline)
 
     @contextmanager
     def _publication_owner(self, plan: TransitionPlan, deadline: float) -> Generator[None, None, None]:
@@ -77,13 +76,7 @@ class RuntimeTransitionCoordinator:
         A caller supplies one deadline for lock admission, restoration and proof.
         """
         deadline = deadline_monotonic
-        if (
-            isinstance(deadline, bool)
-            or not isinstance(deadline, (int, float))
-            or not math.isfinite(deadline)
-            or deadline - time.monotonic() > 60
-        ):
-            raise TransitionError("deadline_invalid")
+        prepare_request("recovery", deadline=deadline, now=time.monotonic())
         self._check_deadline(deadline)
         with (
             codex_install_transaction(
@@ -101,51 +94,89 @@ class RuntimeTransitionCoordinator:
         status = self.runtime.status(operation_id)
         if status.phase in {"Committed", "FailedWithVerifiedRollback"}:
             raise TransitionError("terminal_transition")
-        if set(plan.native_runtimes or {}) != {"candidate", "predecessor"}:
-            raise TransitionError("native_runtime_bindings_missing")
+        prepare_request("bindings", native=dict(plan.native_runtimes or {}))
         cause = status.first_cause or "interrupted_transition"
         self._check_deadline(deadline)
-        persistence_error: Exception | None = None
-        try:
-            self.runtime.prepare_recovery(operation_id, first_cause=cause)
-        except Exception as error:
-            persistence_error = error
-        inverse_attempted = False
-        inverse_completed = False
-        try:
-            self._check_deadline(deadline)
-            self.driver.stop(plan.candidate, deadline_monotonic=deadline)
-            if persistence_error is not None:
-                raise persistence_error
-            self._check_deadline(deadline)
-            inverse_attempted = True
-            self.runtime.restore_files(operation_id, first_cause=cause)
-            inverse_completed = True
-            self._check_deadline(deadline)
-            self.driver.start(plan.predecessor, deadline_monotonic=deadline)
-            self._check_deadline(deadline)
-            observation = self.driver.observe_protection(
-                plan.predecessor,
-                operation_id,
-                deadline_monotonic=deadline,
-            )
-            self._check_deadline(deadline)
-            self.runtime.finish_rollback(operation_id, functional_proof=observation)
-        except Exception as error:
+        return self._run("recover", plan, deadline, cause=cause)
+
+    def _run(self, flow: str, plan: TransitionPlan, deadline: float, *, cause: str = "") -> TransitionStatus:
+        """Run the runtime's step protocol: it names each effect in order, this process performs it."""
+        errors: dict[int, BaseException] = {}
+        numbers = count(1)
+        state: object = None
+        outcome: dict[str, object] | None = None
+        observation: NativeProtectionAdmission | None = None
+
+        def caught(identifier: object) -> BaseException:
+            known = errors.get(cast(int, identifier))
+            if known is None:
+                known = errors[cast(int, identifier)] = TransitionError("deadline_exceeded")
+            return known
+
+        while True:
+            answer = coordinate(flow, deadline=deadline, state=state, outcome=outcome, cause=cause)
+            state, action = answer.get("state"), cast(Mapping[str, object], answer["action"])
+            if action["do"] == "done":
+                return self.runtime.status(plan.operation_id)
+            if action["do"] == "raise":
+                error, chained = caught(action["error"]), action.get("cause")
+                if chained is None:
+                    raise error
+                raise error from caught(chained)
             try:
-                if persistence_error is not None and persistence_error is not error:
-                    self.runtime.record_recovery_failure(operation_id, first_cause=cause, error=persistence_error)
-                if (
-                    not inverse_attempted
-                    or inverse_completed
-                    or self.runtime.status(operation_id).phase != "RecoveryRequired"
-                ):
-                    self.runtime.record_recovery_failure(operation_id, first_cause=cause, error=error)
-            except Exception as recording_error:
-                if persistence_error is not None:
-                    raise persistence_error from recording_error
-                raise
-        return self.runtime.status(operation_id)
+                result = self._perform(action, plan, deadline, observation, caught)
+            except Exception as error:
+                identifier = next(numbers)
+                errors[identifier] = error
+                outcome = {
+                    "ok": False,
+                    "id": identifier,
+                    "cause": error.reason if isinstance(error, TransitionError) else type(error).__name__,
+                }
+                continue
+            outcome = {"ok": True}
+            if action["do"] == "drive" and action["op"] == "observe":
+                observation = cast(NativeProtectionAdmission, result)
+            elif action["do"] == "call" and action["method"] == "phase":
+                outcome["phase"] = result
+
+    def _perform(
+        self,
+        action: Mapping[str, object],
+        plan: TransitionPlan,
+        deadline: float,
+        observation: NativeProtectionAdmission | None,
+        caught: Callable[[object], BaseException],
+    ) -> object:
+        """One effect the runtime named: a lifecycle step of the driver or a method of the journal."""
+        operation_id = plan.operation_id
+        if action["do"] == "drive":
+            artifact = plan.candidate if action["side"] == "candidate" else plan.predecessor
+            if action["op"] == "stop":
+                return self.driver.stop(artifact, deadline_monotonic=deadline)
+            if action["op"] == "start":
+                return self.driver.start(artifact, deadline_monotonic=deadline)
+            return self.driver.observe_protection(artifact, operation_id, deadline_monotonic=deadline)
+        method, phase, cause = str(action["method"]), str(action.get("phase", "")), str(action.get("cause", ""))
+        runtime = self.runtime
+        if method == "publish":
+            return runtime.publish(operation_id, phase)
+        if method == "authorize":
+            return runtime.authorize_runtime_step(operation_id, phase)
+        if method == "advance":
+            return runtime.advance(operation_id, phase, functional_proof=observation)
+        if method == "prepare_recovery":
+            return runtime.prepare_recovery(operation_id, first_cause=cause)
+        if method == "restore_files":
+            return runtime.restore_files(operation_id, first_cause=cause)
+        if method == "finish_rollback":
+            return runtime.finish_rollback(operation_id, functional_proof=observation)
+        if method == "record_failure":
+            error = cast(Exception, caught(action["error"]))
+            return runtime.record_recovery_failure(operation_id, first_cause=cause, error=error)
+        if method == "phase":
+            return runtime.status(operation_id).phase
+        raise TransitionError("record_invalid")
 
     def activate(
         self,
@@ -155,15 +186,19 @@ class RuntimeTransitionCoordinator:
         grant: ApprovalGateGrant | None,
         deadline_monotonic: float | None = None,
     ) -> TransitionStatus:
-        if set(plan.native_runtimes or {}) != {"candidate", "predecessor"}:
-            raise TransitionError("native_runtime_bindings_missing")
+        prepare_request("bindings", native=dict(plan.native_runtimes or {}))
         # Capture once before owner admission; waiting for the lock consumes
         # this same operation budget. Begin validates the signed exact subject.
-        deadline = time.monotonic() + max(0.0, plan.deadline_epoch - time.time())
-        if deadline_monotonic is not None:
-            if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
-                raise TransitionError("deadline_invalid")
-            deadline = min(deadline, deadline_monotonic)
+        deadline = cast(
+            float,
+            prepare_request(
+                "activation",
+                deadline_epoch=plan.deadline_epoch,
+                wall=time.time(),
+                now=time.monotonic(),
+                deadline=deadline_monotonic,
+            ).get("deadline"),
+        )
         self._check_deadline(deadline)
         with (
             self._publication_owner(plan, deadline),
@@ -174,89 +209,4 @@ class RuntimeTransitionCoordinator:
         ):
             self._check_deadline(deadline)
             self.runtime.begin(plan, authority_home=authority_home, grant=grant, deadline_monotonic=deadline)
-            candidate_may_be_running = False
-            try:
-                _ = self.runtime.publish(plan.operation_id, "AuthorizedForExactTransition")
-                self._check_deadline(deadline)
-                self.runtime.authorize_runtime_step(plan.operation_id, "HooksPrepared")
-                self.driver.stop(plan.predecessor, deadline_monotonic=deadline)
-                self._check_deadline(deadline)
-                _ = self.runtime.publish(plan.operation_id, "HooksPrepared")
-                self._check_deadline(deadline)
-                self.runtime.authorize_runtime_step(plan.operation_id, "Switching")
-                candidate_may_be_running = True
-                self.driver.start(plan.candidate, deadline_monotonic=deadline)
-                self._check_deadline(deadline)
-                observation = self.driver.observe_protection(
-                    plan.candidate,
-                    plan.operation_id,
-                    deadline_monotonic=deadline,
-                )
-                self._check_deadline(deadline)
-                _ = self.runtime.advance(plan.operation_id, "Switching", functional_proof=observation)
-                _ = self.runtime.advance(plan.operation_id, "CandidateFunctional", functional_proof=observation)
-            except Exception as first_error:
-                cause = first_error.reason if isinstance(first_error, TransitionError) else type(first_error).__name__
-                persistence_error: Exception | None = None
-                try:
-                    self.runtime.prepare_recovery(plan.operation_id, first_cause=cause)
-                except Exception as error:
-                    persistence_error = error
-                retirement_error: Exception | None = None
-                if candidate_may_be_running:
-                    try:
-                        self._check_deadline(deadline)
-                        self.driver.stop(plan.candidate, deadline_monotonic=deadline)
-                    except Exception as error:
-                        retirement_error = error
-                inverse_attempted = False
-                inverse_completed = False
-                try:
-                    if persistence_error is not None:
-                        raise persistence_error
-                    if retirement_error is not None:
-                        # Keep selection and bindings coherent for a candidate
-                        # whose process retirement is still unconfirmed.
-                        raise retirement_error
-                    self._check_deadline(deadline)
-                    inverse_attempted = True
-                    self.runtime.restore_files(plan.operation_id, first_cause=cause)
-                    inverse_completed = True
-                    self._check_deadline(deadline)
-                    self.driver.start(plan.predecessor, deadline_monotonic=deadline)
-                    observation = self.driver.observe_protection(
-                        plan.predecessor,
-                        plan.operation_id,
-                        deadline_monotonic=deadline,
-                    )
-                    self._check_deadline(deadline)
-                    self.runtime.finish_rollback(plan.operation_id, functional_proof=observation)
-                except Exception as recovery_error:
-                    try:
-                        if retirement_error is not None and retirement_error is not recovery_error:
-                            self.runtime.record_recovery_failure(
-                                plan.operation_id,
-                                first_cause=cause,
-                                error=retirement_error,
-                            )
-                        if persistence_error is not None and persistence_error is not recovery_error:
-                            self.runtime.record_recovery_failure(
-                                plan.operation_id,
-                                first_cause=cause,
-                                error=persistence_error,
-                            )
-                        # The inverse writer already records its own failures.
-                        # Lifecycle failures need their own durable observation.
-                        if (
-                            not inverse_attempted
-                            or inverse_completed
-                            or self.runtime.status(plan.operation_id).phase != "RecoveryRequired"
-                        ):
-                            self.runtime.record_recovery_failure(
-                                plan.operation_id, first_cause=cause, error=recovery_error
-                            )
-                    except Exception as recording_error:
-                        if persistence_error is not None:
-                            raise persistence_error from recording_error
-                        raise
-            return self.runtime.status(plan.operation_id)
+            return self._run("activate", plan, deadline)

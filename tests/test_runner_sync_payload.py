@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import pytest
 from jsonschema import Draft202012Validator
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime import fleet_posture as fp
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -31,22 +31,20 @@ NOW = datetime(2026, 10, 16, 12, 0, 0, tzinfo=timezone.utc)
 pytestmark = [pytest.mark.usefixtures("native_hook_force")]
 
 
-class _Adapter:
-    harness = "claude-code"
+def _diagnostics(_harness: str, _context: HarnessContext) -> dict[str, object]:
+    return {"setup_status": "active", "config_paths": ["/cfg"], "artifacts": [], "installed": True}
 
-    def diagnostics(self, _context: HarnessContext) -> dict[str, object]:
-        return {"setup_status": "active", "config_paths": ["/cfg"], "artifacts": [], "installed": True}
 
-    def setup_contract(self) -> SimpleNamespace:
-        return SimpleNamespace(
-            coverage=SimpleNamespace(
-                native_hooks=True,
-                browser_fallback=False,
-                mcp_proxy=True,
-                prompt_hooks=False,
-                blind_spots=(),
-            )
+def _setup_contract(_harness: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        coverage=SimpleNamespace(
+            native_hooks=True,
+            browser_fallback=False,
+            mcp_proxy=True,
+            prompt_hooks=False,
+            blind_spots=(),
         )
+    )
 
 
 class _Response:
@@ -105,11 +103,13 @@ def _add_receipts(store: GuardStore, count: int) -> None:
 
 @pytest.fixture
 def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GuardStore:
-    from codex_plugin_scanner.guard import adapters
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
     guard_store = GuardStore(tmp_path / "guard-home")
     _seed_cloud(guard_store)
-    monkeypatch.setattr(adapters, "list_adapters", lambda: [_Adapter()])
+    monkeypatch.setattr(harness_ops, "list_harnesses", lambda: ("claude-code",))
+    monkeypatch.setattr(harness_ops, "diagnostics", _diagnostics)
+    monkeypatch.setattr(harness_ops, "setup_contract", _setup_contract)
     monkeypatch.setattr(guard_runner_module, "FleetPostureSettings", partial(fp.FleetPostureSettings, now=NOW))
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
     yield guard_store

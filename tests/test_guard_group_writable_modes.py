@@ -8,17 +8,18 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner import cli
-from codex_plugin_scanner.guard.adapters import claude_code
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import (
+from codex_plugin_scanner.guard import claude_hook_entry as claude_code
+from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard.claude_hook_entry import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
-    ClaudeCodeHarnessAdapter,
     run_frozen_claude_hook,
 )
 from codex_plugin_scanner.guard.cli import uninstall_commands
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionError, TransitionFile
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_runtime_stamp import stamp_native_runtime
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits")
 
@@ -100,14 +101,14 @@ def _frozen(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_claude_hooks_use_entrypoint_not_dash_c_when_frozen(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _frozen(monkeypatch)
-    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-    session = ClaudeCodeHarnessAdapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
-    fallback = ClaudeCodeHarnessAdapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    session = claude_code.claude_argv("session_start", context)
+    fallback = claude_code.claude_argv("hook", context)
     for argv in (session, fallback):
         assert "-c" not in argv and "-m" not in argv
     with pytest.raises(RuntimeError, match="hol-guard repair"):
-        ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+        claude_code.claude_argv("daemon", context)
     assert session[1:3] == (_FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_SESSION_START_HOOK_MARKER)
     assert fallback[1] == "hook"
 
@@ -116,26 +117,23 @@ def test_frozen_claude_daemon_hook_runs_the_durable_native_bridge(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _frozen(monkeypatch)
-    runtime = tmp_path / "g" / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
-    requested: list[Path | None] = []
-
-    def durable(_feature: str, *, guard_home: Path | None = None) -> Path:
-        requested.append(guard_home)
-        return runtime
-
-    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", durable)
+    source = tmp_path / "bundle" / "hol-guard-runtime"
+    source.parent.mkdir()
+    source.write_bytes(b"native runtime")
+    digest = stamp_native_runtime(monkeypatch, source, ("claude-hook-bridge-v1",))
+    runtime = tmp_path / "g" / "native-runtime" / digest / "hol-guard-runtime"
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-    daemon = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    daemon = claude_code.claude_argv("daemon", context)
 
     assert daemon[:3] == (str(runtime), "claude-hook-bridge", CLAUDE_GUARD_DAEMON_HOOK_MARKER)
     assert sys.executable not in daemon
-    assert requested and all(home == context.guard_home for home in requested)
+    assert runtime.read_bytes() == b"native runtime"
 
 
 def test_claude_hooks_keep_python_launcher_when_not_frozen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-    session = ClaudeCodeHarnessAdapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    session = claude_code.claude_argv("session_start", context)
     assert session[1] == "-c"
 
 
@@ -143,7 +141,7 @@ def test_frozen_dispatch_routes_claude_hook(monkeypatch: pytest.MonkeyPatch) -> 
     _frozen(monkeypatch)
     seen: list[list[str]] = []
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.claude_code.run_frozen_claude_hook",
+        "codex_plugin_scanner.guard.claude_hook_entry.run_frozen_claude_hook",
         lambda argv: seen.append(list(argv)) or 7,
     )
     assert cli._run_frozen_early_dispatch(["__guard-claude-hook", "M", "x"]) == 7

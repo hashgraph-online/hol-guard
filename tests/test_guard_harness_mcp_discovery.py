@@ -4,10 +4,12 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.adapters as adapters_module
 import codex_plugin_scanner.guard.local_clis.local_cli_api as local_cli_api_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_discovery_client import (
     MAX_DISCOVERED_MCP_SERVERS,
     _safe_detections,
     apply_source_labels,
@@ -15,9 +17,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discovered_server_for_observation,
     persist_discovered_harness_mcp_servers,
 )
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-from codex_plugin_scanner.guard.local_cli_trust import utc_now
-from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
@@ -138,18 +138,17 @@ def test_managed_codex_discovery_authenticates_default_home_context(
 ) -> None:
     observed: list[tuple[bool, bool]] = []
 
-    class CodexAdapter:
-        harness = "codex"
+    def detect(harness: str, context: HarnessContext) -> HarnessDetection:
+        assert harness == "codex"
+        home_explicit = context.home_override_explicit
+        workspace_explicit = context.workspace_override_explicit
+        observed.append((home_explicit, workspace_explicit))
+        if home_explicit:
+            raise RuntimeError("manifest belongs to default home context")
+        return _detection("codex")
 
-        def detect(self, context: HarnessContext) -> HarnessDetection:
-            home_explicit = context.home_override_explicit
-            workspace_explicit = context.workspace_override_explicit
-            observed.append((home_explicit, workspace_explicit))
-            if home_explicit:
-                raise RuntimeError("manifest belongs to default home context")
-            return _detection("codex")
-
-    monkeypatch.setattr(adapters_module, "list_adapters", lambda: (CodexAdapter(),))
+    monkeypatch.setattr(harness_ops, "list_harnesses", lambda: ("codex",))
+    monkeypatch.setattr(harness_ops, "detect", detect)
 
     detections = _safe_detections(tmp_path, tmp_path / "guard-home", tmp_path / "workspace")
 

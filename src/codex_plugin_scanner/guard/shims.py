@@ -70,7 +70,8 @@ def prepare_guard_shim(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Render and snapshot both launchers without creating or changing files."""
-    from .adapters.native_harness import ask, planned_files
+    from .native_harness_client import ask
+    from .native_harness_steps import planned_files
 
     answer = ask(
         "prepare_guard_shim",
@@ -102,18 +103,32 @@ def install_guard_shim(
     launcher_name: str | None = None,
     display_name: str | None = None,
 ) -> dict[str, object]:
-    """Publish the same prepared launcher bytes used by runtime transitions."""
-    from .codex_hook_integrity import atomic_write_bytes
-    from .codex_install_transaction import codex_install_transaction
-    from .runtime_transition import assert_transition_mutation_allowed
+    """Publish the same prepared launcher bytes used by runtime transitions.
 
-    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.install"):
-        assert_transition_mutation_allowed(context.guard_home)
-        prepared = prepare_guard_shim(harness, context, launcher_name=launcher_name, display_name=display_name)
-        for change in prepared.files:
-            assert change.after is not None
-            atomic_write_bytes(change.path, change.after, mode=change.after_mode, private=False)
-        return prepared.manifest
+    The native runtime holds the installation transaction (or runs as the owner this thread already holds),
+    publishes the launcher and journals every write.
+    """
+    from .cli.native_managed_install import ask_managed
+
+    answer = ask_managed(
+        "shim_install",
+        context,  # pyright: ignore[reportArgumentType]
+        [],
+        actor="harness-shim.install",
+        harness=harness,
+        launcher_name=launcher_name,
+        display_name=display_name,
+    )
+    return json.loads(str(answer["manifest"]))
+
+
+def shell_profile_facts(context: HarnessContextLike) -> dict[str, object]:
+    """The shell whose profile gets the PATH block, and whether the shim dir is temporary."""
+
+    return {
+        "shell": Path(os.environ.get("SHELL", "")).name,
+        "shim_dir_transient": _is_transient_path(context.guard_home / "bin"),
+    }
 
 
 def remove_guard_shim(
@@ -125,7 +140,7 @@ def remove_guard_shim(
     display_name: str | None = None,
 ) -> dict[str, object]:
     """Remove a previously installed Guard launcher shim."""
-    from .codex_install_transaction import codex_install_transaction
+    from .native_owned import codex_install_transaction
     from .runtime_transition import assert_transition_mutation_allowed
 
     with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.uninstall"):
@@ -170,7 +185,8 @@ def prepare_guard_shim_removal(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Snapshot every launcher an uninstall deletes, without changing files."""
-    from .adapters.native_harness import ask, planned_files
+    from .native_harness_client import ask
+    from .native_harness_steps import planned_files
 
     answer = ask(
         "prepare_guard_shim_removal",
@@ -185,7 +201,8 @@ def prepare_guard_shim_removal(
 
 def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardShim:
     """Capture the selected shell profile and render its PATH block without writes."""
-    from .adapters.native_harness import ask, planned_files
+    from .native_harness_client import ask
+    from .native_harness_steps import planned_files
 
     answer = ask(
         "prepare_guard_shim_shell_profile",
@@ -202,22 +219,16 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
 
 def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
     """Prepend the harness launcher shim dir in the user's normal shell profile."""
-    from .codex_install_transaction import codex_install_transaction
-    from .runtime_transition import RuntimeTransition, assert_transition_mutation_allowed
+    from .cli.native_managed_install import ask_managed
 
-    prepared = prepare_guard_shim_shell_profile(context)
-    if not prepared.files:
-        return prepared.manifest
-    assert_transition_mutation_allowed(context.guard_home)
-    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-profile.install"):
-        assert_transition_mutation_allowed(context.guard_home)
-        prepared = prepare_guard_shim_shell_profile(context)
-        payload: dict[str, object] = {"files": [change.payload() for change in prepared.files]}
-        RuntimeTransition._compare(payload, "before")
-        for change in prepared.files:
-            RuntimeTransition._write_file(change.payload(), "after")
-        RuntimeTransition._compare(payload, "after")
-        return prepared.manifest
+    answer = ask_managed(
+        "profile_install",
+        context,  # pyright: ignore[reportArgumentType]
+        [],
+        actor="harness-profile.install",
+    )
+    manifest = answer.get("manifest")
+    return dict(manifest) if isinstance(manifest, dict) else json.loads(str(manifest))
 
 
 def _is_transient_path(path: Path) -> bool:

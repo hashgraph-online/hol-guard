@@ -14,6 +14,7 @@ import pytest
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic as private_state
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_resident as resident
 from codex_plugin_scanner.guard import native_resident_client, native_runtime
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_windows import write_windows_ack
@@ -44,11 +45,20 @@ class _Resident:
         self.frame: bytes | None = None
 
     def __call__(
-        self, *, executable: Path, guard_home: Path, payload: bytes, idle_only: bool = False, **_: object
+        self,
+        *,
+        executable: Path,
+        guard_home: Path,
+        payload: bytes,
+        idle_only: bool = False,
+        idle_wait_seconds: float = 0.0,
+        **_: object,
     ) -> bytes | None:
         assert executable == EXECUTABLE
-        # Only a stream already parked here is borrowed; asking never starts one.
+        # Only a stream this process holds is borrowed; asking never starts one,
+        # but an op landing while that stream is busy waits for it to be parked.
         assert idle_only is True
+        assert idle_wait_seconds > 0
         envelope = json.loads(payload)
         assert envelope["operation"] == "windows_private_state"
         assert envelope["request"]["guard_home"] == str(guard_home)
@@ -261,7 +271,7 @@ def test_a_pool_without_an_idle_stream_starts_no_client(
     monkeypatch.setattr(pool, "request", counted)
     monkeypatch.setattr(native_resident_client, "_CLIENT_POOLS", {(str(EXECUTABLE), str(state_dir)): pool})
     monkeypatch.setattr(native_resident_client, "native_resident_client_request", _REAL_REQUEST)
-    monkeypatch.setattr(native_resident_client, "_PersistentNativeClient", no_client)
+    monkeypatch.setattr(pool_module, "_PersistentNativeClient", no_client)
 
     with pytest.raises(NativePolicySnapshotError, match="native_windows_private_state_unavailable"):
         write_windows_ack(home, home / "native-runtime" / "direct-lane" / "ack.json", b"{}")

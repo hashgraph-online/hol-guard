@@ -11,6 +11,7 @@ use serde_json::{json, Map, Value};
 
 use super::files::{self, adapter_result, path_value, render, text, Change, Doc};
 use super::kimi::{expand_user, guard_hook_args, hook_command, utf8};
+use super::zcode_desktop_keys::{added_desktop_keys, without_added_keys, ADDED_KEYS};
 use super::{common, detection, path_answer, path_text, which, Ctx, Failure, Spec, Step};
 use crate::pyjson::PyVal;
 
@@ -300,6 +301,7 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
     let (config, file_config) = (config_path(ctx), file_config_path(ctx));
     let mut surfaces = Vec::new();
     let mut history = Doc::default();
+    let mut added_keys: Vec<String> = Vec::new();
     for path in [&config, &file_config] {
         files::within_root(ctx, &zcode_home(ctx), path, "ZCode")?;
         let present = ctx.absolute(path).is_file();
@@ -313,6 +315,9 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
             (Some(bytes), true) => Some(utf8(bytes.clone(), "ZCode config")?),
             _ => None,
         };
+        if *path == config {
+            added_keys = added_desktop_keys(current.as_deref(), &previous, path);
+        }
         let (rendered, enabled) =
             install_surface(ctx, current.as_deref(), path, &previous, &command)?;
         history.set(&path_text(path), enabled);
@@ -353,6 +358,12 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
         .set("managed_config_path", path_value(&config))
         .set("managed_file_config_path", path_value(&file_config))
         .set("hooks_enabled_before", history.value());
+    if !added_keys.is_empty() {
+        record.set(
+            ADDED_KEYS,
+            PyVal::List(added_keys.into_iter().map(PyVal::Str).collect()),
+        );
+    }
     let state_after = format!("{}\n", render(&record.value())?).into_bytes();
     let backup_after = backup_before.clone().or(config_before);
     let mut changes = vec![Change::at(
@@ -424,9 +435,24 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
         let answer = hook_settings(request, &["text"])?;
         let rendered = match answer.get("text") {
             _ if answer.contains_key("refusal") => return Err(Failure::Refusal(MALFORMED.into())),
-            Some(Value::String(rendered)) => rendered,
-            Some(Value::Null) => continue,
+            Some(Value::String(rendered)) => Some(rendered.clone()),
+            Some(Value::Null) => None,
             _ => return Err(Failure::Refusal(MALFORMED.into())),
+        };
+        // The Desktop objects install added come out even when the hooks
+        // need no change, since the state file that records them goes now.
+        let rendered = if path == config_path(ctx) {
+            let base = rendered.clone().unwrap_or_else(|| current.clone());
+            let cleaned = without_added_keys(base, &recorded, &path);
+            if rendered.is_none() && cleaned == current {
+                continue;
+            }
+            cleaned
+        } else {
+            match rendered {
+                Some(rendered) => rendered,
+                None => continue,
+            }
         };
         // The authorized parent, resolved, and the final name not followed.
         let parent = absolute.parent().unwrap_or(&absolute);

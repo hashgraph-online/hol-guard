@@ -97,6 +97,19 @@ pub(super) fn load(call: &mut Call<'_>) -> Step<Value> {
         return Err(recovery("receipt_generation_changed"));
     }
     call.budget.hook()?;
+    // The caller's plan names the manifest this receipt must retain.
+    if let Some(reason) = call.args.get("mismatch").and_then(Value::as_str) {
+        let fault = match reason {
+            "generation_changed" => Fault::Transition("generation_changed"),
+            "authority_repair_request_plan_invalid" => {
+                Fault::Transition("authority_repair_request_plan_invalid")
+            }
+            _ => Fault::Transition("files_invalid"),
+        };
+        if decode(call.args.get("expect_manifest"))?.as_deref() != Some(manifest_bytes.as_slice()) {
+            return Err(fault);
+        }
+    }
     Ok(json!({
         "manifest": encode(Some(&manifest_bytes))?,
         "receipt": encode(Some(&raw))?,

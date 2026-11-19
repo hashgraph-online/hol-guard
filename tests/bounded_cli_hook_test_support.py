@@ -10,7 +10,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
+from codex_plugin_scanner.guard import bounded_cli_hook_bridge
 
 
 def json_object(text: str) -> dict[str, object]:

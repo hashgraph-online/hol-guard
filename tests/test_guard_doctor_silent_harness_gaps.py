@@ -7,14 +7,12 @@ from unittest import mock
 import pytest
 import tomlkit
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
-from codex_plugin_scanner.guard.codex_hook_trust import (
-    CODEX_HOOK_TRUST_WARNING,
-    apply_codex_hook_trust_doctor,
-    codex_command_hook_hash,
-)
+from codex_plugin_scanner.guard import diagnostics_bridge
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
+from codex_plugin_scanner.guard.codex_hook_registration import codex_doctor_result
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.python_oracles.codex_hook_trust import codex_command_hook_hash
 
 GUARD_COMMAND = "/opt/guard/1.2.3/hol-guard-codex-hook --harness codex"
 
@@ -122,19 +120,27 @@ def test_stale_trust_accepts_canonical_config_path(tmp_path: Path) -> None:
     assert not stale_guard_hook_coordinates(payload, config)
 
 
+_ACTIVE_HOOKS = {
+    "config_present": True,
+    "codex_hooks_enabled": True,
+    "managed_hook_installed": True,
+    "integrity_status": "valid",
+    "protection_active": True,
+}
+
+
 @pytest.mark.parametrize(("stale", "status"), [(True, "partial"), (False, "active")])
 def test_doctor_does_not_report_untrusted_hooks_active(stale: bool, status: str) -> None:
-    payload: dict[str, object] = {"warnings": ["existing"], "setup_status": "active"}
-    apply_codex_hook_trust_doctor(payload, {"hook_trust_stale": stale})
-    assert payload["setup_status"] == status
-    assert (CODEX_HOOK_TRUST_WARNING in payload["warnings"]) is stale  # type: ignore[operator]
-    assert "/hooks" in CODEX_HOOK_TRUST_WARNING and "press t" in CODEX_HOOK_TRUST_WARNING
+    warnings, setup_status = codex_doctor_result(["existing"], {**_ACTIVE_HOOKS, "hook_trust_stale": stale}, "active")
+    assert setup_status == status
+    trust = [item for item in warnings if "/hooks" in item and "press t" in item]
+    assert bool(trust) is stale
+    assert "existing" in warnings
 
 
 def test_doctor_keeps_broken_status_when_trust_is_stale() -> None:
-    payload: dict[str, object] = {"warnings": [], "setup_status": "broken"}
-    apply_codex_hook_trust_doctor(payload, {"hook_trust_stale": True})
-    assert payload["setup_status"] == "broken"
+    state = {"config_present": True, "codex_hooks_enabled": False, "hook_trust_stale": True}
+    assert codex_doctor_result([], state, "active")[1] == "broken"
 
 
 OMP_CODE_MODE_WARNING = (
@@ -150,12 +156,12 @@ def omp_code_mode_warnings(home: Path, workspace: Path | None = None, *, environ
     cleared = {name: "" for name in _AGENT_ENV}
     with (
         mock.patch.dict(os.environ, {**cleared, **environ}),
-        mock.patch.object(HarnessAdapter, "diagnostics", lambda _self, _context: {"warnings": []}),
+        mock.patch.object(diagnostics_bridge, "native_diagnostics", lambda **_kwargs: {"warnings": []}),
     ):
         for name in _AGENT_ENV:
             if name not in environ:
                 del os.environ[name]
-        return list(get_adapter("omp").diagnostics(context)["warnings"])
+        return list(harness_ops.diagnostics("omp", context)["warnings"])
 
 
 _AUTO = "providers:\n  openai-codex:\n    codeMode: auto\n"
@@ -233,5 +239,5 @@ def test_omp_diagnostics_include_warning(tmp_path: Path) -> None:
     context = HarnessContext(
         home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    payload = get_adapter("omp").diagnostics(context)
+    payload = harness_ops.diagnostics("omp", context)
     assert OMP_CODE_MODE_WARNING.format(path=config) in payload["warnings"]

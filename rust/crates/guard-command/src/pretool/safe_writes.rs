@@ -9,7 +9,7 @@ mod mkdir_targets;
 #[path = "plan_note_writes.rs"]
 mod plan_notes;
 #[path = "write_target_screens.rs"]
-mod screens;
+pub(super) mod screens;
 #[path = "temporary_directories.rs"]
 mod temporary_directories;
 use super::read_paths::{

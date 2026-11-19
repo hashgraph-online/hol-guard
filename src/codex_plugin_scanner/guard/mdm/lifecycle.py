@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from ..adapters.base import HarnessContext
 from ..cli.install_commands import apply_managed_install
+from ..harness_context import HarnessContext
 from ..native_daemon_manage import retire_all_guard_daemons_for_home
 from ..policy_bundle_trusted_keys import policy_bundle_keyring_payload
 from ..store import GuardStore

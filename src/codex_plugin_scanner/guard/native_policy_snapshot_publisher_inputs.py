@@ -49,6 +49,9 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     _compiled_structured_output_view: dict[str, object] | None = None
     # The MCP relay harness views every config of the last compile agreed on.
     _compiled_mcp_relay_harnesses: dict[str, object] | None = None
+    # Watch revert deadlines across home and selected workspaces;
+    # ``None`` when they could not be resolved.
+    _compiled_watch_ends: tuple[int | None, dict[str, int]] | None = None
 
     def _current_policy_input_stats(
         self,
@@ -277,6 +280,8 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         """
 
         from .config import load_guard_config
+        from .config_file_io import ConfigFileTrustError
+        from .harness_posture import compose_watch_revert_deadlines
         from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
 
         with self._condition:
@@ -287,6 +292,7 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         # A compile that fails before the view is read binds none.
         self._compiled_structured_output_view = None
         self._compiled_mcp_relay_harnesses = None
+        self._compiled_watch_ends = None
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
         # The composer lays the operator's MCP choices over the configured
@@ -309,6 +315,12 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         self._compiled_blocked_request_mode = blocked_request_mode
         self._compiled_structured_output_view = uniform_structured_output_view(configs)
         self._compiled_mcp_relay_harnesses = harnesses
+        # The sidecar signs these beside the postures compiled here, so a
+        # bridge whose daemon is down ends Watch when the daemon would have.
+        try:
+            self._compiled_watch_ends = compose_watch_revert_deadlines(configs)
+        except (ConfigFileTrustError, OSError, RuntimeError, ValueError):
+            self._compiled_watch_ends = None
         return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:

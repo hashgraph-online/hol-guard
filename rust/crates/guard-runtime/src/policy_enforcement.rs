@@ -133,7 +133,29 @@ pub(crate) fn apply_pre_tool_policy_for_hook(
         &envelope.source.guard_home,
         envelope.source.cwd.as_deref(),
     );
-    apply_pre_tool_policy_with_inspection(snapshot, &envelope.raw_payload, result, inspection)
+    // Guard's own safety guide passes the execution floors only where the
+    // native verdict already allows the read; it never turns a review into
+    // an allow.
+    let guide = result.minimum_action == "allow"
+        && guard_safety_guide_read(&envelope.raw_payload, &envelope.source.home_dir);
+    apply_pre_tool_policy_with_inspection(
+        snapshot,
+        &envelope.raw_payload,
+        result,
+        inspection || guide,
+    )
+}
+
+/// Whether `payload` is one plain read of Guard's own safety guide below the
+/// hook's user home, the read Guard's managed agent instructions ask for
+/// (`guard_command::pretool::guard_safety_guide_read_command`).
+fn guard_safety_guide_read(payload: &Value, home_dir: &str) -> bool {
+    guard_command::pretool::generic::extract_untrusted_command_context(payload)
+        .ok()
+        .and_then(|context| context.command)
+        .is_some_and(|command| {
+            guard_command::pretool::guard_safety_guide_read_command(&command, home_dir)
+        })
 }
 
 /// The native review of a `--home` Guard's launcher cannot place, lifted when
@@ -197,25 +219,9 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
         && result.explicitly_benign
         && result.reason_code == "native_prompt_benign"
         && !facts.sensitive_target;
+    let mut operator_allowed_mcp_tool = false;
     if result.action.action_type == PreToolActionTypeV1::McpTool {
-        // Tool arguments can themselves contain `tool_name` (dispatchers are
-        // common). They are data, never the outer tool's authority selector.
-        let tool = match payload.as_object() {
-            Some(record) => {
-                let mut envelopes = vec![record];
-                for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
-                    if let Some(envelope) = record.get(key).and_then(Value::as_object) {
-                        envelopes.push(envelope);
-                    }
-                }
-                preferred_tool_name(&envelopes)?.or_else(|| {
-                    ["action", "operation"]
-                        .into_iter()
-                        .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
-                })
-            }
-            None => None,
-        };
+        let tool = policy_enforcement_mcp_provider::mcp_tool_name(payload, &harness)?;
         if let Some(tool) = tool {
             let composio_name = tool
                 .rsplit("__")
@@ -276,16 +282,22 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
                 result.reason_code = "native_custom_mcp_tool_review".into();
                 result.reason =
                     "This MCP tool requires approval under its custom extension settings.".into();
-            } else if choice == Some("allow")
-                && !composio_execution
-                && result.minimum_action == "review"
-                && result.reason_code == "native_mcp_tool_review"
+            }
+            operator_allowed_mcp_tool = !composio_execution
+                && policy_enforcement_mcp_provider::operator_allows_tool(
+                    &snapshot.effective_policy.mcp_tool_actions,
+                    &harness,
+                    &tool,
+                )
                 && result.action.bounded
                 && !facts.sensitive_target
                 && !facts.changed_hash
                 && result.command_extensions.as_ref().is_none_or(|evidence| {
                     evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
-                })
+                });
+            if operator_allowed_mcp_tool
+                && result.minimum_action == "review"
+                && result.reason_code == "native_mcp_tool_review"
             {
                 // Only explicit operator authority in the admitted, authenticated
                 // snapshot can replace the unknown-tool review. Independent
@@ -332,6 +344,7 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
             prompt_classes: &result.prompt_risk_classes,
             benign_prompt,
             package_scripts_disabled: package_scripts_disabled(payload, &result),
+            operator_allowed_mcp_tool,
         },
         false,
         guard_inspection && !facts.sensitive_target,

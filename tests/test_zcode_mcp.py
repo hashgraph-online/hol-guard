@@ -12,10 +12,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
+from tests import harness_ops_support as harness_support
 from tests.test_zcode_adapter import ZCODE_PRETOOL_MATCHERS, is_guard_managed_hook_command
 
 
@@ -46,7 +46,7 @@ class TestZCodeMcpToolCoverage:
                 (), {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []}
             ),
         )
-        get_adapter("zcode").install(ctx)
+        harness_support.install("zcode", ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         pretool_entries = payload["hooks"]["events"]["PreToolUse"]
         matchers = {

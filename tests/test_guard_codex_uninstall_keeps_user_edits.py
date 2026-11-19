@@ -11,7 +11,7 @@ except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.codex_config import dump_toml
+from tests.codex_toml_support import dump_toml
 
 _GLOBAL_TOOLS = {"command": "python3", "args": ["-m", "http.server", "9000"]}
 

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -40,10 +40,8 @@ def test_skill_identity_covers_primary_and_nested_files(tmp_path: Path, workspac
     _write_text(script_path, "print('one')\n")
     _write_text(reference_path, "Policy one.\n")
 
-    adapter = get_adapter("gemini")
-
     def detected_skill_hash() -> tuple[str, dict[str, object]]:
-        detection = adapter.detect(ctx)
+        detection = harness_ops.detect("gemini", ctx)
         artifact = next(
             item
             for item in detection.artifacts
@@ -92,7 +90,7 @@ def test_linked_skill_directory_is_reported_as_nonreusable_discovery(tmp_path: P
     except (NotImplementedError, OSError) as exc:
         pytest.skip(f"symlink creation unavailable: {exc}")
 
-    result = get_adapter("gemini").detect(ctx)
+    result = harness_ops.detect("gemini", ctx)
     skill = next(item for item in result.artifacts if "skill-discovery" in item.artifact_id)
     identity_metadata = skill.metadata.get("skillDirectoryIdentity")
 
@@ -114,7 +112,7 @@ def test_broken_linked_skill_root_is_not_silently_omitted(tmp_path: Path) -> Non
     except (NotImplementedError, OSError) as exc:
         pytest.skip(f"symlink creation unavailable: {exc}")
 
-    result = get_adapter("gemini").detect(ctx)
+    result = harness_ops.detect("gemini", ctx)
     artifact = next(item for item in result.artifacts if "skill-discovery" in item.artifact_id)
     identity_metadata = artifact.metadata.get("skillDirectoryIdentity")
 
@@ -136,7 +134,7 @@ def test_incomplete_skill_identity_warns_without_external_path_disclosure(tmp_pa
     except (NotImplementedError, OSError) as exc:
         pytest.skip(f"symlink creation unavailable: {exc}")
 
-    result = get_adapter("gemini").detect(ctx)
+    result = harness_ops.detect("gemini", ctx)
     skill = next(item for item in result.artifacts if item.artifact_type == "skill")
     identity_metadata = skill.metadata.get("skillDirectoryIdentity")
 

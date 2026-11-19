@@ -49,6 +49,16 @@ worktree of the same repository.
 Only terminal verdicts are excluded. `block`, `sandbox-required` and `allow`
 are not reviews, so there is nothing to approve.
 
+The dashboard card for an MCP tool call shows the two choices as plain cards,
+"Just this once" (Allow once) and "Always allow this call" (Always allow),
+without the scope picker. Always allow still sends the request's scope
+contract (`scope_contract_version` and `scope_contract_digest`) and
+`persist_policy: true`, and it binds the call's arguments, so the same tool
+with new inputs asks again. Wider scopes and the blocking rules stay one click
+away under "More choices". A request that is not exact-action eligible, has no
+artifact scope, is Watch-only, or carries `retry_cannot_reuse_approval` gets
+the full decision controls instead.
+
 A prompt has no execution binding, so a review held at the prompt could offer
 neither choice. When a prompt's only risks are ones a later tool call carries
 out (reading local secrets, sending data out, deleting files, running a
@@ -72,12 +82,10 @@ recommendation whenever the exact action is offered, and the dashboard follows
 it. Broader choices (this project, this source, this app, everywhere) stay
 available but are never preselected.
 
-Every choice states three things on the card:
-
-- **Applies to**: the action and the place the decision covers.
-- **Expires**: one identical retry for Allow once; for a saved decision, until
-  the user removes it or the action itself changes.
-- **Policy**: whether anything is saved, and where it applies.
+Each choice is a label and one plain sentence. The card does not add a terms
+table (applies to, expires, policy) under a choice: a person deciding in a few
+seconds reads the label and the sentence, and the sentence says whether
+anything is saved and where it applies.
 
 Choosing a broader scope does not widen what the decision approves. A saved
 allow at any scope still answers only the action whose hash it was saved
@@ -117,6 +125,10 @@ falls back to `native-command-hash-v1`. That hash covers:
 - for any other tool, its whole input as it was sent, including a `command`
   field and any other field, even when the input is not an object (empty only
   when the tool takes none)
+- for an Oh My Pi `eval` made only of `commit` prelude drafts, the
+  repositories the drafts commit to instead of the program text. A draft's
+  subject, body and file selection are literal text that runs nothing, so
+  Always allow holds for the next draft in that repository
 
 Changing any of these produces a new command, and Guard asks again.
 

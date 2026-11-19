@@ -1,7 +1,7 @@
 //! The request environment the adapters this kind owns may read.
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 47] = [
+pub(crate) const ENV_NAMES: [&str; 66] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -29,6 +29,7 @@ pub(crate) const ENV_NAMES: [&str; 47] = [
     "CLINE_DIR",
     "CLINE_MCP_SETTINGS_PATH",
     "HOL_GUARD_CURSOR_HOOK_BRIDGE",
+    "HOL_GUARD_PI_HOOK_BRIDGE",
     "HOL_GUARD_TEST_MODE",
     "HERMES_HOME",
     "HERMES_HOST_HOME",
@@ -37,6 +38,8 @@ pub(crate) const ENV_NAMES: [&str; 47] = [
     "HOME",
     "USERPROFILE",
     "LANG",
+    // The locale a harness CLI probe runs with (`_PROBE_ENV_KEYS`).
+    "LC_ALL",
     "TEMP",
     "TMP",
     "TMPDIR",
@@ -51,6 +54,27 @@ pub(crate) const ENV_NAMES: [&str; 47] = [
     "HOL_GUARD_RUNTIME_DIR",
     "HOL_GUARD_DESKTOP",
     "HOL_GUARD_DESKTOP_HOOK_PROXY",
+    // The import path a managed MCP proxy launcher keeps
+    // (`merge_guard_launcher_env`).
+    "PYTHONPATH",
+    // The presence-only markers a harness runtime injects into the commands
+    // it runs (`harness_attribution`).
+    "HOL_GUARD_ORIGIN_HARNESS",
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CURSOR_VERSION",
+    "CURSOR_PROJECT_DIR",
+    "CURSOR_TRACE_ID",
+    "CURSOR_SESSION_ID",
+    "CURSOR_TRANSCRIPT_PATH",
+    "CODEX_SANDBOX",
+    "CODEX_THREAD_ID",
+    "GROK_AGENT",
+    "GROK_SESSION_ID",
+    "OPENCODE_CONFIG_CONTENT",
+    "DEVIN_PROJECT_DIR",
+    "MUSE_SESSION_ID",
+    "MUSE_THREAD_ID",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.

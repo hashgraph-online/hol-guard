@@ -30,9 +30,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_connectors import allow_ready_cli
@@ -188,7 +188,9 @@ def _run_hook(fixture: BenignFixture, store: GuardStore, index: int) -> None:
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "git status --short"},
+        # Two commands in turn: the same command six times in a row within a
+        # session is a stuck loop, which Guard stops on purpose.
+        "tool_input": {"command": ("git status --short", "git diff --stat")[index % 2]},
         "session_id": "cli-hook-rpc-budget",
         "tool_call_id": f"cli-rpc-{index}",
         "cwd": str(cwd),

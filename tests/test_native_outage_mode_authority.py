@@ -8,12 +8,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .native_exit_code_support import native_exit_code_is
 from .native_policy_snapshot_test_fixtures import _config
 from .test_native_policy_snapshot_cache_binding import _write_resident_authority
 
@@ -69,6 +70,7 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
     else:
         worker.review_http_payload.return_value = None
     monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
+    native_exit_code_is(monkeypatch, 0)
     responses = []
     monkeypatch.setattr(cli, "native_cli_hook_emit", lambda _harness, value, **_kwargs: responses.append(value))
     if failure == "worker_exception":

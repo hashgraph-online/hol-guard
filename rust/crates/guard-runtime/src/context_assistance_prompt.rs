@@ -1,11 +1,10 @@
 //! Adds the project code a typed prompt is about to the hook's answer, when
-//! someone turned on CIGAR project context for their AI apps.
-//!
-//! The prompt hook answers in time whatever happens here: the walk and the
-//! lookup share what is left of the hook's budget, the lookup runs on its own
-//! thread, a repeat of the same prompt joins the lookup already running, a
-//! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing. Only an allowed prompt gets context, and only for harnesses that show
+//! someone turned on CIGAR project context for their AI apps. The prompt hook
+//! answers in time whatever happens here: the walk and the lookup share what
+//! is left of the hook's budget, the lookup runs on its own thread, a repeat
+//! of the same prompt joins the lookup already running, a prompt CIGAR cannot
+//! answer yet gets the matched files, and anything failed or off adds nothing.
+//! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
@@ -18,6 +17,7 @@ use lookup::{anchored, lookup, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -42,7 +42,7 @@ mod names;
 #[path = "context_assistance_prompt_sections.rs"]
 mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
-mod seen;
+pub(crate) mod seen;
 
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
@@ -88,6 +88,45 @@ pub(super) struct Rendered {
 /// the verdict is settled and its locks are released; `started` is when the
 /// hook began, so the lookup never outlasts the hook's own budget.
 pub(crate) fn harness_response(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event: &str,
+    result: &Value,
+    store: Option<&PolicySnapshotStore>,
+    started: Instant,
+) -> Option<Value> {
+    let fallback = fallback_response(harness, event, result, envelope.recording_only);
+    advisory_or_fallback(fallback, || {
+        harness_response_inner(envelope, harness, event, result, store, started)
+    })
+}
+
+fn advisory_or_fallback(
+    fallback: Option<Value>,
+    advisory: impl FnOnce() -> Option<Value> + std::panic::UnwindSafe,
+) -> Option<Value> {
+    catch_unwind(AssertUnwindSafe(advisory))
+        .ok()
+        .flatten()
+        .or(fallback)
+}
+
+fn fallback_response(
+    harness: &str,
+    event: &str,
+    result: &Value,
+    recording_only: bool,
+) -> Option<Value> {
+    let mut response =
+        guard_command::hook_responses::render_edge_response(harness, event, result, recording_only)
+            .map(Value::Object)?;
+    if event == "UserPromptSubmit" && harness == "claude-code" && !recording_only {
+        let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
+    }
+    Some(response)
+}
+
+fn harness_response_inner(
     envelope: &GuardHookEnvelopeV2,
     harness: &str,
     event: &str,
@@ -158,11 +197,12 @@ fn prompt_cwd(envelope: &GuardHookEnvelopeV2) -> Option<&str> {
         .or_else(|| raw.pointer("/workspaceRoots/0").and_then(Value::as_str))
 }
 
-/// The prompt's text: top-level `prompt`, or Cline's `userPromptSubmit.prompt`.
+/// A typed prompt's text (`prompt` or Cline's `userPromptSubmit.prompt`); none if the app wrote it.
 fn prompt_text(raw: &Value) -> Option<&str> {
     (raw.get("prompt"))
         .or_else(|| raw.pointer("/userPromptSubmit/prompt"))
         .and_then(Value::as_str)
+        .filter(|prompt| !crate::context_assistance_prompt_generated::by_app(prompt))
 }
 
 /// Watch answers some apps' prompts without a context slot; one is opened

@@ -487,19 +487,19 @@ integers wider than the resident's number type. Each travels as a token drawn
 from a per-request random prefix that is verified to match no string in the
 payload, with its meaning in a separate map, so a config file cannot spell a
 token itself and nothing it contains can pass as a substituted scalar.
-`codex_hook_identity.py` now only names what is being identified;
-`native_codex_hook_identity.py` ships it across and fails closed.
+`native_codex_hook_identity.py` ships the entries across and fails closed;
+no Python copy of the identity rules remains.
 
 Whether the authenticated Codex hook manifest still describes the live
-installation is decided in the resident (`codex-hook-manifest-verify-v1`, in
-`codex_hook_manifest_verify_op.rs`). Python checked the manifest header, the
-config target, the interpreter and every packaged file, the launch identities
-and the hook registrations in the Codex config. It still authenticates the
-manifest, since the key never leaves it, and supplies the canonical path
-spellings, its package roots, its own command splitting and whether a file's
-group is private to its owner; the resident reads the files and answers with
-the integrity state. An unavailable resident reports the installation as
-unverified. `codex_hook_manifest.py` keeps only that authentication step.
+installation is decided in the native runtime. The `verify_manifest` Codex
+harness op (and `live_hook_state`, which reads the files itself) authenticates
+the manifest under the hook key the runtime owns, builds the canonical
+spellings, and decides the integrity state through
+`codex_hook_manifest_verify_op.rs`. Python sends only the installation it
+expects (`CodexHookManifestSpec.payload()`), the live hook groups it parsed and
+its package roots; it never holds key bytes. A repair or inverse plan sends the
+captured manifest text, and the runtime authenticates it. The baseline
+(`publication_baseline`) is loaded and its untrusted refusal shaped there too.
 
 A Codex hook source's inventory is walked there as well
 (`codex-hook-identity-v2`, the `inventory` entry). Python sent one handler and
@@ -507,8 +507,7 @@ one argv question per hook and assembled the records itself; it now sends the
 source's events in the order the file wrote them, with its manifest, legacy and
 self-install bindings, and the resident answers with every record, its
 ownership and identity, and every shape issue, from the same walk native hook
-detection runs. `codex_hook_inventory.py` checks each field of the answer and
-keeps no walk of its own. A resident without the feature, or an answer that is
+detection runs. No Python walk remains. A resident without the feature, or an answer that is
 not an inventory, leaves the source with one identity issue and no records, so
 install stops before it activates.
 

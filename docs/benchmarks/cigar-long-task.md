@@ -448,3 +448,13 @@ Every session passed in both arms. Codex and Oh My Pi save 52–76% of cost in a
 | code needed | 44 | 3 | 38 | 3 | 2,402 |
 
 Wrong-note rate: 48 of 86 notes that carry code (55.8%). Only 11 of 56 prompts that need no code get no code. 38 of the 45 wrong notes on those prompts are the excerpt form: when no range matches well, CIGAR pastes a whole document, changelog or README (7–8k characters for "push this branch and open a PR", "so is it fixed?" and "are the actual risky calls fixed?"). The other 7 are ranges into unrelated code (a PRD request mapped to `_parser.py`, "what did you change in the last step?" mapped to click's terminal UI files). Coding prompts are mostly fine: 38 of 44 name a right file.
+
+### Preview 3.60.0a121 (2026-11-18)
+
+Results for the 3.60.0a121 preview, the short-reply instruction test and the two hold fixes measured on it are in [cigar-a121-preview.md](cigar-a121-preview.md).
+
+## General-savings measurements (2026-11-16)
+
+Step-by-step workflow anatomy, harness coverage, used and wrong notes, note build time under load,
+probes, the swarm set and the commit-replay set are in
+[cigar-general-savings.md](cigar-general-savings.md).

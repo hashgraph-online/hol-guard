@@ -10,13 +10,44 @@ use super::codex_migration::{read_json, read_toml};
 use super::{path_text, Failure, Step};
 
 const UNREADABLE: &str = "codex_hook_inventory_source_unreadable";
+const CONFIG_LABEL: &str = "Codex config file";
+const HOOKS_LABEL: &str = "Codex hooks file";
 
-/// The strict parse of each named config and hooks source (from disk, or
-/// over captured bytes); the parsed values are not needed.
+/// The strict parse of each config and hooks pair named in `pairs`, from
+/// disk or over the bytes `contents` captured for it (a path mapped to
+/// base64, or null for an absent file). A captured generation must name
+/// every path of every pair; the parsed values are not needed.
 pub(super) fn check_sources(fields: &Map<String, Value>) -> Step<Value> {
-    let Some(Value::Array(sources)) = fields.get("sources") else {
+    let Some(Value::Array(pairs)) = fields.get("pairs") else {
         return Err(Failure::Invalid);
     };
+    let captured = match fields.get("contents") {
+        None => None,
+        Some(Value::Object(contents)) => Some(contents),
+        Some(_) => return Err(Failure::Invalid),
+    };
+    let mut sources = Vec::new();
+    for pair in pairs {
+        let Some([Value::String(config), Value::String(hooks)]) =
+            pair.as_array().map(Vec::as_slice)
+        else {
+            return Err(Failure::Invalid);
+        };
+        for (path, label, kind) in [(config, CONFIG_LABEL, "toml"), (hooks, HOOKS_LABEL, "json")] {
+            let mut source = json!({ "path": path, "label": label, "kind": kind });
+            if let Some(contents) = captured {
+                let data = contents.get(path).ok_or(Failure::Invalid)?;
+                source["data"] = data.clone();
+            }
+            sources.push(source);
+        }
+    }
+    check(&sources)
+}
+
+/// The strict parse of each named source (from disk, or over captured
+/// bytes).
+fn check(sources: &[Value]) -> Step<Value> {
     for source in sources {
         let Value::Object(source) = source else {
             return Err(Failure::Invalid);

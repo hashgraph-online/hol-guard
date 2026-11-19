@@ -17,13 +17,7 @@ use crate::codex_hook_bridge::{decode_config_argument, BRIDGE_COMMAND};
 use crate::codex_hook_bridge_trust_files::{canonical, verify_executable_in};
 
 const RECOVER_ARG: &str = "--_hol-guard-codex-daemon-recover";
-const TRANSPORT_ROLES: [&str; 5] = [
-    "bridge",
-    "bridge_runtime",
-    "launch_runtime",
-    "runtime_trust",
-    "windows_job",
-];
+const TRANSPORT_ROLES: [&str; 4] = ["bridge", "launch_runtime", "runtime_trust", "windows_job"];
 
 fn refused(message: &str) -> Refusal {
     (

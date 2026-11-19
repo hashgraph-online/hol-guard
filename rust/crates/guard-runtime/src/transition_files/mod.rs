@@ -15,6 +15,7 @@
 //! owning transaction's journal. One fact stays with the asking interpreter:
 //! which directories are its own package roots (`package_roots`).
 
+mod config_scope;
 mod digest_cache;
 mod inspect;
 mod journal;
@@ -22,28 +23,74 @@ mod lease;
 mod lock_files;
 mod merge_dependency;
 mod output;
+mod owned;
+mod owned_locks;
+mod owned_ops;
 mod publication;
 mod publication_abort;
+mod publication_artifact_generation;
+mod publication_authorize;
 mod publication_baseline;
 mod publication_commit;
+mod publication_coordinate;
 mod publication_files;
 mod publication_generation;
+mod publication_inspect_runtime;
+mod publication_inverse_pinned;
 mod publication_inverse_plan;
+mod publication_inverse_prepare;
 mod publication_inverse_publish;
+mod publication_inverse_registry;
 mod publication_io;
+mod publication_lean;
+mod publication_observe;
+mod publication_observe_check;
+mod publication_observe_legacy;
+mod publication_observe_run;
 mod publication_observer;
+mod publication_pin_executable;
+mod publication_pin_stamp;
+mod publication_prepare_request;
+mod publication_proof;
 mod publication_receipt;
 mod publication_repair_files;
 mod publication_repair_plan;
+mod publication_repair_prepare;
+mod publication_repair_request;
 mod publication_request;
+mod publication_request_policy;
+mod publication_runtime_compare;
 mod publication_target;
+mod python_equal;
 mod repair_claims;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_owned;
+#[cfg(test)]
+mod tests_owned_locks;
+#[cfg(test)]
+mod tests_publication_artifact_generation;
+#[cfg(test)]
+mod tests_publication_authorize;
+#[cfg(test)]
+mod tests_publication_inspect_runtime;
+#[cfg(test)]
 mod tests_publication_inverse_plan;
 #[cfg(test)]
+mod tests_publication_pin_executable;
+#[cfg(test)]
+mod tests_publication_prepare_request;
+#[cfg(test)]
+mod tests_publication_proof;
+#[cfg(test)]
 mod tests_publication_repair_plan;
+#[cfg(test)]
+mod tests_publication_repair_request;
+#[cfg(test)]
+mod tests_publication_request_policy;
+#[cfg(test)]
+mod tests_publication_runtime_compare;
 #[cfg(test)]
 mod tests_publication_target;
 
@@ -54,7 +101,13 @@ use serde_json::{json, Map, Value};
 
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+pub(crate) use config_scope::{within as within_config_scope, HeldDirectory};
+pub(crate) use inspect::resolve_lenient;
+pub(crate) use lease::{hold_install_lock, hold_opencode_lock};
 pub(crate) use output::{managed_write, remove_no_follow, write_no_follow};
+pub(crate) use owned::{with_owned, Owner, Spec as OwnedSpec};
+pub(crate) use owned_locks::Failure as OwnedFailure;
+pub(crate) use owned_ops::with_registered;
 
 /// The plan sizes `_record_files` accepts, with room for an install that
 /// publishes beside them.
@@ -72,6 +125,8 @@ pub(crate) enum Fault {
     Refused(String, Option<String>),
     /// `OSError`, with its errno when the platform reported one.
     Os(std::io::Error),
+    /// `RuntimeError(message)`, as a retained config's TOML parse raises it.
+    Runtime(String),
 }
 
 impl From<std::io::Error> for Fault {
@@ -90,6 +145,7 @@ impl Fault {
             }
             Self::Integrity(code, message) => json!({ "integrity": code, "message": message }),
             Self::Os(error) => json!({ "os": error.to_string(), "errno": error.raw_os_error() }),
+            Self::Runtime(message) => json!({ "runtime": message }),
             // Asked once a write has started, the question can no longer be
             // answered before the plan is published, so it refuses the file.
         }
@@ -107,7 +163,7 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
-    fn parse(value: Option<&Value>) -> Result<Self, &'static str> {
+    pub(crate) fn parse(value: Option<&Value>) -> Result<Self, &'static str> {
         let fields = match value {
             None | Some(Value::Null) => return Ok(Self::none()),
             Some(Value::Object(fields)) => fields,
@@ -238,6 +294,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             Ok(publish(files()?, flag("removals"), flag("rollback"), &ask))
         }
         "journal" => journal::dispatch(args),
+        op if op.starts_with("owned_") => owned_ops::dispatch(op, args, &ask.budget),
         op @ ("lease_acquire" | "lease_release" | "lease_check") => lease::dispatch(op, args),
         op => publication_commit::dispatch(op, args, &ask.budget),
     }

@@ -16,9 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
 from codex_plugin_scanner.guard import native_runner_authority as native_runner_authority_module
-from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
 from codex_plugin_scanner.guard.local_clis.local_cli_api import (
     DISCOVERY_STAGE_FAILED_EVENT,
     LocalCliApiService,
@@ -28,6 +27,7 @@ from codex_plugin_scanner.guard.local_clis.mcp_discovery_jobs import (
     DiscoveryStageError,
     McpDiscoveryJobs,
 )
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity
 from codex_plugin_scanner.guard.runtime_health import background_diagnostics

@@ -7,9 +7,9 @@
 //! returns the artifacts, the config paths that were found, and the warnings.
 //! A source may instead carry its legacy bindings as `config_legacy` and
 //! `hooks_legacy`, as the recorded vectors do. A Windows command naming an
-//! 8.3 short path is answered with `{"reply": {"expand": [...]}}`, as
-//! `codex_hook_owners` answers it. Text CPython would raise on instead of
-//! returning is a stable refusal, never a partial inventory.
+//! 8.3 short path is expanded by this host, as `codex_hook_owners` does. Text CPython would
+//! raise on instead of returning is a stable refusal, never a partial
+//! inventory.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -34,7 +34,7 @@ use super::zcode_artifacts::{pair_value, Fields, Scope};
 #[path = "codex_detect_restore.rs"]
 mod restore;
 
-use restore::{restorations, restore_paths};
+use restore::{expand, restorations, restore_paths};
 
 const HARNESS: &str = "codex";
 
@@ -390,7 +390,8 @@ fn source_pairs(
 }
 
 pub(crate) fn detect(args: &Value) -> KindResult {
-    let args = args_object(args)?;
+    let args = expand(args_object(args)?)?;
+    let args = &*args;
     if args.get("harness").and_then(Value::as_str) != Some(HARNESS) {
         return Err(ERR_INVALID);
     }
@@ -465,11 +466,6 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         );
         records.extend(inventory.records);
         warnings.extend(inventory.warnings);
-    }
-    if let Some(unresolved) = legacy.as_ref().map(DetectLegacy::unresolved) {
-        if !unresolved.is_empty() {
-            return Ok(json!({ "reply": { "expand": unresolved } }));
-        }
     }
     if records.iter().any(|record| record.unencodable) {
         return Err(ERR_VALUE);

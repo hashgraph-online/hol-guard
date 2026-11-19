@@ -9,8 +9,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_identity_for_retirement,
     _retire_guard_daemon_pid,

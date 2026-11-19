@@ -501,6 +501,31 @@ fn evaluate_request(
             result.native_decision_receipt_valid =
                 Some(crate::edge::standalone_receipt(receipt, edge));
         }
+        ContextDigestKindV1::TransitionHookObservation { payload, receipt } => {
+            result.transition_hook_observation =
+                crate::transition_hook_observation::observe(payload, receipt);
+        }
+        ContextDigestKindV1::PublicationInverseClaim {
+            action,
+            grant_id,
+            subject,
+            operation_id,
+            owner_pid,
+            deadline,
+            retirement_seconds,
+        } => {
+            result.publication_inverse_claim = Some(crate::publication_inverse_claims::answer(
+                action,
+                &crate::publication_inverse_claims::Presented {
+                    grant_id,
+                    subject,
+                    operation_id,
+                    owner_pid: *owner_pid,
+                    deadline,
+                },
+                *retirement_seconds,
+            ));
+        }
         ContextDigestKindV1::McpLaunchEnvironment {
             inherited,
             configured,
@@ -935,6 +960,8 @@ fn evaluate_context_digest_request_inner(
         memory_pattern: None,
         guard_run_launch: None,
         package_runner_target: None,
+        transition_hook_observation: None,
+        publication_inverse_claim: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

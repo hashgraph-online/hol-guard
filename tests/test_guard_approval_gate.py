@@ -20,7 +20,6 @@ from rich.console import Console
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -42,6 +41,7 @@ from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
@@ -2237,3 +2237,30 @@ def test_approval_gate_password_material_stays_out_of_public_payloads(tmp_path: 
     assert "approval_password" not in combined_public
     assert "approval_totp_code" not in combined_public
     assert "otpauth://" not in combined_public
+
+
+def test_public_config_keeps_the_pulse_fields_the_resident_reports() -> None:
+    from codex_plugin_scanner.guard.approval_gate_types import config_from_wire
+
+    wire = {
+        "enabled": True,
+        "configured": True,
+        "cooldown_seconds": 0,
+        "cooldown_active": False,
+        "fail_closed": False,
+        "strict_all_decisions": False,
+        "totp_enabled": False,
+        "totp_pending": False,
+        "pulse_enabled": True,
+        "pulse_cooldown_seconds": 900,
+    }
+    config = config_from_wire(wire)
+    assert config is not None
+    assert config.pulse_enabled is True
+    assert config.pulse_cooldown_seconds == 900
+    assert config.to_dict()["pulse_enabled"] is True
+
+    without_pulse = config_from_wire({k: v for k, v in wire.items() if not k.startswith("pulse_")})
+    assert without_pulse is not None
+    assert without_pulse.pulse_enabled is False
+    assert without_pulse.pulse_cooldown_seconds == 0

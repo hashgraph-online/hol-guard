@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
 from uuid import uuid4
 
-from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_hook_copy import live_approval_review_url
 from ..approval_scope_support import package_request_runtime_workspace_scope
@@ -24,6 +23,7 @@ from ..approvals import approval_prompt_flow, build_approval_browser_url, first_
 from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
+from ..harness_context import HarnessContext
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,

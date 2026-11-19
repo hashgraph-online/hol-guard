@@ -13,6 +13,7 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from .apply_patch_calls import patch_target
 from .approval_retry import pinned_retry_outcome, retry_assessment
 from .approval_retry_action import PATH_KEYS as _PATH_KEYS
 from .approval_retry_action import WORKSPACE_ROOTS as _WINDOWS_ROOTS
@@ -31,6 +32,7 @@ from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .interruptions import case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
 from .proofs import BLOCK_REASONS, block_reasons, required_checks
+from .safety_guide_reads import is_guide_read
 
 _PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
@@ -113,14 +115,27 @@ def _request(payload: dict[str, Any]) -> tuple[str | None, str | None]:
         (v for v in (fields.get("command"), fields.get("cmd"), payload.get("command")) if v is not None), None
     )
     if str(payload.get("tool_name", "")).lower() == "apply_patch":
+        target = patch_target(command)
         command = None
-    path = next(
-        (fields.get(key) or payload.get(key) for key in _PATH_KEYS if fields.get(key) or payload.get(key)), None
-    )
+        path = target[1] if target else None
+    else:
+        path = next(
+            (fields.get(key) or payload.get(key) for key in _PATH_KEYS if fields.get(key) or payload.get(key)),
+            None,
+        )
     return (
         command if isinstance(command, str) else None,
         _relative(path) if isinstance(path, str) else None,
     )
+
+
+def _patch_tool(payload: dict[str, Any]) -> str | None:
+    """The catalog write tool an ``apply_patch`` request stands for, if it pins one file."""
+    if str(payload.get("tool_name", "")).lower() != "apply_patch":
+        return None
+    tool_input = payload.get("tool_input")
+    target = patch_target(tool_input.get("command") if isinstance(tool_input, dict) else None)
+    return target[0] if target else None
 
 
 def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EVENTS) -> list[dict[str, Any]]:
@@ -133,11 +148,14 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
         event = receipt.get("event_name") or payload.get("hook_event_name")
         if event not in events:
             continue
+        if _cursor_route_probe(row):
+            continue
         command, path = _request(payload)
         decisions.append(
             {
                 "event": event,
                 "tool": payload.get("tool_name"),
+                "patch_tool": _patch_tool(payload),
                 "command": command,
                 "path": path,
                 "decision": effective_decision(response),
@@ -151,6 +169,18 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
             }
         )
     return decisions
+
+
+def _cursor_route_probe(row: dict[str, Any]) -> bool:
+    """Cursor's Shell preToolUse that Guard answers as a route probe, by design without a receipt.
+
+    Cursor sends one shell call to preToolUse and then to beforeShellExecution. Guard
+    answers the first as a route probe (a plain allow, or the contained sink command) and
+    records nothing; beforeShellExecution is the reviewed check, so the probe is not a
+    decision. A probe row that does carry a receipt still counts.
+    """
+    payload = row.get("payload") or {}
+    return row.get("route_harness") == "cursor" and payload.get("cursor_route_probe") is True and not row.get("receipt")
 
 
 def _observed_lifecycle_answers(rows: list[dict[str, Any]]) -> int:
@@ -351,6 +381,8 @@ def _targets_scenario(case: dict[str, Any], scenario: Scenario, decision: dict[s
         # A read of the pinned path is not the write the case pins, so the tool
         # must be one the case requires as well as the path.
         tool = str(decision.get("tool") or "").strip().lower()
+        if tool == "apply_patch":
+            tool = decision.get("patch_tool") or ""
         required = {str(name).strip().lower() for name in scenario.required_tools}
         return command is None and decision["path"] == scenario.path and tool in required
     expected = {_tokens(c) for c in case.get("expected_commands", [])}
@@ -372,7 +404,9 @@ def _block_outcome(
     native = [d for d in matching if d["reason_code"] in expected and d["receipt_decision"] == "deny"]
     if not native:
         return "fail", f"the stop was not the expected native protection decision ({matching[0]['reason_code']})"
-    extra = len(decisions) - len(matching)
+    # Guard's Codex install asks the agent to read its safety guide first; that
+    # allowed read is Guard's own doing, not a second attempt.
+    extra = sum(1 for d in decisions if not _targets_scenario(case, scenario, d) and not is_guide_read(d))
     if extra:
         return "not-exercised", f"the model made {extra} request(s) besides the scenario's single attempt"
     return "pass", f"Guard stopped {native[0]['tool'] or 'the call'} ({native[0]['reason_code']}) before it ran"

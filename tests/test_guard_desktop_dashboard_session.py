@@ -234,9 +234,9 @@ def test_desktop_session_does_not_adopt_an_older_core_while_waiting(monkeypatch,
 
 
 def test_status_payload_skips_installed_app_scan_when_requested(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -276,9 +276,9 @@ def test_status_payload_skips_installed_app_scan_when_requested(monkeypatch, tmp
 
 
 def test_scanned_status_does_not_treat_a_host_artifact_as_guard_registration(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
     from codex_plugin_scanner.guard.store import GuardStore
 
@@ -345,9 +345,9 @@ def test_scanned_status_does_not_treat_a_host_artifact_as_guard_registration(mon
 
 
 def test_status_payload_marks_inactive_managed_installs_as_not_installed(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -380,9 +380,9 @@ def test_status_payload_marks_inactive_managed_installs_as_not_installed(monkeyp
 
 
 def test_status_payload_warns_when_a_managed_shim_is_missing(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -414,9 +414,9 @@ def test_status_payload_warns_when_a_managed_shim_is_missing(monkeypatch, tmp_pa
 
 
 def test_status_payload_counts_each_missing_managed_path(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -448,9 +448,9 @@ def test_status_payload_counts_each_missing_managed_path(monkeypatch, tmp_path: 
 
 
 def test_status_payload_warns_when_managed_opencode_config_is_missing(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = tmp_path / "home"
@@ -486,9 +486,9 @@ def test_status_payload_warns_when_managed_opencode_config_is_missing(monkeypatc
 
 
 def test_status_payload_still_scans_installed_apps_by_default(monkeypatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import product
     from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.models import HarnessDetection
     from codex_plugin_scanner.guard.store import GuardStore
 

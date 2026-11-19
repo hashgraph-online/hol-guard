@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 
 use super::{add, artifact, generations, Object, REPAIR};
 use crate::codex_hook_manifest_build::bridge_argv_sha256;
+use crate::transition_files::dispatch;
 use crate::transition_files::Fault;
 
 fn object(value: Value) -> Object {
@@ -123,4 +124,38 @@ fn shared_artifacts_merge_and_the_manifest_cannot_be_pinned() {
     own.insert("path".into(), json!(manifest.to_string_lossy()));
     let error = add(&mut files, artifact(&own, None).unwrap(), Some(manifest)).unwrap_err();
     assert_eq!(integrity(error), "adapter_preparation_generation_conflict");
+}
+
+fn inverse_error(extra: Value) -> Value {
+    let mut request = json!({
+        "op": "publication_inverse_dependencies",
+        "home": std::env::temp_dir().join("inverse-manifest-text-home").to_string_lossy(),
+    });
+    request
+        .as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().cloned().unwrap());
+    dispatch(&request).unwrap()["error"].clone()
+}
+
+#[test]
+fn captured_manifest_text_is_authenticated_by_the_runtime_or_refused() {
+    assert_eq!(
+        inverse_error(json!({"manifest_text": "not json"})),
+        json!({"integrity": "codex_hook_manifest_invalid", "message":
+            "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it."}),
+    );
+    let unsigned = inverse_error(json!({"manifest_text": "{\"installation_id\": \"x\"}"}));
+    assert_eq!(
+        unsigned["integrity"],
+        json!("codex_hook_manifest_authentication_missing")
+    );
+    assert_eq!(
+        inverse_error(json!({"manifest_text": 7})),
+        json!({"transition": "files_invalid"}),
+    );
+    assert_eq!(
+        inverse_error(json!({})),
+        json!({"transition": "files_invalid"})
+    );
 }

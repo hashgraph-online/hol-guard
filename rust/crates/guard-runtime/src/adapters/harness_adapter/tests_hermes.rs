@@ -1,6 +1,5 @@
-//! Hermes through the `harness_adapter` kind, answering its replies the way
-//! the Python glue does. The `yaml` answer echoes the JSON rendering, which
-//! YAML reads back the same.
+//! Hermes through the `harness_adapter` kind. The runtime renders `config.yaml`
+//! itself; the tests read it back with the PyYAML-compatible loader.
 
 use std::fs;
 use std::path::PathBuf;
@@ -21,32 +20,14 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
     dispatch(&request).unwrap()
 }
 
-/// Answer every reply until the op settles, as `HermesHarnessAdapter._ask` does.
+/// One answer of the op; the runtime asks the caller for nothing.
 fn run(home: &Home, op: &str, extra: Value) -> Value {
-    let mut fields = extra.as_object().cloned().unwrap_or_default();
-    for _ in 0..16 {
-        let answer = ask(home, op, &fields);
-        let Some(reply) = answer.get("reply").and_then(Value::as_object) else {
-            return answer;
-        };
-        let (key, value) = reply.iter().next().unwrap();
-        let answered = match key.as_str() {
-            "launchers" => {
-                let entries: Vec<Value> = value
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|request| json!({"command": "/g/bin/hol-guard", "args": ["proxy", request["name"]]}))
-                    .collect();
-                json!({"requests": value, "guard_cli": "/g/bin/hol-guard", "entries": entries})
-                    .to_string()
-            }
-            "yaml" => json!([value, value]).to_string(),
-            other => panic!("unexpected reply {other}"),
-        };
-        fields.insert(key.clone(), json!(answered));
+    let fields = extra.as_object().cloned().unwrap_or_default();
+    let answer = ask(home, op, &fields);
+    if let Some(reply) = answer.get("reply") {
+        panic!("unexpected reply {reply}");
     }
-    panic!("{op} never settled");
+    answer
 }
 
 fn hermes_home(home: &Home) -> PathBuf {
@@ -73,7 +54,20 @@ fn planned(answer: &Value, name: &str) -> Value {
         .iter()
         .find(|change| change["path"].as_str().unwrap().ends_with(name))
         .unwrap_or_else(|| panic!("no planned {name}"));
-    serde_json::from_str(&after(change)).unwrap()
+    if name.ends_with(".yaml") {
+        yaml_json(&after(change))
+    } else {
+        serde_json::from_str(&after(change)).unwrap()
+    }
+}
+
+/// A rendered `config.yaml` read back as JSON.
+fn yaml_json(text: &str) -> Value {
+    let Ok(Ok(doc)) = crate::hermes_yaml::load(text) else {
+        panic!("config.yaml loads");
+    };
+    let rendered = super::super::files::render(&doc).expect("config renders");
+    serde_json::from_str(&rendered).unwrap()
 }
 
 #[test]
@@ -112,14 +106,18 @@ fn install_registers_a_fail_closed_hook_and_approves_only_its_command() {
             .unwrap_or_else(|| panic!("no overlay entry for {key}"))
             .clone()
     };
-    assert_eq!(server("yaml:github")["args"], json!(["proxy", "github"]));
     assert_eq!(
         server("yaml:github")["metadata"]["guard_transport"],
         "stdio"
     );
-    for (key, transport) in [("yaml:remote", "remote"), ("yaml:bare", "stdio")] {
+    for (key, transport) in [
+        ("yaml:github", "stdio"),
+        ("yaml:remote", "remote"),
+        ("yaml:bare", "stdio"),
+    ] {
         let entry = server(key);
-        assert_eq!(entry["command"], "/g/bin/hol-guard");
+        // The launcher is the caller stamp's; no native runtime means no relay.
+        assert_eq!(entry["command"], "/py");
         assert_eq!(entry["transport"], "stdio");
         let args: Vec<&str> = entry["args"]
             .as_array()
@@ -127,8 +125,12 @@ fn install_registers_a_fail_closed_hook_and_approves_only_its_command() {
             .iter()
             .map(|arg| arg.as_str().unwrap())
             .collect();
-        assert_eq!(&args[2..4], ["hermes", "mcp-proxy"]);
-        assert_eq!(&args[args.len() - 3..], ["--server", key, "--stdio"]);
+        if key == "yaml:github" {
+            // A stdio server with its own command runs under the module-form proxy.
+            assert_eq!(&args[args.len() - 3..], ["stdio", "--command", "npx"]);
+        } else {
+            assert_eq!(&args[args.len() - 3..], ["--server", key, "--stdio"]);
+        }
         assert_eq!(entry["metadata"]["guard_transport"], transport);
     }
 }
@@ -206,7 +208,7 @@ fn uninstall_without_a_manifest_removes_only_this_homes_proxies() {
         .iter()
         .find(|write| write["path"].as_str().unwrap().ends_with("config.yaml"))
         .unwrap();
-    let config: Value = serde_json::from_str(config["text"].as_str().unwrap()).unwrap();
+    let config = yaml_json(config["text"].as_str().unwrap());
     let names: Vec<&String> = config["mcp_servers"].as_object().unwrap().keys().collect();
     assert_eq!(names, ["foreign", "malformed"]);
 }

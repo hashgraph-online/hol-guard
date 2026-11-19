@@ -39,11 +39,12 @@ for event in ("pre_tool_use", "permission_request", "user_prompt_submit", "post_
 # Claude Code: let Guard install its hooks into the rig home, then carry them into the arm settings.
 # The hooks must name the daemon's own HOME: the daemon rejects any other home as an unexpected
 # root and then reviews every call with no working directory, which holds git reads and pytest.
-from codex_plugin_scanner.guard.adapters.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter  # noqa: E402
+from codex_plugin_scanner.guard.harness_context import HarnessContext  # noqa: E402
+from codex_plugin_scanner.guard.native_harness_install_ops import install as install_harness  # noqa: E402
+from codex_plugin_scanner.guard.native_owned import owner_request  # noqa: E402
 
 ctx = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard, home_override_explicit=True)
-ClaudeCodeHarnessAdapter().install(ctx)
+install_harness("claude-code", ctx, owner=owner_request(guard, actor="adapter.claude-code.adapter_install"))
 installed = json.loads((home / ".claude" / "settings.json").read_text())
 assert installed.get("hooks", {}).get("PreToolUse"), "Guard did not install a PreToolUse hook"
 settings = json.loads((arms / "clbase" / "claude_settings.json").read_text())

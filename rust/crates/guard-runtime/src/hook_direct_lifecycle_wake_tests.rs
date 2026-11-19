@@ -57,3 +57,26 @@ fn a_new_session_in_watch_leaves_cigar_resting() {
     );
     assert_eq!(result["outcome"], "answer", "{result}");
 }
+
+/// After compaction the agent holds a summary, so CIGAR must send code again.
+#[test]
+fn a_session_started_again_after_compaction_gets_its_code_again() {
+    use crate::context_assistance_prompt::seen::{holds_for_test, shown_for_test};
+    let lane = lane("lifecycle-session-compacted", json!({}));
+    for (source, id) in [
+        ("compact", "compacted"),
+        ("clear", "cleared"),
+        ("resume", "resumed"),
+    ] {
+        shown_for_test("claude-code", id);
+        let start =
+            json!({ "hook_event_name": "SessionStart", "session_id": id, "source": source });
+        let result = run_as(&lane, "claude-code", Some(HOME), start);
+        assert_eq!(result["outcome"], "answer", "{source}: {result}");
+        assert_eq!(
+            holds_for_test("claude-code", id),
+            source == "resume",
+            "{source}"
+        );
+    }
+}

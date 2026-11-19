@@ -1126,7 +1126,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1239,8 +1239,11 @@ jobs:
     # now spend around 430 seconds in pytest alone, so checkout and setup push
     # them past an eight-minute limit and GitHub cancels them after their
     # cases have already passed. Twelve minutes restores the headroom without
-    # a wider macOS fan-out, which the runner pool cannot spare.
-    timeout-minutes: 12
+    # a wider macOS fan-out, which the runner pool cannot spare. Slow macOS
+    # runners have since pushed a full shard's pytest run to about 690
+    # seconds, so twelve minutes cancels shards whose cases all passed; each
+    # shard now gets eighteen.
+    timeout-minutes: 18
     strategy:
       fail-fast: false
       matrix:

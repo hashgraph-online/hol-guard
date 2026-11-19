@@ -25,13 +25,13 @@ fn os(error: std::io::Error) -> Failure {
     Failure::Os(error.to_string())
 }
 
-fn fault(fault: Fault) -> Failure {
+pub(super) fn fault(fault: Fault) -> Failure {
     match fault {
         Fault::Os(error) => os(error),
         Fault::Integrity(code, _) if code == "codex_hook_transaction_target_not_regular" => {
             Failure::Integrity("codex_hook_transaction_target_not_regular")
         }
-        Fault::Integrity(_, message) => Failure::Runtime(message),
+        Fault::Integrity(_, message) | Fault::Runtime(message) => Failure::Runtime(message),
         Fault::Transition(_) | Fault::Refused(..) => Failure::Invalid,
     }
 }
@@ -123,8 +123,16 @@ fn shim_only(spec: &Spec, ctx: &Ctx) -> Step<Value> {
 
 pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> KindResult {
     let mut events = Vec::new();
+    let _config = match super::install_apply::opencode_lock(spec, ctx) {
+        Ok(lock) => lock,
+        Err(failure) => return answer(Err(failure)),
+    };
     let step = if spec.install == Install::Shim {
         shim_only(spec, ctx)
+    } else if spec.harness == "cursor" {
+        super::cursor_apply::uninstall(spec, ctx, fields)
+    } else if spec.harness == "cline" {
+        super::cline_apply::uninstall(ctx, fields)
     } else {
         // The plan comes first, so a refusal leaves the launcher in place.
         route(spec, "prepare_uninstall", ctx, fields).and_then(|plan| {

@@ -37,8 +37,8 @@ fn warnings_for(detection: Value, proves: bool, timed_out: bool) -> Vec<String> 
 fn probe(timed_out: bool, failed: bool, reported_no_artifacts: bool) -> Value {
     json!({
         "timed_out": timed_out,
-        "failed": failed,
-        "reported_no_artifacts": reported_no_artifacts,
+        "ok": !failed,
+        "reported_artifacts": if reported_no_artifacts { 0 } else { 1 },
         "managed_install_present": false,
         "runtime_hook_registered": false,
     })
@@ -338,7 +338,7 @@ fn malformed_requests_are_refused() {
             "harness": "stubtool",
             "executable": "stubcli",
             "command_absence_proves_uninstalled": true,
-            "runtime_probe": { "timed_out": false },
+            "runtime_probe": "timed out",
             "detection": found.clone(),
         }),
         json!({
@@ -373,27 +373,33 @@ fn a_hermes_install_without_its_hook_reviews_launches_only() {
 }
 
 #[test]
-fn the_first_file_running_guard_is_the_launcher_shim() {
-    let home = tempfile::tempdir().unwrap();
-    let bin = home.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    let other = bin.join("guard-codex");
-    std::fs::write(&other, "#!/bin/sh\nexec codex \"$@\"\n").unwrap();
-    let binary = bin.join("guard-codex.bin");
-    std::fs::write(&binary, [0xff, 0xfe, 0x00]).unwrap();
-    let shim = bin.join("guard-codex.cmd");
-    std::fs::write(
-        &shim,
-        "python -m codex_plugin_scanner.cli guard run codex %*\r\n",
-    )
-    .unwrap();
-    let ask = |paths: Value| dispatch(&json!({"op": "launcher_shim", "paths": paths}));
-    let paths = json!([bin.join("absent"), bin, other, binary, shim, shim]);
-    assert_eq!(ask(paths).unwrap(), json!({"launcher_shim": 4}));
-    assert_eq!(ask(json!([other])).unwrap(), json!({"launcher_shim": null}));
-    assert_eq!(ask(json!([])).unwrap(), json!({"launcher_shim": null}));
-    for paths in [json!(["relative/guard-codex"]), json!([1]), json!("x")] {
-        assert!(ask(paths).is_err());
-    }
-    assert!(dispatch(&json!({"op": "launcher_shim"})).is_err());
+fn a_probe_report_states_each_fact_as_the_adapter_wrote_it() {
+    let reported = |report: Value| {
+        probe_warnings(
+            "cursor",
+            detection(&[], true, &[artifact("mcp_server", Some("x"), &[])]),
+            true,
+            report,
+        )
+        .len()
+    };
+    assert_eq!(reported(json!({ "reported_artifacts": 0 })), 1);
+    assert_eq!(reported(json!({ "reported_artifacts": 0.0 })), 1);
+    assert_eq!(reported(json!({ "reported_artifacts": false })), 1);
+    assert_eq!(reported(json!({ "reported_artifacts": 2 })), 0);
+    assert_eq!(reported(json!({ "reported_artifacts": null })), 0);
+    assert_eq!(reported(json!({ "reported_artifacts": "0" })), 0);
+    assert_eq!(reported(json!({})), 0);
+    let timed_out = |value: Value| {
+        probe_warnings(
+            "stubtool",
+            detection(&[], true, &[]),
+            true,
+            json!({ "timed_out": value }),
+        )
+        .len()
+    };
+    assert_eq!(timed_out(json!(true)), 1);
+    assert_eq!(timed_out(json!(1)), 0);
+    assert_eq!(timed_out(json!("true")), 0);
 }

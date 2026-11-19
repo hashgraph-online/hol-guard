@@ -7,19 +7,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
+from codex_plugin_scanner.guard.resident_evidence_client import ResidentEvidenceClient
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
-def _writer(store: GuardStore) -> NativeHookEvidenceWriter:
+def _writer(store: GuardStore) -> ResidentEvidenceClient:
     """The writer these tests record through, held by the resident.
 
     Every test that builds one takes ``native_hook_force`` first, so the
     caller-pinned runtime is the authority behind the handoff.
     """
 
-    return NativeHookEvidenceWriter(store=store)
+    return ResidentEvidenceClient(store=store)
 
 
 def _valid_native_receipt() -> dict[str, object]:

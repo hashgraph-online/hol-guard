@@ -2,16 +2,15 @@
 //! native plan for Guard's `permission`, `mcp` and runtime overlay, and the
 //! transition files and manifest of the install.
 //!
-//! Install runs in two steps because Python still owns the proxy argv of
-//! each managed server: `install_detection` reads the configs and answers
-//! the detection Python derives the servers from, with a digest of the
-//! bytes it read; `prepare_install` reads them again, refuses when the
-//! digest moved, and plans the files.
+//! Everything the plan needs comes from the configs read here: the detection,
+//! the managed and skipped servers, and the source config paths. Python only
+//! answers what lives in its process, through a reply: the launch facts of the
+//! Guard process, the plugin render arguments, and the portable skill walk a
+//! Windows detection needs.
 
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use super::files::{self, path_value, text, Change, Doc};
 use super::opencode::{
@@ -19,7 +18,9 @@ use super::opencode::{
     overlay_path, scope_for, wire_payload,
 };
 use super::opencode_build::{self, Builder};
-use super::{detection, path_text, Ctx, Failure, Spec, Step};
+use super::opencode_servers::{self, Launch, Launched, Selection};
+use super::opencode_workspace::workspace_paths;
+use super::{path_text, Ctx, Failure, Step};
 use crate::copilot_detect::universal_newlines;
 use crate::pyjson::{self, PyVal};
 
@@ -50,7 +51,6 @@ struct Config {
 struct Snapshot {
     contents: Vec<(PathBuf, Option<Vec<u8>>)>,
     configs: Vec<Config>,
-    digest: String,
 }
 
 fn invalid(path: &Path) -> Failure {
@@ -86,18 +86,8 @@ pub(super) fn normalize(ctx: &Ctx, path: &Path, payload: String, op: Option<&str
 fn snapshot(ctx: &Ctx) -> Step<Snapshot> {
     let mut contents = Vec::new();
     let mut configs = Vec::new();
-    let mut hasher = Sha256::new();
     for path in config_paths(ctx) {
         let raw = files::snapshot(ctx, &path)?;
-        hasher.update(path_text(&path).as_bytes());
-        hasher.update([0]);
-        match &raw {
-            Some(bytes) => {
-                hasher.update((bytes.len() as u64).to_le_bytes());
-                hasher.update(bytes);
-            }
-            None => hasher.update([0xff]),
-        }
         if let Some(bytes) = &raw {
             let source = std::str::from_utf8(bytes).map_err(|_| {
                 Failure::Refusal(format!(
@@ -131,36 +121,36 @@ fn snapshot(ctx: &Ctx) -> Step<Snapshot> {
         }
         contents.push((path, raw));
     }
-    Ok(Snapshot {
-        contents,
-        configs,
-        digest: hex::encode(hasher.finalize()),
-    })
+    Ok(Snapshot { contents, configs })
 }
 
-/// `install_detection`: the detection of the normalized configs, verified
-/// Guard companions included, and the digest `prepare_install` checks.
-pub(super) fn install_detection(spec: &Spec, ctx: &Ctx) -> Step<Value> {
-    let snapshot = snapshot(ctx)?;
+/// The detection of the normalized configs, verified Guard companions
+/// included: its artifacts and the config paths it found.
+fn detect(ctx: &Ctx, snapshot: &Snapshot) -> Step<(Vec<Value>, Vec<String>)> {
     let configs: Vec<(PathBuf, &str, String)> = snapshot
         .configs
         .iter()
         .map(|config| (config.path.clone(), config.scope, config.text.clone()))
         .collect();
     let request = opencode::detect_request(ctx, &configs, false);
-    let found = crate::opencode_detect::detect(&request);
-    let mut answer = detection(spec, found, opencode::command_available(spec, ctx))?;
-    answer["firewall"] = json!(true);
-    answer["digest"] = json!(snapshot.digest);
-    Ok(answer)
-}
-
-fn json_field(fields: &Map<String, Value>, key: &str) -> Step<PyVal> {
-    let raw = fields
-        .get(key)
-        .and_then(Value::as_str)
+    let mut found = crate::opencode_detect::detect(&request).map_err(|_| Failure::Invalid)?;
+    let found = found.as_object_mut().ok_or(Failure::Invalid)?;
+    let artifacts = match found.remove("artifacts") {
+        Some(Value::Array(artifacts)) => artifacts,
+        _ => return Err(Failure::Invalid),
+    };
+    let paths = found
+        .remove("found_paths")
+        .as_ref()
+        .and_then(Value::as_array)
+        .and_then(|paths| {
+            paths
+                .iter()
+                .map(|path| path.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+        })
         .ok_or(Failure::Invalid)?;
-    pyjson::parse(raw).map_err(|_| Failure::Invalid)
+    Ok((artifacts, paths))
 }
 
 /// `_source_entry`: the server's own entry in its source config, as read now.
@@ -175,55 +165,36 @@ fn source_entry(ctx: &Ctx, path: &str, name: &str) -> PyVal {
 /// The plan request, in the order Python built it, and each server's launches.
 fn plan_request(
     ctx: &Ctx,
-    fields: &Map<String, Value>,
+    selection: &Selection,
+    launched: &[Launched],
     snapshot: &Snapshot,
     target: &[(String, PyVal)],
 ) -> Step<(PyVal, Vec<[PyVal; 2]>, Vec<String>)> {
-    let PyVal::List(servers) = json_field(fields, "servers")? else {
-        return Err(Failure::Invalid);
-    };
     let mut wire = Vec::new();
     let mut launches = Vec::new();
     let mut names = Vec::new();
-    for server in &servers {
-        let field = |key: &str| server.get(key).cloned().ok_or(Failure::Invalid);
-        let name = server
-            .get("name")
-            .and_then(PyVal::as_str)
-            .ok_or(Failure::Invalid)?;
-        let scope = server
-            .get("source_scope")
-            .and_then(PyVal::as_str)
-            .ok_or(Failure::Invalid)?;
-        let config_path = server
-            .get("config_path")
-            .and_then(PyVal::as_str)
-            .ok_or(Failure::Invalid)?;
-        let source = if scope == "project" {
+    for (server, launched) in selection.servers.iter().zip(launched) {
+        let source = if server.source_scope == "project" {
             PyVal::Null
         } else {
-            source_entry(ctx, config_path, name)
+            source_entry(ctx, &server.config_path, &server.name)
         };
         let mut entry = Doc::default();
         entry
-            .set("name", text(name))
-            .set("source_scope", text(scope))
-            .set("command", field("command")?)
-            .set("args", field("args")?)
-            .set("env", field("env")?)
-            .set("enabled", field("enabled")?)
-            .set("proxy_environment", field("proxy_environment")?)
+            .set("name", text(server.name.as_str()))
+            .set("source_scope", text(server.source_scope.as_str()))
+            .set("command", text(server.command.as_str()))
+            .set(
+                "args",
+                PyVal::List(server.args.iter().map(|arg| text(arg.as_str())).collect()),
+            )
+            .set("env", pairs_dict(&server.env))
+            .set("enabled", PyVal::Bool(server.enabled))
+            .set("proxy_environment", launched.proxy_environment.clone())
             .set("source", source);
         wire.push(entry.value());
-        let pair = server
-            .get("launches")
-            .and_then(PyVal::as_list)
-            .ok_or(Failure::Invalid)?;
-        let [companion, over] = pair else {
-            return Err(Failure::Invalid);
-        };
-        launches.push([companion.clone(), over.clone()]);
-        names.push(name.to_owned());
+        launches.push(launched.launches.clone());
+        names.push(server.name.clone());
     }
     let mut workspace_servers: Vec<String> = snapshot
         .configs
@@ -255,8 +226,8 @@ fn plan_request(
         .set("op", text("plan"))
         .set("workspace", PyVal::Bool(ctx.workspace.is_some()))
         .set("servers", PyVal::List(wire))
-        .set("skipped", json_field(fields, "skipped")?)
-        .set("artifacts", json_field(fields, "artifacts")?)
+        .set("skipped", names_list(&selection.skipped))
+        .set("artifacts", names_list(&selection.artifacts))
         .set(
             "workspace_servers",
             PyVal::List(workspace_servers.into_iter().map(text).collect()),
@@ -265,6 +236,18 @@ fn plan_request(
         .set("mcp", mcp)
         .set("mcp_keys", PyVal::List(mcp_keys));
     Ok((request.value(), launches, names))
+}
+
+fn names_list(names: &[String]) -> PyVal {
+    PyVal::List(names.iter().map(|name| text(name.as_str())).collect())
+}
+
+fn pairs_dict(pairs: &[(String, String)]) -> PyVal {
+    let mut env = Doc::default();
+    for (key, value) in pairs {
+        env.set(key, text(value.as_str()));
+    }
+    env.value()
 }
 
 /// `json.dumps(payload, indent=2) + "\n"`.
@@ -283,10 +266,21 @@ fn assign(after: &mut Vec<(PathBuf, Option<Vec<u8>>)>, path: PathBuf, bytes: Opt
 /// `prepare_install`: the transition files and manifest of the install.
 pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let snapshot = snapshot(ctx)?;
-    if fields.get("digest").and_then(Value::as_str) != Some(snapshot.digest.as_str()) {
-        return Err(Failure::Integrity("target_changed"));
-    }
     let shim = files::shim_manifest(fields)?;
+    let (artifacts, found_paths) = detect(ctx, &snapshot)?;
+    let source_paths = match &ctx.workspace {
+        Some(_) => workspace_paths(ctx, &artifacts, found_paths)?,
+        None => found_paths,
+    };
+    let selection = opencode_servers::select(&artifacts)?;
+    let mut launched = Vec::with_capacity(selection.servers.len());
+    if !selection.servers.is_empty() {
+        let launch = Launch::of(ctx)?;
+        for server in &selection.servers {
+            launched.push(opencode_servers::launched(ctx, &launch, server)?);
+        }
+    }
+    let plugin = opencode::plugin_args(ctx, fields, true)?;
     let target = managed_config_path(ctx);
     let mut payload = snapshot
         .configs
@@ -294,7 +288,7 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
         .find(|config| config.path == target)
         .map(|config| config.value.clone())
         .unwrap_or_default();
-    let (request, launches, names) = plan_request(ctx, fields, &snapshot, &payload)?;
+    let (request, launches, names) = plan_request(ctx, &selection, &launched, &snapshot, &payload)?;
     let answer = request.to_json().ok_or(Failure::Invalid).and_then(|wire| {
         crate::opencode_install_plan::dispatch(&wire).map_err(|_| Failure::Invalid)
     })?;
@@ -351,8 +345,7 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
                 path_value(&ctx.resolved(workspace))
             }),
         );
-    let plugin = fields.get("plugin").ok_or(Failure::Invalid)?;
-    let source = crate::opencode_plugin_render::render(plugin)
+    let source = crate::opencode_plugin_render::render(&plugin)
         .map_err(|error| {
             Failure::Refusal(format!(
                 "Guard could not render the OpenCode plugin: {error}"
@@ -432,7 +425,6 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
 
     let mut notes = files::shim_notes(&shim);
     notes.extend(INSTALL_NOTES.iter().map(|note| text(*note)));
-    let listed = |key: &str| json_field(fields, key);
     let mut manifest = Doc::default();
     manifest
         .set("harness", text("opencode"))
@@ -459,7 +451,7 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
             "skipped_servers",
             PyVal::List(skipped.into_iter().map(text).collect()),
         )
-        .set("source_config_paths", listed("source_config_paths")?)
+        .set("source_config_paths", names_list(&source_paths))
         .set("notes", PyVal::List(notes));
     Ok(json!({ "files": changes, "manifest": files::render(&manifest.value())? }))
 }

@@ -285,6 +285,7 @@ fn glob_selects_sensitive_path(value: &str, path_operand: bool) -> bool {
     ];
     patterns.iter().any(|pattern| {
         pattern.split('/').any(|component| {
+            let component = &*glob_class::widen_unmodeled_class(component);
             let bytes = component.as_bytes();
             let code_extension = component
                 .rsplit_once('.')

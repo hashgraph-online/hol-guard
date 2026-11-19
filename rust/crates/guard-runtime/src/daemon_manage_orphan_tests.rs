@@ -8,22 +8,29 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command};
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+use super::ensure::start_lock;
+use super::retire::Deadline;
 use super::{host, records, run_command};
 use crate::daemon_edge::standalone::write_signed_record;
 
 const PREVIOUS_LAUNCH: &str = "previous Guard daemon launch";
 
-struct Running(Child);
+pub(super) struct Running(Child);
 
 impl Running {
-    fn pid(&self) -> u32 {
+    pub(super) fn spawn(command: &mut Command) -> Self {
+        Self(command.process_group(0).spawn().unwrap())
+    }
+
+    pub(super) fn pid(&self) -> u32 {
         self.0.id()
     }
 
-    fn exited(&mut self) -> bool {
+    pub(super) fn exited(&mut self) -> bool {
         self.0.try_wait().unwrap().is_some()
     }
 }
@@ -40,13 +47,13 @@ impl Drop for Running {
     }
 }
 
-fn private_home() -> tempfile::TempDir {
+pub(super) fn private_home() -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
     fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
     home
 }
 
-fn free_port() -> u16 {
+pub(super) fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
@@ -82,7 +89,7 @@ fn dead_pid() -> i64 {
 }
 
 /// The signed receipt a launch leaves when its child exits before handoff.
-fn abandoned_receipt(home: &Path) {
+pub(super) fn abandoned_receipt(home: &Path) {
     let nonce = "ab".repeat(32);
     let mut pending = Map::new();
     pending.insert("state_kind".into(), "daemon_launch_pending".into());
@@ -170,17 +177,16 @@ fn a_start_retires_an_orphaned_daemon_before_it_launches() {
     );
 }
 
-#[test]
-fn a_live_launch_receipt_still_protects_its_daemon() {
-    let home = private_home();
-    let mut orphan = orphaned_daemon(home.path());
+/// The signed receipt a launch writes while its launcher, `launcher`, is
+/// still running and handing off.
+fn live_receipt(home: &Path, launcher: &Running) {
     let nonce = "cd".repeat(32);
-    let pid = i64::from(orphan.pid());
+    let pid = i64::from(launcher.pid());
     let mut pending = Map::new();
     pending.insert("state_kind".into(), "daemon_launch_pending".into());
     pending.insert(
         "guard_home".into(),
-        host::resolve_lenient(home.path())
+        host::resolve_lenient(home)
             .to_string_lossy()
             .into_owned()
             .into(),
@@ -198,11 +204,61 @@ fn a_live_launch_receipt_still_protects_its_daemon() {
     pending.insert("user".into(), owner.clone().into());
     pending.insert("owner".into(), owner.into());
     pending.insert("runtime_fingerprint".into(), "new-runtime".into());
-    write_signed_record(home.path(), "daemon-launch-pending.json", pending).unwrap();
+    write_signed_record(home, "daemon-launch-pending.json", pending).unwrap();
+}
+
+#[test]
+fn a_live_launch_receipt_still_protects_its_daemon() {
+    let home = private_home();
+    let mut orphan = orphaned_daemon(home.path());
+    live_receipt(home.path(), &orphan);
     // Gate the stand-in on a pid that is already gone, so any launch at all
     // leaves the sentinel this test expects to stay absent.
     let gone = u32::try_from(dead_pid()).unwrap();
     let answer = ensure(home.path(), gone);
     assert!(!orphan.exited(), "a live launch was retired: {answer}");
     assert!(!home.path().join("launch-sentinel").exists(), "{answer}");
+}
+
+/// A Core update and a hook recovery can start the daemon at the same time.
+/// The second starter finds the first one's receipt naming a live launcher;
+/// it must wait for the first to finish its handoff under the start lock,
+/// not fail at once with the previous-launch refusal.
+#[test]
+fn a_start_waits_for_another_starter_still_handing_off_its_launch() {
+    let home = private_home();
+    let launcher = orphaned_daemon(home.path());
+    live_receipt(home.path(), &launcher);
+    let deadline = Deadline(Some(Instant::now() + Duration::from_secs(5)));
+    let Ok(lock) = start_lock(home.path(), deadline) else {
+        panic!("the start lock could not be taken");
+    };
+    // The second starter begins while the first holds the lock and its
+    // receipt names a live launcher.
+    let (answered, answer) = std::sync::mpsc::channel();
+    let second = {
+        let home = home.path().to_path_buf();
+        let gone = u32::try_from(dead_pid()).unwrap();
+        std::thread::spawn(move || {
+            let _ = answered.send(ensure(&home, gone));
+        })
+    };
+    let early = answer.recv_timeout(Duration::from_millis(800));
+    assert!(
+        early.is_err(),
+        "the start answered while another starter held the lock: {early:?}"
+    );
+    // The first starter's handoff clears its receipt, then it releases the
+    // start lock.
+    fs::remove_file(home.path().join("daemon-launch-pending.json")).unwrap();
+    drop(lock);
+    let answer = answer.recv_timeout(Duration::from_secs(10)).unwrap();
+    second.join().unwrap();
+    let error = answer["error"].as_str().unwrap_or_default();
+    assert!(!error.contains(PREVIOUS_LAUNCH), "{answer}");
+    assert!(
+        home.path().join("launch-sentinel").exists(),
+        "no launch after the first starter finished: {answer}"
+    );
+    drop(launcher);
 }

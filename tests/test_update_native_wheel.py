@@ -1006,8 +1006,8 @@ def test_doctor_report_names_the_fix_and_the_manual_command(monkeypatch: pytest.
 def test_install_stops_before_wiring_hooks_when_the_runtime_cannot_be_fetched(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], reason_code: str
 ) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli import commands_dispatch_local as dispatch
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     failure = {"status": "failed", "reason_code": reason_code, "message": "run pip by hand"}
     monkeypatch.setattr(dispatch, "repair_native_runtime_if_missing", lambda **_kwargs: (failure, 1))

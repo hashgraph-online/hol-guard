@@ -2,13 +2,10 @@
 //! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
 //! Cline, Copilot, Cursor, Claude Code, Hermes and Codex harness adapters.
 //!
-//! Python keeps one generic adapter class that holds the ownership locks,
-//! prepares and removes the launcher shim, builds the bounded hook argv and
-//! publishes the file plans this kind returns through the runtime transition
-//! journal. Everything else is answered here: the adapter descriptions, policy
-//! and config paths, detection and command lookup, the install and uninstall
-//! plans with their manifests, the launch environment, the runtime probe
-//! fields, the approval flow and Paseo's delegated native installs.
+//! The runtime answers the adapter descriptions, paths, detection, install and
+//! uninstall plans, their publication under one installation transaction, the
+//! managed-install records, the update repairs and Paseo's delegated native
+//! installs. The caller supplies only the facts of its own process.
 //!
 //! Every request carries `harness`, `op` and a `context` object:
 //! `{home, workspace, guard_home, home_override_explicit, cwd, user_home,
@@ -27,12 +24,16 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod attested_cli;
 mod authorized_write;
+mod caller;
 mod claude;
 mod claude_argv;
 mod claude_install_target;
+mod claude_install_target_text;
 mod claude_settings;
 mod cline;
+mod cline_apply;
 mod cline_hooks;
 mod cline_install;
 mod cline_mcp;
@@ -43,14 +44,19 @@ mod codex;
 mod codex_alternate_plan;
 mod codex_config_hooks;
 mod codex_detect_legacy;
+mod codex_failure;
 mod codex_files;
 mod codex_hook_state;
+mod codex_incident;
+mod codex_incident_read;
 mod codex_install;
 mod codex_install_plan;
+mod codex_install_request;
 mod codex_live_hooks;
 mod codex_live_read;
 mod codex_live_state;
 mod codex_main_plan;
+mod codex_manifest_verify;
 mod codex_merge;
 mod codex_migration;
 mod codex_owner_home;
@@ -60,18 +66,22 @@ mod codex_publish;
 mod codex_python_hook;
 mod codex_python_imports;
 mod codex_python_values;
+mod codex_repair_verify;
 mod codex_servers;
 mod codex_sources;
+mod codex_spec;
 mod codex_uninstall;
 mod codex_uninstall_config;
 mod codex_uninstall_op;
 mod codex_uninstall_plan;
+mod contract_config_paths;
 mod copilot;
 mod copilot_install;
 mod copilot_mcp;
 mod copilot_state;
 mod copilot_uninstall;
 mod cursor;
+mod cursor_apply;
 mod cursor_ask;
 mod cursor_editor;
 mod cursor_files;
@@ -80,12 +90,21 @@ mod cursor_hooks_plan;
 mod cursor_hooks_uninstall;
 mod cursor_rebind;
 mod cursor_state;
+mod cursor_surfaces;
 mod describe;
 mod describe_env;
 mod desktop_core;
+mod detect_merged;
+mod durable_runtime;
 mod files;
+mod firewall;
 mod grok;
+mod grok_hook_command;
+mod grok_hook_files;
+mod grok_hook_op;
 mod grok_install;
+mod grok_protection_checks;
+mod grok_update;
 mod guard_shim;
 mod guard_shim_text;
 mod hermes;
@@ -93,41 +112,69 @@ mod hermes_config;
 mod hermes_hooks;
 mod hermes_install;
 mod hermes_uninstall;
+mod hook_config;
 mod hook_render;
+mod install_apply;
 mod isolated_python;
 mod kimi;
+mod launch_default;
+mod live_hook_verification;
+mod managed_install;
+mod managed_install_target;
+mod managed_record;
+mod managed_servers;
+mod managed_store;
+mod managed_update;
+mod mcp_servers;
 mod openclaw;
 mod opencode;
 mod opencode_build;
 mod opencode_checks;
 mod opencode_install;
+mod opencode_servers;
+mod opencode_update;
+mod opencode_workspace;
 mod paseo;
 mod paseo_install;
 mod paseo_paths;
 mod pi;
 mod pi_extension;
+mod probe_run;
 mod proof;
+mod proxy_launch;
 mod settings_hooks;
+mod setup_detection;
 mod shim_profile;
 mod shim_remove;
+mod shims_apply;
 mod simple;
+mod skills_scan;
+mod standalone_install;
 mod uninstall_apply;
+mod update_bounded;
+mod update_support;
 mod which;
 mod zcode;
+mod zcode_desktop_keys;
 
-#[cfg(test)]
-#[path = "tests.rs"]
-mod tests;
+pub(crate) use codex_repair_verify::{verify_captured, Verdict};
 
 #[cfg(test)]
 #[path = "codex_owners_tests.rs"]
 mod codex_owners_tests;
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
+#[cfg(test)]
+#[path = "tests_mcp_launch.rs"]
+mod tests_mcp_launch;
 
 pub(crate) use codex_detect_legacy::DetectLegacy;
 pub(crate) use describe::Spec;
 
 /// The paths a harness adapter works from, as Python's `HarnessContext` and
 /// process hold them.
+#[derive(Clone)]
 pub(crate) struct Ctx {
     pub(crate) home: PathBuf,
     pub(crate) workspace: Option<PathBuf>,
@@ -138,6 +185,10 @@ pub(crate) struct Ctx {
     pub(crate) env: BTreeMap<String, String>,
     pub(crate) executable_overrides: BTreeMap<String, String>,
     pub(crate) windows: bool,
+    /// Whether CLI probes may run; the passive global doctor turns them off.
+    pub(crate) probes: bool,
+    /// `native_caller.caller_identity()`: the Guard process that asked.
+    pub(crate) caller: Map<String, Value>,
 }
 
 impl Ctx {
@@ -176,6 +227,15 @@ impl Ctx {
             env: strings("env")?,
             executable_overrides: strings("executable_overrides")?,
             windows: cfg!(windows),
+            probes: match map.get("probes") {
+                None => true,
+                Some(value) => value.as_bool().ok_or(ERR_INVALID)?,
+            },
+            caller: match map.get("caller") {
+                None | Some(Value::Null) => Map::new(),
+                Some(Value::Object(caller)) => caller.clone(),
+                Some(_) => return Err(ERR_INVALID),
+            },
         })
     }
 
@@ -224,6 +284,7 @@ pub(crate) fn path_text(path: &Path) -> String {
 }
 
 /// Why an op stopped, as the Python adapter raised it.
+#[derive(Debug)]
 pub(crate) enum Failure {
     Refusal(String),
     Os(String),
@@ -277,15 +338,39 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "describe" {
         return Ok(describe::describe());
     }
+    if mcp_servers::handles(op) {
+        return answer(mcp_servers::dispatch(op, fields));
+    }
     let ctx = Ctx::parse(fields.get("context"))?;
+    if grok_protection_checks::handles(op) {
+        return answer(grok_protection_checks::dispatch(op, &ctx));
+    }
+    if contract_config_paths::handles(op) {
+        return answer(contract_config_paths::dispatch(&ctx, fields));
+    }
+    if setup_detection::handles(op) {
+        return answer(setup_detection::dispatch(op, &ctx, fields));
+    }
+    if live_hook_verification::handles(op) {
+        return answer(live_hook_verification::dispatch(&ctx, fields));
+    }
+    if grok_hook_op::handles(op) {
+        return answer(grok_hook_op::dispatch(op, &ctx, fields));
+    }
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
+    }
+    if let Some(done) = managed_install::route(op, &ctx, fields) {
+        return done;
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));
     }
     if op == "prepare_guard_shim_shell_profile" {
         return answer(shim_profile::prepare(&ctx, fields));
+    }
+    if op == "apply_guard_shims" {
+        return answer(shims_apply::apply_guard_shims(&ctx, fields));
     }
     if op == "prepare_guard_shim_removal" {
         return answer(shim_remove::prepare(&ctx, fields));
@@ -295,11 +380,34 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
+    if op == "adapter_install" || op == "adapter_uninstall" {
+        return managed_install::adapter(op, spec, &ctx, fields);
+    }
+    if op == "detect_merged" {
+        return answer(detect_merged::one(spec, &ctx, fields));
+    }
     if op == "apply_uninstall" {
         return uninstall_apply::apply(spec, &ctx, fields);
     }
+    if op == "apply_install" {
+        return answer(install_apply::apply(spec, &ctx, fields));
+    }
+    if op == "prepare_surfaces" && spec.harness == "cursor" {
+        return answer(cursor_apply::prepare(spec, &ctx, fields));
+    }
+    if op == "apply_plan" {
+        return answer(shims_apply::apply_plan(spec, &ctx, fields));
+    }
+    if op == "probe_runtime" {
+        return answer(probe_run::runtime(spec, &ctx, fields));
+    }
     answer(if op == "default_launch" {
-        default_launch(spec, &ctx, fields)
+        launch_default::answer(spec, &ctx, fields)
+    } else if op == "hook_config" {
+        hook_config::answer(spec, &ctx, fields)
+    } else if op == "hook_spec" {
+        route(spec, op, &ctx, fields)
+            .and_then(|spec_answer| hook_config::with_config(spec, &ctx, spec_answer))
     } else {
         route(spec, op, &ctx, fields)
     })
@@ -324,30 +432,6 @@ fn route(spec: &Spec, op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
         "codex" => codex::dispatch(spec, op, ctx, fields),
         _ => Err(Failure::Invalid),
     }
-}
-
-/// `{"argv": [...]}`, the launch for a harness with no launcher of its own:
-/// its resolved executable or else its bare name, the workspace for the two
-/// harnesses that open one, then the caller's `args`.
-fn default_launch(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let args = fields
-        .get("args")
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|arg| arg.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect::<Step<Vec<_>>>()?;
-    let resolved = route(spec, "resolved_executable", ctx, fields)?;
-    let mut argv = vec![resolved
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or(spec.executable)
-        .to_owned()];
-    if matches!(spec.harness, "opencode" | "claude-code") {
-        argv.extend(ctx.workspace.as_deref().map(path_text));
-    }
-    argv.extend(args);
-    Ok(json!({ "argv": argv }))
 }
 
 /// `{"path": ...}` for `resolved_executable`, shared by every harness.

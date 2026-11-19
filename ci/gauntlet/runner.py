@@ -8,7 +8,6 @@ import os
 import platform
 import re
 import shutil
-import subprocess
 import time
 from collections.abc import Callable, Container, Mapping, Sequence
 from datetime import datetime, timezone
@@ -56,6 +55,7 @@ from .fixtures import (
 )
 from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
 from .host_process import clean_environment, realistic_environment, run_process
+from .host_shims import omp_version
 from .input_evidence import (
     public_native_extension_evidence,
     public_native_receipt,
@@ -68,6 +68,7 @@ from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .release_budgets import attempt_observations, release_budgets
+from .repeat_cases import REPEAT_ORACLE
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
@@ -228,6 +229,7 @@ def run_case(
                 memory_bank="learn" in scenario.required_tools,
                 github_tool="github" in scenario.required_tools,
                 structured_tasks=scenario.id == TASK_SCHEMA_CASE,
+                tool_call_loop_guard=scenario.oracle != REPEAT_ORACLE,
             )
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
@@ -522,7 +524,7 @@ def run_suite(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    version = subprocess.check_output([executable, "--version"], text=True, timeout=15).strip()
+    version = omp_version(executable)
     package = json.loads((REPO / "ci/pi-exact-continuation/package.json").read_text())
     expected_version = package["dependencies"]["@oh-my-pi/pi-coding-agent"]
     if version != "omp/" + expected_version:

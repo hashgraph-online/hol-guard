@@ -226,3 +226,49 @@ fn other_requests_and_page_methods_stay_reviewed() {
         assert!(!loopback_browser_program(code, None), "{code}");
     }
 }
+
+/// A file URL must not be silently allowed merely because the current
+/// filesystem points it at HTML. The browser opens the path later, and a
+/// symlink or directory entry can change after the pre-tool check.
+#[test]
+fn file_urls_remain_reviewed_even_for_existing_workspace_html() {
+    let workspace = tempfile::tempdir().unwrap();
+    let cwd = workspace.path().to_str().unwrap();
+    std::fs::write(workspace.path().join("index.html"), "<html>project</html>").unwrap();
+    std::fs::write(workspace.path().join("private.html"), "SYNTHETIC_SECRET").unwrap();
+    for code in [
+        format!("const tab=await browser.open({{url:'file://{cwd}/index.html',app:'own'}});"),
+        format!("const tab=await browser.open({{url:'file://{cwd}/private.html'}});"),
+        String::from(
+            "const tab=await browser.open({url:'file:///home/alice/.config/private.html'});",
+        ),
+        String::from("const tab=await browser.open({url:'file:///etc/passwd'});"),
+    ] {
+        assert!(!loopback_browser_program(&code, None), "{code}");
+    }
+}
+
+#[test]
+fn bounded_browser_callbacks_remain_modeled_without_local_file_opens() {
+    for code in [
+        "const tab=browser.tab('game'); return {canvas: await tab.count('#game'), score: await tab.text('#score'), errors: (await tab.errors()).entries}",
+        "const tab=browser.tab('game'); await tab.click('#game'); await tab.waitFor(100); return {message: await tab.text('#message')}",
+        "const tab=browser.tab('game'); await tab.press('Space',{selector:'body'}); await tab.run(async ({wait})=>{await wait(100);}); return {message: await tab.text('#message')}",
+    ] {
+        assert!(loopback_browser_program(code, None), "{code}");
+    }
+    for code in [
+        "const tab=browser.tab('game'); await tab.press('body','Space'); await tab.waitFor(100);",
+        "const tab=await browser.open({url:'http://localhost:3000/',app:'chrome'});",
+        "const tab=await browser.open({url:'http://localhost:3000/',app:'own',app:'own'});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await wait('x');});",
+        "const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await page.click('#game');});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{const text=await page.title();});",
+        "const wait=100; const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});",
+        "const tab=browser.tab('game'); await tab.run(async ({page,page})=>{});",
+        "const tab=browser.tab('game'); return (await tab.errors()).constructor",
+    ] {
+        assert!(!loopback_browser_program(code, None), "{code}");
+    }
+}

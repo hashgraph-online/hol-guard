@@ -18,8 +18,8 @@ use super::{Fault, Step};
 use crate::codex_hook_authority_record::python_json::python_canonical_json;
 use crate::runtime_transition_record::check_change;
 
-const SCHEMA: &str = "hol-guard.codex-authority-repair-plan.v1";
-const ACTION: &str = "apps.repair.codex-authority";
+pub(super) const SCHEMA: &str = "hol-guard.codex-authority-repair-plan.v1";
+pub(super) const ACTION: &str = "apps.repair.codex-authority";
 const MAX_FILES: usize = 128;
 const INVALID: Fault = Fault::Transition("authority_repair_plan_invalid");
 const BINDING: Fault = Fault::Transition("authority_repair_native_binding_invalid");
@@ -55,7 +55,7 @@ fn spelled(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn payload(args: &Map<String, Value>) -> Step<Map<String, Value>> {
+pub(super) fn payload(args: &Map<String, Value>) -> Step<Map<String, Value>> {
     let operation = text(args, "operation_id")?;
     if !canonical_uuid(operation) {
         return Err(INVALID);

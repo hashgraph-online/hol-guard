@@ -12,6 +12,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
@@ -20,6 +21,7 @@ from .codex_hook_file_integrity import (
 )
 from .codex_hook_integrity import manifest_refusal
 from .codex_hook_launch_runtime import (
+    BoundedHookProcessResult,
     isolated_hook_environment,
     private_hook_runtime_cwd,
     run_isolated_hook_process,
@@ -48,14 +50,10 @@ class TrustedCodexHookLaunch:
         timeout_seconds: float,
         failure_kind: str = "transport-failure",
     ) -> bool:
-        if failure_kind not in {
-            "authenticated-control-plane-failure",
-            "overload",
-            "transport-failure",
-        }:
-            failure_kind = "transport-failure"
         environment = dict(self.environment)
-        environment["HOL_GUARD_HOOK_FAILURE_KIND"] = failure_kind
+        environment["HOL_GUARD_HOOK_FAILURE_KIND"] = _answer(
+            _native("launch_failure_kind", deadline_bound=False, failure_kind=failure_kind), "failure_kind", str
+        )
         result = run_isolated_hook_process(
             command,
             input_text="",
@@ -65,12 +63,7 @@ class TrustedCodexHookLaunch:
             deadline_monotonic=self._launch_deadline(timeout_seconds),
             allow_windows_breakaway=True,
         )
-        return (
-            result.returncode == 0
-            and not result.output_limit_exceeded
-            and not result.timed_out
-            and not result.containment_failed
-        )
+        return _succeeded(result)
 
     def run_fallback(
         self,
@@ -87,12 +80,37 @@ class TrustedCodexHookLaunch:
             timeout_seconds=timeout_seconds,
             deadline_monotonic=self._launch_deadline(timeout_seconds),
         )
-        if result.returncode != 0 or result.output_limit_exceeded or result.timed_out or result.containment_failed:
-            return None
-        return result.stdout
+        return result.stdout if _succeeded(result) else None
 
 
-def _checked(op: str, **fields: object) -> dict[str, object]:
+def _answer(answer: dict[str, object], key: str, kind: type) -> Any:
+    identity = answer.get("identity")
+    value = identity.get(key) if isinstance(identity, dict) else None
+    if not isinstance(value, kind):
+        raise CodexHookIntegrityError("codex_hook_integrity_io_error", "Guard could not verify the Codex hook launch.")
+    return value
+
+
+def _succeeded(result: BoundedHookProcessResult) -> bool:
+    """The runtime's verdict on a child's result; the child already ran under its own limits."""
+
+    return bool(
+        _answer(
+            _native(
+                "launch_result",
+                deadline_bound=False,
+                returncode=result.returncode,
+                output_limit_exceeded=bool(result.output_limit_exceeded),
+                timed_out=bool(result.timed_out),
+                containment_failed=bool(result.containment_failed),
+            ),
+            "succeeded",
+            bool,
+        )
+    )
+
+
+def _checked(op: str, **fields: Any) -> dict[str, object]:
     try:
         return _native(op, **fields)
     except CodexHookIntegrityError as exc:

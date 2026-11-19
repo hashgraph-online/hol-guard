@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..adapters.contracts import contract_for
+from ..setup_contracts import contract_for
 
 
 def managed_install_payload(managed_install: dict[str, object]) -> dict[str, object]:

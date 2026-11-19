@@ -9,6 +9,7 @@ preferences and activates. Touches nothing outside <work>.
 
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -20,7 +21,7 @@ from pathlib import Path
 work = Path(sys.argv[1]).resolve()
 home = work / "ghome"
 guard = home / ".hol-guard"
-exe = str(work / "gvenv/bin/hol-guard")
+exe = str(work / ("gvenv/Scripts/hol-guard.exe" if os.name == "nt" else "gvenv/bin/hol-guard"))
 assert Path(os.environ.get("HOME", "")).resolve() == home, "run with HOME=<work>/ghome"
 env = dict(os.environ, HOME=str(home), USERPROFILE=str(home))
 
@@ -74,7 +75,10 @@ def post(url, body, session):
 
 def dash(path, body):
     from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
-    from codex_plugin_scanner.guard.native_daemon_client import load_guard_surface_daemon_client
+    try:
+        from codex_plugin_scanner.guard.native_daemon_client import load_guard_surface_daemon_client
+    except ImportError:  # published wheels keep it in the daemon package
+        from codex_plugin_scanner.guard.daemon.client import load_guard_surface_daemon_client
 
     client = load_guard_surface_daemon_client(guard)
     seed = build_local_dashboard_session_token(auth_token=client.auth_token, surface="dashboard")
@@ -110,17 +114,32 @@ def builds():
     return found
 
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter  # noqa: E402
+from codex_plugin_scanner.guard.harness_context import HarnessContext  # noqa: E402
+from codex_plugin_scanner.guard.native_harness_install_ops import install as install_harness  # noqa: E402
+from codex_plugin_scanner.guard.native_owned import owner_request  # noqa: E402
 
 guard.mkdir(parents=True, exist_ok=True)
-CodexHarnessAdapter().install(HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard))
+# Installing hooks asks the resident daemon, so start it first on a fresh home.
+subprocess.run([exe, "daemon", "ensure", "--guard-home", str(guard)], env=env, capture_output=True, timeout=300)
+install_harness(
+    "codex",
+    HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard),
+    owner=owner_request(guard, actor="adapter.codex.adapter_install"),
+)
 log("codex hooks installed in rig home")
 subprocess.run([exe, "daemon", "ensure", "--guard-home", str(guard)], env=env, capture_output=True, timeout=300)
 if ctx("status").get("requested_enabled") is not True:
     ids = builds()
-    machine = "darwin-arm64" if os.uname().machine == "arm64" else "darwin-x64"
-    py = sorted(b for b in ids if b.startswith("cpython-") and b.endswith(machine))[-1]
+    system = {"darwin": "darwin", "linux": "linux", "win32": "win32"}[sys.platform]
+    # Windows has an x64 build only; on Windows on Arm it runs under emulation.
+    arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") and system != "win32" else "x64"
+    # Build ids end in darwin-arm64, win32-x64, linux-arm64-gnu or linux-arm64-musl (glibc wanted).
+    pythons = sorted(b for b in ids if b.startswith("cpython-") and b.removesuffix("-gnu").endswith(f"-{system}-{arch}"))
+    if not pythons:
+        log("no CPython build for", system, arch, sorted(ids))
+        log("versions answer:", json.dumps(ctx("versions"))[:1500])
+        sys.exit(1)
+    py = pythons[-1]
     cigar = sorted(b for b in ids if b.startswith("cigar-"))[-1]
     log("builds", py, cigar)
     job = f"cli:{uuid.uuid4()}"

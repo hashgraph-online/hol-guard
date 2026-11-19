@@ -1,39 +1,61 @@
 """Exact lifecycle authorization for a reviewed Codex publication inverse.
 
 This module grants no journal retirement or native completion. Forward
-authorization stays in process memory and never renews the caller's deadline.
+authorization claims live in the resident (one use per grant) and never renew the
+caller's deadline.
 """
 
 from __future__ import annotations
 
-import math
-import os
-import threading
-import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from .approval_gate import ApprovalGateError, ApprovalGateGrant, validate_grant
 from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_install_transaction import CodexInstallOwner, require_codex_install_owner
 from .codex_publication_inverse_plan import PUBLICATION_INVERSE_ACTION, PreparedCodexPublicationInverse
+from .native_context import _resolve_existing_digest_home, native_context_digest
+from .native_owned import CodexInstallOwner, require_codex_install_owner
+from .native_transition_files import authorize_plan, require_deadline
 from .runtime_transition import TransitionError, inverse_recovery_budget
 
-_claims: dict[str, tuple[str, str, int, float, float]] = {}
-_claims_guard = threading.RLock()
-_MAX_CLAIMS = 128
 
+def _claim_call(
+    action: str,
+    plan: PreparedCodexPublicationInverse,
+    *,
+    grant_id: str,
+    subject: str,
+    owner: tuple[str, int],
+    deadline: float,
+    retirement_seconds: float = 0.0,
+) -> None:
+    """Ask the resident, which holds every claim, to spend or confirm one.
 
-def _after_fork_child() -> None:
-    global _claims, _claims_guard
-    _claims = {}
-    _claims_guard = threading.RLock()
+    A claim has to outlive the step that made it, so the registry is resident
+    state. Without a resident that answers, no authorization can be claimed or
+    confirmed: the proof fails closed.
+    """
 
-
-if hasattr(os, "register_at_fork"):
-    os.register_at_fork(after_in_child=_after_fork_child)
+    result = native_context_digest(
+        "publication_inverse_claim",
+        {
+            "action": action,
+            "grant_id": grant_id,
+            "subject": subject,
+            "operation_id": owner[0],
+            "owner_pid": owner[1],
+            "deadline": repr(float(deadline)),
+            "retirement_seconds": retirement_seconds,
+        },
+        guard_home=_resolve_existing_digest_home(plan.guard_home),
+    )
+    outcome = result.get("publication_inverse_claim") if isinstance(result, dict) else None
+    if outcome is None:
+        raise TransitionError("publication_inverse_authorization_unavailable")
+    if outcome != "ok":
+        raise TransitionError(str(outcome))
 
 
 def _owner(plan: PreparedCodexPublicationInverse) -> CodexInstallOwner:
@@ -56,8 +78,7 @@ class CodexPublicationInverseAuthorization:
     approved_subject: str
 
     def check(self) -> None:
-        if time.monotonic() >= self.deadline_monotonic:
-            raise TransitionError("deadline_exceeded")
+        require_deadline(self.deadline_monotonic)
         owner = _owner(self.plan)
         if owner.operation_id != self.owner_operation_id or owner.pid != self.owner_pid:
             raise TransitionError("publication_inverse_owner_mismatch")
@@ -67,20 +88,16 @@ class CodexPublicationInverseAuthorization:
         ).resolve(strict=False)
         if expected != self.authority_home:
             raise TransitionError("approval_authority_mismatch")
-        with _claims_guard:
-            claim = _claims.get(self.grant.grant_id)
-        if (
-            self.plan.subject() != self.approved_subject
-            or claim is None
-            or claim[:4]
-            != (
-                self.approved_subject,
-                self.owner_operation_id,
-                self.owner_pid,
-                self.deadline_monotonic,
-            )
-        ):
+        if self.plan.subject() != self.approved_subject:
             raise TransitionError("publication_inverse_authorization_invalid")
+        _claim_call(
+            "check",
+            self.plan,
+            grant_id=self.grant.grant_id,
+            subject=self.approved_subject,
+            owner=(self.owner_operation_id, self.owner_pid),
+            deadline=self.deadline_monotonic,
+        )
         validate_grant(
             expected,
             self.grant,
@@ -106,13 +123,7 @@ def authorize_codex_publication_inverse(
     grant: ApprovalGateGrant | None,
     deadline_monotonic: float,
 ) -> CodexPublicationInverseAuthorization:
-    if (
-        isinstance(deadline_monotonic, bool)
-        or not isinstance(deadline_monotonic, (int, float))
-        or not math.isfinite(deadline_monotonic)
-        or time.monotonic() >= deadline_monotonic
-    ):
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     owner = _owner(plan)
     subject = plan.subject()
     expected = lifecycle_authority_home(
@@ -133,21 +144,19 @@ def authorize_codex_publication_inverse(
         subject=subject,
         session_nonce=owner.operation_id,
     )
-    now = time.monotonic()
-    expires_at = datetime.fromisoformat(grant.expires_at.replace("Z", "+00:00")).timestamp()
-    retirement = now + max(0.0, expires_at - time.time())
-    deadline = min(deadline_monotonic, now + 60.0, retirement)
+    timing = authorize_plan("inverse", grant.expires_at, deadline_monotonic)
+    deadline = cast(float, timing["deadline"])
     # Claim before file comparison: restoring old bytes cannot replay a proof
     # whose first attempted use observed a different generation.
-    with _claims_guard:
-        for identifier, claim in tuple(_claims.items()):
-            if claim[4] <= now:
-                del _claims[identifier]
-        if grant.grant_id in _claims:
-            raise TransitionError("publication_inverse_authorization_claimed")
-        if len(_claims) >= _MAX_CLAIMS:
-            raise TransitionError("publication_inverse_authorization_capacity")
-        _claims[grant.grant_id] = (subject, owner.operation_id, owner.pid, deadline, retirement)
+    _claim_call(
+        "claim",
+        plan,
+        grant_id=grant.grant_id,
+        subject=subject,
+        owner=(owner.operation_id, owner.pid),
+        deadline=deadline,
+        retirement_seconds=cast(float, timing["retirement_seconds"]),
+    )
     authorization = CodexPublicationInverseAuthorization(
         plan,
         expected,

@@ -13,12 +13,12 @@ from unittest.mock import Mock
 import pytest
 
 from codex_plugin_scanner.guard import hook_deadline
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review import hook_policy_fence_window as fence
 from codex_plugin_scanner.guard.hook_review import hook_worker_native_review as review
 from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.store import GuardStore
 
 FENCE_CODE = "native_business_source_mutation_in_progress"

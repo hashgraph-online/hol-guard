@@ -11,6 +11,8 @@
 //! a client killed mid-operation frees its lock for clients of other
 //! residents too.
 //!
+//! `owned` composes these leases into one owner's installation transaction.
+//!
 //! Three locks exist; `lock_files` opens and checks them. The installation lock is `managed/codex/installation.lock`
 //! under a Guard home, in a private directory repaired to owner-only. A
 //! lifecycle lock is one file per Codex configuration directory, under the
@@ -56,7 +58,7 @@ fn contended(error: &std::io::Error) -> bool {
 
 /// Python's `msvcrt.locking` needs a byte to lock, so an empty Windows lock
 /// file gets one first.
-fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
+pub(super) fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
     #[cfg(windows)]
     {
         use std::io::Write;
@@ -69,6 +71,38 @@ fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
         Ok(()) => Ok(true),
         Err(error) if contended(&error) => Ok(false),
         Err(error) => Err(error),
+    }
+}
+
+/// The OpenCode config lock held by the caller's own handle for one native
+/// call, waiting up to `wait` while another Guard operation holds it. Answers
+/// `opencode_config_busy` when it stays busy and the lock file's refusal
+/// reason when the file cannot be opened safely.
+pub(crate) fn hold_opencode_lock(home_dir: &Path, wait: Duration) -> Result<fs::File, String> {
+    let (file, _) = opencode_lock(home_dir).map_err(|refusal| refusal.0)?;
+    hold(file, wait, "opencode_config_busy")
+}
+
+/// The Guard home's installation lock held by the caller's own handle, so a
+/// resident stop neither interrupts an install that holds its lease nor lets
+/// one start until the stop is done. Answers
+/// `native_resident_install_in_progress` when an install keeps it past `wait`.
+pub(crate) fn hold_install_lock(guard_home: &Path, wait: Duration) -> Result<fs::File, String> {
+    let (file, _) = install_lock(guard_home).map_err(|refusal| refusal.0)?;
+    hold(file, wait, "native_resident_install_in_progress")
+}
+
+fn hold(mut file: fs::File, wait: Duration, busy: &str) -> Result<fs::File, String> {
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        match try_lock(&mut file) {
+            Ok(true) => return Ok(file),
+            Ok(false) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Ok(false) => return Err(busy.to_owned()),
+            Err(error) => return Err(Refusal::lifecycle("lock", &error).0),
+        }
     }
 }
 
@@ -153,6 +187,56 @@ fn acquire(args: &Map<String, Value>) -> KindResult {
     );
     ensure_reaper();
     Ok(json!({ "ok": true, "lease": lease }))
+}
+
+/// Register a lock this caller already holds under a lease for the client
+/// process `pid`, so the reaper frees it if that process is gone.
+pub(super) fn adopt(file: fs::File, path: PathBuf, pid: u32) -> Result<String, &'static str> {
+    let marker = running_process_start_marker(pid).map_err(|_| ERR_INVALID)?;
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    reap(leases);
+    if leases.len() >= MAX_LEASES {
+        return Err(ERR_INVALID);
+    }
+    let lease = token()?;
+    leases.insert(
+        lease.clone(),
+        Lease {
+            file,
+            path,
+            pid,
+            marker,
+        },
+    );
+    ensure_reaper();
+    Ok(lease)
+}
+
+/// Close the lease's handle, releasing its advisory lock.
+pub(super) fn release(lease: &str) {
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    leases.remove(lease);
+    reap(leases);
+}
+
+/// Whether the lease is live and its lock file is still the one at the path.
+pub(super) fn held(lease: &str) -> bool {
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    reap(leases);
+    leases.get(lease).is_some_and(check)
+}
+
+/// Whether the lease is live and holds the lock file at `path`, not another lock's.
+pub(super) fn held_at(lease: &str, path: &Path) -> bool {
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    reap(leases);
+    leases
+        .get(lease)
+        .is_some_and(|lease| lease.path == path && check(lease))
 }
 
 /// `check`: the lease is live and its lock file is still the one at the path.

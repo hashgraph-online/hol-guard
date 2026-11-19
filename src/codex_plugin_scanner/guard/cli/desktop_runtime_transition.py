@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from ... import __version__
-from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError, public_config, require_high_risk
 from ..codex_hook_file_integrity import CodexHookIntegrityError
-from ..codex_install_transaction import codex_install_transaction
+from ..harness_context import HarnessContext
 from ..native_daemon_manage import guard_daemon_start_lock
+from ..native_owned import codex_install_transaction
 from ..native_runtime import NativeRuntimeIdentity
 from ..runtime_transition import (
     RuntimeTransition,

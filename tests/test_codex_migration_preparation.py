@@ -7,11 +7,12 @@ from dataclasses import replace
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_hook_self_binding
-from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests import codex_install_flow_support as flow
 from tests import codex_plan_segments as segments
+from tests.codex_toml_support import parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- imported pytest fixture
@@ -123,7 +124,7 @@ def migration_kept_hooks(context, hooks_payload, owned_bindings=()):
         owned=json.dumps(list(owned_bindings)),
         unlaunchable=True,
         hold_recorded=False,
-        **adapter._legacy_fields(context),
+        **flow.legacy_fields(context),
         **codex_hook_self_binding.install_fields(adapter._runtime_guard_home(context), None),
     )
     cleaned = json.loads(codex_hook_self_binding.answer_text(answer, "hooks"))

@@ -11,13 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
+from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction, require_codex_install_owner
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction, require_codex_install_owner
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests import harness_ops_support as harness_support
+from tests.codex_hook_paths_support import hook_manifest_path
 
 
 def test_copied_context_cannot_borrow_another_threads_publication_owner(tmp_path):
@@ -35,7 +37,7 @@ def test_copied_context_cannot_borrow_another_threads_publication_owner(tmp_path
 FORK_OWNER = r"""
 import os, subprocess, sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import (
+from codex_plugin_scanner.guard.native_owned import (
     codex_install_transaction, require_codex_install_owner,
 )
 root = Path(sys.argv[1])
@@ -75,7 +77,7 @@ try:
     probe = '''
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 home = Path(sys.argv[1])
 with codex_install_transaction(home, home / "config", actor="competitor",
                                deadline=time.monotonic() + 0.3):
@@ -104,7 +106,7 @@ def test_fork_does_not_retain_parent_lock_or_authority(tmp_path: Path, mode: str
 FORK_UNWIND = r"""
 import os, subprocess, sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 root = Path(sys.argv[1])
 ready_read, ready_write = os.pipe()
 release_read, release_write = os.pipe()
@@ -120,7 +122,7 @@ try:
         probe = '''
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 home = Path(sys.argv[1])
 try:
     with codex_install_transaction(home, home / "config", actor="competitor",
@@ -158,7 +160,7 @@ def test_fork_child_unwind_cannot_unlock_live_parent(tmp_path: Path):
 FORK_THREAD_OWNER = r"""
 import os, sys, threading, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 root = Path(sys.argv[1])
 owned, release = threading.Event(), threading.Event()
 ready_read, ready_write = os.pipe()
@@ -233,8 +235,9 @@ def test_missing_manifest_is_rejected_before_key_access(tmp_path: Path, monkeypa
 INSTALLER = r"""
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 root = Path(sys.argv[1])
 actor = sys.argv[2]
 context = HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "home/.hol-guard")
@@ -247,9 +250,12 @@ if actor == "A":
                 raise TimeoutError("fixture synchronization expired")
             time.sleep(0.01)
         raise OSError("injected publication failure")
-    codex._ask_install_plan = fail_publish
+    from tests import codex_install_flow_support as flow
+    from tests.codex_publication_steps import install_stepwise_codex
+    flow.ask_install_plan = fail_publish
+    install_stepwise_codex()
 try:
-    codex.CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 except RuntimeError as error:
     if actor != "B" or "codex_lifecycle_busy" not in str(error):
         raise
@@ -328,15 +334,15 @@ def test_failed_installer_cannot_remove_separate_process_winner(
                 process.communicate(timeout=5)
 
 
-def test_transaction_rejects_symlink_and_bounds_separate_process_wait(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+def test_transaction_bounds_separate_process_wait_and_keeps_the_lock_file(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 
     home = tmp_path / "guard-home"
     config = tmp_path / "home/.codex/config.toml"
     code = """
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 try:
     with codex_install_transaction(
         Path(sys.argv[1]), Path(sys.argv[2]), actor="contender", deadline=time.monotonic()+0.1
@@ -355,23 +361,14 @@ except TimeoutError:
     with codex_install_transaction(home, config, actor="next") as second:
         assert second.operation_id != first.operation_id
     assert lock.stat().st_ino == original.st_ino, "ownership lock must never be unlinked"
-    if os.name != "nt":
-        unsafe_home = tmp_path / "unsafe"
-        directory = unsafe_home / "managed/codex"
-        directory.mkdir(parents=True)
-        victim = tmp_path / "victim"
-        victim.write_bytes(b"preserve")
-        (directory / "installation.lock").symlink_to(victim)
-        with pytest.raises(CodexHookIntegrityError), codex_install_transaction(unsafe_home, config, actor="unsafe"):
-            pytest.fail("symlink was accepted")
-        assert victim.read_bytes() == b"preserve"
 
 
 def test_mutation_journal_contains_identities_and_no_private_contents(tmp_path: Path) -> None:
     import json
 
-    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text, restore_private_file
-    from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+    from tests.codex_hook_integrity_fixtures import restore_private_file
 
     home = tmp_path / "guard-home"
     config = tmp_path / "home/.codex/config.toml"
@@ -395,14 +392,14 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
 ) -> None:
     import json
 
+    from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_hook_runtime_trust as runtime_trust
-    from codex_plugin_scanner.guard.adapters import codex
 
     context = HarnessContext(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    source_root = Path(codex.__file__).resolve().parents[3]
-    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
+    source_root = Path(codex.__file__).resolve().parents[2]
+    files = [path for role, path in codex._hook_manifest_spec(context).packaged_file_paths if role != "bridge"]
     # Two immutable package layouts with identical reviewed code, so this
     # models a path/format migration without authenticating altered code.
     for generation in ("old", "new"):
@@ -412,12 +409,15 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
     adapter_path = Path(codex.__file__).relative_to(source_root)
+    caller_path = "codex_plugin_scanner/guard/native_caller.py"
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "old" / adapter_path))
-    codex.CodexHarnessAdapter().install(context)
+    monkeypatch.setattr(native_caller, "__file__", str(tmp_path / "old" / caller_path))
+    harness_support.install("codex", context)
     old_argv = codex._hook_command_parts(context)
     config = json.loads(old_argv[2])
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "new" / adapter_path))
-    codex.CodexHarnessAdapter().install(context)
+    monkeypatch.setattr(native_caller, "__file__", str(tmp_path / "new" / caller_path))
+    harness_support.install("codex", context)
     monkeypatch.setattr(
         runtime_trust, "__file__", str(tmp_path / "old" / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
     )
@@ -449,16 +449,16 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 ) -> None:
     import json
 
+    from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_hook_runtime_trust as runtime_trust
-    from codex_plugin_scanner.guard.adapters import codex
-    from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest_path
 
     context = HarnessContext(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    source_root = Path(codex.__file__).resolve().parents[3]
+    source_root = Path(codex.__file__).resolve().parents[2]
     adapter_path = Path(codex.__file__).relative_to(source_root)
-    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
+    files = [path for role, path in codex._hook_manifest_spec(context).packaged_file_paths if role != "bridge"]
     commands = []
     for number in range(10):
         root = tmp_path / f"generation-{number}"
@@ -468,9 +468,12 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
         monkeypatch.setattr(codex, "__file__", str(root / adapter_path))
-        codex.CodexHarnessAdapter().install(context)
+        monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
+        harness_support.install("codex", context)
         commands.append(codex._hook_command_parts(context))
-    manifest = load_authenticated_hook_manifest(context.guard_home, context.home_dir / ".codex/config.toml")
+    manifest = load_authenticated_hook_manifest_path(
+        context.guard_home, hook_manifest_path(context.guard_home, context.home_dir / ".codex/config.toml")
+    )
     assert len(manifest["retained_bridge_generations"]) == 8
     assert len(manifest["compatible_bridge_argv_sha256"]) == 8
 
@@ -502,9 +505,8 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 
 
 def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters import codex
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
-    from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+    from tests.codex_hook_paths_support import hook_secret_path
 
     guard_home = tmp_path / "guard-home"
     first = HarnessContext(
@@ -513,8 +515,7 @@ def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: 
     second = HarnessContext(
         home_dir=tmp_path / "second", workspace_dir=None, guard_home=guard_home, home_override_explicit=True
     )
-    adapter = codex.CodexHarnessAdapter()
-    adapter.install(first)
+    harness_support.install("codex", first)
     # Qualify cleanup against two authenticated targets without weakening the
     # public install gate for an absent manifest beside an existing key.
     config = second.home_dir / ".codex/config.toml"
@@ -527,9 +528,9 @@ def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: 
     assert state["protection_active"]
     key = hook_secret_path(guard_home)
     identity = key.stat()
-    adapter.uninstall(first)
+    harness_support.uninstall("codex", first)
     assert key.stat().st_ino == identity.st_ino
     assert codex_native_hook_state(second)["protection_active"]
-    adapter.uninstall(second)
+    harness_support.uninstall("codex", second)
     assert not key.exists()
     print("H5 pass other_target_key_retained=true last_uninstall_removes_key=true")

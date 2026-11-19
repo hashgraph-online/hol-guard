@@ -31,7 +31,7 @@ def native_serve_executable(guard_home: Path) -> Path | None:
 
     if os.name not in {"posix", "nt"} or os.environ.get(NATIVE_SERVE_ENV, "").strip() == "0":
         return None
-    from ..adapters.native_hook_bridge import native_hook_bridge_executable
+    from ..native_hook_bridge import native_hook_bridge_executable
 
     return native_hook_bridge_executable(SERVE_FEATURE, guard_home=guard_home)
 
