@@ -193,7 +193,7 @@ impl CloudContext<'_> {
 
     /// The pre-request failures of `_resolve_guard_sync_auth_context`.
     fn auth_resolution_failure(&self, error: &EvalError) -> CloudOutcome {
-        if let Some(outage) = refresh_outage_as_validation(error) {
+        if let Some(outage) = super::cloud_failures::refresh_outage_as_validation(error) {
             return self.auth_resolution_failure(&outage);
         }
         match error {
@@ -498,16 +498,4 @@ pub(super) fn evaluate_with_cloud(
         }
         Fetched::Done(outcome) => *outcome,
     }
-}
-
-/// A sign-in refresh that could not reach Guard Cloud is an outage like the
-/// other availability failures, so it keeps the local-intelligence fallback a
-/// failed refresh always had: it is read as the validation failure it was.
-pub(super) fn refresh_outage_as_validation(error: &EvalError) -> Option<EvalError> {
-    let EvalError::Internal(message) = error else {
-        return None;
-    };
-    message
-        .strip_prefix(crate::guard_sync_transport::OAUTH_REFRESH_UNREACHABLE)
-        .map(|reason| EvalError::Validation(reason.trim().to_owned()))
 }
