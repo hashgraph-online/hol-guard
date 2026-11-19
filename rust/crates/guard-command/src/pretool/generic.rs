@@ -1050,18 +1050,32 @@ fn evaluate_envelope(
             result.reason = reason.into();
         }
     }
-    // A header Oh My Pi reads as a tagged file that does not exist cannot
-    // apply. Blocking it at once, with how to write the header, keeps the
-    // agent from waiting on an approval for an edit that would fail.
+    // A header Oh My Pi reads as a tagged file that does not exist, or a
+    // first header it cannot read at all, cannot apply. Blocking it at once,
+    // with how to write the header, keeps the agent from waiting on an
+    // approval for an edit that would fail.
     if harness == "omp"
         && event == "PreToolUse"
         && signals.tool_name.as_deref() == Some("edit")
         && result.minimum_action == "review"
     {
-        let header = omp::strict_tool_input(payload)
-            .and_then(|input| input.get("input")?.as_str())
-            .and_then(|input| super::omp_hashline_recovery::missing_tagged_header(input, cwd));
-        if let Some(header) = header {
+        use super::omp_hashline_recovery as recovery;
+        let input = omp::strict_tool_input(payload).and_then(|input| input.get("input")?.as_str());
+        let blocked = input.and_then(|input| {
+            if let Some(header) = recovery::missing_tagged_header(input, cwd) {
+                return Some((
+                    read_decisions::MISSING_PATH,
+                    recovery::missing_header_reason(&header),
+                ));
+            }
+            recovery::unparseable_first_header(input).map(|line| {
+                (
+                    recovery::UNPARSEABLE_HEADER,
+                    recovery::unparseable_header_reason(&line),
+                )
+            })
+        });
+        if let Some((reason_code, reason)) = blocked {
             result = generic_result(
                 generic_action(
                     harness,
@@ -1072,8 +1086,8 @@ fn evaluate_envelope(
                     false,
                 ),
                 "block",
-                read_decisions::MISSING_PATH,
-                &super::omp_hashline_recovery::missing_header_reason(&header),
+                reason_code,
+                &reason,
             );
         }
     }

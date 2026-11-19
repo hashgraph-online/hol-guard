@@ -24,6 +24,9 @@ const SENTINELS: [&str; 2] = ["Begin Patch", "End Patch"];
 const TAG_LENGTH: usize = 4;
 const SHOWN_CHARS: usize = 120;
 
+/// Reason code for an edit whose first header Oh My Pi cannot read.
+pub(super) const UNPARSEABLE_HEADER: &str = "native_omp_edit_header_unreadable";
+
 /// Oh My Pi's `APPLY_PATCH_PATH_NOISE_RE`.
 static PATH_NOISE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -90,6 +93,65 @@ pub(super) fn missing_header_reason(header: &MissingHeader) -> String {
         "HOL Guard did not run this edit because Oh My Pi reads its header `{}`{named}. Write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets, and try again.",
         header.line
     )
+}
+
+/// The first header of an edit Oh My Pi cannot read at all, shortened for a
+/// message.
+///
+/// Oh My Pi takes the first non-blank line after `*** Begin Patch` as the
+/// first file header. When that line opens with `[` but its bracket closes
+/// before the end of the line, as in `[tool_error] ...` or reasoning that
+/// quotes a header, or the line does not end with `]`, Oh My Pi rejects the
+/// whole edit with a parse error and writes nothing. A bracketed `*** ...`
+/// marker at the start is one Oh My Pi unwraps, so such a line is left
+/// unproven, as is one with control characters.
+pub(super) fn unparseable_first_header(input: &str) -> Option<String> {
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let mut lines = input
+        .split('\n')
+        .map(|line| line.trim_end_matches([' ', '\t', '\r']))
+        .filter(|line| !line.is_empty());
+    let mut line = lines.next()?;
+    if line == BEGIN_PATCH {
+        line = lines.next()?;
+    }
+    closes_early(line).then(|| shown(line))
+}
+
+/// The block reason for an edit whose first header Oh My Pi cannot read.
+pub(super) fn unparseable_header_reason(line: &str) -> String {
+    format!(
+        "HOL Guard did not run this edit because Oh My Pi cannot read its first header `{line}` and would reject the whole edit. Write each header on its own line as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing before or after it, and try again."
+    )
+}
+
+/// Whether `line` opens a header Oh My Pi cannot parse: its opening `[`
+/// closes before the end of the line, or the line does not end with `]`.
+fn closes_early(line: &str) -> bool {
+    let Some(body) = line.strip_prefix('[') else {
+        return false;
+    };
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}')
+        || body.trim_start_matches([' ', '\t']).starts_with('*')
+    {
+        return false;
+    }
+    let mut depth = 1usize;
+    for (index, c) in body.char_indices() {
+        match c {
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return index + 1 != body.len();
+                }
+            }
+            _ => {}
+        }
+    }
+    !body.ends_with(']')
 }
 
 /// The path and whether it carries a tag, the way Oh My Pi's
