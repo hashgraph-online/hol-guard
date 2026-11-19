@@ -174,6 +174,7 @@ pub mod pretool_git_sibling_local_writes;
 pub mod pretool_git_sibling_worktree_cleanup;
 pub mod pretool_git_sibling_worktree_ops;
 pub mod pretool_git_side_record_reads;
+pub mod pretool_git_stage_is_git_add;
 pub mod pretool_git_stash_reads;
 pub mod pretool_git_submodules;
 pub mod pretool_git_tag_clean_reads;
