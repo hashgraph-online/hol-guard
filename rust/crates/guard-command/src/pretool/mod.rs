@@ -600,10 +600,24 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
     // looks like `--name=value`. Git treats it as a pathspec, so discarding
     // its prefix before screening could conceal credential-named files.
     let mut positional = false;
+    // For grep/rg, -e may consume "--" as its literal search pattern.
+    let pattern_options = matches!(
+        crate::command_compatibility::basename(segment),
+        "grep" | "rg"
+    );
+    let mut pattern_value = false;
     arguments_outside_message(segment).any(|argument| {
-        if argument == "--" {
+        let is_pattern_value = std::mem::take(&mut pattern_value);
+        if argument == "--" && !is_pattern_value {
             positional = true;
             return false;
+        }
+        if pattern_options
+            && !positional
+            && !is_pattern_value
+            && matches!(argument.as_str(), "-e" | "--regexp")
+        {
+            pattern_value = true;
         }
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
@@ -758,13 +772,21 @@ fn class_end(chars: &[char], start: usize) -> Option<(usize, bool)> {
 fn arguments_outside_message(
     segment: &crate::CommandSegmentV1,
 ) -> impl Iterator<Item = &String> + '_ {
+    // Git diff/log/show use -m for merge diffs, not for a message.
+    // Filtering its following "--" would hide the pathspec delimiter.
+    let merge_diff = crate::command_compatibility::basename(segment) == "git"
+        && matches!(
+            chain_directory_copies::git_subcommand(segment),
+            Some("diff" | "log" | "show")
+        );
     let mut message_value = false;
     segment.arguments.iter().filter(move |argument| {
         let is_message = std::mem::take(&mut message_value);
-        message_value = matches!(argument.as_str(), "-m" | "--message");
+        message_value = !merge_diff && matches!(argument.as_str(), "-m" | "--message");
         let lowered = argument.to_ascii_lowercase();
-        let attached_message = lowered.starts_with("--message=")
-            || (lowered.starts_with("-m") && !lowered.starts_with("--"));
+        let attached_message = !merge_diff
+            && (lowered.starts_with("--message=")
+                || (lowered.starts_with("-m") && !lowered.starts_with("--")));
         !(is_message || attached_message)
     })
 }
