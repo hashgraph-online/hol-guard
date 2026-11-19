@@ -780,7 +780,8 @@ fn arguments_outside_message(
             .is_some_and(|command| {
                 matches!(
                     command.as_str(),
-                    "diff" | "log" | "show" | "checkout" | "restore"
+                    "diff" | "diff-files" | "diff-index" | "diff-tree" | "log"
+                        | "show" | "whatchanged" | "checkout" | "restore"
                 )
             });
     let mut message_value = false;
