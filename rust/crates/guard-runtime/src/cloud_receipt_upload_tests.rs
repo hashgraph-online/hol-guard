@@ -8,6 +8,11 @@ use crate::cloud_receipt_upload_rows::{
     DETAIL_BACKFILL_FLAG,
 };
 
+/// One batch, written without a one-range `vec!`.
+fn one(range: std::ops::Range<usize>) -> Vec<std::ops::Range<usize>> {
+    std::iter::once(range).collect()
+}
+
 fn receipt(rowid: i64) -> Value {
     json!({"receipt_id": format!("r-{rowid}"), "receipt_rowid": rowid})
 }
@@ -159,7 +164,7 @@ fn an_empty_backfill_page_completes_the_walk() {
 
 #[test]
 fn batches_hold_fifty_and_an_empty_upload_still_sends_one() {
-    assert_eq!(batches(0), vec![0..0]);
+    assert_eq!(batches(0), one(0..0));
     assert_eq!(batches(120), vec![0..50, 50..100, 100..120]);
 }
 
@@ -317,15 +322,15 @@ fn batches_split_before_a_body_goes_over_the_limit() {
     // Overhead 10, limit 40: 12 + 13 (with comma) fits, the third does not.
     let sizes = [Some(12), Some(12), Some(12)];
     assert_eq!(sized_batches(&sizes, 10, 40), vec![0..2, 2..3]);
-    assert_eq!(sized_batches(&[], 10, 40), vec![0..0]);
+    assert_eq!(sized_batches(&[], 10, 40), one(0..0));
 }
 
 #[test]
 fn a_receipt_left_unsent_still_rides_in_its_batch() {
     let sizes = [Some(12), None, Some(12)];
-    assert_eq!(sized_batches(&sizes, 10, 40), vec![0..3]);
+    assert_eq!(sized_batches(&sizes, 10, 40), one(0..3));
     let sizes = [None, None];
-    assert_eq!(sized_batches(&sizes, 10, 40), vec![0..2]);
+    assert_eq!(sized_batches(&sizes, 10, 40), one(0..2));
 }
 
 #[test]
@@ -356,7 +361,7 @@ fn a_receipt_too_large_for_any_request_is_planned_unsent() {
         },
     )
     .unwrap();
-    assert_eq!(plan.batches, vec![0..2]);
+    assert_eq!(plan.batches, one(0..2));
     assert!(plan.projected[0].is_some());
     assert!(plan.projected[1].is_none());
     let state = UploadState::default();

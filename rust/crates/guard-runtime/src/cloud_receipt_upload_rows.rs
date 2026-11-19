@@ -211,7 +211,7 @@ pub(crate) fn advance_marker(marker: &Value, batch: &[Value], synced_at: &str) -
 /// which carries the sync context.
 pub(crate) fn batches(count: usize) -> Vec<Range<usize>> {
     if count == 0 {
-        return vec![0..0];
+        return std::iter::once(0..0).collect();
     }
     (0..count)
         .step_by(BATCH_SIZE)
@@ -229,7 +229,7 @@ pub(crate) fn sized_batches(
     limit: usize,
 ) -> Vec<Range<usize>> {
     if sizes.is_empty() {
-        return vec![0..0];
+        return std::iter::once(0..0).collect();
     }
     let mut ranges = Vec::new();
     let (mut start, mut bytes, mut sent) = (0, overhead, 0_usize);
