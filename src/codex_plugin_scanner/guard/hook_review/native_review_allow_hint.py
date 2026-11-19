@@ -227,9 +227,18 @@ def _live_reviewed_command(approval: Mapping[str, object], guard_home: Path) -> 
     workspace_text = approval.get("workspace")
     workspace_path = Path(workspace_text) if isinstance(workspace_text, str) and workspace_text.strip() else None
     raw_payload = envelope.get("raw_payload_redacted") if isinstance(envelope, Mapping) else None
-    if isinstance(raw_payload, Mapping) and any(key in raw_payload for key in ("tool_input", "toolInput")):
+    tool_input = raw_payload.get("tool_input") if isinstance(raw_payload, Mapping) else None
+    if not isinstance(tool_input, Mapping) and isinstance(raw_payload, Mapping):
+        tool_input = raw_payload.get("toolInput")
+    if isinstance(raw_payload, Mapping) and isinstance(tool_input, Mapping):
         facts = native_hook_facts(raw_payload, guard_home, deadline=time.monotonic() + _LIVE_BUDGET_SECONDS)
-        if facts is None or not facts.command_only:
+        if facts is None:
+            # The hint is advisory and cannot grant approval. Preserve the
+            # historical bounded shape check when a legacy resident cannot
+            # answer this optional lookup.
+            if not isinstance(tool_input, Mapping) or not _command_only_payload(tool_input):
+                return None
+        elif not facts.command_only:
             return None
         cwd = _stored_launch_cwd(raw_payload, workspace_path)
         if cwd is None and _names_launch_directory(raw_payload):

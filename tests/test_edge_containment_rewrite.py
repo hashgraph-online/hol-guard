@@ -115,6 +115,7 @@ def _status(tmp_path: Path) -> NativeRuntimeStatus:
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
+            "hook-payload-facts-v1",
         ),
     )
     return NativeRuntimeStatus(
