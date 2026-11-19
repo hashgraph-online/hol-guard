@@ -154,20 +154,13 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         let result = evaluate("omp", &input);
         assert_eq!(result.minimum_action, "review", "{input}: {result:?}");
     }
-    // A header Guard cannot read the way Oh My Pi does names no file Guard
-    // can prove. The edit keeps its review, so a person can still approve
-    // it, and the reason tells the agent how to write a header Guard can
-    // prove.
-    for (input, shown) in [
-        (
-            patch(&["[*** Update File: \"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[*** Update File: \"src/a.ts\"#0AC4]`",
-        ),
-        (
-            patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
-            "`[src/a.ts#NOPE]`",
-        ),
-    ] {
+    // A header with a bad tag names no file Guard can prove. The edit keeps
+    // its review, so a person can still approve it, and the reason tells the
+    // agent how to write a header Guard can prove.
+    for (input, shown) in [(
+        patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
+        "`[src/a.ts#NOPE]`",
+    )] {
         let result = evaluate("omp", &input);
         assert_eq!(
             (result.minimum_action.as_str(), result.reason_code.as_str()),
@@ -192,6 +185,12 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         (
             patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
             "`[FILE: src/a.ts#0AC4]`",
+        ),
+        // Oh My Pi unquotes before it drops the noise, so it opens a file
+        // whose name keeps the quotes.
+        (
+            patch(&["[*** Update File: \"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Update File: \"src/a.ts\"#0AC4]`",
         ),
     ] {
         let result = evaluate("omp", &input);
