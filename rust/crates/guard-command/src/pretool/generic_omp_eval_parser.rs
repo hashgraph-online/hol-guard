@@ -43,6 +43,7 @@ struct Parser {
 mod builtins;
 #[path = "generic_omp_eval_parser_commit.rs"]
 mod commit;
+pub(super) use commit::uses_earlier_cell_draft;
 #[path = "generic_omp_eval_parser_vocabulary.rs"]
 mod vocabulary;
 use vocabulary::{PURE_METHODS, RESERVED};

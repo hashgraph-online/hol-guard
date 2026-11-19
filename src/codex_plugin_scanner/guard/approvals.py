@@ -574,6 +574,7 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
+        _save_package_decision(store, plan.get("package_decision"), reason, resolved_at, resolved_gate_grant)
     elif persistence == "once":
         once_decision = replace(decision, expires_at=_string_or_none(plan.get("once_expires_at")))
         store.ensure_policy_integrity_ready_for_write(
@@ -866,6 +867,37 @@ def _approval_notification_message(request: _QueuedNotice) -> str:
     if len(message) <= 180:
         return message
     return f"{message[:177].rstrip()}..."
+
+
+def _save_package_decision(
+    store: GuardStore,
+    planned: object,
+    reason: str | None,
+    resolved_at: str,
+    approval_gate_grant: ApprovalGateGrant | None,
+) -> None:
+    """Save a package install review's Always allow under its package key too.
+
+    The resident names the key only for an allow persisted at artifact scope
+    whose review carried one, so the identical install run from another
+    checkout of the repository reuses it.
+    """
+
+    if not isinstance(planned, Mapping):
+        return
+    package = PolicyDecision(
+        harness=str(planned["harness"]),
+        scope="artifact",
+        action="allow",
+        artifact_id=_string_or_none(planned.get("artifact_id")),
+        artifact_hash=_string_or_none(planned.get("artifact_hash")),
+        reason=reason,
+        source="approval-gate",
+    )
+    store.ensure_policy_integrity_ready_for_write(
+        harness=package.harness, approval_gate_grant=approval_gate_grant, now=resolved_at
+    )
+    store.upsert_policy(package, resolved_at, approval_gate_grant=approval_gate_grant)
 
 
 def _string_or_none(value: object) -> str | None:

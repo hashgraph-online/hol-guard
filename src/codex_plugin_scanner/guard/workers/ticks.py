@@ -32,19 +32,6 @@ def cloud_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     return {"ok": status == "synced", "status": status}
 
 
-def plugin_telemetry(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Sends the opted-in weekly plugin install report; a no-op until opt-in."""
-
-    del args
-    from ..plugin_telemetry.report import PluginTelemetryError, send_if_due
-
-    try:
-        send_if_due(store.guard_home)
-    except PluginTelemetryError:
-        return {"ok": False}
-    return {"ok": True}
-
-
 def extension_catalog(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Observes active command-pack security, requests discovery, cleans the pack cache."""
 
@@ -196,23 +183,8 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
     return {"ok": False, "status": record["status"]}
 
 
-def cloud_workspace(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """The Guard Cloud workspace queued review events sync to, or ``None`` without a usable profile."""
-
-    del args
-    try:
-        profile = store.get_cloud_sync_profile()
-    except Exception:
-        # Queued events stay durable in guard.db; do not pin the daemon alive.
-        profile = None
-    workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    return {"ok": True, "workspace_id": workspace_id if isinstance(workspace_id, str) else None}
-
-
 WORKER_CALLS = {
     "worker.cloud_sync": cloud_sync,
-    "worker.cloud_workspace": cloud_workspace,
-    "worker.plugin_telemetry": plugin_telemetry,
     "worker.extension_catalog": extension_catalog,
     "worker.reconcile_artifacts": reconcile_artifacts,
     "worker.aibom_inventory": aibom_inventory,

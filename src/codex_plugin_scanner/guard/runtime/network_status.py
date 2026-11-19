@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.network_capability_contract import (
@@ -18,13 +19,11 @@ from codex_plugin_scanner.guard.runtime.network_status_validation import (
     NetworkStatusValidatorUnavailableError,
     validate_network_status,
 )
-from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisorHealth
 
 __all__ = [
     "NetworkStatusSchemaError",
     "NetworkStatusValidatorUnavailableError",
     "build_network_status",
-    "project_network_supervisor_health",
     "validate_network_status",
 ]
 
@@ -33,7 +32,7 @@ def build_network_status(
     profiles: tuple[PlatformCapabilityProfile, ...] | None = None,
     *,
     legacy_domain_action: GuardAction | None = None,
-    supervisor_health: NetworkSupervisorHealth | None = None,
+    supervisor: Mapping[str, object] | None = None,
     platform_name: str | None = None,
 ) -> dict[str, object]:
     """Return current-host truth without promoting static profiles to protection.
@@ -64,7 +63,7 @@ def build_network_status(
         ],
         "explicit": profiles is not None,
         "host_only": profiles is None and platform_name is not None,
-        "supervisor": project_network_supervisor_health(supervisor_health) if supervisor_health is not None else None,
+        "supervisor": dict(supervisor) if supervisor is not None else None,
         "legacy_domain_policy": legacy_policy,
     }
     try:
@@ -84,17 +83,3 @@ def build_network_status(
         if legacy_policy is not None:
             status["legacy_domain_policy"] = legacy_policy
         return status
-
-
-def project_network_supervisor_health(health: NetworkSupervisorHealth) -> dict[str, object]:
-    return {
-        "phase": health.phase.value,
-        "backend_id": health.backend_id,
-        "backend_digest": health.backend_digest,
-        "effective_grade": health.effective_grade.value,
-        "healthy_until_epoch_ms": health.healthy_until_epoch_ms,
-        "retry_attempt": health.retry_attempt,
-        "next_retry_seconds": health.next_retry_seconds,
-        "permits_enforcement": health.permits_enforcement,
-        "independently_observed": False,
-    }

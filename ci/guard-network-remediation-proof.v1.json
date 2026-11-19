@@ -106,9 +106,8 @@
       "outcome": "partial",
       "complete": false,
       "evidence": [
-        "tests/test_guard_network_supervisor.py",
-        "tests/test_guard_daemon_recovery_resilience.py",
-        "tests/test_guard_provider_recovery.py"
+        "rust/crates/guard-runtime/src/daemon_edge_network_tests.rs",
+        "tests/test_guard_daemon_recovery_resilience.py"
       ],
       "blockers": [
         "Recovery tests do not operate a packaged network provider or reconcile live kernel state."

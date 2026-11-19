@@ -89,6 +89,20 @@ pub(crate) fn build(query: &ReviewRequestQueryV1) -> Result<Built, Failure> {
     }
     let mut reason = reason(result)?;
     let harness = &query.envelope.harness;
+    // Only an exact-action review offers Always allow, and only a key for this
+    // harness's own package request may ride along with it.
+    if let Some(key) = query.package_approval.as_ref().filter(|key| {
+        query.exact_token.is_some() && crate::package_approval_key::fits(key, harness)
+    }) {
+        envelope.insert(
+            PACKAGE_APPROVAL_KEY.to_owned(),
+            json!({
+                "harness": key.harness,
+                "artifact_id": key.artifact_id,
+                "artifact_hash": key.artifact_hash,
+            }),
+        );
+    }
     let (artifact_id, artifact_type, queue_group_id) = match &query.bound_bash {
         Some(bound) => {
             let lineage = bound.get("review_lineage").ok_or_else(invalid)?;
@@ -158,6 +172,10 @@ pub(crate) fn build(query: &ReviewRequestQueryV1) -> Result<Built, Failure> {
         payload,
     })
 }
+
+/// The envelope field naming the package key a package install review's Always
+/// allow is also saved under (`approval_resolution_plan_op`).
+pub(crate) const PACKAGE_APPROVAL_KEY: &str = "package_approval";
 
 /// A valid receipt that authenticates its origin; the envelope keeps only that.
 fn origin_receipt(receipt: &Value) -> bool {

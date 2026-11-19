@@ -22,6 +22,8 @@ use std::path::PathBuf;
 #[path = "glob_expand.rs"]
 mod glob_expand;
 
+#[path = "committed_hidden.rs"]
+mod committed_hidden;
 #[path = "descendant.rs"]
 mod descendant;
 #[path = "literal_bracket.rs"]

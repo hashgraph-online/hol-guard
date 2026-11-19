@@ -263,6 +263,12 @@ fn delegation_result(tool: &str, context: &OmpContext<'_>) -> PreToolResultV1 {
 }
 
 /// The one tool input object. Alternate spellings must agree with it.
+/// The review reason for an eval cell that reuses a `commit` draft made in an
+/// earlier cell, if this is one.
+pub(super) fn earlier_cell_draft_reason(payload: &Value) -> Option<&'static str> {
+    eval::earlier_cell_draft_reason(payload)
+}
+
 pub(super) fn strict_tool_input(payload: &Value) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
     let input = root.get("tool_input")?.as_object()?;
