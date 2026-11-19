@@ -54,10 +54,7 @@ fn only_literal_awk_program_words_are_simplified() {
     for command in [r#"awk "$P" f"#, r#"awk $P f"#, r#"awk "{print $1}" f"#] {
         assert_eq!(super::without_plain_awk(command), command, "{command}");
     }
-    assert_eq!(
-        super::without_plain_awk(r#"awk '{print $1}' f"#),
-        "true"
-    );
+    assert_eq!(super::without_plain_awk(r#"awk '{print $1}' f"#), "true");
 }
 
 #[test]
