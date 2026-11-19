@@ -22,3 +22,19 @@ fn python_control_strip_is_preserved() {
     let output: Value = serde_json::from_slice(&evaluate(&request).expect("facts")).expect("json");
     assert_eq!(output["result"]["event_name"], "PreToolUse");
 }
+
+#[test]
+fn command_and_launch_facts_are_resident_owned() {
+    let request = HookPayloadFactsRequestV1 {
+        schema: "guard-hook-payload-facts-request.v1".to_owned(),
+        request_id: "facts-3".to_owned(),
+        payload: json!({
+            "toolName": "Bash",
+            "toolInput": {"command": "  echo hi  "}
+        }),
+    };
+    let output: Value = serde_json::from_slice(&evaluate(&request).expect("facts")).expect("json");
+    assert_eq!(output["result"]["command"], "echo hi");
+    assert_eq!(output["result"]["tool_name"], "Bash");
+    assert_eq!(output["result"]["launch_target"], "echo hi");
+}

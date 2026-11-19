@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from .native_execution import _resident_request
@@ -18,14 +19,36 @@ _REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
 
 
-def native_hook_event(
+@dataclass(frozen=True, slots=True)
+class NativePayloadFacts:
+    event_name: str
+    tool_input: Mapping[str, object] | None
+    command: str | None
+    tool_name: str
+    launch_target: str
+
+
+def native_hook_facts(
     payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None
-) -> str | None:
-    """Return the resident-normalized event, or ``None`` on native absence."""
+) -> NativePayloadFacts | None:
+    """Return resident-normalized payload facts, or ``None`` on native absence."""
 
     event_payload = {
         key: payload[key]
-        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+        for key in (
+            "event",
+            "eventName",
+            "hook_event_name",
+            "hookEventName",
+            "hook_name",
+            "hookName",
+            "tool_input",
+            "toolInput",
+            "arguments",
+            "tool_name",
+            "toolName",
+            "tool",
+        )
         if key in payload
     }
     wire = {
@@ -48,8 +71,32 @@ def native_hook_event(
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
-    event = result.get("event_name") if isinstance(result, Mapping) else None
-    return event if isinstance(event, str) and event else None
+    if not isinstance(result, Mapping):
+        return None
+    event = result.get("event_name")
+    tool_input = result.get("tool_input")
+    command = result.get("command")
+    tool_name = result.get("tool_name")
+    launch_target = result.get("launch_target")
+    if (
+        not isinstance(event, str)
+        or not event
+        or (tool_input is not None and not isinstance(tool_input, Mapping))
+        or (command is not None and not isinstance(command, str))
+        or not isinstance(tool_name, str)
+        or not tool_name
+        or not isinstance(launch_target, str)
+        or not launch_target
+    ):
+        return None
+    return NativePayloadFacts(event, tool_input, command, tool_name, launch_target)
 
 
-__all__ = ["native_hook_event"]
+def native_hook_event(
+    payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None
+) -> str | None:
+    facts = native_hook_facts(payload, guard_home, deadline=deadline)
+    return facts.event_name if facts is not None else None
+
+
+__all__ = ["NativePayloadFacts", "native_hook_event", "native_hook_facts"]

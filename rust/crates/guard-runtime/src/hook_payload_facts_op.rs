@@ -62,6 +62,60 @@ pub(crate) fn runtime_event(payload: &Map<String, Value>) -> String {
     "PreToolUse".to_owned()
 }
 
+fn text(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(py_strip)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn tool_input(payload: &Map<String, Value>) -> Option<Map<String, Value>> {
+    ["tool_input", "toolInput"]
+        .iter()
+        .find_map(|key| payload.get(*key).and_then(Value::as_object).cloned())
+}
+
+fn command(payload: &Map<String, Value>, input: Option<&Map<String, Value>>) -> Option<String> {
+    let candidates = input
+        .into_iter()
+        .chain(payload.get("arguments").and_then(Value::as_object))
+        .chain(std::iter::once(payload));
+    for candidate in candidates {
+        for key in ["command", "cmd", "shell_command", "shellCommand"] {
+            if let Some(value) = text(candidate.get(key)) {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
+fn tool_name(payload: &Map<String, Value>) -> String {
+    ["tool_name", "toolName", "tool"]
+        .iter()
+        .find_map(|key| text(payload.get(*key)))
+        .unwrap_or_else(|| "tool".to_owned())
+}
+
+fn launch_target(
+    input: Option<&Map<String, Value>>,
+    command: Option<&str>,
+    tool_name: &str,
+) -> String {
+    if let Some(command) = command {
+        return command.to_owned();
+    }
+    if let Some(input) = input {
+        for key in ["url", "path", "file_path", "target"] {
+            if let Some(value) = text(input.get(key)) {
+                return value;
+            }
+        }
+    }
+    format!("tool:{tool_name}")
+}
+
 pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, String> {
     if request.schema != REQUEST_SCHEMA
         || request.request_id.is_empty()
@@ -73,11 +127,18 @@ pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, S
         .payload
         .as_object()
         .ok_or_else(|| "hook_payload_facts_payload_invalid".to_owned())?;
+    let input = tool_input(payload);
+    let command = command(payload, input.as_ref());
+    let tool_name = tool_name(payload);
     encode_response(&json!({
         "schema": RESULT_SCHEMA,
         "result": {
             "request_id": request.request_id,
             "event_name": runtime_event(payload),
+            "tool_input": input.as_ref().map(|value| Value::Object(value.clone())),
+            "command": command,
+            "tool_name": tool_name.clone(),
+            "launch_target": launch_target(input.as_ref(), command.as_deref(), &tool_name),
         },
     }))
 }
