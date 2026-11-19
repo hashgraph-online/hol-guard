@@ -124,6 +124,19 @@ pub(super) fn native(
     Some(answer)
 }
 
+/// The Guard Cloud workspace queued review events sync to, or `None` while
+/// the device has no healthy OAuth sign-in to sync with.
+fn cloud_workspace(config: &ReadConfig) -> Option<String> {
+    let store = crate::package_authority_op::ResidentSupplyChainStore::new(
+        config.store_path(),
+        config.guard_home(),
+    );
+    guard_command::local_supply_chain::SupplyChainStore::get_cloud_sync_profile(&store)?
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
 fn now_micros() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -167,18 +180,9 @@ pub(super) fn idle_holds(reads: &NativeReads, config: &ReadConfig) -> bool {
     if pending {
         return true;
     }
-    // The sync profile depends on OAuth credential health, which the library
-    // owns.
-    let Some(workspace_id) =
-        super::super::super::library::call_resident(config, "worker.cloud_workspace", json!({}))
-            .ok()
-            .and_then(|reply| {
-                reply
-                    .get("workspace_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            })
-    else {
+    // Queued events stay durable in guard.db, so a device without a usable
+    // sync profile does not pin the daemon alive.
+    let Some(workspace_id) = cloud_workspace(config) else {
         return false;
     };
     let Some(now) = isoformat(now_micros()) else {
@@ -354,5 +358,70 @@ mod onefile_tests {
         assert_eq!(report["reclaimed_count"], 1);
         assert!(!leaked.exists());
         assert!(other.exists());
+    }
+}
+
+#[cfg(test)]
+mod cloud_workspace_tests {
+    use super::super::super::super::reads::HANDSHAKE_SCHEMA;
+    use super::*;
+
+    #[test]
+    fn a_device_without_a_sign_in_names_no_workspace() {
+        let home = tempfile::tempdir().unwrap();
+        let guard_home = home.path().to_string_lossy().into_owned();
+        let handshake = json!({
+            "schema": HANDSHAKE_SCHEMA,
+            "auth_token": "test",
+            "guard_home": guard_home,
+            "store_path": format!("{guard_home}/guard.db"),
+            "source": "default",
+            "busy_timeout_ms": 2000,
+        });
+        let config = ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap();
+        assert_eq!(cloud_workspace(&config), None);
+    }
+    #[test]
+    fn a_signed_in_device_names_its_workspace() {
+        let home = tempfile::tempdir().unwrap();
+        let guard_home = home.path().to_string_lossy().into_owned();
+        let store_path = home.path().join("guard.db");
+        rusqlite::Connection::open(&store_path)
+            .unwrap()
+            .execute_batch(
+                "create table sync_state (state_key text primary key, \
+                 payload_json text not null, updated_at text not null);",
+            )
+            .unwrap();
+        let store =
+            crate::package_authority_op::ResidentSupplyChainStore::new(&store_path, home.path());
+        let credentials = json!({
+            "issuer": "https://hol.org",
+            "client_id": "guard-cli",
+            "dpop_private_key_pem": "synthetic-pem",
+            "dpop_public_jwk": {"kty": "EC"},
+            "dpop_public_jwk_thumbprint": "synthetic-thumbprint",
+            "workspace_id": "workspace-1",
+        });
+        crate::oauth_refresh::persist_rotated_oauth_refresh_token(
+            &store,
+            &credentials,
+            None,
+            None,
+            "synthetic-refresh",
+            None,
+            None,
+        )
+        .unwrap();
+        let handshake = json!({
+            "schema": HANDSHAKE_SCHEMA,
+            "auth_token": "test",
+            "guard_home": guard_home,
+            "store_path": store_path.to_string_lossy(),
+            "source": "default",
+            "busy_timeout_ms": 2000,
+        });
+        let config = ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap();
+        assert_eq!(cloud_workspace(&config).as_deref(), Some("workspace-1"));
     }
 }
