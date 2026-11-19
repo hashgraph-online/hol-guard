@@ -29,6 +29,9 @@ fn receipt_idempotency_key(receipt_id: &str) -> String {
     format!("receipt.created:{receipt_id}")
 }
 
+/// Stands in for a summary whose text could not leave the machine.
+const WITHHELD_SUMMARY: &str = "Summary withheld.";
+
 /// `build_receipt_event(...).to_dict()`.
 pub(crate) fn build_receipt_event(
     receipt: &Map<String, Value>,
@@ -41,14 +44,9 @@ pub(crate) fn build_receipt_event(
     // same scrub `cloud_sync_receipt_payloads` gives a synced receipt.
     let summary = |key: &str| match receipt.get(key) {
         Some(Value::String(text)) => {
-            let fallback = format!(
-                "Guard recorded a {} decision.",
-                receipt
-                    .get("policy_decision")
-                    .and_then(Value::as_str)
-                    .unwrap_or("review")
-            );
-            Value::String(sanitize_text(&cloud_scrub_text(text), &fallback))
+            // Decision-neutral: a pending event's `policyDecision` can still be
+            // rewritten after queueing, and the summary must not contradict it.
+            Value::String(sanitize_text(&cloud_scrub_text(text), WITHHELD_SUMMARY))
         }
         _ => field(key),
     };
@@ -375,7 +373,7 @@ pub(crate) fn reconcile_pending_events(connection: &rusqlite::Connection) -> Sto
 mod scrub_tests {
     use serde_json::{json, Value};
 
-    use super::build_receipt_event;
+    use super::{build_receipt_event, WITHHELD_SUMMARY};
 
     fn event_payload(receipt: Value) -> Value {
         build_receipt_event(receipt.as_object().unwrap(), None, None)["payload"].clone()
@@ -396,10 +394,20 @@ mod scrub_tests {
             .as_str()
             .unwrap()
             .starts_with("deploy-tool push --api-key"));
-        assert_eq!(
-            payload["capabilitiesSummary"],
-            "Guard recorded a allow decision."
-        );
+        assert_eq!(payload["capabilitiesSummary"], WITHHELD_SUMMARY);
+    }
+
+    #[test]
+    fn a_withheld_summary_names_no_decision() {
+        // `set_pending_event_decision` may still rewrite `policyDecision`
+        // after queueing; the stand-in must not contradict the final one.
+        let payload = event_payload(json!({
+            "receipt_id": "receipt-1",
+            "policy_decision": "allow",
+            "capabilities_summary": "bun -e 'console.log(1)'",
+        }));
+        let summary = payload["capabilitiesSummary"].as_str().unwrap();
+        assert!(!summary.contains("allow"), "{summary}");
     }
 
     #[test]

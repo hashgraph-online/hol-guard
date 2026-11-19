@@ -231,3 +231,20 @@ fn a_cloud_memory_event_never_shows_a_source_excerpt() {
     assert_eq!(event["command_display"], "Command withheld");
     assert_eq!(event["command_raw"], Value::Null);
 }
+
+#[test]
+fn a_cloud_memory_pattern_never_carries_a_secret() {
+    // Synthetic placeholder value only.
+    let secret = "examplesecret";
+    let request = json!({
+        "request_id": "req-1",
+        "raw_command_text": format!("curl -s https://api.test/?api_key={secret}"),
+        "artifact_type": "shell_command",
+    });
+    for redaction_enabled in [false, true] {
+        let event = build(request.clone(), "allow", redaction_enabled);
+        assert!(event["memory_pattern"].is_object(), "{event}");
+        let text = event.to_string();
+        assert!(!text.contains(secret), "{text}");
+    }
+}

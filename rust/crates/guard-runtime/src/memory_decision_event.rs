@@ -95,8 +95,11 @@ fn event(
         .unwrap_or_else(|| WITHHELD_DISPLAY.to_owned());
     // A withheld command never falls back to `review_command`: it usually
     // holds the approval wrapper and would make an over-broad fingerprint.
+    // The pattern's target and fingerprint copy the command, so they are built
+    // from the scrubbed text the cloud may see.
+    let scrubbed_command = raw_command.map(cloud_scrub_text);
     let pattern = verdict(&MemoryRequest {
-        command: raw_command,
+        command: scrubbed_command.as_deref(),
         artifact_type,
         artifact_id,
         artifact_name,
