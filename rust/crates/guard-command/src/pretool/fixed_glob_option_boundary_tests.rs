@@ -21,6 +21,8 @@ fn option_shaped_pathspecs_after_delimiter_keep_secret_floor() {
         "git -C . diff -m -- '--include=*.tsx'",
         "git log -m -- '--include=*.tsx'",
         "git show -m -- '--include=*.tsx'",
+        "git checkout -m -- '--include=*.tsx'",
+        "git restore -m -- '--include=*.tsx'",
         "git diff -- '--api-key=*.ts'",
     ] {
         assert!(fixed_command_floor(&model(command)), "{command}");
