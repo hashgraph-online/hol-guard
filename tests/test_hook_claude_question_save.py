@@ -49,16 +49,10 @@ def test_integrity_finalize_reports_a_failed_control_state_write() -> None:
     assert hook_integrity_finalize(Store(), {"next_control_state": {"generation": 1}}) == {"finalized": False}
 
 
-def test_locked_integrity_finalize_rejects_a_stale_generation() -> None:
+def test_locked_integrity_finalize_uses_the_lock_owning_finalize_path() -> None:
     class Store:
-        def _normalize_policy_integrity_control_state(self, payload: object) -> object:
-            return payload
-
-        def _load_policy_integrity_control_state(self, *, create: bool) -> dict[str, int]:
-            return {"generation": 2}
-
-        def _store_policy_integrity_control_state(self, payload: object) -> bool:
-            raise AssertionError("stale state must not be stored")
+        def _finalize_policy_integrity_control_state(self, payload: object) -> bool:
+            return False
 
     assert hook_integrity_finalize_locked(Store(), {"next_control_state": {"generation": 1}}) == {
         "finalized": False

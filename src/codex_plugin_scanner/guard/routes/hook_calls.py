@@ -189,24 +189,14 @@ def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[
 
 
 def hook_integrity_finalize_locked(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Finalize while the native daemon already holds the generation lock."""
+    """Compatibility alias for the lock-owning finalize operation.
 
-    next_control_state = args.get("next_control_state")
-    if next_control_state is None:
-        return {"finalized": True}
-    if not isinstance(next_control_state, dict):
-        return {"finalized": False}
-    try:
-        normalized = store._normalize_policy_integrity_control_state(next_control_state)
-        current = store._load_policy_integrity_control_state(create=False)
-        if normalized is None or (
-            current is not None and normalized["generation"] < current["generation"]
-        ):
-            return {"finalized": False}
-        stored = store._store_policy_integrity_control_state(normalized)
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return {"finalized": False}
-    return {"finalized": stored is True}
+    The old callback could outlive the coordinator lock after a timed-out
+    resident request. Finalization now always reacquires and validates its
+    own lock before writing the secret-backed generation.
+    """
+
+    return hook_integrity_finalize(store, args)
 
 
 def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
@@ -233,11 +223,11 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
     source = _text(args.get("source"))
     if not (session_id and artifact_id and pending_artifact_hash and reason and source):
         return {"valid": False}
-    with store.hold_policy_integrity_generation_lock():
+    def save_under_lock() -> dict[str, object] | None:
         try:
             integrity = hook_integrity_begin(store, {"now": _now(), "sign": True})
         except Exception:
-            return {"valid": False}
+            return None
         payload = {
             "artifact_id": artifact_id,
             "pending_artifact_hash": pending_artifact_hash,
@@ -257,7 +247,7 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
             and isinstance(integrity.get("integrity_key_id"), str)
             else {}
         )
-        reply = hook_authority_state(
+        return hook_authority_state(
             store,
             "claude_question_save",
             now=_now(),
@@ -266,32 +256,33 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
             session_id=session_id,
             payload=payload,
         )
-        if not isinstance(reply, dict) or reply.get("saved") is not True:
-            return {"valid": False}
-        finalized = hook_integrity_finalize_locked(
-            store, {"next_control_state": reply.get("next_control_state")}
-        )
-        if finalized.get("finalized") is not True:
-            return {"valid": False}
-        consumed = hook_authority_state(
-            store,
-            "claude_question_consume",
-            now=_now(),
-            required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
-            session_id=session_id,
-            payload={
-                "artifact_id": artifact_id,
-                "pending_artifact_hash": pending_artifact_hash,
-                **(
-                    {"pending_id": args["pending_id"]}
-                    if isinstance(args.get("pending_id"), str)
-                    else {}
-                ),
-            },
-        )
-        if not isinstance(consumed, dict) or consumed.get("consumed") is not True:
-            return {"valid": False}
-        return reply
+
+    with store.hold_policy_integrity_generation_lock():
+        reply = save_under_lock()
+    if not isinstance(reply, dict) or reply.get("saved") is not True:
+        return {"valid": False}
+    finalized = hook_integrity_finalize(store, {"next_control_state": reply.get("next_control_state")})
+    if finalized.get("finalized") is not True:
+        return {"valid": False}
+    consumed = hook_authority_state(
+        store,
+        "claude_question_consume",
+        now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+        session_id=session_id,
+        payload={
+            "artifact_id": artifact_id,
+            "pending_artifact_hash": pending_artifact_hash,
+            **(
+                {"pending_id": args["pending_id"]}
+                if isinstance(args.get("pending_id"), str)
+                else {}
+            ),
+        },
+    )
+    if not isinstance(consumed, dict) or consumed.get("consumed") is not True:
+        return {"valid": False}
+    return reply
 
 
 _LIVE_DECISION_REVIEW_SECONDS = 1.45
