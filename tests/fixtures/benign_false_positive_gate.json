@@ -32017,6 +32017,38 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-prune-inside-linked-worktree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree prune"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-prune-then-list-inside-linked-worktree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree prune && git worktree list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-native-ln-sibling-modules-into-source-dir",
       "fix_area": "queue",
       "harnesses": [
