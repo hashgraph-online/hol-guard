@@ -47,7 +47,14 @@ const QUESTION_SAVE: &str = "claude_question_save";
 /// refused before it reached the op.
 const MAX_REQUEST_BYTES: usize = 512 * 1024;
 /// The fields a `save` reply carries, and nothing else.
-const SAVE_FIELDS: [&str; 5] = ["outcome", "artifact_id", "reason", "source", "plan"];
+const SAVE_FIELDS: [&str; 6] = [
+    "outcome",
+    "artifact_id",
+    "pending_artifact_hash",
+    "reason",
+    "source",
+    "plan",
+];
 
 /// The Claude lifecycle op an event runs, if any.
 fn claude_op(event: &str, payload: &Map<String, Value>) -> Option<&'static str> {
@@ -189,7 +196,7 @@ pub(super) fn settled(reply: &Value) -> Option<Settled> {
     {
         return None;
     }
-    let texts = ["artifact_id", "reason", "source"];
+    let texts = ["artifact_id", "pending_artifact_hash", "reason", "source"];
     if !texts
         .iter()
         .all(|name| fields[*name].as_str().is_some_and(|text| !text.is_empty()))

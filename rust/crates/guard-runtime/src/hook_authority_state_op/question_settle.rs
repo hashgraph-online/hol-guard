@@ -116,6 +116,8 @@ impl Env<'_> {
         payload: &Object,
     ) -> Result<Value, &'static str> {
         let artifact_id = opt_str(payload, "artifact_id").ok_or(ERROR_INVALID)?;
+        let pending_artifact_hash =
+            opt_str(payload, "pending_artifact_hash").ok_or(ERROR_INVALID)?;
         let reason = opt_str(payload, "reason").ok_or(ERROR_INVALID)?;
         let source = opt_str(payload, "source").ok_or(ERROR_INVALID)?;
         if guard_policy_snapshot::policy_integrity::is_remote_policy_source(Some(&source)) {
@@ -185,7 +187,8 @@ impl Env<'_> {
         let pending_key = claude_pending_key(session_id, &artifact_id);
         let same_pending = match self.read(&pending_key) {
             Stored::Object(pending) => {
-                opt_str(&pending, "artifact_hash").as_deref() == Some(stored_artifact_hash)
+                opt_str(&pending, "artifact_hash").as_deref()
+                    == Some(pending_artifact_hash.as_str())
             }
             _ => false,
         };
@@ -272,6 +275,7 @@ impl Env<'_> {
         Ok(json!({
             "outcome": "save",
             "artifact_id": artifact_id,
+            "pending_artifact_hash": opt_str(&pending, "artifact_hash").ok_or(ERROR_INVALID)?,
             "reason": reason,
             "source": SOURCE,
             "plan": serde_json::to_value(plan).map_err(|_| ERROR_INVALID)?,

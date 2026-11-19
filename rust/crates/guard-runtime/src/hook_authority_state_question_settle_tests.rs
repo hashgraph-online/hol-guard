@@ -104,6 +104,7 @@ fn settles_every_recorded_question() {
                     json!({
                         "outcome": "save",
                         "artifact_id": row["artifact_id"],
+                        "pending_artifact_hash": row["artifact_hash"],
                         "reason": reason,
                         "source": "claude-ask-user-question",
                         "plan": serde_json::to_value(plan).unwrap(),
@@ -228,7 +229,8 @@ fn question_save_persists_the_plan_and_consumes_pending_state() {
             )",
         )
         .expect("policy schema");
-    let row = recorded(&case["pending"]);
+    let mut row = recorded(&case["pending"]);
+    row.insert("artifact_type".into(), json!("tool_action_request"));
     let reply = settle(&connection, &row, Some(&projection(&case)));
     assert_eq!(reply["outcome"], "save");
     let mut save = reply.as_object().unwrap().clone();

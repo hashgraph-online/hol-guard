@@ -174,10 +174,10 @@ def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[
     if not isinstance(next_control_state, dict):
         return {"finalized": False}
     try:
-        store._finalize_policy_integrity_control_state(next_control_state)
+        stored = store._finalize_policy_integrity_control_state(next_control_state)
     except (OSError, RuntimeError, TypeError, ValueError):
         return {"finalized": False}
-    return {"finalized": True}
+    return {"finalized": stored is True}
 
 
 def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
@@ -199,9 +199,10 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
 
     session_id = _text(args.get("session_id"))
     artifact_id = _text(args.get("artifact_id"))
+    pending_artifact_hash = _text(args.get("pending_artifact_hash"))
     reason = _text(args.get("reason"))
     source = _text(args.get("source"))
-    if not (session_id and artifact_id and reason and source):
+    if not (session_id and artifact_id and pending_artifact_hash and reason and source):
         return {"valid": False}
     reply = hook_authority_state(
         store,
@@ -211,6 +212,7 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
         session_id=session_id,
         payload={
             "artifact_id": artifact_id,
+            "pending_artifact_hash": pending_artifact_hash,
             "reason": reason,
             "source": source,
             "plan": args.get("plan"),
