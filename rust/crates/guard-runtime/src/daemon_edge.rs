@@ -88,12 +88,14 @@ fn set_package_version(version: &str) {
 
 /// `hol-guard/<package version>`, the User-Agent of every outbound request.
 pub(crate) fn user_agent() -> String {
-    format!(
-        "hol-guard/{}",
-        PACKAGE_VERSION
-            .get()
-            .map_or(crate::PACKAGE_VERSION, String::as_str)
-    )
+    format!("hol-guard/{}", package_version())
+}
+
+/// The Guard package version the launcher named, or the runtime's own.
+pub(crate) fn package_version() -> &'static str {
+    PACKAGE_VERSION
+        .get()
+        .map_or(crate::PACKAGE_VERSION, String::as_str)
 }
 
 fn serve(

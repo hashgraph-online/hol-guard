@@ -1097,6 +1097,8 @@ use guard_policy_bundle::{
     python as policy_bundle_py, time as policy_bundle_time,
 };
 mod background_loop_gate;
+mod plugin_telemetry_host;
+mod plugin_telemetry_weekly;
 mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;

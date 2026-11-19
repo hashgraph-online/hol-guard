@@ -680,6 +680,10 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             write_json(&crate::local_cli_discover::run_command(&bytes))
         }
+        [command, flag] if command == plugin_telemetry_host::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&plugin_telemetry_host::run_command(&bytes))
+        }
         [command, flag] if command == guard_plugin_telemetry::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&guard_plugin_telemetry::run_request(&bytes))
