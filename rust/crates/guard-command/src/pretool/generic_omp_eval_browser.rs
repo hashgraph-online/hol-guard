@@ -44,7 +44,7 @@ mod lex;
 #[path = "generic_omp_eval_browser_page.rs"]
 mod page;
 use lex::{
-    loopback_url, timer_pause, tokenize, workspace_file_url, Token, NO_ARGUMENT_METHODS, OPEN_KEYS,
+    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS,
     OPTION_KEYS,
 };
 
@@ -68,8 +68,6 @@ struct Parser {
     /// Locates the Guard daemon's state file, so its port stays unreachable
     /// from `fetch` and `page.goto`.
     home_dir: Option<String>,
-    /// The workspace, whose own files `browser.open` may load by `file://`.
-    cwd: Option<String>,
 }
 
 impl Parser {
@@ -248,7 +246,9 @@ impl Parser {
             match key.as_str() {
                 "url" => {
                     let url = self.string()?;
-                    loopback = loopback_url(&url) || workspace_file_url(&url, self.cwd.as_deref());
+                    // A pre-tool check cannot bind the path to what a later file://
+                    // open reads. Keep all file:// opens in review.
+                    loopback = loopback_url(&url);
                 }
                 // `own` is OMP's own headless browser, the one it opens by
                 // default; any other `app` attaches a browser of the user's.
@@ -467,11 +467,7 @@ impl Parser {
 
 /// Whether `code` is a JavaScript program that only drives the isolated
 /// browser against loopback pages and displays what it reads.
-pub(super) fn loopback_browser_program(
-    code: &str,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
+pub(super) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
     if code.len() > MAX_CODE_BYTES {
         return false;
     }
@@ -481,7 +477,6 @@ pub(super) fn loopback_browser_program(
     Parser {
         tokens,
         home_dir: home_dir.map(str::to_owned),
-        cwd: cwd.map(str::to_owned),
         ..Parser::default()
     }
     .program()
