@@ -1,16 +1,56 @@
-import { r as reactExports, t as harnessDisplayName, cl as fetchSettings, em as runHarnessAction, en as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, eo as HiMiniRocketLaunch, af as HiMiniShieldCheck, k as HiMiniArrowPath, s as formatRelativeTime, as as HiMiniExclamationTriangle, G as HiMiniCheckCircle, ep as HiMiniTrash, aZ as ApprovalProofModal, bI as isGuardDemoMode, eq as fetchGuardApi, er as formatHarnessCommand, bo as HiMiniAdjustmentsHorizontal, aQ as appModesNote, es as appModes, et as fetchApprovalPage, eu as fetchPolicy, ah as guardActionDisposition, a7 as protectionHealthFor, a6 as useProtectionPresentationState, bY as HiMiniArrowLeft, q as HiMiniChevronRight, aU as GuardHero, aV as ProofStrip, ev as appSetupTarget, bM as HiMiniHome, at as HiMiniBolt, ew as guardActionPresentation, au as Badge, ex as DEFAULT_FILTER_STATE, ey as filterEvidence, ez as sortEvidence, eA as computeMetrics, eB as CommandActivityWorkspace, an as EmptyState, eC as EvidenceFilterBar, eD as EvidenceInsightStrip, eE as EvidenceActionList, eF as EvidenceActionDetail, ar as useFocusTrap, eG as policyIdentityKey, ap as HiMiniCloud, T as Tag, aT as HiMiniXCircle, eH as clearLabelForScope, eI as HiMiniChartBar } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, as as HiMiniExclamationTriangle, r as reactExports, t as harnessDisplayName, cl as fetchSettings, em as runHarnessAction, en as GuardHarnessActionError, S as SectionLabel, A as ActionButton, eo as HiMiniRocketLaunch, af as HiMiniShieldCheck, k as HiMiniArrowPath, s as formatRelativeTime, G as HiMiniCheckCircle, ep as HiMiniTrash, aZ as ApprovalProofModal, bI as isGuardDemoMode, eq as fetchGuardApi, er as formatHarnessCommand, bo as HiMiniAdjustmentsHorizontal, aQ as appModesNote, es as appModes, et as fetchApprovalPage, eu as fetchPolicy, ah as guardActionDisposition, a7 as protectionHealthFor, a6 as useProtectionPresentationState, bY as HiMiniArrowLeft, q as HiMiniChevronRight, aU as GuardHero, aV as ProofStrip, ev as appSetupTarget, bM as HiMiniHome, at as HiMiniBolt, ew as guardActionPresentation, au as Badge, ex as DEFAULT_FILTER_STATE, ey as filterEvidence, ez as sortEvidence, eA as computeMetrics, eB as CommandActivityWorkspace, an as EmptyState, eC as EvidenceFilterBar, eD as EvidenceInsightStrip, eE as EvidenceActionList, eF as EvidenceActionDetail, ar as useFocusTrap, eG as policyIdentityKey, ap as HiMiniCloud, T as Tag, aT as HiMiniXCircle, eH as clearLabelForScope, eI as HiMiniChartBar } from "../guard-dashboard.js";
 import { s as setupActionErrorMessage } from "./harness-action-errors-BMFGvfEG.js";
-import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, l as eventProtectionName, a as useHarnessDetection, b as versionCompatibilityFor, m as isHarnessDetected } from "./harness-version-label-B2Ob_2J1.js";
+import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, l as eventProtectionName, a as useHarnessDetection, b as versionCompatibilityFor, m as isHarnessDetected } from "./harness-version-label-BTjqj8Ip.js";
 import "./settings-save-proof-modal-DdKoGp14.js";
+function LeftoverGuardCleanup({ warnings }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Leftover Guard files detected" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-1 space-y-1 text-sm text-muted-foreground", children: warnings.slice(0, 3).map((warning) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: warning }, warning)) })
+    ] })
+  ] }) });
+}
+function setupStepsFor(result, active) {
+  if (!result) return [];
+  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
+  if (result.verification?.steps) return result.verification.steps;
+  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
+  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
+  return [];
+}
+function setupNotesFor(result) {
+  const notes = result?.managed_install?.manifest?.["notes"];
+  return Array.isArray(notes) ? notes.filter((note) => typeof note === "string") : [];
+}
+function setupActionLabel(action) {
+  if (action === "install") return "connect";
+  if (action === "verify") return "test";
+  if (action === "repair") return "repair";
+  return "disconnect";
+}
+function setupSuccessTitle(action, displayName) {
+  if (action === "install") return `${displayName} connected`;
+  if (action === "verify") return `${displayName} test complete`;
+  if (action === "repair") return `${displayName} repaired`;
+  return `${displayName} disconnected`;
+}
 function HarnessSetupPanel(props) {
   const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
   const [disconnectArmed, setDisconnectArmed] = reactExports.useState(false);
+  const [leftoverRemoved, setLeftoverRemoved] = reactExports.useState(false);
   const [approvalGate, setApprovalGate] = reactExports.useState(void 0);
   const [gateLoadFailed, setGateLoadFailed] = reactExports.useState(false);
   const active = props.install?.active === true;
+  const hasLeftover = !active && !leftoverRemoved && (props.setupWarnings?.length ?? 0) > 0;
   const displayName = harnessDisplayName(props.harness);
   const gateLoaded = approvalGate !== void 0;
   const disconnectRequiresProof = approvalGate?.enabled === true;
+  reactExports.useEffect(() => {
+    if (active) {
+      setLeftoverRemoved(false);
+    }
+  }, [active]);
   reactExports.useEffect(() => {
     let cancelled = false;
     void fetchSettings().then((payload) => {
@@ -66,6 +106,16 @@ function HarnessSetupPanel(props) {
           setDisconnectArmed(false);
         }
         setSetupState({ kind: "success", action, result });
+        const cleanupIncomplete = result.managed_install?.manifest?.cleanup_incomplete === true;
+        if (action === "uninstall" && options.dryRun !== true && !cleanupIncomplete) {
+          if (!active) {
+            setLeftoverRemoved(true);
+          }
+          props.onLeftoverRemoved?.("removed");
+        }
+        if (action === "install" && options.dryRun !== true) {
+          props.onLeftoverRemoved?.("installed");
+        }
         if (action !== "verify" && options.dryRun !== true) {
           await refreshAfterMutation();
         }
@@ -87,7 +137,7 @@ function HarnessSetupPanel(props) {
         }
       }
     },
-    [props.harness, refreshAfterMutation]
+    [active, props.harness, props.onLeftoverRemoved, refreshAfterMutation]
   );
   const handleConnect = reactExports.useCallback(() => {
     void runAction("install", { dryRun: false });
@@ -132,14 +182,23 @@ function HarnessSetupPanel(props) {
   }
   const steps = setupStepsFor(currentPlan, active);
   const notes = setupNotesFor(currentPlan);
-  const showSimpleConfirm = active && disconnectArmed && gateLoaded && !disconnectRequiresProof && !gateLoadFailed;
-  const showProofModal = active && disconnectArmed && disconnectRequiresProof && approvalGate != null;
+  const showSimpleConfirm = (active || hasLeftover) && disconnectArmed && gateLoaded && !disconnectRequiresProof && !gateLoadFailed;
+  const showProofModal = (active || hasLeftover) && disconnectArmed && disconnectRequiresProof && approvalGate != null;
+  let panelHeading = `Connect ${displayName} from this dashboard`;
+  let panelBody = "Guard will install the local managed hooks through the daemon. No copied shell command required.";
+  if (active) {
+    panelHeading = `${displayName} is managed by Guard`;
+    panelBody = "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard.";
+  } else if (hasLeftover) {
+    panelHeading = `${displayName} needs cleanup`;
+    panelBody = "Guard found leftover configuration for this app. Remove it here before connecting again.";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local harness install" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-lg font-semibold text-brand-dark", children: active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm text-muted-foreground", children: active ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard." : "Guard will install the local managed hooks through the daemon. No copied shell command required." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-lg font-semibold text-brand-dark", children: panelHeading }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm text-muted-foreground", children: panelBody })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2 max-xl:w-full max-xl:justify-start", children: [
         !active && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConnect, disabled: busy, "data-primary": "true", children: [
@@ -159,7 +218,7 @@ function HarnessSetupPanel(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid gap-3 md:grid-cols-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: installStateLabel(active, props.status), active }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: installStateLabel(active, props.status, hasLeftover), active }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Config source", value: props.install?.workspace ?? "Local machine" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Last changed", value: props.install ? formatRelativeTime(props.install.updated_at) : "Not yet" })
     ] }),
@@ -181,6 +240,7 @@ function HarnessSetupPanel(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: setupState.action === "verify" ? "Safe local check completed. No app config was changed." : "Dashboard action completed through the local Guard daemon." })
       ] })
     ] }) }),
+    hasLeftover && /* @__PURE__ */ jsxRuntimeExports.jsx(LeftoverGuardCleanup, { warnings: props.setupWarnings ?? [] }),
     steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 space-y-2", children: steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessSetupStepRow, { step }, step.step_id)) }),
     notes.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-200/70 bg-white/80 p-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-widest text-slate-400", children: "What changed" }),
@@ -196,7 +256,7 @@ function HarnessSetupPanel(props) {
           children: "Refresh setup"
         }
       ),
-      active && !disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      (active || hasLeftover) && !disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
           onClick: handleRequestDisconnect,
@@ -204,7 +264,7 @@ function HarnessSetupPanel(props) {
           className: "inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-attention/20 bg-white px-3 text-sm font-medium text-brand-attention transition-colors hover:bg-brand-attention/[0.04] disabled:opacity-50",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Disconnect"
+            hasLeftover ? "Remove leftover Guard files" : "Disconnect"
           ]
         }
       ),
@@ -228,7 +288,7 @@ function HarnessSetupPanel(props) {
           }
         )
       ] }),
-      active && disconnectArmed && !showSimpleConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      (active || hasLeftover) && disconnectArmed && !showSimpleConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           onClick: handleCancelDisconnect,
@@ -238,8 +298,8 @@ function HarnessSetupPanel(props) {
         }
       )
     ] }),
-    active && disconnectArmed && !gateLoaded && !gateLoadFailed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-muted-foreground", children: "Checking approval requirements before disconnect." }) : null,
-    active && disconnectArmed && gateLoadFailed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-attention", role: "alert", children: "Guard could not load approval settings. Keep the app connected and retry disconnect." }) : null,
+    (active || hasLeftover) && disconnectArmed && !gateLoaded && !gateLoadFailed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-muted-foreground", children: "Checking approval requirements before disconnect." }) : null,
+    (active || hasLeftover) && disconnectArmed && gateLoadFailed ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-attention", role: "alert", children: "Guard could not load approval settings. Keep the app connected and retry disconnect." }) : null,
     showProofModal ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalProofModal,
       {
@@ -310,35 +370,11 @@ function SetupMetric(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 truncate text-sm font-semibold ${props.active ? "text-brand-green" : "text-brand-dark"}`, children: props.value })
   ] });
 }
-function installStateLabel(active, status) {
+function installStateLabel(active, status, hasLeftover = false) {
   if (active) return "Installed";
+  if (hasLeftover) return "Needs repair";
   if (status === "observed") return "Observed";
   return "Not connected";
-}
-function setupStepsFor(result, active) {
-  if (!result) return [];
-  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
-  if (result.verification?.steps) return result.verification.steps;
-  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
-  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
-  return [];
-}
-function setupNotesFor(result) {
-  const manifest = result?.managed_install?.manifest;
-  const notes = manifest?.["notes"];
-  return Array.isArray(notes) ? notes.filter((note) => typeof note === "string") : [];
-}
-function setupActionLabel(action) {
-  if (action === "install") return "connect";
-  if (action === "verify") return "test";
-  if (action === "repair") return "repair";
-  return "disconnect";
-}
-function setupSuccessTitle(action, displayName) {
-  if (action === "install") return `${displayName} connected`;
-  if (action === "verify") return `${displayName} test complete`;
-  if (action === "repair") return `${displayName} repaired`;
-  return `${displayName} disconnected`;
 }
 function appModesSummary(settings, harness) {
   const note = appModesNote(settings, harness);
@@ -747,6 +783,28 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }) {
 }
 function AppDetailWorkspace(props) {
   const harnessDetection = useHarnessDetection();
+  const [cleanedLeftoverHarnesses, setCleanedLeftoverHarnesses] = reactExports.useState(() => /* @__PURE__ */ new Set());
+  const detectedSetupWarnings = harnessDetection.kind === "ready" ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? [] : [];
+  const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
+  const handleLeftoverRemoved = reactExports.useCallback((change = "removed") => {
+    if (change === "installed") {
+      void harnessDetection.refresh().then((refreshed) => {
+        if (refreshed) {
+          setCleanedLeftoverHarnesses((current) => {
+            const next = new Set(current);
+            next.delete(props.harness);
+            return next;
+          });
+        }
+      });
+      return;
+    }
+    setCleanedLeftoverHarnesses((current) => {
+      const next = new Set(current);
+      next.add(props.harness);
+      return next;
+    });
+  }, [harnessDetection.refresh, props.harness]);
   const versionCompatibility = reactExports.useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),
     [harnessDetection, props.harness]
@@ -976,6 +1034,8 @@ function AppDetailWorkspace(props) {
                 harnessInventory,
                 pendingItems,
                 protection: runtime.supply_chain?.package_manager_protection,
+                setupWarnings,
+                onLeftoverRemoved: handleLeftoverRemoved,
                 versionCompatibility,
                 onOpenRequest: props.onOpenRequest,
                 onManagedInstallChanged: props.onManagedInstallChanged
@@ -998,6 +1058,8 @@ function AppDetailWorkspace(props) {
                 harness,
                 status,
                 install,
+                setupWarnings,
+                onLeftoverRemoved: handleLeftoverRemoved,
                 harnessPolicies,
                 onClearAppPolicies: props.onClearAppPolicies,
                 onClearPolicy: props.onClearPolicy,
@@ -1053,6 +1115,8 @@ function AppOverviewTab(props) {
           harness: props.harness,
           install: props.install,
           status: props.status,
+          setupWarnings: props.setupWarnings,
+          onLeftoverRemoved: props.onLeftoverRemoved,
           onManagedInstallChanged: props.onManagedInstallChanged
         }
       ),
@@ -1267,6 +1331,8 @@ function FirstRunGuide(props) {
           harness: props.harness,
           install: props.install,
           status: props.status,
+          setupWarnings: props.setupWarnings,
+          onLeftoverRemoved: props.onLeftoverRemoved,
           onManagedInstallChanged: props.onManagedInstallChanged
         }
       ) }),
@@ -1635,6 +1701,8 @@ function AppSettingsTab(props) {
           harness: props.harness,
           install: props.install,
           status: props.status,
+          setupWarnings: props.setupWarnings,
+          onLeftoverRemoved: props.onLeftoverRemoved,
           onManagedInstallChanged: props.onManagedInstallChanged
         }
       ) : /* @__PURE__ */ jsxRuntimeExports.jsx(OperationalSourceSetupPanel, { harness: props.harness }),

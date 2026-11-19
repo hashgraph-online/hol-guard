@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { fetchGuardApi } from "./guard-api";
 import { isGuardDemoMode } from "./guard-demo";
@@ -15,6 +15,7 @@ export type GuardHarnessSetupItem = GuardHarnessSetupContract & {
   command_available: boolean;
   config_paths: string[];
   artifact_count: number;
+  warnings?: string[];
   // Added by newer daemons; normalize before rendering.
   version_compatibility?: unknown;
 };
@@ -24,6 +25,10 @@ export type HarnessDetectionState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardHarnessSetupItem[] };
 
+export type HarnessDetection = HarnessDetectionState & {
+  refresh: () => Promise<boolean>;
+};
+
 async function fetchHarnessSetupItems(): Promise<GuardHarnessSetupItem[]> {
   if (isGuardDemoMode()) return [];
   const response = await fetchGuardApi("/v1/harnesses");
@@ -32,24 +37,23 @@ async function fetchHarnessSetupItems(): Promise<GuardHarnessSetupItem[]> {
   return Array.isArray(payload.items) ? payload.items : [];
 }
 
-export function useHarnessDetection(): HarnessDetectionState {
+export function useHarnessDetection(): HarnessDetection {
   const [state, setState] = useState<HarnessDetectionState>({ kind: "loading" });
-  useEffect(() => {
-    let cancelled = false;
-    void fetchHarnessSetupItems()
-      .then((items) => {
-        if (!cancelled) setState({ kind: "ready", items });
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to detect local AI apps." });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+  const refresh = useCallback(async (): Promise<boolean> => {
+    setState({ kind: "loading" });
+    try {
+      const items = await fetchHarnessSetupItems();
+      setState({ kind: "ready", items });
+      return true;
+    } catch (error: unknown) {
+      setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to detect local AI apps." });
+      return false;
+    }
   }, []);
-  return state;
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  return { ...state, refresh };
 }
 
 export function detectedHarnesses(state: HarnessDetectionState): string[] {
