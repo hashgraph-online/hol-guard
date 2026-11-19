@@ -772,18 +772,20 @@ fn class_end(chars: &[char], start: usize) -> Option<(usize, bool)> {
 fn arguments_outside_message(
     segment: &crate::CommandSegmentV1,
 ) -> impl Iterator<Item = &String> + '_ {
-    // Git diff/log/show use -m for merge diffs, not for a message.
-    // Filtering its following "--" would hide the pathspec delimiter.
-    let merge_diff = crate::command_compatibility::basename(segment) == "git"
+    // Git diff/log/show/checkout/restore use -m for merge handling, not
+    // for a message. Hiding the following "--" would hide a pathspec.
+    let merge_flag = crate::command_compatibility::basename(segment) == "git"
         && crate::command_compatibility::git_command_index(&segment.arguments)
             .and_then(|index| segment.arguments.get(index))
-            .is_some_and(|command| matches!(command.as_str(), "diff" | "log" | "show"));
+            .is_some_and(|command| {
+                matches!(command.as_str(), "diff" | "log" | "show" | "checkout" | "restore")
+            });
     let mut message_value = false;
     segment.arguments.iter().filter(move |argument| {
         let is_message = std::mem::take(&mut message_value);
-        message_value = !merge_diff && matches!(argument.as_str(), "-m" | "--message");
+        message_value = !merge_flag && matches!(argument.as_str(), "-m" | "--message");
         let lowered = argument.to_ascii_lowercase();
-        let attached_message = !merge_diff
+        let attached_message = !merge_flag
             && (lowered.starts_with("--message=")
                 || (lowered.starts_with("-m") && !lowered.starts_with("--")));
         !(is_message || attached_message)
