@@ -113,7 +113,8 @@ fn enable(call: &mut Call<'_>, guard_home: &Path, path: &Path) -> Step<Checked<V
         // The write can fail after the new config is already in place (a
         // mode or directory sync error); then Guard's text is there and
         // Guard keeps owning it.
-        let published = matches!(read_config(path), Ok((_, now)) if current(&now) == Some(TEXT));
+        let published =
+            matches!(read_config(path), Ok((_, now)) if self::current(&now) == Some(TEXT));
         if !published {
             write_record(call, guard_home, path, record)?;
         }
