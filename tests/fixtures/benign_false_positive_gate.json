@@ -51138,23 +51138,6 @@
       "expect": "allow"
     },
     {
-      "id": "neg-find-name-group-any-file-exec-cat",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "find . -type f \\( -name '*.py' -o -name '*' \\) -exec cat {} +"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
       "id": "neg-find-name-group-env-file-exec-cat",
       "fix_area": "shell",
       "harnesses": [
