@@ -64,6 +64,7 @@ export function CodexShortReplies({ gate, disabled, cigarOn }: Props) {
     setError(null);
     try {
       setState(await setCodexShortReplies(enabled, credentials));
+      setReadError(null);
       setProof(null);
     } catch (cause) {
       if (cause instanceof ContextAssistanceApiError && cause.code.startsWith("approval")) {

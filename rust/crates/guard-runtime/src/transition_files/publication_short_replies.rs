@@ -110,7 +110,13 @@ fn enable(call: &mut Call<'_>, guard_home: &Path, path: &Path) -> Step<Checked<V
     write_record(call, guard_home, path, Record::Wrote(TEXT.to_owned()))?;
     set(&mut payload, HookVal::Str(TEXT.to_owned()));
     if let Err(fault) = write_config(call, path, &payload, text.as_deref()) {
-        write_record(call, guard_home, path, record)?;
+        // The write can fail after the new config is already in place (a
+        // mode or directory sync error); then Guard's text is there and
+        // Guard keeps owning it.
+        let published = matches!(read_config(path), Ok((_, now)) if current(&now) == Some(TEXT));
+        if !published {
+            write_record(call, guard_home, path, record)?;
+        }
         return Err(fault);
     }
     Ok(Ok(view(path, Some(TEXT), &Record::Wrote(TEXT.to_owned()))))
