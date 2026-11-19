@@ -126,6 +126,7 @@ fn the_review_and_its_notice_commit_together() {
     );
     notice.remove("integrity");
     let state_key = notice.remove("state_key").unwrap();
+    notice.remove("pending_id");
     assert_eq!(state_key, "claude_permission_notice:sess-1:Bash");
     assert_eq!(Value::Object(notice.clone()), fixture.call["payload"]);
     let connection = Connection::open(fixture.home.join("guard.db")).unwrap();
@@ -256,6 +257,7 @@ fn unsigned_notice(fixture: &Fixture) -> Map<String, Value> {
     assert_eq!(notice["integrity"]["integrity_key_id"], KEY_ID);
     notice.remove("integrity");
     notice.remove("state_key");
+    notice.remove("pending_id");
     let code = notice.remove("approval_code").unwrap();
     let code = code.as_str().unwrap();
     assert!(code.len() == 12 && code.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -268,6 +270,7 @@ fn recorded_without_code(fixture: &Fixture) -> Map<String, Value> {
     let mut recorded = fixture.call["payload"].as_object().unwrap().clone();
     recorded.remove("approval_code");
     recorded.remove("approval_question");
+    recorded.remove("pending_id");
     recorded
 }
 
