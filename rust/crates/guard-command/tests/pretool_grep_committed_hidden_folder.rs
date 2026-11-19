@@ -28,16 +28,40 @@ fn git(directory: &Path, arguments: &[&str]) {
         .args(arguments)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .status()
         .unwrap();
     assert!(status.success(), "git {arguments:?}");
+}
+
+/// A fixture home that owns its tree: the whole root goes away when the
+/// guard drops, on a passing test and on a panicking one alike.
+struct Home {
+    root: PathBuf,
+    home: PathBuf,
+}
+
+impl std::ops::Deref for Home {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.home
+    }
+}
+
+impl Drop for Home {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
 }
 
 /// A home whose `project` repository commits `docs/` with a hidden design
 /// folder and a hidden lint file, plus whatever `extra` adds and commits. The
 /// root stays below the target directory: `$TMPDIR` on macOS resolves under
 /// `/private/var`, which the sensitive-root screen rejects.
-fn home(extra: &[(&str, &str)], untracked: &[(&str, &str)]) -> PathBuf {
+fn home(extra: &[(&str, &str)], untracked: &[(&str, &str)]) -> Home {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-grep-committed-hidden-folder")
         .join(format!(
@@ -70,7 +94,8 @@ fn home(extra: &[(&str, &str)], untracked: &[(&str, &str)]) -> PathBuf {
     for (path, text) in untracked {
         write(project.join(path), text);
     }
-    std::fs::canonicalize(root.join("home")).unwrap()
+    let home = std::fs::canonicalize(root.join("home")).unwrap();
+    Home { root, home }
 }
 
 fn action(home: &Path, harness: &str, command: &str) -> String {
