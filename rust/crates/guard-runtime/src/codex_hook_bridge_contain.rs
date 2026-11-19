@@ -69,7 +69,10 @@ pub(super) fn settle(
     let (settled, unmap) = match contain(config, prepared, &response, deadline) {
         Contained::Unchanged => (response, mapped),
         Contained::Hint => (with_update_hint(response), mapped),
-        Contained::Routed(routed, unmap) => (routed, unmap),
+        Contained::Routed(routed, unmap) => {
+            admit_contained(config, prepared);
+            (routed, unmap)
+        }
     };
     let PyVal::Dict(entries) = &settled else {
         return Route::Respond(fail_closed(&prepared.event_name));
@@ -84,6 +87,20 @@ pub(super) fn settle(
     match pending_pretool_approval(&settled, &prepared.event_name) {
         Some(pending) => Route::AwaitApproval(pending, rendered),
         None => Route::Respond(rendered),
+    }
+}
+
+/// Running the call contained is how this answer settles the floor that held
+/// it, so the call's `PostToolUse` must not hold its output for that same
+/// floor again (`native_admitted_call`). Oh My Pi proves the same through its
+/// verified sink delivery; Codex has no such delivery, so the call id stands
+/// in. Secret, network and risk floors on the output still apply.
+fn admit_contained(config: &BridgeConfig, prepared: &Prepared) {
+    let Some(guard_home) = guard_home(&config.state_path) else {
+        return;
+    };
+    if let Ok(serde_json::Value::Object(payload)) = serde_json::from_str(&prepared.data) {
+        crate::native_admitted_call::record_for_hook(&guard_home, "codex", &payload);
     }
 }
 
