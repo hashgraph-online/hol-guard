@@ -221,6 +221,7 @@ pub mod pretool_jq_command_bindings;
 pub mod pretool_jq_filter_credential_words;
 pub mod pretool_jq_sibling_filters;
 pub mod pretool_kubectl_output_templates;
+pub mod pretool_later_command_input_redirect;
 pub mod pretool_leaf_glob_exact_matches;
 pub mod pretool_link_chains;
 pub mod pretool_linked_writes;
