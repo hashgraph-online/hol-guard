@@ -164,3 +164,54 @@ def test_other_codex_patches_are_not_the_pinned_write(patch: str) -> None:
     command, path = _request(payload)
     decision = {"tool": "apply_patch", "patch_tool": _patch_tool(payload), "command": command, "path": path}
     assert not _targets_scenario({}, scenario, decision)
+
+
+def _denied_write() -> dict[str, object]:
+    return {
+        "tool": "apply_patch",
+        "patch_tool": "write",
+        "command": None,
+        "path": "notes.md",
+        "decision": "deny",
+        "receipt_decision": "deny",
+        "reason_code": "native_file_write_review",
+    }
+
+
+def _shell(command: str, decision: str = "allow") -> dict[str, object]:
+    return {
+        "tool": "Bash",
+        "patch_tool": None,
+        "command": command,
+        "path": None,
+        "decision": decision,
+        "receipt_decision": decision,
+        "reason_code": "native_policy_warning",
+    }
+
+
+def test_reading_the_safety_guide_guard_installed_is_not_a_second_attempt() -> None:
+    # `hol-guard install codex` asks the agent to read this guide first.
+    from ci.gauntlet.harness_judge import _block_outcome
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    decisions = [_shell("cat ~/.hol-support/SAFETY.md"), _denied_write()]
+    outcome, _ = _block_outcome(scenario, {}, decisions, [object()])
+    assert outcome == "pass"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        _shell("cat ~/.hol-support/SAFETY.md && cat notes.md"),
+        _shell("cat ~/.hol-support/OTHER.md"),
+        _shell("cat notes.md"),
+        _shell("cat ~/.hol-support/SAFETY.md", decision="deny"),
+    ],
+)
+def test_any_other_request_still_leaves_the_case_unexercised(extra: dict[str, object]) -> None:
+    from ci.gauntlet.harness_judge import _block_outcome
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    outcome, _ = _block_outcome(scenario, {}, [extra, _denied_write()], [object()])
+    assert outcome == "not-exercised"
