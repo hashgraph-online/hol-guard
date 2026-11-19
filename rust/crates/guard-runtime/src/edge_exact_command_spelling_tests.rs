@@ -255,3 +255,24 @@ fn a_comment_cut_reads_each_word_as_bash_unquotes_it() {
     assert!(has("npm publish x;#b", "npm publish x"));
     assert!(has("npm publish x&&#b", "npm publish x"));
 }
+
+/// Inside quotes an operator is ordinary text, so a `#` written right after
+/// one starts no comment. Reading the whole line for the two characters next
+/// to each other sent every pull request number and every alternation that
+/// spells a Markdown heading to review as an unreadable line.
+#[test]
+fn a_hash_after_a_quoted_operator_still_reads_as_text() {
+    for command in [
+        "gh pr merge 12 --squash --subject \"feat(scope): a change (#12)\"",
+        "rg -n \"Remaining risks|## Remaining\" docs/notes.md",
+        "grep -n \"Section 7\\|## Remaining risks\" -A 1 docs/notes.md",
+        "git grep -n \"len()\\|#\\[test\\]\" -- src",
+        "grep -naE \"FAILED|##\\[error\\]\" build.log",
+        "git commit -m 'docs: count three routes (#54)'",
+    ] {
+        assert!(spellings(command).complete, "{command:?}");
+    }
+    // Outside quotes the pair still reads as bash's comment, and the line is
+    // left unread the way it was before.
+    assert!(!spellings("npm publish x|#b").complete);
+}
