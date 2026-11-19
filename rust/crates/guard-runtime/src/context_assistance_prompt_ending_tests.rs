@@ -76,6 +76,15 @@ fn the_codex_hint_asks_for_the_edit_and_the_test_as_two_tool_calls() {
     assert!(!ACT_ON_IT.contains("apply the patch and run the tests)"));
 }
 
+/// Codex spent output tokens narrating its plan and restating tool output.
+/// The hint asks for short replies, and keeps code and paths exact.
+#[test]
+fn the_codex_hint_asks_for_short_replies() {
+    assert!(ACT_ON_IT.contains("Keep your own words short"));
+    assert!(ACT_ON_IT.contains("no summary of tool output"));
+    assert!(ACT_ON_IT.contains("code, commands, paths and identifiers stay exact"));
+}
+
 /// Claude Code ran the whole suite and committed after the doctest or test a
 /// note named had passed, a turn each. The hint says that check finishes the
 /// change.

@@ -21,10 +21,16 @@ test run or a commit nobody asked for costs another turn each.";
 /// edit and the test go out as two tool calls from one exec script: a shell
 /// command that writes files and then runs tests is one Guard cannot match to
 /// the project's controls, so it is held and the turn is spent anyway.
+/// Codex also narrates its plan and restates tool output, and output tokens
+/// cost the most. Given as Codex instructions, the same request cut session
+/// cost by 6 to 14% in two 16-session runs, with the same tasks passing.
 const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: \
 work from them instead of reading those lines again. When you can, make the edit and run its check \
 in the same turn: one exec script can call apply_patch and then run the test command, as two tool \
-calls. Make edits with apply_patch, not with a shell or Python script that writes files.";
+calls. Make edits with apply_patch, not with a shell or Python script that writes files. Keep your \
+own words short: no preamble, no restating the task, no narration of what you will do, no summary \
+of tool output. End with one or two lines naming what changed or the answer; code, commands, paths \
+and identifiers stay exact.";
 
 /// Oh My Pi models open a todo list for most steps, often in a turn of its
 /// own, and read again lines a note already shows. Oh My Pi drops a note when
