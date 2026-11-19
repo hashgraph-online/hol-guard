@@ -83,4 +83,3 @@ def build_network_status(
         if legacy_policy is not None:
             status["legacy_domain_policy"] = legacy_policy
         return status
-
