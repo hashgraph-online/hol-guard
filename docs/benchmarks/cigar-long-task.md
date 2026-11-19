@@ -449,6 +449,45 @@ Every session passed in both arms. Codex and Oh My Pi save 52–76% of cost in a
 
 Wrong-note rate: 48 of 86 notes that carry code (55.8%). Only 11 of 56 prompts that need no code get no code. 38 of the 45 wrong notes on those prompts are the excerpt form: when no range matches well, CIGAR pastes a whole document, changelog or README (7–8k characters for "push this branch and open a PR", "so is it fixed?" and "are the actual risky calls fixed?"). The other 7 are ranges into unrelated code (a PRD request mapped to `_parser.py`, "what did you change in the last step?" mapped to click's terminal UI files). Coding prompts are mostly fine: 38 of 44 name a right file.
 
+### Preview 3.60.0a121 (2026-11-18)
+
+Full Guard against no Guard, each no-Guard run made in the same batch. The 32 seeds are the benchmark seeds 116–131 and the held-out seeds 200–215; the random set is a newer 16 seeds (581 to 9298), compared with two separate no-Guard runs.
+
+| harness | set | cost saved | tokens saved | passed (Guard / no Guard) | holds |
+|---|---|---|---|---|---|
+| Codex | 32 seeds | 59.3% | 66.5% | 30 / 32 | 8 |
+| Codex | 16 random seeds | 63.2–63.6% | 70.4–70.6% | 15 / 15 | |
+| Claude Code | 32 seeds | 41.5% | 49.8% | 29 / 31 | 14 |
+| Claude Code | 16 random seeds | 59.7–60.1% | 68.5–68.8% | 15 / 14 and 13 | |
+| Oh My Pi (CIGAR) | 32 seeds | 55.3% | 62.2% | 26 / 32 | 25 |
+| Oh My Pi (CIGAR) | 16 random seeds | 58.8–69.0% | 65.1–72.5% | 13 / 14 | |
+
+#### Short replies
+
+Codex, 16 random seeds, full Guard with and without an instruction to answer briefly:
+
+| where the instruction went | cost saved | tokens saved | passed |
+|---|---|---|---|
+| Codex developer instructions, run 1 | 5.5% | -0.2% | 15 / 15 |
+| Codex developer instructions, run 2 | 13.9% | 9.2% | 15 / 15 |
+| one sentence in the CIGAR note | no change (67.8% / 74.1% saved against 66.2–68.2% / 72.7–74.0% without it) | | 14 / 15 |
+
+The instruction helps only where the harness reads it as a system instruction. CIGAR's note is not that, so the note keeps its current wording.
+
+#### Commit messages read as data
+
+Most Claude Code holds on the 32 seeds were `git commit -m "$(cat <<'EOF' ... EOF)"` messages holding a backtick, `a[key]`, `"\n"` or an em dash. After the fix that reads such a message as data (only directly after `git commit` with value-less flags and a final `-m` or `--message`), on the same seeds and no-Guard run:
+
+| | before | after |
+|---|---|---|
+| cost saved | 41.5% | 50.7% |
+| tokens saved | 49.8% | 58.5% |
+| passed (no Guard 31) | 29 | 30 |
+| holds | 14 | 11 |
+| requests | 1,221 | 1,108 |
+
+On the 16 random seeds the same build saved 61.3–61.7% cost and 69.6–69.9% tokens (was 59.7–60.1% / 68.5–68.8%), passed 15 (no Guard 14 and 13), and held nothing.
+
 ## General-savings measurements (2026-11-16)
 
 Step-by-step workflow anatomy, harness coverage, used and wrong notes, note build time under load,
