@@ -1059,22 +1059,9 @@ fn evaluate_envelope(
         && signals.tool_name.as_deref() == Some("edit")
         && result.minimum_action == "review"
     {
-        use super::omp_hashline_recovery as recovery;
-        let input = omp::strict_tool_input(payload).and_then(|input| input.get("input")?.as_str());
-        let blocked = input.and_then(|input| {
-            if let Some(header) = recovery::missing_tagged_header(input, cwd) {
-                return Some((
-                    read_decisions::MISSING_PATH,
-                    recovery::missing_header_reason(&header),
-                ));
-            }
-            recovery::unparseable_first_header(input).map(|line| {
-                (
-                    recovery::UNPARSEABLE_HEADER,
-                    recovery::unparseable_header_reason(&line),
-                )
-            })
-        });
+        let blocked = omp::strict_tool_input(payload)
+            .and_then(|input| input.get("input")?.as_str())
+            .and_then(|input| super::omp_hashline_recovery::unappliable_edit(input, cwd));
         if let Some((reason_code, reason)) = blocked {
             result = generic_result(
                 generic_action(

@@ -24,8 +24,10 @@ const SENTINELS: [&str; 2] = ["Begin Patch", "End Patch"];
 const TAG_LENGTH: usize = 4;
 const SHOWN_CHARS: usize = 120;
 
+/// Reason code for a header that names a missing file, as for any write.
+const MISSING_PATH: &str = "native_missing_path";
 /// Reason code for an edit whose first header Oh My Pi cannot read.
-pub(super) const UNPARSEABLE_HEADER: &str = "native_omp_edit_header_unreadable";
+const UNPARSEABLE_HEADER: &str = "native_omp_edit_header_unreadable";
 
 /// Oh My Pi's `APPLY_PATCH_PATH_NOISE_RE`.
 static PATH_NOISE: LazyLock<Regex> = LazyLock::new(|| {
@@ -52,7 +54,7 @@ pub(super) struct MissingHeader {
 /// session folder is unknown, when any header line is one Oh My Pi refuses
 /// outright, or when every unproven header names a file that exists, is
 /// sensitive or is protected.
-pub(super) fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<MissingHeader> {
+fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<MissingHeader> {
     if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
         return None;
     }
@@ -81,7 +83,7 @@ pub(super) fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<Mi
 }
 
 /// The block reason for a header Oh My Pi reads as a missing file.
-pub(super) fn missing_header_reason(header: &MissingHeader) -> String {
+fn missing_header_reason(header: &MissingHeader) -> String {
     let named = if header.path.chars().count() <= SHOWN_CHARS
         && !header.path.contains(|c: char| c.is_control() || c == '`')
     {
@@ -105,7 +107,7 @@ pub(super) fn missing_header_reason(header: &MissingHeader) -> String {
 /// whole edit with a parse error and writes nothing. A bracketed `*** ...`
 /// marker at the start is one Oh My Pi unwraps, so such a line is left
 /// unproven, as is one with control characters.
-pub(super) fn unparseable_first_header(input: &str) -> Option<String> {
+fn unparseable_first_header(input: &str) -> Option<String> {
     if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
         return None;
     }
@@ -120,8 +122,18 @@ pub(super) fn unparseable_first_header(input: &str) -> Option<String> {
     closes_early(line).then(|| shown(line))
 }
 
+/// The reason code and message for an edit Oh My Pi cannot apply: one whose
+/// first header it cannot read, or whose tagged header names a missing file.
+pub(super) fn unappliable_edit(input: &str, cwd: Option<&str>) -> Option<(&'static str, String)> {
+    if let Some(header) = missing_tagged_header(input, cwd) {
+        return Some((MISSING_PATH, missing_header_reason(&header)));
+    }
+    let line = unparseable_first_header(input)?;
+    Some((UNPARSEABLE_HEADER, unparseable_header_reason(&line)))
+}
+
 /// The block reason for an edit whose first header Oh My Pi cannot read.
-pub(super) fn unparseable_header_reason(line: &str) -> String {
+fn unparseable_header_reason(line: &str) -> String {
     format!(
         "HOL Guard did not run this edit because Oh My Pi cannot read its first header `{line}` and would reject the whole edit. Write each header on its own line as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing before or after it, and try again."
     )
