@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.authscan-verify",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "name": "MCP AuthScan Verify",
   "description": "Recomputes the hash of an mcp-authscan report and reports whether a second party gets the same graded content, plus the signature state. It reads one local report file, never scans a server and makes no network requests.",
   "trustClass": "external",
