@@ -468,8 +468,6 @@ fn safe_expression(expression: &[String], reference: &dyn Fn(&str) -> bool) -> b
     depth == 0
 }
 
-/// A `find` age or size operand: an optional `+` or `-`, digits, and for
-/// `-size` one unit letter, as in `+1`, `-30` or `+10M`.
 /// For a `-newerXY` test, whether `Y` names a written date (`t`) rather than
 /// a reference file. `None` when the token is not such a test.
 fn newer_time_test(token: &str) -> Option<bool> {
@@ -490,6 +488,8 @@ fn written_date(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || " -:/+.,T".contains(c))
 }
 
+/// A `find` age or size operand: an optional `+` or `-`, digits, and for
+/// `-size` one unit letter, as in `+1`, `-30` or `+10M`.
 fn metadata_test_value(value: &str, size: bool) -> bool {
     let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
     let digits = match unsigned.strip_suffix(|unit: char| size && "bckwMGTP".contains(unit)) {
