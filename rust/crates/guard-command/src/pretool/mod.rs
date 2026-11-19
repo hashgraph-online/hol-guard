@@ -602,7 +602,7 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
     let mut positional = false;
     // For grep/rg, -e may consume "--" as its literal search pattern.
     let pattern_options = matches!(
-        crate::command_compatibility::basename(segment),
+        crate::command_compatibility::basename(segment).as_str(),
         "grep" | "rg"
     );
     let mut pattern_value = false;
@@ -776,7 +776,7 @@ fn arguments_outside_message(
     // Filtering its following "--" would hide the pathspec delimiter.
     let merge_diff = crate::command_compatibility::basename(segment) == "git"
         && matches!(
-            chain_directory_copies::git_subcommand(segment),
+            directory_copies::git_subcommand(segment),
             Some("diff" | "log" | "show")
         );
     let mut message_value = false;
