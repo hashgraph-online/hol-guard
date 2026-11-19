@@ -77,13 +77,16 @@ fn raw_text(value: Option<&Value>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn tool_input(payload: &Map<String, Value>) -> Option<Map<String, Value>> {
+pub(crate) fn tool_input(payload: &Map<String, Value>) -> Option<Map<String, Value>> {
     ["tool_input", "toolInput"]
         .iter()
         .find_map(|key| payload.get(*key).and_then(Value::as_object).cloned())
 }
 
-fn command(payload: &Map<String, Value>, input: Option<&Map<String, Value>>) -> Option<String> {
+pub(crate) fn command(
+    payload: &Map<String, Value>,
+    input: Option<&Map<String, Value>>,
+) -> Option<String> {
     let candidates = input
         .into_iter()
         .chain(payload.get("arguments").and_then(Value::as_object))

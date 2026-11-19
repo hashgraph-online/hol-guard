@@ -11,7 +11,7 @@ from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_render import native_recording_only_for_binding
-from ..native_payload_facts import fallback_command, native_hook_facts
+from ..native_payload_facts import native_hook_facts
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -471,14 +471,33 @@ class HookWorkerNativeMixin:
             # A saved or Guard Cloud block on this exact command outranks the
             # edge's allow; Watch records the call and lets it run.
             if not recording_only:
-                facts = native_hook_facts(payload, guard_home, deadline=deadline)
+                edge_hint = edge.get("exact_command_block")
+                facts = (
+                    native_hook_facts(payload, guard_home, deadline=deadline)
+                    if edge_hint is not False
+                    else None
+                )
+                if facts is None and edge_hint is not False:
+                    return (
+                        _record_unavailable_native(
+                            self,
+                            payload,
+                            harness=native_harness,
+                            event_name="PreToolUse",
+                            reason_code="native_payload_facts_unavailable",
+                            reason="HOL Guard could not identify this command safely.",
+                            guard_home=guard_home,
+                            deadline=deadline,
+                        ),
+                        False,
+                    )
                 command_block = native_exact_command_block_response(
                     self.store,
                     harness=native_harness,
-                    command=facts.command if facts is not None else fallback_command(payload),
+                    command=facts.command if facts is not None else None,
                     native_result=native_result,
                     workspace=workspace,
-                    edge_hint=edge.get("exact_command_block"),
+                    edge_hint=edge_hint,
                 )
                 if command_block is not None:
                     return (

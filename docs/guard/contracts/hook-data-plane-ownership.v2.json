@@ -296,7 +296,7 @@
     "src/codex_plugin_scanner/guard/native_payload_facts.py",
     "src/codex_plugin_scanner/guard/hook_deadline.py"
    ],
-   "current": "HTTP authentication, JSON envelope interpretation, fast-path selection, and fallback routing",
+   "current": "HTTP authentication and resident request transport with response-shape validation",
    "target": "authentication and byte transport only"
   },
   {
