@@ -99,13 +99,14 @@ pub(crate) fn apply_post_tool_policy_for_hook(
 }
 
 /// Whether this output is Guard's own approval wait on the hook's Guard
-/// home, the same proof that let its `PreToolUse` through.
+/// home, or Guard's own safety guide below the hook's user home: the same
+/// proof that let its `PreToolUse` through.
 pub(crate) fn own_approval_wait(request: &NativeHookRequestV1) -> bool {
     super::guard_approval_inspection(
         &request.payload,
         &request.guard_home,
         request.cwd.as_deref(),
-    )
+    ) || super::guard_safety_guide_read(&request.payload, &request.home_dir)
 }
 
 /// `apply_post_tool_policy_with_delivery`, plus `admitted_call`: whether the
