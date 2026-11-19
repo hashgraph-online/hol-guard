@@ -44,6 +44,26 @@ Review decisions still appear in the approval inbox so the same request is visib
 
 Restart Cursor after install so hook config reloads.
 
+## Hook events in a Cursor CLI session
+
+Checked on Cursor CLI (`cursor-agent`) 2026.11.17 on macOS, in print mode with
+a project `.cursor/hooks.json` whose stand-in hook recorded only event and tool
+names:
+
+| Event | Fired in the CLI session? |
+| --- | --- |
+| `preToolUse` | Yes, for the `Write` and `Shell` tools |
+| `beforeShellExecution` | Yes, after `preToolUse` for `Shell` |
+| `afterFileEdit` | Yes |
+| `beforeSubmitPrompt` | No |
+| `stop` | No |
+
+Guard installs no prompt hook for Cursor, and the CLI did not raise
+`beforeSubmitPrompt` even when one was configured, so prompt submission stays
+unsupported on both surfaces. The Gauntlet Cursor lane has driven Guard's own
+hooks through a CLI session on the same version (shell, read and write stops),
+but no release run qualifies the CLI rows yet, so they stay `unsupported`.
+
 ## Claude-compatible hooks inside Cursor
 
 When Cursor loads Claude Code hooks (`.claude/settings.json` daemon URLs), Guard re-labels those events as harness `cursor` when `CURSOR_*` environment markers are present. Prefer `hol-guard install cursor` for first-class Cursor hook coverage; keep `hol-guard install claude-code` refreshed so daemon URLs include `runtime-harness=cursor` when both are used.
