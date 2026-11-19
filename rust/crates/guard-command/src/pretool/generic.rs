@@ -1041,6 +1041,15 @@ fn evaluate_envelope(
             result.reason = reason;
         }
     }
+    if result.reason_code == "native_pre_tool_unknown_review"
+        && matches!(harness, "omp" | "pi")
+        && signals.tool_name.as_deref() == Some("eval")
+    {
+        // Same review; the reason names the one-cell draft form Guard checks.
+        if let Some(reason) = omp::earlier_cell_draft_reason(payload) {
+            result.reason = reason.into();
+        }
+    }
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);

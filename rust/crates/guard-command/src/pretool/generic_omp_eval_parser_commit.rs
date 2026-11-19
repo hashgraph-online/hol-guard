@@ -13,11 +13,63 @@
 //! including `amend`, keep the whole program reviewed, as does a draft method
 //! on anything but a name bound to an awaited draft.
 
-use super::super::tokens::Token;
+use super::super::tokens::{tokenize_lines, Token};
 use super::{Call, Lit, Parser, MAX_CALLS, MAX_DEPTH};
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 
 const DRAFT_METHODS: &[&str] = &["take", "drop", "only", "show", "diff", "commit"];
+
+/// Whether the program would parse if the names it calls draft methods on
+/// without binding them held drafts: a cell that reuses a draft an earlier
+/// cell made. Guard reads each cell alone and cannot prove such a name still
+/// holds that draft, so the cell stays reviewed; this only lets the review
+/// name the one-cell form Guard can check.
+pub(in super::super) fn uses_earlier_cell_draft(code: &str) -> bool {
+    if code.len() > super::MAX_CODE_BYTES {
+        return false;
+    }
+    let Some(lexed) = tokenize_lines(code) else {
+        return false;
+    };
+    let tokens = &lexed.tokens;
+    let ident = |index: usize| match tokens.get(index) {
+        Some(Token::Ident(word)) => Some(word.as_str()),
+        _ => None,
+    };
+    let bound: HashSet<&str> = (1..tokens.len())
+        .filter(|&index| {
+            matches!(
+                ident(index - 1),
+                Some("const" | "let" | "var" | "function" | "class")
+            )
+        })
+        .filter_map(ident)
+        .collect();
+    let carried: HashSet<String> = (0..tokens.len())
+        .filter(|&index| {
+            (index == 0 || tokens[index - 1] != Token::Punct('.'))
+                && tokens.get(index + 1) == Some(&Token::Punct('.'))
+                && ident(index + 2).is_some_and(|method| DRAFT_METHODS.contains(&method))
+        })
+        .filter_map(ident)
+        .filter(|name| !bound.contains(name) && *name != "commit")
+        .map(str::to_owned)
+        .collect();
+    if carried.is_empty() {
+        return false;
+    }
+    let mut parser = Parser {
+        tokens: lexed.tokens,
+        breaks: lexed.breaks,
+        raw_templates: lexed.raw_templates,
+        pos: 0,
+        declared: carried.clone(),
+        drafts: carried,
+        calls: Vec::new(),
+    };
+    parser.program().is_some()
+}
 
 impl Parser {
     /// Whether `await commit.draft` starts at the cursor.
