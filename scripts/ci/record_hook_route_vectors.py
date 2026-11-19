@@ -48,7 +48,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _canonical_harness_name,
     _is_copilot_permission_request,
 )
-from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.native_payload_facts import fallback_runtime_event_name
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
 
@@ -169,9 +169,9 @@ class Case:
         return {
             "harness": self.harness,
             "canonical_harness": self.canonical,
-            "invoked_event": runtime_hook_event_name(self.entry),
+            "invoked_event": fallback_runtime_event_name(self.entry),
             "hook_event": _hook_event_name(self.prepared) or "",
-            "runtime_event": runtime_hook_event_name(self.prepared),
+            "runtime_event": fallback_runtime_event_name(self.prepared),
             "notification_type": _optional_string(self.prepared.get("notification_type")) or "",
             "copilot_stage": self.copilot_stage,
             "copilot_tool_call_present": self.copilot_tool_call,
@@ -302,7 +302,7 @@ def _recorded_ladder(case: Case, r: Recorder, claim: Mapping[str, object]) -> in
     payload = case.prepared
     canonical = case.canonical
     claude = canonical == "claude-code"
-    if runtime_hook_event_name(case.entry) == "PermissionRequest" and canonical in _PASSTHROUGH_HARNESSES:
+    if fallback_runtime_event_name(case.entry) == "PermissionRequest" and canonical in _PASSTHROUGH_HARNESSES:
         return 0
     if claude and _hook_event_name(payload) == "PostToolUse":
         pending_pair = r.pending_pair()
@@ -313,7 +313,7 @@ def _recorded_ladder(case: Case, r: Recorder, claim: Mapping[str, object]) -> in
     edge = edge if isinstance(edge, Mapping) else {}
     edge_result, edge_receipt, edge_failure = edge.get("result"), edge.get("receipt"), edge.get("failure_reason_code")
     recording_only = bool(edge.get("recording_only"))
-    event_name = _hook_event_name(payload) or runtime_hook_event_name(payload)
+    event_name = _hook_event_name(payload) or fallback_runtime_event_name(payload)
     if event_name in _EDGE_EVENTS and edge_result is None:
         return r.unavailable(event_name, str(edge_failure or "native_hook_event_unavailable"), recording_only)
     contained = r.containment(edge_result)
@@ -477,7 +477,7 @@ def observed_route(
 def record(case: Case) -> dict[str, Any]:
     worlds = {world.name: run(case, world) for world in WORLDS}
     base, edge_missing = worlds["base"][0], worlds["edge_missing"][0]
-    event_name = _hook_event_name(case.prepared) or runtime_hook_event_name(case.prepared)
+    event_name = _hook_event_name(case.prepared) or fallback_runtime_event_name(case.prepared)
     return {
         "facts": case.facts(),
         "route": observed_route(base, edge_missing, event_name, passthrough=not base),

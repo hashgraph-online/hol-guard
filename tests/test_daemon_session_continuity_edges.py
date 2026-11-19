@@ -10,12 +10,12 @@ from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     cursor_unparseable_input_permission,
     hook_event_is_permission_request,
 )
-from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.native_payload_facts import fallback_runtime_event_name
 
 
 def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
-    assert runtime_hook_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
-    assert runtime_hook_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
+    assert fallback_runtime_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
+    assert fallback_runtime_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
     denied = availability_harness_response(
         harness="claude-code",
         event_name="PermissionDenied",

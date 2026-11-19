@@ -11,7 +11,7 @@ from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_render import native_recording_only_for_binding
-from ..native_payload_facts import native_hook_facts
+from ..native_payload_facts import fallback_command, native_hook_facts
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -26,7 +26,6 @@ from .hook_native_review_approval import (
 )
 from .hook_native_saved_approval import native_exact_command_block_response
 from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
-from .hook_request_parsing import pre_tool_command
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -476,7 +475,7 @@ class HookWorkerNativeMixin:
                 command_block = native_exact_command_block_response(
                     self.store,
                     harness=native_harness,
-                    command=facts.command if facts is not None else pre_tool_command(payload),
+                    command=facts.command if facts is not None else fallback_command(payload),
                     native_result=native_result,
                     workspace=workspace,
                     edge_hint=edge.get("exact_command_block"),

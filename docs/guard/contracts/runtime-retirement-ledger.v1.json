@@ -6,6 +6,7 @@
   "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
   "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
   "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",

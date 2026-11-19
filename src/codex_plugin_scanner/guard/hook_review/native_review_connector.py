@@ -20,8 +20,8 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..local_cli_hook import launch_env
+from ..native_payload_facts import fallback_command
 from .hook_native_exact_action import launch_cwd, launch_path
-from .hook_request_parsing import pre_tool_command
 
 CONNECTOR_SETUP_REQUIRED = "connector_setup_required"
 # Mirrors `connector_setup::NON_RECOGNITION_REASON_CODES`: any other review
@@ -45,7 +45,7 @@ def native_review_connector_lookup(
 
     if native_result.get("reason_code") not in NON_RECOGNITION_REASON_CODES:
         return None
-    command = pre_tool_command(payload)
+    command = fallback_command(payload)
     cwd = launch_cwd(payload, workspace)
     if command is None or cwd is None:
         return None

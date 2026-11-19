@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from ..native_daemon_route import _decide
+from ..native_payload_facts import fallback_tool_input
 from ..native_resident_decision import ResidentOperation
 from ..runtime.extension_allow_hint import (
     hint_authority_admitted,
@@ -37,7 +38,6 @@ from ..runtime.extension_coverage_hint import (
     with_extension_coverage,
 )
 from .hook_native_exact_action import launch_cwd as _launch_cwd
-from .hook_request_parsing import pre_tool_input
 
 EXTENSION_REVIEW_HINT_FEATURE: Final = "extension-review-hint-v1"
 # A hook with no deadline still bounds the hint, as the allow-hint ask does.
@@ -80,7 +80,7 @@ _COMMAND_ONLY_INPUT_KEYS = frozenset(
 def _command_only_payload(payload: Mapping[str, object]) -> bool:
     """True when the shell command is the only content the tool call carries."""
 
-    tool_input = pre_tool_input(payload)
+    tool_input = fallback_tool_input(payload)
     if tool_input is None:
         return False
     return all(isinstance(key, str) and key in _COMMAND_ONLY_INPUT_KEYS for key in tool_input)
@@ -228,7 +228,7 @@ def _live_reviewed_command(approval: Mapping[str, object]) -> tuple[str, Path | 
     workspace_text = approval.get("workspace")
     workspace_path = Path(workspace_text) if isinstance(workspace_text, str) and workspace_text.strip() else None
     raw_payload = envelope.get("raw_payload_redacted") if isinstance(envelope, Mapping) else None
-    if isinstance(raw_payload, Mapping) and pre_tool_input(raw_payload) is not None:
+    if isinstance(raw_payload, Mapping) and fallback_tool_input(raw_payload) is not None:
         if not _command_only_payload(raw_payload):
             return None
         cwd = _stored_launch_cwd(raw_payload, workspace_path)

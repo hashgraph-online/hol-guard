@@ -163,9 +163,9 @@ def _run_exact(case: dict, root: Path) -> dict:
     raw_cwd = case["raw_cwd"]
     if raw_cwd is not None:
         payload["cwd"] = raw_cwd
-    from codex_plugin_scanner.guard.hook_review.hook_request_parsing import pre_tool_command
+    from codex_plugin_scanner.guard.native_payload_facts import fallback_command
 
-    assert pre_tool_command(payload) == query["command"], case["name"]
+    assert fallback_command(payload) == query["command"], case["name"]
     workspace = Path(query["workspace"]) if query["workspace"] is not None else None
     home = Path(query["home_dir"]) if query["home_dir"] is not None else None
     preimages: dict[str, str] = {}
