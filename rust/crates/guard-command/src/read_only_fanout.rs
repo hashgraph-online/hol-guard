@@ -23,6 +23,8 @@ use crate::CommandSegmentV1;
 
 #[path = "read_only_fanout_fd.rs"]
 pub(crate) mod fd;
+#[path = "read_only_fanout_group.rs"]
+mod group;
 #[path = "read_only_fanout_listing.rs"]
 pub(crate) mod listing;
 
@@ -51,6 +53,8 @@ pub(crate) struct FindShape<'a> {
     pub roots: &'a [String],
     pub regular_files_only: bool,
     pub patterns: Vec<&'a str>,
+    /// Parenthesized `-o` choices of names; a file matches one of each.
+    pub name_groups: Vec<Vec<&'a str>>,
     pub print0: bool,
 }
 
@@ -128,9 +132,10 @@ pub(crate) fn bounded_without_operands(child: &[String]) -> bool {
 }
 
 /// Flat `find` operands: roots, an optional `-prune` prefix, then a
-/// conjunction of name, type and depth tests. An operator in the printing
-/// branch (`-o`, parentheses), `-L`, `-H`, `-follow` and every action other
-/// than `-print`/`-print0` are not part of the shape.
+/// conjunction of name, type and depth tests and parenthesized choices of
+/// names (`group`). Any other operator in the printing branch, `-L`, `-H`,
+/// `-follow` and every action other than `-print`/`-print0` are not part of
+/// the shape.
 pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
     let end = arguments
         .iter()
@@ -144,6 +149,7 @@ pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
         roots,
         regular_files_only: false,
         patterns: Vec::new(),
+        name_groups: Vec::new(),
         print0: false,
     };
     let mut index = 0;
@@ -168,6 +174,11 @@ pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
         match token {
             "-print" | "-a" | "-and" if !negated => {}
             "-print0" if !negated => shape.print0 = true,
+            "(" if !negated => {
+                let (names, after) = group::name_group(expression, index)?;
+                shape.name_groups.push(names);
+                index = after;
+            }
             "-name" | "-iname" | "-path" | "-ipath" => {
                 let pattern = expression.get(index)?;
                 if !bounded_test_pattern(pattern) {

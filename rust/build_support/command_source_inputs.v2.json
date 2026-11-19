@@ -769,6 +769,7 @@
       "src/pytest_argv.rs",
       "src/read_only_fanout.rs",
       "src/read_only_fanout_fd.rs",
+      "src/read_only_fanout_group.rs",
       "src/read_only_fanout_listing.rs",
       "src/redacted_command_tokens.rs",
       "src/restricted_command.rs",
