@@ -150,6 +150,15 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     source.as_deref(),
                 )
             }
+            ResidentOperationV1::HookPayloadFacts(request) => {
+                crate::hook_payload_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookConnectorFacts(request) => {
+                crate::hook_connector_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyFenceWindow(request) => {
+                crate::hook_policy_fence_window_op::evaluate(&request)
+            }
             ResidentOperationV1::McpRelayDecide(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
