@@ -40,12 +40,6 @@ impl Env<'_> {
             .cloned()
             .or_else(|| payload.as_object().cloned())
             .unwrap_or_default();
-        let mut nonce = [0u8; 16];
-        if getrandom::fill(&mut nonce).is_err() {
-            return;
-        }
-        let pending_id: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
-        recorded.insert("pending_id".to_owned(), pending_id.into());
         let payload = Value::Object(recorded);
         if !self.store_signed(&pending_key, &payload, &CLAUDE_PENDING) {
             return;
