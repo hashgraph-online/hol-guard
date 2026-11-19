@@ -55,6 +55,7 @@ pub struct HookAuthorityStateRequestV1 {
     /// Absolute path to the resolved guard home.
     pub guard_home: String,
     /// One of the `claude_*` / `cursor_*` operations or `state_is_fresh`.
+    /// `claude_lifecycle` selects the Claude hook operation from `payload`.
     pub op: String,
     /// Wall-clock timestamp (`datetime.isoformat()`), used for signing,
     /// freshness and the audit rows.

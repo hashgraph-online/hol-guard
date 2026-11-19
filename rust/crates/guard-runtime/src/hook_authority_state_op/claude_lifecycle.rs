@@ -25,6 +25,25 @@ const CLAUDE_CODE: &str = "claude-code";
 const STOP: &str = "Stop";
 
 impl Env<'_> {
+    /// Selects and answers one Claude lifecycle hook in the same transaction
+    /// that reads and updates its pending authority state.
+    pub(super) fn claude_lifecycle(
+        &self,
+        session_id: Option<&str>,
+        payload: &Object,
+    ) -> Result<Value, &'static str> {
+        match exact_str(payload, "event_name") {
+            Some("PermissionRequest") => Ok(self.claude_permission_request(session_id, payload)),
+            Some("Notification")
+                if exact_str(payload, "notification_type") == Some("permission_prompt") =>
+            {
+                self.claude_permission_prompt(session_id, payload)
+            }
+            Some("Stop") => self.claude_turn_stop(session_id, payload),
+            _ => Ok(json!({})),
+        }
+    }
+
     /// `claude_permission_request_response`: Claude's dialog is denied in
     /// favour of the Guard approval question, shown with the review reason,
     /// or left to Claude when the session has no notice.

@@ -97,6 +97,9 @@ impl Env<'_> {
                 request.payload.as_ref(),
                 request.tilde_home.as_deref(),
             ),
+            "claude_lifecycle" => {
+                self.claude_lifecycle(request.session_id.as_deref(), hook_payload(request)?)
+            }
             "claude_permission_request" => Ok(self
                 .claude_permission_request(request.session_id.as_deref(), hook_payload(request)?)),
             "claude_permission_prompt" => {

@@ -60,7 +60,7 @@ def test_worker_routes_claude_permission_requests_before_native_review(
     finally:
         worker.close()
 
-    assert [op for op, _fields in calls] == ["claude_permission_request"]
+    assert [op for op, _fields in calls] == ["claude_lifecycle"]
     assert response == {
         "guard_permission_passthrough": True,
         "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
@@ -70,7 +70,7 @@ def test_worker_routes_claude_permission_requests_before_native_review(
 @pytest.mark.parametrize(
     ("payload", "op"),
     [
-        (dict(_PAYLOAD), "claude_permission_request"),
+        (dict(_PAYLOAD), "claude_lifecycle"),
         (
             {
                 "session_id": "session-permission-1",
@@ -80,7 +80,7 @@ def test_worker_routes_claude_permission_requests_before_native_review(
                 "title": "Permission needed",
                 "transcript_path": "/tmp/transcript.jsonl",
             },
-            "claude_permission_prompt",
+            "claude_lifecycle",
         ),
     ],
 )
@@ -103,7 +103,7 @@ def test_the_resident_answer_is_the_hook_response(
     # Only the fields the copy reads travel; the tool's input never does.
     sent = fields["payload"]
     assert isinstance(sent, dict)
-    assert set(sent) <= {"session_id", "notification_type", "tool_name", "message", "title"}
+    assert set(sent) <= {"event_name", "session_id", "notification_type", "tool_name", "message", "title"}
     assert "tool_input" not in sent
     assert "transcript_path" not in sent
 
@@ -151,7 +151,7 @@ def test_stop_is_answered_by_the_call_that_drops_the_sessions_prompts(
         worker.close()
 
     assert response == stop_answer
-    assert [(op, fields["session_id"]) for op, fields in calls] == [("claude_turn_stop", "s")]
+    assert [(op, fields["session_id"]) for op, fields in calls] == [("claude_lifecycle", "s")]
 
 
 def test_stop_from_an_older_runtime_is_left_to_the_edge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,4 +163,4 @@ def test_stop_from_an_older_runtime_is_left_to_the_edge(tmp_path: Path, monkeypa
         worker.close()
 
     assert answered is None
-    assert [op for op, _fields in calls] == ["claude_turn_stop"]
+    assert [op for op, _fields in calls] == ["claude_lifecycle"]

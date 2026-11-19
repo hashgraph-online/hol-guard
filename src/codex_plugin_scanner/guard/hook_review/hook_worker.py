@@ -87,7 +87,7 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native
 _PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
 # The Claude hook fields the resident's lifecycle answers read: the session,
 # the prompt's kind and the tool it names.
-_CLAUDE_LIFECYCLE_FIELDS = ("session_id", "notification_type", "tool_name", "message", "title")
+_CLAUDE_LIFECYCLE_FIELDS = ("event_name", "session_id", "notification_type", "tool_name", "message", "title")
 # The prompt copy when the resident cannot answer: it says Guard is holding the
 # request, so an unreachable resident never leaves a prompt reading as though
 # Guard allowed the action.
@@ -400,13 +400,11 @@ class HookWorker(HookWorkerNativeMixin):
             from ..cli.commands_support_claude_approval import _settle_claude_guard_question
 
             return None if _settle_claude_guard_question(self.store, payload) is None else {}
-        if event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt":
-            op = "claude_permission_prompt"
-        elif event_name == "PermissionRequest":
-            op = "claude_permission_request"
-        elif event_name == "Stop":
-            op = "claude_turn_stop"
-        else:
+        if not (
+            event_name == "PermissionRequest"
+            or event_name == "Stop"
+            or (event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt")
+        ):
             return None
         from ..cli._commands_shared import _now
         from ..cli.commands_support_runtime_artifacts import _optional_string
@@ -418,16 +416,23 @@ class HookWorker(HookWorkerNativeMixin):
 
         reply = hook_authority_state(
             self.store,
-            op,
+            "claude_lifecycle",
             now=_now(),
             required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
             session_id=_optional_string(payload.get("session_id")),
-            payload={name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name in payload},
+            payload={
+                "event_name": event_name,
+                **{
+                    name: payload[name]
+                    for name in _CLAUDE_LIFECYCLE_FIELDS
+                    if name != "event_name" and name in payload
+                },
+            },
         )
         answered = object_field(reply, "harness_response")
-        if answered is not None or op == "claude_turn_stop":
+        if answered is not None or event_name == "Stop":
             return answered
-        if op == "claude_permission_request":
+        if event_name == "PermissionRequest":
             # Without the resident there is no pending review to present, so
             # the dialog stays Claude's own, as for a session with none.
             return {
