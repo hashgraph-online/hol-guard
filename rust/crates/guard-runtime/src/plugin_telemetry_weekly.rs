@@ -5,10 +5,12 @@
 //! the weekly counting hashes and never leaves the machine. Turning counts
 //! off deletes it, so turning them on again starts a new, unlinkable series.
 //!
-//! A sender records the week before it sends, under `plugin-telemetry.lock`,
-//! so two senders never both send one week; a failed send gives the week
-//! back unless consent or the week changed since. The lock is held only
-//! while the state files change, never across a network call.
+//! A sender holds `plugin-telemetry-send.lock` for the whole send, so two
+//! senders never both send one week, and records the week only after the
+//! report is accepted. The operating system drops that lock when a sender
+//! exits, so a send that is interrupted or killed leaves the week due.
+//! `plugin-telemetry.lock` guards only the state files and is never held
+//! across a network call.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -22,6 +24,7 @@ use crate::plugin_telemetry_host::{self as host, Hol};
 const SETTINGS_FILE: &str = "plugin-telemetry.json";
 const SECRET_FILE: &str = "plugin-telemetry.key";
 const LOCK_FILE: &str = "plugin-telemetry.lock";
+const SEND_LOCK_FILE: &str = "plugin-telemetry-send.lock";
 const SECRET_BYTES: usize = 32;
 const LOCK_WAIT: Duration = Duration::from_secs(10);
 const LOCK_POLL: Duration = Duration::from_millis(50);
@@ -190,48 +193,39 @@ pub(crate) fn turn_off(guard_home: &Path) -> Result<(), String> {
     })
 }
 
-enum Claim {
-    /// The state before the claim.
-    Claimed(State),
-    /// Counts are off, or the week was already claimed.
-    NotDue,
-    Busy,
-}
+/// Held for a whole send. Dropping it, or the sender exiting, frees it.
+struct SendLock(File);
 
-/// Records `week` as sent before sending it.
-fn claim_week(guard_home: &Path, week: &str, only_if_due: bool) -> Result<Claim, String> {
-    let answer = with_state_lock(guard_home, || {
-        let state = read_state(guard_home);
-        if !state.enabled || (only_if_due && state.last_week.as_deref() == Some(week)) {
-            return Ok(Claim::NotDue);
-        }
-        write_state(
-            guard_home,
-            &State {
-                enabled: true,
-                last_week: Some(week.to_owned()),
-            },
-        )?;
-        Ok(Claim::Claimed(state))
-    });
-    match answer {
-        Ok(claim) => Ok(claim),
-        Err(LockError::Busy) => Ok(Claim::Busy),
-        Err(LockError::Unwritable) => Err(STATE_UNWRITABLE_MESSAGE.to_owned()),
+impl Drop for SendLock {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.0);
     }
 }
 
-/// Gives a claimed week back after a failed send, unless consent or the
-/// week changed since.
-fn release_week(guard_home: &Path, week: &str, previous: &State) {
+/// The send lock, or `None` while another sender holds it.
+fn try_send_lock(guard_home: &Path) -> Result<Option<SendLock>, String> {
+    fs::create_dir_all(guard_home).map_err(|_| STATE_UNWRITABLE_MESSAGE.to_owned())?;
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .read(true)
+        .open(guard_home.join(SEND_LOCK_FILE))
+        .map_err(|_| STATE_UNWRITABLE_MESSAGE.to_owned())?;
+    match fs2::FileExt::try_lock_exclusive(&file) {
+        Ok(()) => Ok(Some(SendLock(file))),
+        Err(_) => Ok(None),
+    }
+}
+
+/// Records `week` as sent, unless counts were turned off meanwhile.
+fn record_week(guard_home: &Path, week: &str) {
     let _ = with_state_lock(guard_home, || {
-        let state = read_state(guard_home);
-        if state.enabled && state.last_week.as_deref() == Some(week) {
+        if read_state(guard_home).enabled {
             write_state(
                 guard_home,
                 &State {
                     enabled: true,
-                    last_week: previous.last_week.clone(),
+                    last_week: Some(week.to_owned()),
                 },
             )?;
         }
@@ -383,18 +377,15 @@ fn send_claimed(
     }))
 }
 
-fn send_after_claim(
+fn send_and_record(
     hol: &dyn Hol,
     guard_home: &Path,
     home: &Path,
     week: &str,
-    previous: &State,
 ) -> Result<Value, String> {
-    let answer = send_claimed(hol, guard_home, home, week);
-    if answer.is_err() {
-        release_week(guard_home, week, previous);
-    }
-    answer
+    let answer = send_claimed(hol, guard_home, home, week)?;
+    record_week(guard_home, week);
+    Ok(answer)
 }
 
 /// Sends this week's report now. Requires opt-in; records the week on
@@ -405,11 +396,13 @@ pub(crate) fn send_now(
     home: &Path,
     week: &str,
 ) -> Result<Value, String> {
-    match claim_week(guard_home, week, false)? {
-        Claim::Claimed(previous) => send_after_claim(hol, guard_home, home, week, &previous),
-        Claim::NotDue => Err(OFF_MESSAGE.to_owned()),
-        Claim::Busy => Err(BUSY_MESSAGE.to_owned()),
+    let Some(_lock) = try_send_lock(guard_home)? else {
+        return Err(BUSY_MESSAGE.to_owned());
+    };
+    if !read_state(guard_home).enabled {
+        return Err(OFF_MESSAGE.to_owned());
     }
+    send_and_record(hol, guard_home, home, week)
 }
 
 /// Sends at most one report per ISO week, and only after opt-in. `Ok(None)`
@@ -420,16 +413,18 @@ pub(crate) fn send_if_due(
     home: &Path,
     week: &str,
 ) -> Result<Option<Value>, String> {
-    let state = read_state(guard_home);
-    if !state.enabled || state.last_week.as_deref() == Some(week) {
+    let due = |state: &State| state.enabled && state.last_week.as_deref() != Some(week);
+    if !due(&read_state(guard_home)) {
         return Ok(None);
     }
-    match claim_week(guard_home, week, true)? {
-        Claim::Claimed(previous) => {
-            send_after_claim(hol, guard_home, home, week, &previous).map(Some)
-        }
-        Claim::NotDue | Claim::Busy => Ok(None),
+    let Some(_lock) = try_send_lock(guard_home)? else {
+        return Ok(None);
+    };
+    // Another sender may have finished this week while we waited.
+    if !due(&read_state(guard_home)) {
+        return Ok(None);
     }
+    send_and_record(hol, guard_home, home, week).map(Some)
 }
 
 #[cfg(all(test, unix))]

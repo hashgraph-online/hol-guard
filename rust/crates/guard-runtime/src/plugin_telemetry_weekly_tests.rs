@@ -16,6 +16,9 @@ struct FakeHol {
     refuse_post: bool,
     /// Turns counts off while the index downloads.
     opt_out_home: Option<PathBuf>,
+    /// What a second sender and the state file saw while the report posted.
+    seen_mid_send: RefCell<Option<(Option<String>, String, String)>>,
+    probe_home: Option<(PathBuf, PathBuf)>,
 }
 
 impl FakeHol {
@@ -28,6 +31,8 @@ impl FakeHol {
             sent: RefCell::new(Vec::new()),
             refuse_post: false,
             opt_out_home: None,
+            seen_mid_send: RefCell::new(None),
+            probe_home: None,
         }
     }
 }
@@ -44,6 +49,17 @@ impl Hol for FakeHol {
     }
 
     fn post_report(&self, report: &Value) -> Result<i64, String> {
+        if let Some((guard_home, user_home)) = &self.probe_home {
+            let other = FakeHol::new();
+            let due = send_if_due(&other, guard_home, user_home, WEEK);
+            let now = send_now(&other, guard_home, user_home, WEEK);
+            *self.seen_mid_send.borrow_mut() = Some((
+                read_state(guard_home).last_week,
+                format!("{due:?}"),
+                format!("{now:?}"),
+            ));
+            assert!(other.sent.borrow().is_empty());
+        }
         if self.refuse_post {
             return Err("HOL did not accept the report (HTTP 503).".to_owned());
         }
@@ -249,6 +265,43 @@ fn a_failed_send_leaves_the_week_due() {
         .expect("send")
         .is_some());
     assert_eq!(read_state(&homes.guard).last_week.as_deref(), Some(WEEK));
+    assert_eq!(hol.sent.borrow().len(), 1);
+}
+
+#[test]
+fn a_send_in_flight_records_nothing_and_holds_off_other_senders() {
+    let homes = homes();
+    turn_on(&homes.guard).expect("on");
+    let mut hol = FakeHol::new();
+    hol.probe_home = Some((homes.guard.clone(), homes.user.clone()));
+    assert!(send_if_due(&hol, &homes.guard, &homes.user, WEEK)
+        .expect("send")
+        .is_some());
+    // Mid-send the week is not yet recorded, so a sender killed at this point
+    // leaves it due; the send lock it held is released with the process.
+    assert_eq!(
+        hol.seen_mid_send.take(),
+        Some((
+            None,
+            "Ok(None)".to_owned(),
+            format!("Err({BUSY_MESSAGE:?})"),
+        ))
+    );
+    assert_eq!(read_state(&homes.guard).last_week.as_deref(), Some(WEEK));
+    assert_eq!(hol.sent.borrow().len(), 1);
+}
+
+#[test]
+fn a_released_send_lock_lets_the_week_be_sent() {
+    let homes = homes();
+    turn_on(&homes.guard).expect("on");
+    let lock = try_send_lock(&homes.guard).expect("lock").expect("free");
+    let hol = FakeHol::new();
+    assert_eq!(send_if_due(&hol, &homes.guard, &homes.user, WEEK), Ok(None));
+    drop(lock);
+    assert!(send_if_due(&hol, &homes.guard, &homes.user, WEEK)
+        .expect("send")
+        .is_some());
     assert_eq!(hol.sent.borrow().len(), 1);
 }
 
