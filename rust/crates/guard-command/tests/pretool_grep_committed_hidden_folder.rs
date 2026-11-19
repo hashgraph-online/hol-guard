@@ -13,6 +13,9 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Files to write as `(relative path, contents)`.
+type Files<'a> = Vec<(&'a str, &'a str)>;
+
 fn write(path: PathBuf, text: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, text).unwrap();
@@ -110,7 +113,7 @@ fn a_committed_hidden_document_folder_does_not_stop_a_search() {
 #[test]
 fn a_hidden_entry_that_is_not_a_clean_committed_document_keeps_its_review() {
     let key = format!("{{\"aws\": \"{}{}\"}}\n", "AKIA", "IOSFODNN7REALKEY");
-    let cases: Vec<(&str, Vec<(&str, &str)>, Vec<(&str, &str)>)> = vec![
+    let cases: Vec<(&str, Files, Files)> = vec![
         // A file the repository does not track.
         (
             "untracked",
