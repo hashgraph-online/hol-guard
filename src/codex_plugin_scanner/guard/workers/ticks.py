@@ -3,8 +3,8 @@
 The native daemon owns the schedule: it calls ``worker.<job>`` once per tick
 and waits ``interval`` after a pass that succeeded or ``backoff`` after one
 that did not. Each call answers ``{"ok": bool}`` plus what the pass reports.
-The runtime heartbeat, the idle-shutdown hold and storage maintenance run in
-the native daemon itself.
+The runtime heartbeat, the idle-shutdown hold, storage maintenance and the
+one-file extraction sweep run in the native daemon itself.
 """
 
 from __future__ import annotations
@@ -210,27 +210,6 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
     return {"ok": False, "status": record["status"]}
 
 
-def onefile_reclaim(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Reclaims orphaned one-file extraction directories left by earlier frozen runs."""
-
-    del store, args
-    import sys
-    import tempfile
-
-    from ..onefile_extraction import reclaim_orphaned_extraction_dirs
-
-    if not getattr(sys, "frozen", False):
-        return {"ok": True, "skipped": True}
-    # Directories still open, this call's own among them, are left in place.
-    reclaim_orphaned_extraction_dirs(
-        temp_root=Path(tempfile.gettempdir()),
-        current_meipass=getattr(sys, "_MEIPASS", None),
-        now=datetime.now(timezone.utc),
-        scan_open_paths=True,
-    )
-    return {"ok": True}
-
-
 def cloud_workspace(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """The Guard Cloud workspace queued review events sync to, or ``None`` without a usable profile."""
 
@@ -251,5 +230,4 @@ WORKER_CALLS = {
     "worker.extension_catalog": extension_catalog,
     "worker.reconcile_artifacts": reconcile_artifacts,
     "worker.aibom_inventory": aibom_inventory,
-    "worker.onefile_reclaim": onefile_reclaim,
 }

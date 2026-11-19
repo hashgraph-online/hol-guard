@@ -5,7 +5,7 @@ use crate::native_hook_receipt::{
     receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
 };
 use crate::policy_enforcement::AdmittedPolicySnapshot;
-use crate::{edge_exact_command_review as exact_review, runtime_known_vulnerable as runtime_risk};
+use crate::{git_rules, runtime_known_vulnerable as runtime_risk};
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, PreToolResultV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
@@ -344,7 +344,7 @@ fn evaluate_validated_envelope<Lease>(
             );
             let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
             let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
-            let evaluated = exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
+            let evaluated = git_rules::after_exact_review(&envelope, policy_snapshot, evaluated);
             let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
             let call = (event_name.as_str(), harness.as_str());
             let evaluated =

@@ -109,6 +109,19 @@ pub struct ReviewRequestQueryV1 {
     pub queue_group_id: Option<String>,
     /// The prepared native Bash review (`subject` and `review_lineage`).
     pub bound_bash: Option<Value>,
+    /// The package key an Always allow on a package install review is also
+    /// saved under, when the hook derived one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_approval: Option<PackageApprovalKeyV1>,
+}
+
+/// The key the package firewall saves a package approval under.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageApprovalKeyV1 {
+    pub harness: String,
+    pub artifact_id: String,
+    pub artifact_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.config import (
     resolve_risk_action,
     update_guard_settings,
 )
+from codex_plugin_scanner.guard.config_constants import USER_RULE_RISK_ACTION_KEYS
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -96,9 +97,11 @@ class TestPresetRiskActionMaps:
         home_dir = tmp_path / "home"
         _write_text(home_dir / "config.toml", 'security_level = "paranoid"\n')
         config = load_guard_config(home_dir)
-        for risk_key in VALID_RISK_ACTION_KEYS:
+        for risk_key in VALID_RISK_ACTION_KEYS - USER_RULE_RISK_ACTION_KEYS:
             action = resolve_risk_action(config, risk_key, harness="codex")
             assert action == "block", f"paranoid preset should block {risk_key}, got {action!r}"
+        for risk_key in USER_RULE_RISK_ACTION_KEYS:
+            assert resolve_risk_action(config, risk_key, harness="codex") == "allow"
 
 
 class TestPresetCliCommands:

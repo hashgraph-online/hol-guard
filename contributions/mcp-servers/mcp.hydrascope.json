@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.hydrascope",
+  "version": "1.0.0",
+  "name": "HydraScope MCP",
+  "description": "Structural OpenCypher context graph, temporal SUPERSEDES decision lineage, and 4-axis brick ontology MCP server on HydraDB (kruschdev/HydraScope v0.1.1). Local pre-flight ontology answerability checks inherit Guard policy; HydraDB graph queries, vector-vs-graph comparisons, benchmark runs, decision supersession, and repository directory ingestion require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/HydraScope"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/hydrascope-agent-context-on-hydradb.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "hydrascope-mcp"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "external-network-access",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "hydrascope_check_answerable",
+      "state": "inherit"
+    },
+    {
+      "name": "hydrascope_traverse_context",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_compare_vector_vs_graph",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_run_benchmark",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_supersede_decision",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_ingest_directory",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/HydraScope",
+    "https://github.com/kruschdev/HydraScope/blob/main/src/mcp/hydrascope-mcp.js",
+    "https://github.com/kruschdev/HydraScope/blob/main/README.md",
+    "https://krusch.dev/articles/hydrascope-agent-context-on-hydradb.html",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/hydrascope"
+  ],
+  "saferAlternatives": [
+    "Leave HYDRADB_GRAPH_URL and HYDRADB_BOLT_URI unset for local graph operation when you do not want HydraScope to contact a remote HydraDB instance.",
+    "Keep hydrascope_ingest_directory and hydrascope_supersede_decision on Review: ingest_directory reads local repository files and writes graph vertices/edges, and supersede_decision mutates decision lineage."
+  ]
+}
