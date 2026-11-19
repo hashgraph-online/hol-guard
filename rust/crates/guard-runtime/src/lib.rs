@@ -855,6 +855,7 @@ mod hook_policy_fence_window_op;
 mod hook_process_spawn;
 mod hook_render_op;
 mod hook_render_posture;
+mod hook_review_binding_op;
 mod insights_share_payload;
 mod installation_continuity;
 mod inventory_export_redaction;

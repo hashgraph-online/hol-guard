@@ -153,6 +153,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::HookPayloadFacts(request) => {
                 crate::hook_payload_facts_op::evaluate(&request)
             }
+            ResidentOperationV1::HookReviewBinding(request) => {
+                crate::hook_review_binding_op::evaluate(&request)
+            }
             ResidentOperationV1::HookPolicyAdmission(request) => {
                 crate::hook_policy_admission_op::evaluate(&request)
             }

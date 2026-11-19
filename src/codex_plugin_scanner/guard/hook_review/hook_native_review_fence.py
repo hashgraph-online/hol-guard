@@ -11,6 +11,7 @@ from ..native_command_control_authority_io import (
     NativeCommandControlAuthorityUnavailableError,
     hold_command_control_authority_lock,
 )
+from ..native_hook_review_binding import native_hook_review_binding
 
 # The lease only keeps a control mutation from committing while the review
 # runs, so it is not worth the review's own budget. Every acquirer takes the
@@ -77,16 +78,10 @@ def published_binding_token(publisher: object) -> tuple[object, ...] | None:
             # which is a definite state and stays comparable, so ordinary work
             # there is not turned into an approval.
             return None
-        return (
-            marker.get("epoch"),
-            marker.get("mutation_revision"),
-            marker.get("phase"),
-            marker.get("effective_digest"),
-            marker.get("authority_key_id"),
-            marker.get("pack_program_digest"),
-            identity,
-            cli_revision,
-        )
+        guard_home = getattr(publisher, "guard_home", None)
+        if not isinstance(guard_home, Path):
+            return None
+        return native_hook_review_binding(marker, identity, cli_revision, guard_home)
     except (OSError, RuntimeError, TypeError, ValueError, KeyError, IndexError):
         return None
 
