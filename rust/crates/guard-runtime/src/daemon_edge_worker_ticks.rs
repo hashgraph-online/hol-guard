@@ -355,6 +355,7 @@ mod cloud_workspace_tests {
         let guard_home = home.path().to_string_lossy().into_owned();
         let handshake = json!({
             "schema": HANDSHAKE_SCHEMA,
+            "auth_token": "test",
             "guard_home": guard_home,
             "store_path": format!("{guard_home}/guard.db"),
             "source": "default",
