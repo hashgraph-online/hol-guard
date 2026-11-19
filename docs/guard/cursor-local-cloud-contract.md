@@ -60,6 +60,6 @@ Unsupported Cursor states should:
 
 ## Known blind spots
 
-- Commands run in Cursor's **built-in terminal** outside the agent loop are not seen by agent hooks.
+- Commands run in Cursor's **built-in terminal** outside the agent loop are not seen by agent hooks. [Cursor built-in terminal](cursor-built-in-terminal.md) reviews the options for covering it; none is implemented.
 - `beforeTabFileRead` / Tab-only operations use a separate hook surface and are not installed by Guard today.
 - Cloud agents load project `.cursor/hooks.json` but not user `~/.cursor/hooks.json`; use project-level install for cloud agent repos.
