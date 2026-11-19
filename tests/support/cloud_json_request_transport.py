@@ -20,7 +20,7 @@ def cloud_json_request_over_urllib(
     auth_context: Mapping[str, object],
     *,
     url: str,
-    body: bytes,
+    body: bytes | None,
     timeout_seconds: float,
     retry_timeout_seconds: float,
 ) -> dict[str, object]:
@@ -31,7 +31,7 @@ def cloud_json_request_over_urllib(
     request = runner._guard_sync_request(
         auth_context,
         request_url=url,
-        method="POST",
+        method="GET" if body is None else "POST",
         data=body,
         extra_headers=None,
     )
