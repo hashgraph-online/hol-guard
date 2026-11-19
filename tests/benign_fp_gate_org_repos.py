@@ -97,6 +97,12 @@ def write_org_repos(org: Path, home: Path) -> None:
     # A sibling checkout that keeps no workflows, where a probe finds nothing.
     docs_site = org / "docs-site"
     _write(docs_site / "README.md", "# docs-site\n")
+    # A design tool's own dot-folder, committed beside the docs it describes.
+    _write(docs_site / "docs" / "guide.md", "# Guide\n\nThe palette.\n")
+    _write(
+        docs_site / "docs" / "design" / ".designtool" / "design.json",
+        '{"palette": {"primary": "#1f6feb"}}\n',
+    )
     _git(docs_site, "init", "--quiet", "--initial-branch=main", home=home)
     _git(docs_site, "add", "-A", home=home)
     _git(docs_site, "commit", "--quiet", "-m", "docs-site base", home=home)
