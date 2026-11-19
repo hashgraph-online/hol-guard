@@ -778,7 +778,10 @@ fn arguments_outside_message(
         && crate::command_compatibility::git_command_index(&segment.arguments)
             .and_then(|index| segment.arguments.get(index))
             .is_some_and(|command| {
-                matches!(command.as_str(), "diff" | "log" | "show" | "checkout" | "restore")
+                matches!(
+                    command.as_str(),
+                    "diff" | "log" | "show" | "checkout" | "restore"
+                )
             });
     let mut message_value = false;
     segment.arguments.iter().filter(move |argument| {
