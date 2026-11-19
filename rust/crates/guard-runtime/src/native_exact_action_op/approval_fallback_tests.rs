@@ -184,6 +184,37 @@ fn a_known_vulnerable_runtime_approval_survives_a_feed_update() {
     assert_eq!(updated, saved, "a feed update keeps the saved approval");
 }
 
+/// A command held by the user's own git rules offers Always allow, bound to
+/// the exact command: a different command asks again.
+#[test]
+fn a_git_rule_review_offers_always_allow() {
+    let root = root();
+    for (command, code) in [
+        ("git commit --no-verify -m wip", "native_git_hook_bypass"),
+        ("git add -A", "native_git_stage_all"),
+    ] {
+        let held = |command: &str| {
+            let request = exact_request(&root, |query| {
+                query["command"] = json!(command);
+                query["tool_input"] = json!([["command", command]]);
+                query["facts"] = json!({
+                    "decision": "deny", "minimum_action": "review", "policy_action": "review",
+                    "reason_code": code, "action_type": "shell"
+                });
+            });
+            outcome(&request, Fallback::CommandHash)
+        };
+        let (saved, reason) = held(command);
+        assert!(saved.is_some(), "{code} offers Always allow");
+        assert_eq!(reason, None);
+        assert_ne!(
+            held("git add -u").0,
+            saved,
+            "{code}: another command asks again"
+        );
+    }
+}
+
 /// An Oh My Pi eval made only of `commit` drafts is approved for the
 /// repositories it commits to. Always allow on one draft holds for the next
 /// draft there with another subject, body or file selection, and not for a

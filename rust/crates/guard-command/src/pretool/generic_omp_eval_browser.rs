@@ -60,6 +60,9 @@ struct Parser {
     depth: usize,
     loops: usize,
     in_run: bool,
+    /// Bindings actually destructured by the current TAB.run callback.
+    run_page: bool,
+    run_wait: bool,
     browser_calls: usize,
     /// Locates the Guard daemon's state file, so its port stays unreachable
     /// from `fetch` and `page.goto`.
@@ -174,13 +177,14 @@ impl Parser {
                 self.pos = timer_pause(&self.tokens, self.pos)?;
                 Some(())
             }
-            "await" if self.in_run && self.peek_ident("page") => self.page_call(),
+            "await" if self.in_run && self.run_page && self.peek_ident("page") => self.page_call(),
+            "await" if self.in_run && self.run_wait && self.peek_ident("wait") => self.wait_call(),
             "await" => self.tab_call(),
             "for" => self.for_loop(),
             "try" => self.try_block(),
             "if" => self.if_throw(),
             "break" if self.loops > 0 => Some(()),
-            "return" if self.in_run => self.value(),
+            "return" => self.value(),
             "display" | "log" => self.output_args(),
             "console" => {
                 self.punct('.')?;
@@ -234,12 +238,20 @@ impl Parser {
         let mut loopback = false;
         while !self.eat_punct('}') {
             let key = self.key()?;
-            if !OPEN_KEYS.contains(&key.as_str()) || !seen.insert(key.clone()) {
+            if !(OPEN_KEYS.contains(&key.as_str()) || key == "app") || !seen.insert(key.clone()) {
                 return None;
             }
             self.punct(':')?;
             match key.as_str() {
-                "url" => loopback = loopback_url(&self.string()?),
+                "url" => {
+                    let url = self.string()?;
+                    // A pre-tool check cannot bind the path to what a later file://
+                    // open reads. Keep all file:// opens in review.
+                    loopback = loopback_url(&url);
+                }
+                // `own` is OMP's own headless browser, the one it opens by
+                // default; any other `app` attaches a browser of the user's.
+                "app" => (self.string()? == "own").then_some(())?,
                 "viewport" => self.viewport()?,
                 _ => self.scalar()?,
             }
@@ -253,25 +265,7 @@ impl Parser {
         loopback.then_some(())
     }
 
-    fn viewport(&mut self) -> Option<()> {
-        self.punct('{')?;
-        while !self.eat_punct('}') {
-            if !matches!(
-                self.key()?.as_str(),
-                "width" | "height" | "deviceScaleFactor" | "isMobile" | "hasTouch"
-            ) {
-                return None;
-            }
-            self.punct(':')?;
-            self.scalar()?;
-            if !self.eat_punct(',') {
-                return self.punct('}');
-            }
-        }
-        Some(())
-    }
-
-    fn key(&mut self) -> Option<String> {
+    pub(super) fn key(&mut self) -> Option<String> {
         match self.next()? {
             Token::Ident(name) | Token::Str(name) => Some(name),
             _ => None,
@@ -279,7 +273,7 @@ impl Parser {
     }
 
     /// A string, number, boolean or `null` literal.
-    fn scalar(&mut self) -> Option<()> {
+    pub(super) fn scalar(&mut self) -> Option<()> {
         self.eat_punct('-');
         match self.next()? {
             Token::Str(_) | Token::Num(_) => Some(()),
@@ -330,6 +324,8 @@ impl Parser {
             "press" | "waitForSelector" | "waitForText" => {
                 self.string()?;
                 if self.eat_punct(',') {
+                    // OMP accepts a selector in the options object, not a
+                    // second string (`press(key, {selector})`).
                     self.options()?;
                 }
             }
@@ -453,8 +449,8 @@ impl Parser {
                 self.keyword("await")?;
                 self.tab_call()?;
                 self.punct(')')?;
-                if self.eat_punct('.') {
-                    self.keyword("length")?;
+                if self.eat_punct('.') && !matches!(self.ident()?.as_str(), "length" | "entries") {
+                    return None;
                 }
             }
             Token::Ident(word) if self.values.contains(&word) || self.responses.contains(&word) => {

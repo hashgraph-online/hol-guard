@@ -716,6 +716,17 @@
           "action_id": "*"
         },
         "facts": {
+          "classes": [
+            "draft",
+            "send",
+            "share",
+            "export",
+            "update",
+            "execute",
+            "pay",
+            "delete",
+            "admin"
+          ],
           "objects": [
             "deployment"
           ],

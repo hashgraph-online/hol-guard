@@ -69,14 +69,95 @@ fn roots_contained<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool
     })
 }
 
-fn producer_allowed(shape: &FindShape<'_>, child: &[String], context: PathContext<'_>) -> bool {
+fn producer_allowed(
+    shape: &FindShape<'_>,
+    producer: &CommandSegmentV1,
+    child: &[String],
+    context: PathContext<'_>,
+) -> bool {
+    // A file passes a group of names by matching any one of them, so a group
+    // bounds what the child reads only when each of its names does.
     shape.regular_files_only
         && (!fanout::child_reads_contents(child)
             || shape
                 .patterns
                 .iter()
-                .any(|pattern| plain_extension_pattern(pattern)))
-        && contained_roots(shape, context)
+                .any(|pattern| plain_extension_pattern(pattern))
+            || shape
+                .name_groups
+                .iter()
+                .any(|names| names.iter().all(|pattern| plain_extension_pattern(pattern))))
+        && (contained_roots(shape, context)
+            || (metadata_child(child) && metadata_roots(shape.roots, producer, context)))
+}
+
+/// A child that prints only what the directory entry says about each file:
+/// its name, size, owner and times. `wc` reads the bytes to count them, so it
+/// stays bound to the workspace with the readers.
+fn metadata_child(child: &[String]) -> bool {
+    child.first().is_some_and(|name| {
+        matches!(
+            crate::parser_executables::executable_basename(name),
+            "ls" | "stat"
+        )
+    })
+}
+
+/// A root outside the workspace for a metadata child.
+///
+/// `find ROOT -type f` already lists every name below a root that passes
+/// the bounded read-target proof, and a metadata child adds only what `ls -l`
+/// shows about each of those names. The root still has to resolve to a
+/// directory strictly below the home directory with no hidden component on
+/// the way, so a home dot-directory, the home directory itself and paths
+/// outside home keep review whatever the child. A `~/` root needs the shell's
+/// own home to be the declared one as well: where they differ the shell walks
+/// a tree this proof never resolved.
+fn metadata_roots<R: AsRef<str>>(
+    roots: &[R],
+    producer: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
+        return false;
+    };
+    if !verified_path_context(Some(home), Some(cwd))
+        || !std::path::Path::new(home).is_absolute()
+        || !std::path::Path::new(cwd).is_absolute()
+    {
+        return false;
+    }
+    let Ok(home_root) = std::fs::canonicalize(home) else {
+        return false;
+    };
+    // A quoted or escaped `~` never reaches the shell as the home directory.
+    // The word stays the literal relative name `~/...`, which `find` looks for
+    // under the working directory -- the one place the agent writes without
+    // review -- so resolving it against home here would prove a path the
+    // command never walks.
+    if !super::directory_targets::home_targets_unquoted(producer) {
+        return false;
+    }
+    roots.iter().all(|root| {
+        let root = root.as_ref();
+        let spelled = match root.strip_prefix("~/") {
+            Some(rest) => std::path::Path::new(home).join(rest),
+            None => std::path::Path::new(cwd).join(root),
+        };
+        !root.starts_with(['\\', '-'])
+            && (!root.starts_with('~') || (context.shell_home_matches && root.starts_with("~/")))
+            && bounded_read_target(root, Some(home), Some(cwd), true)
+            && std::fs::canonicalize(spelled).is_ok_and(|resolved| {
+                resolved.is_dir()
+                    && resolved.strip_prefix(&home_root).is_ok_and(|below| {
+                        below.components().next().is_some()
+                            && below.components().all(|part| {
+                                matches!(part, std::path::Component::Normal(name)
+                                    if !name.to_string_lossy().starts_with('.'))
+                            })
+                    })
+            })
+    })
 }
 
 /// The child as it will run, with one stand-in file operand last.
@@ -161,7 +242,7 @@ pub(super) fn safe_find_exec(
     plain(segment)
         && words_as_written(segment)
         && fanout::find_exec(&segment.arguments).is_some_and(|exec| {
-            producer_allowed(&exec.shape, exec.child, context)
+            producer_allowed(&exec.shape, segment, exec.child, context)
                 && child_proven(model, segment, exec.child, context)
         })
 }
@@ -227,7 +308,7 @@ pub(super) fn safe_xargs(
     xargs.null_separated
         && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
         && shape.print0
-        && producer_allowed(&shape, xargs.child, context)
+        && producer_allowed(&shape, previous, xargs.child, context)
         && child_proven(model, segment, xargs.child, context)
 }
 
@@ -381,4 +462,54 @@ pub(super) fn whitespace_split_reason(model: &CanonicalCommandV1) -> Option<Stri
             "HOL Guard requires review because xargs splits file names on whitespace, so a crafted directory name can add another path. Use find DIR -type f -name '*.ext' -exec cat {} +, or find ... -print0 | xargs -0 cat, which Guard can prove read-only."
                 .to_owned()
         })
+}
+
+#[cfg(all(test, unix))]
+mod shell_home_tests {
+    use super::*;
+
+    fn parsed(command: &str) -> CanonicalCommandV1 {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({
+                "command": command,
+                "dialect": "posix",
+                "transport": "shell_string",
+                "provenance": "pre-tool-generic",
+            }))
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// A `~/` root is resolved against the home the hook declares. When the
+    /// shell runs with another `HOME` the command walks a different tree, so
+    /// the proof would stand for a path that is never read.
+    #[test]
+    fn a_tilde_root_needs_the_shell_to_use_the_declared_home() {
+        let home = std::env::temp_dir().join(format!(
+            "guard-fanout-home-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let sibling = home.join("Code/org/service-api/src");
+        std::fs::create_dir_all(&sibling).unwrap();
+        let cwd = home.join("Code/org/app-portal");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let home_text = home.to_str().unwrap().to_owned();
+        let cwd_text = cwd.to_str().unwrap().to_owned();
+        let model = parsed(r"find ~/Code/org/service-api/src -type f -exec stat {} \;");
+        let producer = model.segments.first().unwrap();
+        let roots = ["~/Code/org/service-api/src"];
+        let context = |shell_home_matches| PathContext {
+            home_dir: Some(&home_text),
+            cwd: Some(&cwd_text),
+            shell_home_matches,
+            ..Default::default()
+        };
+
+        assert!(metadata_roots(&roots, producer, context(true)));
+        assert!(!metadata_roots(&roots, producer, context(false)));
+
+        std::fs::remove_dir_all(&home).ok();
+    }
 }

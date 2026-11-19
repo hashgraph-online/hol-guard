@@ -23,6 +23,7 @@ from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forwar
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
 from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
+from .git_rules_cases import git_rules_checks
 from .heredoc_commit_fixtures import add_heredoc_commit_change, heredoc_commit_checks
 from .output_cases import add_output_fixture
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
@@ -432,6 +433,7 @@ def filesystem_checks(
     checks.update(supply_chain_checks(fixture.workspace, scenario_id))
     checks.update(script_case_checks(fixture.home, fixture.workspace, fixture.canary, scenario_id))
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
+    checks.update(git_rules_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(branch_return_checks(fixture.workspace, scenario_id))
     checks.update(heredoc_commit_checks(fixture.workspace, scenario_id))

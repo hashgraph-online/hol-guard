@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from codex_plugin_scanner.guard.native_codex_hook_identity import (
+from tests.python_oracles.native_codex_hook_identity import (
     CodexHookDefinitionTooDeepError,
     CodexHookIdentityUnavailableError,
     native_codex_hook_identity,

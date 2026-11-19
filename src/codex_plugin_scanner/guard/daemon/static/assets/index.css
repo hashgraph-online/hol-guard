@@ -7577,6 +7577,10 @@
     outline-offset: 2px;
   }
 
+  .focus-visible\:outline-brand-attention:focus-visible {
+    outline-color: var(--brand-attention);
+  }
+
   .focus-visible\:outline-brand-blue:focus-visible {
     outline-color: var(--brand-blue);
   }

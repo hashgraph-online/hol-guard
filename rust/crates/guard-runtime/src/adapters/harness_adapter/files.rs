@@ -345,15 +345,19 @@ pub(crate) fn finished(
     fields: &serde_json::Map<String, Value>,
 ) -> Step<Value> {
     let shim = shim_manifest(fields)?;
-    let notes = fields
-        .get("finish")
-        .and_then(|finish| finish.get("notes"))
+    let finish = fields.get("finish").ok_or(Failure::Invalid)?;
+    let notes = finish
+        .get("notes")
         .and_then(Value::as_array)
         .ok_or(Failure::Invalid)?
         .iter()
         .map(|note| note.as_str().map(text).ok_or(Failure::Invalid))
         .collect::<Step<Vec<_>>>()?;
-    manifest_answer(adapter_result(harness, false, config_path, &shim, notes))
+    let mut manifest = adapter_result(harness, false, config_path, &shim, notes);
+    if finish.get("cleanup_incomplete") == Some(&Value::Bool(true)) {
+        manifest.set("cleanup_incomplete", PyVal::Bool(true));
+    }
+    manifest_answer(manifest)
 }
 
 /// The saved config a backup envelope holds, as `restore_from_backup` reads it.
