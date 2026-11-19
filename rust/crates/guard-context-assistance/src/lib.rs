@@ -56,7 +56,10 @@ pub use interpreter_probe::{
     probe_interpreter_cancellable, probe_private_interpreter_cancellable, VerifiedInterpreter,
 };
 pub use restrictions::{restrict_config, restrict_value};
-pub use runtime::{RuntimeError, RuntimeStatus, VerifiedRuntime};
+pub use runtime::{
+    builtin_approval, builtin_interpreter, builtin_platform, builtin_selection, RuntimeError,
+    RuntimeStatus, VerifiedRuntime, BUILTIN_APPROVAL_SCHEMA,
+};
 pub use source::{AdmittedFile, SourceRoot};
 
 // Historical fixture identity only; production resolves the bundled catalog.

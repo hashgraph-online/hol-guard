@@ -9,6 +9,7 @@ members = [
     "crates/guard-cigar-release",
     "crates/guard-cigar-install",
     "crates/guard-cigar-artifacts",
+    "crates/guard-cigar-native",
     "crates/guard-command",
     "crates/guard-command-catalog-data",
     "crates/guard-contracts",
@@ -162,3 +163,10 @@ unsafe_code = "forbid"
 all = "deny"
 correctness = "deny"
 suspicious = "deny"
+
+# Temporary: build against the reviewed hol-cigar commit until cigar-context
+# 0.14.2 is on crates.io. Remove this section and the matching deny.toml
+# allow-git entry before merging.
+[patch.crates-io]
+cigar-context = { git = "https://github.com/hashgraph-online/hol-cigar", rev = "3e7d6dc1bca005d93bf01c2071928a9188196763" }
+cigar-windows-ipc = { git = "https://github.com/hashgraph-online/hol-cigar", rev = "3e7d6dc1bca005d93bf01c2071928a9188196763" }

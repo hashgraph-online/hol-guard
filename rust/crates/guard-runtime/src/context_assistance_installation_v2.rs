@@ -130,11 +130,14 @@ impl Installation {
                 )
                 .map_err(|e| error(e.code()))
             }
+            builtin::BUILTIN_SCHEMA => builtin::start(home, self, cancel),
             _ => Err(error("installation_invalid")),
         }
     }
     pub(super) fn version_metadata(&self, home: &Path) -> Result<Value, String> {
-        if self.schema == SCHEMA {
+        if self.schema == builtin::BUILTIN_SCHEMA {
+            Ok(builtin::version_metadata())
+        } else if self.schema == SCHEMA {
             let (legacy, profile) =
                 guard_cigar_release::legacy_candidate_profile().map_err(|e| error(e.code()))?;
             Ok(
@@ -162,7 +165,7 @@ pub(crate) fn publish_verified(
     release: &ResolvedRelease,
     runtime: &mut VerifiedRuntime,
 ) -> Result<Installation, String> {
-    if !valid_id(runtime_id) || !release.activation_qualified() {
+    if !builtin::storable_id(runtime_id) || !release.activation_qualified() {
         return Err(error("installation_invalid"));
     }
     let mut source = crate::managed_policy_load::ManagedPolicySource::native();

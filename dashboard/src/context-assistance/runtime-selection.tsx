@@ -1,7 +1,7 @@
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { shellHref } from "../shell-navigation-link";
 import type { ContextAssistanceStatus, ContextInstallation } from "./types";
-import { installationLabel, platformLabel, versionButton, versionQuiet } from "./versions-view";
+import { installationLabel, platformLabel, runtimeHostLabel, versionButton, versionQuiet } from "./versions-view";
 type Props = {
   value: GuardContextAssistanceConfig; status: ContextAssistanceStatus | null;
   installations: ContextInstallation[] | null; disabled: boolean;
@@ -13,7 +13,7 @@ function describe(id: string, installations: ContextInstallation[] | null, selec
   if (installations === null) return "Looking up version details";
   if (!selected) return "Picked, but not found on this computer";
   const sdk = selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "";
-  return sdk + "Python " + selected.python_version.join(".") + " · " + platformLabel(selected.platform);
+  return sdk + runtimeHostLabel(selected.python_version) + " · " + platformLabel(selected.platform);
 }
 /** Runtime identity is committed by the native versions owner, never drafted here. The raw ID lives under More settings. */
 export function CigarRuntimeSelection(props: Props) {
