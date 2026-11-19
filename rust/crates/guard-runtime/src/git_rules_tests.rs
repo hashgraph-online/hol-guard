@@ -45,6 +45,12 @@ const HOOK_BYPASSES: &[&str] = &[
     "perl -e 'my $n = $#ARGV; system(\"git commit --no-verify -m x\")'",
     "perl -e '`git commit -n -m wip`'",
     "python3 -c \"import os as o; system = o.system; system('git commit -n -m x')\"",
+    "HOOKS=/dev/null git --config-env=core.hooksPath=HOOKS commit -m wip",
+    "git --config-env core.hooksPath=HOOKS commit -m wip",
+    "true && command command command command command git commit --no-verify -m wip",
+    "python3 -c 'import os; os.system(\"git \" + \"commit --no-verify -m wip\")'",
+    "env HUSKY=0 \\\n  git commit -m wip",
+    "env \"HUSKY=0\" git commit \"-m\" \"multi\\\nline\" --no-verify",
 ];
 
 const WHOLE_TREE_STAGES: &[&str] = &[
@@ -80,6 +86,13 @@ const WHOLE_TREE_STAGES: &[&str] = &[
     "node -e 'const x = `${require(\"child_process\").execSync(\"git add -A\")}`'",
     "env -S 'git add -A'",
     "ruby -e '`git add -A`'",
+    "git add '**'",
+    "git add ':(top)**'",
+    "true && env git add -A > /dev/null",
+    "true && env git add -A 2>&1 >/dev/null",
+    "cd sub | cat; git add .",
+    "cd missing || git add .",
+    "node -e 'const x = `${(\"}\", execSync(\"git add -A\"))}`'",
 ];
 
 const QUIET: &[&str] = &[
@@ -139,6 +152,14 @@ const QUIET: &[&str] = &[
     "node -e \"const exec = (t) => console.log(t); exec('git add -A')\"",
     "node -e \"const exec = t => console.log(t); exec('git add -A')\"",
     "git commit -m '--no-verify' --dry-run",
+    "git rm -rn --cached .",
+    "python3 -c 'import subprocess; subprocess.run([\"git\", \"add\", \".\"], cwd=\"src\")'",
+    "node -e \"require('child_process').execSync('git add .', {cwd: 'src'})\"",
+    "env -S 'printf %s' 'example; git add .'",
+    "cd missing || exit 1; git add .",
+    "export HUSKY=0; env --unset=HUSKY git commit -m wip",
+    "export HUSKY=0; env -uHUSKY git commit -m wip",
+    "node -e 'const x = `${(\"}\", console.log(\"git add -A\"))}`'",
 ];
 
 #[test]
@@ -351,75 +372,5 @@ fn a_git_step_beside_a_package_script_or_service_is_still_a_shell_command() {
     }
 }
 
-#[test]
-fn a_hooks_folder_counts_only_when_it_runs_no_hook() {
-    let root = tempfile::tempdir().expect("temp dir");
-    let repo = root.path().join("repo");
-    let hooks = repo.join(".githooks");
-    let empty = root.path().join("empty-hooks");
-    std::fs::create_dir_all(repo.join(".git")).expect("git dir");
-    std::fs::create_dir_all(&hooks).expect("hooks dir");
-    std::fs::create_dir_all(repo.join(".empty")).expect("empty repo dir");
-    std::fs::create_dir_all(&empty).expect("empty dir");
-    std::fs::write(hooks.join("pre-commit"), "#!/bin/sh\n").expect("hook");
-    let cwd = Some(repo.as_path());
-    let empty = empty.display();
-    let hooks = hooks.display();
-    for command in [
-        format!("git -c core.hooksPath={empty} commit -m wip"),
-        "git -c core.hooksPath=.empty commit -m wip".to_owned(),
-        "git -c core.hooksPath=missing commit -m wip".to_owned(),
-        format!("git config core.hooksPath {empty}"),
-    ] {
-        assert!(breaks(&command, cwd).hook_bypass, "missed: {command}");
-    }
-    for command in [
-        format!("git -c core.hooksPath={hooks} commit -m wip"),
-        "git -c core.hooksPath=.githooks commit -m wip".to_owned(),
-        format!("git config core.hooksPath {hooks}"),
-        // A hooks folder saved inside the tree is how hook managers set
-        // themselves up, before or after they write their hooks.
-        "git config core.hooksPath .empty".to_owned(),
-        "git config core.hooksPath missing".to_owned(),
-    ] {
-        assert_eq!(
-            breaks(&command, cwd),
-            Breaks::default(),
-            "flagged: {command}"
-        );
-    }
-}
-
-#[test]
-fn the_agent_folder_below_the_top_is_not_the_whole_tree() {
-    let root = tempfile::tempdir().expect("temp dir");
-    let repo = root.path().join("repo");
-    let ui = repo.join("src").join("ui");
-    std::fs::create_dir_all(repo.join(".git")).expect("git dir");
-    std::fs::create_dir_all(&ui).expect("ui dir");
-    assert_eq!(breaks("git add .", Some(&ui)), Breaks::default());
-    assert_eq!(
-        breaks("cd ../.. && cd src && git add .", Some(&ui)),
-        Breaks::default()
-    );
-    assert!(breaks("git add -A", Some(&ui)).stage_all);
-    assert!(breaks("cd ../.. && git add .", Some(&ui)).stage_all);
-    assert!(breaks("git add .", Some(&repo)).stage_all);
-}
-
-#[test]
-fn words_split_like_the_shell() {
-    use crate::git_rules_state::split_words;
-    assert_eq!(
-        split_words(r#"env -S 'git add -A' "a \"b\"" c\ d"#),
-        Some(vec![
-            "env".to_owned(),
-            "-S".to_owned(),
-            "git add -A".to_owned(),
-            "a \"b\"".to_owned(),
-            "c d".to_owned(),
-        ])
-    );
-    assert_eq!(split_words("''"), Some(vec![String::new()]));
-    assert_eq!(split_words("git commit -m 'open"), None);
-}
+#[path = "git_rules_folder_tests.rs"]
+mod folder;

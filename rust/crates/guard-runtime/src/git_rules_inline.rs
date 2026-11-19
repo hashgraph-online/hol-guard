@@ -12,6 +12,14 @@ pub(crate) enum Call {
     Argv(Vec<String>),
 }
 
+/// A process call and the folder it starts in, when it names one: the
+/// literal `cwd`, or `$VAR` for a value Guard cannot read.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Found {
+    pub(crate) call: Call,
+    pub(crate) cwd: Option<String>,
+}
+
 /// Calls that start a process with their first argument.
 const PROCESS_CALLS: &[&str] = &[
     "system",
@@ -37,18 +45,61 @@ const MAX_CODE: usize = 16_384;
 /// How deep template expressions inside template expressions are read.
 const MAX_NESTING: usize = 8;
 
-/// The process calls in `code`. `hash_comments` says the language starts a
-/// line comment with `#` (Python, Ruby, Perl); otherwise `//` and `/* */`
-/// are comments (JavaScript).
-pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
-    let mut calls = Vec::new();
-    if code.len() <= MAX_CODE {
-        calls_in(code, hash_comments, 0, &mut calls);
+/// The process calls in `code`, or `None` when the code is too long to
+/// read. `hash_comments` says the language starts a line comment with `#`
+/// (Python, Ruby, Perl); otherwise `//` and `/* */` are comments
+/// (JavaScript).
+pub(crate) fn scan(code: &str, hash_comments: bool) -> Option<Vec<Found>> {
+    if code.len() > MAX_CODE {
+        return None;
     }
-    calls
+    let mut calls = Vec::new();
+    calls_in(code, hash_comments, 0, &mut calls);
+    Some(calls)
 }
 
-fn calls_in(code: &str, hash_comments: bool, nesting: usize, calls: &mut Vec<Call>) {
+/// The calls alone, for tests.
+#[cfg(test)]
+pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
+    scan(code, hash_comments)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|found| found.call)
+        .collect()
+}
+
+/// What code too long to read may do to git, from the words in it: skip
+/// the hooks, and stage the whole tree.
+pub(crate) fn unread_risks(code: &str) -> (bool, bool) {
+    if !code.contains("git") {
+        return (false, false);
+    }
+    let hooks = [
+        "--no-verify",
+        "hooksPath",
+        "HUSKY",
+        "LEFTHOOK",
+        "SKIP=",
+        "OVERCOMMIT_DISABLE",
+    ]
+    .iter()
+    .any(|word| code.contains(word));
+    let stage = [
+        "add -A",
+        "add --all",
+        "add .",
+        "add -u",
+        "\"-A\"",
+        "'-A'",
+        "--all",
+        "commit -a",
+    ]
+    .iter()
+    .any(|word| code.contains(word));
+    (hooks, stage)
+}
+
+fn calls_in(code: &str, hash_comments: bool, nesting: usize, calls: &mut Vec<Found>) {
     let bytes = code.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
@@ -57,7 +108,10 @@ fn calls_in(code: &str, hash_comments: bool, nesting: usize, calls: &mut Vec<Cal
             // Ruby and Perl run a backtick string as a shell command.
             match literal(code, index) {
                 Some((text, end)) => {
-                    calls.push(Call::Shell(text));
+                    calls.push(Found {
+                        call: Call::Shell(text),
+                        cwd: None,
+                    });
                     index = end;
                 }
                 None => index = bytes.len(),
@@ -117,7 +171,8 @@ fn calls_in(code: &str, hash_comments: bool, nesting: usize, calls: &mut Vec<Cal
             continue;
         }
         if let Some(call) = first_argument(code, skip_space(code, open + 1)) {
-            calls.push(call);
+            let cwd = closing(code, open).and_then(|close| cwd(&code[open + 1..close]));
+            calls.push(Found { call, cwd });
         }
     }
 }
@@ -138,6 +193,15 @@ fn template(code: &str, at: usize) -> (Vec<&str>, usize) {
                 let mut end = start;
                 while end < bytes.len() {
                     match bytes[end] {
+                        // A brace inside a string or template is text.
+                        b'"' | b'\'' => {
+                            end = literal(code, end).map_or(bytes.len(), |(_, next)| next);
+                            continue;
+                        }
+                        b'`' => {
+                            end = template(code, end).1;
+                            continue;
+                        }
                         b'{' => depth += 1,
                         b'}' => {
                             depth -= 1;
@@ -164,10 +228,88 @@ fn first_argument(code: &str, at: usize) -> Option<Call> {
         return Some(call);
     }
     match code.as_bytes().get(at)? {
-        b'"' | b'\'' | b'`' => literal(code, at).map(|(text, _)| Call::Shell(text)),
+        b'"' | b'\'' | b'`' => joined(code, at).map(Call::Shell),
         b'[' => list(code, at + 1, b']').map(Call::Argv),
         _ => None,
     }
+}
+
+/// A literal and the literals joined to it with `+`. A part that is not a
+/// literal is kept as `$VAR`.
+fn joined(code: &str, at: usize) -> Option<String> {
+    let (mut text, mut end) = literal(code, at)?;
+    let bytes = code.as_bytes();
+    loop {
+        let plus = skip_space(code, end);
+        if bytes.get(plus) != Some(&b'+') {
+            return Some(text);
+        }
+        let next = skip_space(code, plus + 1);
+        match literal(code, next) {
+            Some((part, after)) => {
+                text.push_str(&part);
+                end = after;
+            }
+            None => {
+                text.push_str("$VAR");
+                return Some(text);
+            }
+        }
+    }
+}
+
+/// The index of the `)` that closes the `(` at `open`.
+fn closing(code: &str, open: usize) -> Option<usize> {
+    let bytes = code.as_bytes();
+    let mut depth = 0usize;
+    let mut index = open;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' | b'\'' | b'`' => {
+                index = literal(code, index)?.1;
+                continue;
+            }
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+/// The folder a call's arguments start it in: `cwd="src"` or `{cwd: "src"}`.
+fn cwd(arguments: &str) -> Option<String> {
+    let bytes = arguments.as_bytes();
+    let mut from = 0;
+    while let Some(found) = arguments[from..].find("cwd") {
+        let start = from + found;
+        from = start + 3;
+        if start > 0 && is_word(bytes[start - 1]) || bytes.get(from).is_some_and(|b| is_word(*b)) {
+            continue;
+        }
+        let sign = skip_space(arguments, from);
+        if !matches!(bytes.get(sign), Some(b'=' | b':')) || bytes.get(sign + 1) == Some(&b'=') {
+            continue;
+        }
+        let value = skip_space(arguments, sign + 1);
+        return Some(
+            literal(arguments, value)
+                .filter(|(_, end)| {
+                    matches!(
+                        bytes.get(skip_space(arguments, *end)),
+                        None | Some(b',' | b'}' | b')')
+                    )
+                })
+                .map_or_else(|| "$VAR".to_owned(), |(text, _)| text),
+        );
+    }
+    None
 }
 
 /// `"git", ["add", "."]`: a program literal followed by its argument list.

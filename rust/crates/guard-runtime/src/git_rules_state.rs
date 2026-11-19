@@ -93,6 +93,12 @@ impl Hooks {
                     self = self.unset(name);
                 }
                 index += 1;
+            } else if let Some(name) = word
+                .strip_prefix("--unset=")
+                .or_else(|| word.strip_prefix("-u"))
+                .filter(|name| in_env && !name.is_empty())
+            {
+                self = self.unset(name);
             } else if in_env && matches!(*word, "-C" | "--chdir" | "-S" | "--split-string") {
                 index += 1;
             } else if !(in_env && word.starts_with('-')) {
@@ -104,14 +110,27 @@ impl Hooks {
     }
 }
 
+/// How many `pushd` folders are remembered.
+const STACK: usize = 8;
+
 /// The shell state that carries from one segment to the next.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct State<'a> {
     /// The top of the working tree the agent started in, when known.
     pub(crate) top: Option<&'a std::path::Path>,
+    /// The folder the agent started in, while the shell is still there.
+    pub(crate) origin: Option<&'a std::path::Path>,
     pub(crate) dir: Dir,
-    /// The folder `cd -` and `popd` return to.
+    /// The folder `cd -` returns to.
     pub(crate) previous: Dir,
+    /// The folders `pushd` saved, for `popd`.
+    pub(crate) stack: [Dir; STACK],
+    pub(crate) depth: usize,
+    /// The folder the shell stays in when the last folder change fails, so
+    /// a command after `||` runs there.
+    pub(crate) fallback: Option<Dir>,
+    /// Whether the segment just read changed the folder.
+    pub(crate) moved_now: bool,
     /// The switches exported for every later command.
     pub(crate) hooks: Hooks,
 }
@@ -124,16 +143,42 @@ impl State<'_> {
             .find(|word| !word.starts_with('-') || **word == "-")
             .copied();
         let next = match (program, target) {
-            ("popd", _) | (_, Some("-")) => self.previous,
+            ("popd", _) => self.pop(),
+            ("pushd", None) => {
+                let top = self.pop();
+                self.push(self.dir);
+                top
+            }
+            ("pushd", Some(target)) => {
+                self.push(self.dir);
+                self.dir.enter(target)
+            }
+            (_, Some("-")) => self.previous,
             (_, None) => Dir::Elsewhere,
             (_, Some(target)) => self.dir.enter(target),
         };
-        self.previous = if program == "popd" {
-            Dir::Elsewhere
-        } else {
-            self.dir
-        };
+        self.fallback = Some(self.dir);
+        self.moved_now = true;
+        self.origin = None;
+        self.previous = self.dir;
         self.dir = next;
+    }
+
+    fn push(&mut self, dir: Dir) {
+        if self.depth == STACK {
+            self.stack.copy_within(1.., 0);
+            self.depth -= 1;
+        }
+        self.stack[self.depth] = dir;
+        self.depth += 1;
+    }
+
+    fn pop(&mut self) -> Dir {
+        if self.depth == 0 {
+            return Dir::Elsewhere;
+        }
+        self.depth -= 1;
+        self.stack[self.depth]
     }
 
     /// `export`, `declare`, `typeset` or `unset` with their arguments.
@@ -202,6 +247,9 @@ pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
                         '"' => break,
                         '\\' => {
                             let next = chars.next()?;
+                            if next == '\n' {
+                                continue;
+                            }
                             if !matches!(next, '"' | '\\' | '$' | '`') {
                                 word.push('\\');
                             }
@@ -211,12 +259,16 @@ pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
                     }
                 }
             }
-            '\\' => {
-                started = true;
-                if let Some(next) = chars.next().filter(|next| *next != '\n') {
+            // A backslash before a newline joins the lines and starts no
+            // word.
+            '\\' => match chars.next() {
+                Some('\n') => {}
+                Some(next) => {
+                    started = true;
                     word.push(next);
                 }
-            }
+                None => started = true,
+            },
             c if c.is_whitespace() => {
                 if started {
                     words.push(std::mem::take(&mut word));

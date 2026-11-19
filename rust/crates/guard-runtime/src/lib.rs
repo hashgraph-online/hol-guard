@@ -494,6 +494,7 @@ mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;
 mod git_rules;
+mod git_rules_git;
 mod git_rules_inline;
 mod git_rules_match;
 mod git_rules_state;
