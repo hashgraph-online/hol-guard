@@ -12,6 +12,8 @@ use std::ops::Range;
 use serde_json::{json, Map, Value};
 
 use crate::cloud_bundle_fetch::SyncError;
+use crate::cloud_event_sync::EVENTS_BODY_LIMIT;
+use crate::cloud_receipt_upload::UploadRequest;
 
 /// `_RECEIPT_SYNC_BATCH_SIZE`.
 pub(crate) const BATCH_SIZE: usize = 50;
@@ -291,4 +293,49 @@ pub(crate) fn plan(
         batches,
         projected: Vec::new(),
     })
+}
+
+/// The receipts' upload payloads, and batches whose bodies fit through the
+/// egress broker. A receipt too large for a request of its own is left out
+/// of every body.
+pub(crate) fn fit_to_broker(request: &UploadRequest, mut plan: Plan) -> Result<Plan, SyncError> {
+    let projected = crate::cloud_receipt_payload::cloud_sync_receipt_payloads(&json!({
+        "receipts": plan.rows,
+        "device_id": request.device_id,
+        "device_name": request.device_name,
+        "redaction_level": request.redaction_level,
+        "now": request.now,
+    }))
+    .map_err(|error| SyncError::Failed(format!("Guard receipts could not be prepared: {error}")))?;
+    let payloads = match projected.get("payloads") {
+        Some(Value::Array(payloads)) if payloads.len() == plan.rows.len() => payloads.clone(),
+        _ => {
+            return Err(SyncError::Failed(
+                "Guard receipts could not be prepared.".to_owned(),
+            ))
+        }
+    };
+    let body_size = |context: &Map<String, Value>| {
+        json!({"receipts": [], "syncContext": context})
+            .to_string()
+            .len()
+    };
+    let overhead = body_size(&request.sync_context);
+    // The first request also carries the posture.
+    let first_overhead = request.fleet_posture.as_ref().map_or(overhead, |posture| {
+        let mut context = request.sync_context.clone();
+        context.insert("fleetPosture".to_owned(), posture.payload.clone());
+        body_size(&context)
+    });
+    let (projected, sizes): (Vec<Option<Value>>, Vec<Option<usize>>) = payloads
+        .into_iter()
+        .map(|payload| {
+            let size = payload.to_string().len();
+            let fits = overhead + size <= EVENTS_BODY_LIMIT;
+            (fits.then_some(payload), fits.then_some(size))
+        })
+        .unzip();
+    plan.batches = sized_batches(&sizes, first_overhead, overhead, EVENTS_BODY_LIMIT);
+    plan.projected = projected;
+    Ok(plan)
 }

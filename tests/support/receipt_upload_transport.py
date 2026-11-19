@@ -261,12 +261,18 @@ def upload_receipts(
     store = GuardStore(guard_home)
     auth = dict(auth_context) if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
     level = str(upload["redactionLevel"])
-    prior_cursor = receipt_sync_cursor_rowid(store)
-    receipts = receipt_sync_rows_for_upload(store, cursor_rowid=prior_cursor)
+    receipts: list[dict[str, object]] = []
+    prior_cursor: int | None = None
+    marker: dict[str, object] | None = None
+    # A context-only request carries no receipts and moves no cursor.
+    if upload.get("contextOnly") is not True:
+        prior_cursor = receipt_sync_cursor_rowid(store)
+        receipts = receipt_sync_rows_for_upload(store, cursor_rowid=prior_cursor)
     cursor_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
-    receipts, marker = receipt_sync_rows_with_command_detail_backfill(
-        store, receipts=receipts, redaction_level=level, synced_at=str(upload["now"])
-    )
+    if upload.get("contextOnly") is not True:
+        receipts, marker = receipt_sync_rows_with_command_detail_backfill(
+            store, receipts=receipts, redaction_level=level, synced_at=str(upload["now"])
+        )
     sync_context = dict(upload["syncContext"])
     posture = upload.get("fleetPosture")
     built = upload.get("workspaceAssessments")

@@ -145,3 +145,36 @@ def test_a_refused_supplied_sign_in_is_not_refreshed(tmp_path, cloud_url) -> Non
 
     assert len(_CloudHandler.receipt_bodies) == 1
     assert _cursor(store) is None
+
+
+def test_a_context_only_request_sends_no_receipts_and_keeps_the_cursor(tmp_path, cloud_url) -> None:
+    from pathlib import Path
+
+    from codex_plugin_scanner.guard.runtime.cloud_bundle_sync import cloud_receipt_upload
+
+    store = GuardStore(tmp_path / "home")
+    _add_receipts(store, 3)
+    context = {"deviceId": "device-1", "policyBundleAcknowledgement": {"bundleHash": "sha256:abc"}}
+
+    answer = cloud_receipt_upload(
+        Path(store.guard_home),
+        {
+            "contextOnly": True,
+            "redactionLevel": "full",
+            "deviceId": "device-1",
+            "deviceName": "Device",
+            "now": datetime.now(timezone.utc).isoformat(),
+            "syncContext": context,
+            "fleetPosture": None,
+            "workspaceAssessments": None,
+            "allowAuthRefresh": False,
+        },
+        auth_context=_auth(cloud_url),
+    )
+
+    [body] = _CloudHandler.receipt_bodies
+    assert body["receipts"] == []
+    assert body["syncContext"] == context
+    assert isinstance(answer, dict)
+    assert answer["receipts"] == 0
+    assert _cursor(store) is None
