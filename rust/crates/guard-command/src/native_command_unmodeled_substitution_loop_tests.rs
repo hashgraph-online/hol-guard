@@ -137,6 +137,23 @@ fn launchers_that_run_substitution_outputs_cannot_be_inert() {
 }
 
 #[test]
+fn aliases_cannot_install_unreviewed_commands_from_substitution_values() {
+    let controls = controls(github("enabled", None), false);
+    // With alias expansion enabled, a saved value may be used as shell
+    // command text in a later line. The owner scan cannot name that command.
+    for command in [
+        "shopt -s expand_aliases\nfor i in a; do v=$(cat payload); alias run=\"$v\"; done\nrun",
+        "for i in a; do v=$(cat payload); alias run=\"$v\"; done\nrun",
+        "for i in a; do alias run=\"$(cat payload)\"; done\nrun",
+    ] {
+        assert!(!super::interpreter_free(command), "{command}");
+        let (action, reason) = decision(&controls, command);
+        assert_eq!(reason, FAILED, "{command}: {action}");
+        assert_eq!(action, "block", "{command}: {reason}");
+    }
+}
+
+#[test]
 fn a_shell_state_path_assignment_is_not_treated_as_plain_data() {
     // In zsh, `path` is tied to PATH; unlike `artifact_path`, it can change
     // which commands execute. The uncertain floor must not treat it as an
