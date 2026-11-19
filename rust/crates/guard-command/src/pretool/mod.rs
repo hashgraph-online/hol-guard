@@ -605,6 +605,15 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
             return search::literal_glob_names_sensitive_path(&readable_pattern(argument).0);
         }
         match argument.split_once('=') {
+            // A long option's name is not a path. `grep --include=*.tsx`
+            // selects files called `*.tsx`; the `--include=` in front of the
+            // glob is the option. Reading the whole token as one glob makes
+            // it match `--include=private-key.tsx`, so an ordinary filtered
+            // search picks up a fixed floor no Allow can settle. The value
+            // after the `=` still faces every screen a bare operand faces.
+            Some((name, value)) if option_name(name) => {
+                sensitive_read_path_argument(&readable_pattern(value).0)
+            }
             Some((name, _))
                 if !argument.starts_with('-')
                     && !argument.contains('/')
@@ -637,6 +646,20 @@ fn sensitive_literal_path(value: &str) -> bool {
         sensitive_path_family(relative).is_some()
             || guard_secure_fs::credential_named_path(relative)
     })
+}
+
+/// Whether `name` is an option's name -- `--include`, `-I` -- rather than a
+/// path or a field name. A leading-dash word spelled with ordinary option
+/// characters qualifies; `--a/b` and `-./x` keep their path reading.
+fn option_name(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix('-') else {
+        return false;
+    };
+    let rest = rest.strip_prefix('-').unwrap_or(rest);
+    !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
 }
 
 /// A field name such as `if`, `query` or `user.name`: no glob or brace

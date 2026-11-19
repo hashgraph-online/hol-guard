@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-skylight",
+  "version": "1.0.0",
+  "name": "Krusch Skylight Calendar MCP",
+  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) launched as `krusch-skylight-mcp`, with opt-in dryRun staging (writes are live otherwise) and local twin cache. Status, event listing, chore pulls, and meal listing can create or update local state, so they require review. Event creation, chore assignment, list pushes, meal planning, Magic Import, task sync, and skylight_calendar also require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-companion-skylight-connector"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/introducing-krusch-companion.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-skylight-mcp"
+  },
+  "riskClasses": [
+    "account-calendar-write",
+    "external-network-access",
+    "local-cache-write"
+  ],
+  "tools": [
+    {
+      "name": "skylight_status",
+      "state": "review"
+    },
+    {
+      "name": "skylight_list_events",
+      "state": "review"
+    },
+    {
+      "name": "skylight_pull_chores",
+      "state": "review"
+    },
+    {
+      "name": "skylight_list_meals",
+      "state": "review"
+    },
+    {
+      "name": "skylight_calendar",
+      "state": "review"
+    },
+    {
+      "name": "skylight_create_event",
+      "state": "review"
+    },
+    {
+      "name": "skylight_assign_chore",
+      "state": "review"
+    },
+    {
+      "name": "skylight_push_list_items",
+      "state": "review"
+    },
+    {
+      "name": "skylight_plan_meal",
+      "state": "review"
+    },
+    {
+      "name": "skylight_magic_import",
+      "state": "review"
+    },
+    {
+      "name": "skylight_sync_tasks",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-companion-skylight-connector",
+    "https://github.com/kruschdev/krusch-companion-skylight-connector/blob/main/src/universal-adapter.js",
+    "https://github.com/kruschdev/krusch-companion-skylight-connector/blob/main/bin/krusch-skylight.js",
+    "https://krusch.dev/articles/introducing-krusch-companion.html"
+  ],
+  "saferAlternatives": [
+    "Pass dryRun: true on mutating Skylight tools to preview proposed family calendar, chore, list, and meal changes before they are pushed to Skylight Cloud; calls without it write live.",
+    "All Skylight inspection tools can initialize or update the local twin cache; keep them on Review and use dryRun: true for mutating calls."
+  ]
+}
