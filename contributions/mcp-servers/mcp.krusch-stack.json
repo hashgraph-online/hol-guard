@@ -33,7 +33,7 @@
   "tools": [
     {
       "name": "krusch_context_retrieve",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "krusch_context_health",
