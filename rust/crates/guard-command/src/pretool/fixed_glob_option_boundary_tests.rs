@@ -17,6 +17,10 @@ fn option_shaped_pathspecs_after_delimiter_keep_secret_floor() {
         "git diff --name-only -- '--private-key=*.tsx'",
         "git log --name-only -- '--private-key=*.tsx'",
         "git diff -- '--include=*.tsx'",
+        "git diff -m -- '--include=*.tsx'",
+        "git -C . diff -m -- '--include=*.tsx'",
+        "git log -m -- '--include=*.tsx'",
+        "git show -m -- '--include=*.tsx'",
         "git diff -- '--api-key=*.ts'",
     ] {
         assert!(fixed_command_floor(&model(command)), "{command}");
@@ -28,6 +32,8 @@ fn actual_option_filters_still_have_their_original_distinction() {
     for command in [
         "grep -rn needle src --include=*.tsx -l",
         "rg needle src --glob=*.rs",
+        "grep -e -- --include=*.tsx",
+        "rg -e -- --glob=*.rs",
     ] {
         assert!(!fixed_command_floor(&model(command)), "{command}");
     }
