@@ -58,6 +58,37 @@ fn only_literal_awk_program_words_are_simplified() {
 }
 
 #[test]
+fn unquoted_globs_never_make_awk_program_files_inert() {
+    // In a working directory containing "-f", "?f" expands to awk's -f
+    // option; the next argument is executable program-file content.
+    // Other unquoted globs and mixed quoted/unquoted words have the
+    // same ambiguity. No executable-program-file path may be erased.
+    for command in [
+        "awk ?f payload.awk",
+        "awk * payload.awk",
+        "awk [-a]f payload.awk",
+        "awk ?'f' payload.awk",
+        "awk -F? '{print $1}' input",
+        "awk '{print $1}' *.awk",
+    ] {
+        assert_eq!(super::without_plain_awk(command), command, "{command}");
+        let wrapped = format!("echo $({command})");
+        assert!(bounded_substitutions(&wrapped).is_none(), "{wrapped}");
+        assert!(reviewable_substitutions(&wrapped).is_none(), "{wrapped}");
+    }
+
+    // Quoting removes globbing. The ordinary literal field filter must
+    // remain reviewable even when its data-file argument has a literal "*".
+    for command in [
+        "awk '{print $1}' '*.txt'",
+        "awk '{print $1}' \"*.txt\"",
+        "awk -F\"?\" '{print $1}' input",
+    ] {
+        assert_eq!(super::without_plain_awk(command), "true", "{command}");
+    }
+}
+
+#[test]
 fn a_quoted_keyword_is_a_program_receiving_the_assignment() {
     for command in [
         r#""do" x=$(cat f)"#,
