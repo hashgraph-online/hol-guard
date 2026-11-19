@@ -712,6 +712,22 @@
       "expect": "allow_or_review"
     },
     {
+      "id": "quoted-cd-then-heredoc-python-edit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd '.' && python3 <<'EOF'\np='README.md'\ns=open(p).read()\nprint(len(s))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "background-bash-workspace-script",
       "fix_area": "shell",
       "harnesses": [
@@ -23994,6 +24010,57 @@
       "tool": "shell",
       "tool_input": {
         "command": "python3 <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF\ngit add -A"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "python-heredoc-import-after-cd-into-worktree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd '${WORKTREE}' && python3 - <<'EOF'\nimport json\nimport re\n\nprint(json.dumps({'match': bool(re.match(r'a+', 'aaa'))}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-python-heredoc-import-after-cd-elsewhere",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd /tmp && python3 - <<'EOF'\nimport os\nprint(os.listdir('.'))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-import-after-cd-then-more",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd '${WORKTREE}' && python3 - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF\ngit add -A"
       },
       "cwd": "worktree",
       "expect": "not_allow"

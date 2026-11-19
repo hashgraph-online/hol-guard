@@ -57,6 +57,8 @@ mod find_exec;
 mod functions;
 #[path = "native_command_unmodeled_heredoc.rs"]
 mod heredoc;
+#[path = "native_command_unmodeled_heredoc_lead.rs"]
+mod heredoc_lead;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
 #[path = "native_command_unmodeled_loop.rs"]
@@ -1581,6 +1583,10 @@ mod sourced_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_bounded_tests.rs"]
 mod bounded_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_heredoc_lead_tests.rs"]
+mod heredoc_lead_tests;
 
 #[cfg(test)]
 #[path = "native_command_unmodeled_fd_exec_tests.rs"]
