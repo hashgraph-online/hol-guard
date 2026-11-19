@@ -29,7 +29,11 @@ const OTHER_CONSTRUCTS: &[&str] = &[
 /// The command list with each top-level conditional replaced by the lists it
 /// holds, or `None` when the command holds no such conditional or anything
 /// around it is outside the plain list grammar.
-pub(super) fn spliced(command: &str) -> Option<String> {
+pub(super) fn spliced(command: &str, home_dir: Option<&str>) -> Option<String> {
+    spliced_conditionals(command).or_else(|| loops::spliced_loops(command, home_dir))
+}
+
+fn spliced_conditionals(command: &str) -> Option<String> {
     if command
         .chars()
         .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
@@ -39,7 +43,7 @@ pub(super) fn spliced(command: &str) -> Option<String> {
     let mut rest = command.trim();
     let mut out = String::new();
     let mut spliced_any = false;
-    while let Some(start) = next_conditional(rest)? {
+    while let Some(start) = next_construct(rest, "if")? {
         let (before, construct) = rest.split_at(start);
         out.push_str(before);
         let (parts, after) = conditional_parts(keyword(construct, "if")?)?;
@@ -79,9 +83,10 @@ pub(super) fn spliced(command: &str) -> Option<String> {
     (spliced_any && out.len() <= MAX_FLATTENED_BYTES).then_some(out)
 }
 
-/// The byte offset of the first `if` in command position, `Some(None)` when
-/// there is none, or `None` when the text leaves the plain list grammar.
-fn next_conditional(text: &str) -> Option<Option<usize>> {
+/// The byte offset of the first `target` keyword (`if` or `for`) in command
+/// position, `Some(None)` when there is none, or `None` when the text leaves
+/// the plain list grammar or another construct comes first.
+fn next_construct(text: &str, target: &str) -> Option<Option<usize>> {
     let bytes = text.as_bytes();
     let mut command_position = true;
     // A conditional read from a pipe gives its stdin to every list inside it,
@@ -144,12 +149,13 @@ fn next_conditional(text: &str) -> Option<Option<usize>> {
             _ => {
                 if command_position {
                     let word = &text[i..];
-                    if starts_with_word(word, "if") {
+                    if starts_with_word(word, target) {
                         return (!piped).then_some(Some(i));
                     }
-                    if OTHER_CONSTRUCTS
-                        .iter()
-                        .any(|keyword| starts_with_word(word, keyword))
+                    if starts_with_word(word, "if")
+                        || OTHER_CONSTRUCTS
+                            .iter()
+                            .any(|keyword| starts_with_word(word, keyword))
                     {
                         return None;
                     }
@@ -193,14 +199,25 @@ fn starts_with_word(text: &str, word: &str) -> bool {
 /// a state builtin at the head of any stage, a nested construct's keyword, or
 /// a head word the shell would rewrite first (quoted, escaped or expanded), so
 /// its real name is unknown here.
-fn changes_shell_state(item: &str) -> bool {
-    item.split('|').any(|stage| {
+///
+/// Only an unquoted `|` starts a stage. A `|` inside a quoted word, as in
+/// `jq -c '.[]?|select(.c)'`, is text the command receives, and reading the
+/// rest of that word as a command head would see a quote and refuse an
+/// ordinary read. An item that ends inside a quote counts as a change.
+pub(super) fn changes_shell_state(item: &str) -> bool {
+    let Some(stages) = super::for_loop_unroll::body::pipeline_stages(item) else {
+        return true;
+    };
+    stages.into_iter().any(|stage| {
         let first = command_head(stage);
         command_word_changes_shell_state(stage)
             || first == "if"
             || OTHER_CONSTRUCTS.contains(&first)
     })
 }
+
+#[path = "control_flow_chain_loop.rs"]
+mod loops;
 
 #[cfg(test)]
 #[path = "control_flow_chain_tests.rs"]

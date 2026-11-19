@@ -49,28 +49,22 @@ jobs:
           private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-          fallback-on-error: "true"
 
       - name: Require a token that can open pull requests
         env:
           APP_TOKEN_SOURCE: ${{ steps.release-token.outputs.source }}
-          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
         run: |
-          if [[ "$APP_TOKEN_SOURCE" == "app" ]]; then
-            echo "Using the release GitHub App installation token."
-            exit 0
-          fi
-          if [[ -z "$RELEASE_PLEASE_TOKEN" ]]; then
-            echo "Neither the release App nor RELEASE_PLEASE_TOKEN is configured." >&2
-            echo "The default Actions token cannot open pull requests." >&2
+          if [[ "$APP_TOKEN_SOURCE" != "app" ]]; then
+            echo "The release GitHub App token is not available." >&2
+            echo "Configure HOL_RELEASE_APP_CLIENT_ID and HOL_RELEASE_APP_PRIVATE_KEY." >&2
             exit 1
           fi
-          echo "::warning::Release App unavailable; falling back to RELEASE_PLEASE_TOKEN."
+          echo "Using the scoped release GitHub App installation token."
 
       - id: release
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
-          token: ${{ steps.release-token.outputs.source == 'app' && steps.release-token.outputs.token || secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.release-token.outputs.token }}
           target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json

@@ -220,22 +220,16 @@ class StoreReceiptsRuntimeMixin:
         started_at: str,
         last_heartbeat_at: str,
     ) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_runtime_state (
-                  state_key, session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
-                )
-                values ('runtime', ?, ?, ?, ?, ?)
-                on conflict(state_key) do update set
-                  session_id = excluded.session_id,
-                  daemon_host = excluded.daemon_host,
-                  daemon_port = excluded.daemon_port,
-                  started_at = excluded.started_at,
-                  last_heartbeat_at = excluded.last_heartbeat_at
-                """,
-                (session_id, daemon_host, daemon_port, started_at, last_heartbeat_at),
-            )
+        self._native_store_call(
+            "upsert_runtime_state",
+            {
+                "session_id": session_id,
+                "daemon_host": daemon_host,
+                "daemon_port": daemon_port,
+                "started_at": started_at,
+                "last_heartbeat_at": last_heartbeat_at,
+            },
+        )
 
     def try_touch_runtime_state(
         self,

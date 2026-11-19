@@ -26,6 +26,16 @@ from .approval_retry_persistent import case_environment as approval_persistent_e
 from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
 from .approval_retry_persistent import write_package_review_config
+from .approval_retry_relay import (
+    DESKTOP_RELAY_CASE,
+    RELAY_MARKER,
+    RELAY_ORACLE,
+    SIGNED_LINK_REDACTIONS,
+    queued_request_ids,
+    record_daemon_origin,
+    relay_evidence,
+    write_relay_config,
+)
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
@@ -53,6 +63,7 @@ from .fixtures import (
     stage_directory,
 )
 from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
+from .git_rules_cases import stage_git_rules_cases
 from .guard_tap import GuardTap, read_tap
 from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
@@ -118,8 +129,8 @@ def install_harness_hooks(name: str, daemon: Any, *, home: Path, guard_home: Pat
     This is the code ``hol-guard install`` runs after its operator approval prompt,
     applied to a disposable HOME and Guard home the operator never uses.
     """
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=home,
@@ -169,6 +180,7 @@ def run_harness_case(
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
     stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
+    stage_git_rules_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     stage_bash_lifecycle(fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     private = fixture.root / "private-evidence"
@@ -240,6 +252,8 @@ def run_harness_case(
                         intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
                     )
                 )
+            if scenario.oracle == RELAY_ORACLE:
+                case["review_policy"] = write_relay_config(guard_home, desktop=scenario.id == DESKTOP_RELAY_CASE)
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
@@ -250,6 +264,8 @@ def run_harness_case(
                 identity=identity,
                 register_workspace_policy=not realistic,
             )
+            if scenario.oracle == RELAY_ORACLE:
+                record_daemon_origin(daemon)
             if scenario.oracle == "blocked-extension":
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
@@ -349,7 +365,18 @@ def run_harness_case(
             case["approval_rows"] = approval_rows(worker.store, approval_ids_before)
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
-            case["transcript"] = redact_value(read_transcript(harness, raw_log), replacements)
+            transcript = read_transcript(harness, raw_log)
+            if scenario.oracle == RELAY_ORACLE:
+                # Checked before redaction, so the evidence keeps verdicts, not usable links.
+                case["relay"] = relay_evidence(
+                    str(transcript.get("final_text") or ""),
+                    guard_home=guard_home,
+                    request_ids=queued_request_ids(worker.store, approval_ids_before),
+                    marker_written=(fixture.workspace / RELAY_MARKER).exists(),
+                    daemon_url=f"http://127.0.0.1:{daemon.port}",
+                )
+                replacements.update(SIGNED_LINK_REDACTIONS)
+            case["transcript"] = redact_value(transcript, replacements)
             tap_rows = read_tap(tap_log)
             case["contained_request_proofs"] = codex_request_proofs(tap_rows) if harness == "codex" else []
             case["guard_rows"] = redact_value(tap_rows, replacements)
@@ -372,7 +399,7 @@ def run_harness_case(
         except Exception as exc:
             case["credential_write_back_error"] = type(exc).__name__
         finally:
-            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id, scenario.path)
             collect_approval_marker(fixture.workspace, scenario.id, case)
             collect_approval_persistent(fixture.workspace, scenario.id, case)
             if connector is not None:

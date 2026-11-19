@@ -102,6 +102,10 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::runtime_identity_launch::FEATURE.into(),
         guard_plugin_kit::FEATURE.into(),
         guard_plugin_telemetry::FEATURE.into(),
+        crate::cloud_bundle_command::FEATURE.into(),
+        crate::cloud_event_command::FEATURE.into(),
+        crate::cloud_event_command::RECEIPTS_FEATURE.into(),
+        crate::plugin_telemetry_host::FEATURE.into(),
         crate::workspace_snapshot::FEATURE.into(),
         crate::workspace_snapshot::SECRETS_FEATURE.into(),
         crate::workspace_snapshot::SKILLS_FEATURE.into(),
@@ -114,6 +118,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::workspace_fix::FEATURE.into(),
         crate::workspace_mcp_config::FEATURE.into(),
         guard_plugin_telemetry::UPDATES_FEATURE.into(),
+        crate::local_cli_discover::FEATURE.into(),
     ];
     features.extend(
         crate::resident_op_features::RESIDENT_OP_FEATURES
@@ -149,6 +154,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::bounded_hook_bridge::MUSE_BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
@@ -173,6 +179,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 pub(crate) enum ResidentOperationV1 {
+    Swarm(crate::swarm_op::Request),
     ContextAssistance(crate::context_assistance_op::Request),
     ContextAgent(crate::context_assistance_agent_op::Request),
     ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),
@@ -318,7 +325,6 @@ pub(crate) enum ResidentOperationV1 {
     InventoryScanFindings(guard_contracts::InventoryScanFindingsRequestV1),
     CodexHookIdentity(guard_contracts::CodexHookIdentityRequestV1),
     CodexHookFileIdentity(guard_contracts::CodexHookFileIdentityRequestV1),
-    CodexHookManifestVerify(guard_contracts::CodexHookManifestVerifyRequestV1),
     InventoryScanTargets(guard_contracts::InventoryScanTargetsRequestV1),
     ArtifactContentHash(guard_contracts::ArtifactContentHashRequestV1),
     ConsumerArtifactCompose(ConsumerArtifactComposeRequestV1),
@@ -348,6 +354,7 @@ pub(crate) enum ResidentOperationV1 {
     CloudCatalog(Value),
     DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
     ReleaseFeedProject(crate::release_feed_op::ReleaseFeedProjectRequest),
+    WindowsPrivateState(crate::windows_private_state::resident::ResidentRequest),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     ToolActionRequestIdentity(guard_contracts::ToolActionRequestIdentityRequestV1),
     RuntimeArtifactIdentity(guard_contracts::RuntimeArtifactIdentityRequestV1),

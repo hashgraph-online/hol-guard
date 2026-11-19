@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ci.gauntlet.approval_rows import offers_always
+from ci.gauntlet.eval_shell import protection_block_failure
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
@@ -28,6 +29,9 @@ from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
+# Keep focused regressions separate from the pre-existing legacy corpus.
+OMP_BROWSER_REPLAY = json.loads((FIXTURES / "gauntlet_replay_omp_browser.json").read_text(encoding="utf-8"))
+REPLAY_DOCUMENT["cases"].extend(OMP_BROWSER_REPLAY["cases"])
 GATE_DOCUMENT = json.loads((FIXTURES / "benign_false_positive_gate.json").read_text(encoding="utf-8"))
 
 # Tool names each harness really sends, by the case's abstract tool family. Pi names its built-ins
@@ -43,8 +47,8 @@ SHELL = {
 }
 READ = {"zcode": "Read", "claude-code": "Read", "omp": "read", "pi": "read", "cursor": "Read"}
 GLOB = {"claude-code": "Glob", "omp": "glob"}
-GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep"}
-WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write"}
+GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep", "cursor": "Grep"}
+WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write", "cursor": "Write"}
 FIXED = {
     "eval": "eval",
     "task": "task",
@@ -54,6 +58,10 @@ FIXED = {
     "todo_write": "todo_write",
     "ls": "ls",
     "ask_user_question": "AskUserQuestion",
+    # Gate cases name these tools for Claude Code only, so one spelling is enough.
+    "web_fetch": "WebFetch",
+    "agent": "Agent",
+    "edit": "edit",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
@@ -104,7 +112,7 @@ class ReplayCase:
     tool: str
     tool_input: dict[str, object]
     cwd: str
-    expect: str  # quiet | always | quiet_or_always | setup | block
+    expect: str  # quiet | always | quiet_or_always | setup | block | protection_block
     event: str = "PreToolUse"
     tool_response: object = None
     # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
@@ -188,9 +196,17 @@ def payload_input(case: ReplayCase, resolved: dict[str, object]) -> dict[str, ob
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
-    if case.harness in {"claude-code", "zcode"} and case.tool == "write":
+    if case.harness == "cursor" and case.tool == "grep":
+        resolved = cursor_grep_input(resolved)
+    if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
+
+
+def cursor_grep_input(resolved: dict[str, object]) -> dict[str, object]:
+    """Cursor's hook names the folder a Grep searches ``file_path``."""
+    folder = {"file_path": resolved["path"]} if "path" in resolved else {}
+    return {**{key: value for key, value in resolved.items() if key != "path"}, **folder}
 
 
 def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, object]:
@@ -199,9 +215,12 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
     Cursor reports shell calls as beforeShellExecution and reads as beforeReadFile.
     The script forwards both as PreToolUse, keeping the raw command or path beside tool_input.
     A beforeReadFile event also carries the file's full text as ``content``.
+    A Write or Grep call reaches preToolUse unchanged, so it gains no fields.
     """
     tool_input = payload["tool_input"]
     assert isinstance(tool_input, dict)
+    if tool in {"write", "grep"}:
+        return {}
     if tool == "read":
         file_path = str(tool_input["file_path"])
         fields: dict[str, object] = {"file_path": file_path}
@@ -236,13 +255,14 @@ def cursor_route_probe(
     probe = {**payload, "tool_input": {**tool_input, "cwd": payload["cwd"]}, "cursor_route_probe": True}
     answer = review_with_unavailable_retry(
         case_id,
-        lambda: worker.review_http_payload(
+        lambda deadline: worker.review_http_payload(
             payload=probe,
             params={},
             default_harness="cursor",
             home_dir=fixture.home,
             guard_home=fixture.guard_home,
             workspace=workspace,
+            deadline=deadline,
         ),
         on_retry=on_retry,
     )
@@ -328,6 +348,8 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
         return f"review row without an Always allow offer: {bad}" if bad else None
+    if case.expect == "protection_block":
+        return protection_block_failure(result, approvals)
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.

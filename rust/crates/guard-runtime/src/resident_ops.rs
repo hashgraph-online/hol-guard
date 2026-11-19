@@ -103,6 +103,10 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             answer
         }
         ResidentRequestV1::Operation(request) => match *request {
+            ResidentOperationV1::Swarm(request) => {
+                let store = policy_store.ok_or_else(|| "native_swarm_resident_required".to_owned())?;
+                crate::swarm_op::evaluate(&request, store)
+            }
             ResidentOperationV1::ContextAssistance(request) => {
                 let policy_store = policy_store.ok_or_else(|| "native_context_assistance_resident_required".to_owned())?;
                 crate::context_assistance_op::evaluate(&request, policy_store)
@@ -615,11 +619,6 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
-            ResidentOperationV1::CodexHookManifestVerify(request) => {
-                crate::codex_hook_manifest_verify_op::evaluate_codex_hook_manifest_verify_request(
-                    &request,
-                )
-            }
             ResidentOperationV1::InventoryScanTargets(request) => {
                 crate::inventory_scan_targets_op::evaluate_inventory_scan_targets_request(&request)
             }
@@ -788,6 +787,12 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ReleaseFeedProject(request) => {
                 crate::release_feed_op::evaluate_release_feed_project(&request)
             }
+            // Owner-private Windows state files inside the pinned Guard home,
+            // through the same held handles as `windows-private-state --stdin`.
+            ResidentOperationV1::WindowsPrivateState(request) => {
+                policy_store.ok_or_else(|| "native_windows_private_state_resident_required".to_owned())?;
+                crate::windows_private_state::resident::evaluate(&request)
+            }
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }
@@ -862,6 +867,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ContextAssistance(request) => Some(&request.query.guard_home),
+        ResidentOperationV1::Swarm(request) => Some(&request.query.guard_home),
         ResidentOperationV1::ContextAgent(request) => Some(&request.query.guard_home),
         ResidentOperationV1::CloudCatalog(request) => {
             if request["action"] == "begin" || request["action"] == "reuse" {
@@ -873,6 +879,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::CatalogReadV2(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogPrepareV1(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogReadPreparedV1(request) => request.guard_home.to_str(),
+        ResidentOperationV1::WindowsPrivateState(request) => Some(&request.guard_home),
         ResidentOperationV1::NativeBashPrepare(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashExecute(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashCancel(request) => Some(&request.guard_home),

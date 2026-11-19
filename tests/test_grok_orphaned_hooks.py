@@ -7,9 +7,10 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from codex_plugin_scanner.guard.adapters.base import _shell_command
-from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text
-from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.grok_test_support import prepare_user_config_text
+from tests.native_bounded_runtime import hook_config_argv, use_bounded_runtime
 
 
 def command(home: Path, *, workspace: Path | None = None) -> str:
@@ -77,42 +78,21 @@ def test_repair_preserves_other_hooks(tmp_path: Path, variant: str) -> None:
         assert groups[0]["hooks"][0]["command"] == stale
 
 
-def test_missing_client_is_not_operational_hook_evidence(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
-
-    stale = command(tmp_path / "deleted")
-    assert is_missing_grok_hook_command(stale, command(tmp_path / "current"))
-    assert not is_grok_hook_command(stale)
-
-
-def test_workspace_fallback_changes_do_not_retain_missing_global_client(tmp_path: Path) -> None:
-    assert is_missing_grok_hook_command(
-        command(tmp_path / "old"), command(tmp_path / "new", workspace=tmp_path / "project")
-    )
-
-
 @pytest.mark.parametrize("frozen", [False, True])
-def test_repair_recognizes_orphan_after_isolated_python_disappears(
+def test_repair_replaces_an_orphaned_client_with_the_native_hook(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, frozen: bool
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters import cursor_hook_config
-
     stale = command(tmp_path / "old")
-    monkeypatch.setattr(cursor_hook_config, "isolated_cursor_hook_python", lambda: None)
-    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: None)
-    monkeypatch.setattr(bridge.sys, "frozen", frozen, raising=False)
-    monkeypatch.setattr(bridge, "prune_safe_cli_executable", lambda value: value)
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args, **kwargs: None)
+    monkeypatch.setattr("sys.frozen", frozen, raising=False)
+    use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
     new_home = tmp_path / "new"
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=new_home)
     replacement = _shell_command(
-        bridge.bounded_cli_hook_command(
-            python_executable=str(tmp_path / "hol-guard"),
-            package_root=tmp_path / "package",
-            guard_home=new_home,
-            cli_args=["guard", "hook", "--guard-home", str(new_home), "--harness", "grok", "--json"],
-            harness="grok",
-            timeout_seconds=85,
+        hook_config_argv(
+            context,
+            "grok",
+            ["guard", "hook", "--guard-home", str(new_home), "--harness", "grok", "--json"],
+            85,
         )
     )
     original, _ = prepare_user_config_text("", stale, previous_state={})

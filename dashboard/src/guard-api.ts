@@ -100,6 +100,15 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
+import { applyHarnessCigarPatch } from "./fleet-app-modes";
+import {
+  pulseEnrollmentBody,
+  pulseSetupRefusalMessage,
+  pulseShowCommandBody,
+  sendWithPulseApproval,
+  type PulseMinTier,
+  type PulseWaitTiming,
+} from "./pulse-approval";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -231,22 +240,47 @@ export class GuardOperationTimeoutError extends Error {
   }
 }
 
-function withLocalProtectionDeadline<T>(
-  operation: (signal: AbortSignal) => Promise<T>,
+/** Pause and restart a local-protection deadline around a wait on the user. */
+export type LocalProtectionDeadline = {
+  /** Stop counting: the operation is waiting on the user, not on Guard. */
+  pause: () => void;
+  /** Count a fresh `timeoutMs` from now: the operation is waiting on Guard again. */
+  restart: () => void;
+};
+
+/**
+ * Run `operation` under a deadline. While a Pulse approval waits on the YID
+ * app the operation pauses the deadline (that wait has its own 16-minute
+ * window and fails closed), and restarts it for the resubmission, so every
+ * call to Guard stays bounded.
+ */
+export function withLocalProtectionDeadline<T>(
+  operation: (signal: AbortSignal, deadline: LocalProtectionDeadline) => Promise<T>,
   timeoutMs: number,
   message: string,
 ): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let expire: () => void = () => undefined;
+  const pause = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  const restart = () => {
+    pause();
+    timer = setTimeout(expire, timeoutMs);
+  };
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+    expire = () => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
-    }, timeoutMs);
+    };
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal)), deadline]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
+  restart();
+  return Promise.race([
+    Promise.resolve().then(() => operation(controller.signal, { pause, restart })),
+    deadline,
+  ]).finally(pause);
 }
 
 function fetchLocalProtectionJson(
@@ -255,8 +289,12 @@ function fetchLocalProtectionJson(
   timeoutMs: number,
   message: string,
 ): Promise<{ response: Response; payload: unknown }> {
-  return withLocalProtectionDeadline(async (signal) => {
-    const response = await fetchGuardApi(input, { ...init, signal });
+  return withLocalProtectionDeadline(async (signal, deadline) => {
+    const response = await fetchWithGuardAuth(
+      input,
+      { ...init, signal },
+      { onPending: deadline.pause, onApproved: deadline.restart },
+    );
     const payload = (await response.json().catch(() => null)) as unknown;
     return { response, payload };
   }, timeoutMs, message);
@@ -1081,7 +1119,16 @@ function withGuardAuthForToken(
   };
 }
 
-export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(
+  input: RequestInfo,
+  init?: RequestInit,
+  pulse?: PulseWaitTiming,
+): Promise<Response> {
+  // Every gated request goes through the Pulse flow when the gate asks for it.
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init, pulse);
+}
+
+async function fetchWithGuardAuthOnce(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
@@ -2429,14 +2476,18 @@ function applyHarnessPosturePatch(
   return next;
 }
 
-export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "context_assistance_diagnostic" | "context_assistance_requested"> & {
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "harness_cigar" | "context_assistance_diagnostic" | "context_assistance_requested" | "context_assistance_effective_ready" | "cigar_apps"> & {
   harness_postures?: GuardHarnessPosturePatch;
+  /** Per-app CIGAR patch: `"off"` stops CIGAR for the app, `null` lets it follow CIGAR again. */
+  harness_cigar?: Record<string, "off" | null>;
+  /** The Watch entries in this update get no auto-revert window (an app keeping only CIGAR). */
+  harness_watch_untimed?: boolean;
 };
 
 export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
@@ -2445,6 +2496,9 @@ export async function updateSettings(settings: GuardSettingsUpdate): Promise<Gua
         ...(posturePatch === undefined
           ? {}
           : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+        ...(cigarPatch === undefined
+          ? {}
+          : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }),
       },
     };
   }
@@ -3366,6 +3420,7 @@ export async function bulkAllowReadOnce(input: {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  approval_gate_pulse?: boolean;
 }): Promise<BulkAllowReadOnceResult> {
   if (isGuardDemoMode()) {
     return {
@@ -3385,6 +3440,7 @@ export async function bulkAllowReadOnce(input: {
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
+      ...(input.approval_gate_pulse === true ? { approval_gate_pulse: true } : {}),
     }),
   });
   return {
@@ -3538,6 +3594,7 @@ export function normalizeGuardUpdateStatus(
     release_channel: isGuardUpdateChannel(value.release_channel)
       ? value.release_channel
       : (fallbackReleaseChannel ?? "stable"),
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic",
   };
 }
 
@@ -3654,6 +3711,31 @@ export type GuardUpdateChannelProof = {
   approval_password?: string;
   approval_totp_code?: string;
 };
+
+export type GuardUpdateMode = "automatic" | "ask" | "off";
+
+export async function setGuardUpdateMode(
+  mode: GuardUpdateMode,
+  proof?: GuardUpdateChannelProof,
+): Promise<GuardUpdateStatus> {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...(await fetchGuardUpdateStatus()),
+      update_mode: mode,
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord(payload) ? payload : {};
+    throw new Error(stringValue(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
+}
 
 export async function setGuardUpdateChannel(
   channel: "stable" | "alpha",
@@ -4668,3 +4750,115 @@ export {
   packageWorkbenchEcosystems,
   sortPackageWorkbenchFindings,
 } from "./supply-chain-audit-normalize";
+
+export type GuardPulseEnrollment = {
+  status: "pending";
+  request_id: string;
+  match_code: string;
+  yid_hint: string;
+  decide_by: string;
+};
+
+/** Step 1 of Pulse setup: check the approval password (and authenticator code) only. */
+export async function authorizeApprovalGatePulseSetup(payload: {
+  approval_password: string;
+  approval_totp_code?: string;
+}): Promise<{ status: "authorized"; expires_at: string }> {
+  return readJson("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, step: "authorize" }),
+  });
+}
+
+/**
+ * Send the enrollment request to the YID app. After step 1, the same session
+ * needs only the agent key for 15 minutes.
+ */
+export async function beginApprovalGatePulseEnrollment(payload: {
+  pulse_agent_key: string;
+  min_tier: PulseMinTier;
+}): Promise<GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment }> {
+  const response = await fetchWithGuardAuth("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pulseEnrollmentBody(payload.pulse_agent_key, payload.min_tier)),
+  });
+  if (!response.ok) {
+    let code: unknown = null;
+    try {
+      const refused: unknown = await response.clone().json();
+      code = isRecord(refused) ? refused["error"] : null;
+    } catch {
+      code = null;
+    }
+    throw new Error(
+      pulseSetupRefusalMessage(code, payload.min_tier)
+        ?? (await requestErrorMessage(response, `Request failed with ${response.status}`)),
+    );
+  }
+  return (await response.json()) as GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment };
+}
+
+/** One bounded poll of a Pulse request. */
+export async function pollApprovalGatePulse(requestId: string): Promise<{ status: "pending" | "approved" | "rejected" | "expired" }> {
+  return readJson("/v1/approval-gate/pulse/poll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId }),
+  });
+}
+
+/** Finish Pulse setup. The response carries the one-time recovery code. */
+export async function confirmApprovalGatePulseEnrollment(payload: {
+  request_id: string;
+  cooldown_seconds: 0 | 900 | 3600;
+}): Promise<GuardSettingsPayload & { pulse_recovery_code: string }> {
+  return readJson("/v1/approval-gate/pulse/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Return to the approval password. The Pulse layer asks the YID app first;
+ * aborting `signal` stops waiting for it.
+ */
+export async function disableApprovalGatePulse(signal?: AbortSignal): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+    signal,
+  });
+}
+
+/**
+ * Show or hide the agent's command in the YID app. It is a settings save, so
+ * the Pulse layer asks the YID app first and the approval covers exactly this
+ * change; aborting `signal` stops waiting for it.
+ */
+export async function setApprovalGatePulseShowCommand(
+  show: boolean,
+  signal?: AbortSignal,
+): Promise<GuardSettingsPayload> {
+  return readJson("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify(pulseShowCommandBody(show)),
+    signal,
+  });
+}
+
+/** Lost the YID app: the approval password and the one-time recovery code turn Pulse off. */
+export async function recoverApprovalGatePulse(payload: {
+  approval_password: string;
+  pulse_recovery_code: string;
+}): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}

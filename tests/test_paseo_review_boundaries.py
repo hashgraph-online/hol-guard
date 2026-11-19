@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.contracts import setup_contract_for
-from codex_plugin_scanner.guard.adapters.paseo import PaseoHarnessAdapter
-from codex_plugin_scanner.guard.adapters.paseo_config import paseo_providers, require_local_path
-from codex_plugin_scanner.guard.adapters.paseo_install import receipt_path
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
+from codex_plugin_scanner.guard.setup_contracts import setup_contract_for
+from tests import harness_ops_support as harness_support
+from tests.paseo_test_support import paseo_providers, receipt_path
 from tests.test_paseo_adapter import configure
 from tests.test_paseo_adapter import context as context
 
@@ -47,7 +49,7 @@ def test_nonexistent_guard_root_cannot_hide_a_symlinked_ancestor(
     redirected = replace(context, guard_home=ancestor / "state" / "guard")
     configure(redirected, {"pi": {"enabled": True}})
     with pytest.raises(ValueError, match="symlink"):
-        PaseoHarnessAdapter().install(redirected)
+        harness_support.install("paseo", redirected)
     assert list(outside.iterdir()) == []
     assert not (context.home_dir / ".pi").exists()
 
@@ -58,11 +60,11 @@ def test_symlinked_user_home_remains_an_explicit_path_anchor(tmp_path: Path) -> 
     actual_home.mkdir()
     home = tmp_path / "home"
     home.symlink_to(actual_home, target_is_directory=True)
-    root = home / ".local/state/guard"
-    require_local_path(root, root / "bin/guard-paseo", home_dir=home)
+    context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home / ".local/state/guard")
+    ask("prepare_uninstall", context, harness="paseo")
     (actual_home / ".local").symlink_to(tmp_path / "elsewhere", target_is_directory=True)
     with pytest.raises(ValueError, match="symlink"):
-        require_local_path(root, root / "bin/guard-paseo", home_dir=home)
+        ask("prepare_uninstall", context, harness="paseo")
 
 
 def test_failed_repair_keeps_receipt_but_detects_changed_artifacts(
@@ -70,20 +72,18 @@ def test_failed_repair_keeps_receipt_but_detects_changed_artifacts(
 ) -> None:
     """Keeping an old receipt cannot hide artifact drift caused by a failed repair."""
     configure(context, {"pi": {"enabled": True}})
-    adapter = PaseoHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("paseo", context)
     original = receipt_path(context).read_bytes()
 
-    def fail_after_write(*_args: object) -> None:
-        """Simulate a native installer which changes one file and then fails."""
-        (context.home_dir / ".pi/agent/extensions/hol-guard.ts").write_text("changed", encoding="utf-8")
-        raise ValueError("installation failed")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.paseo.install_native", fail_after_write)
-    with pytest.raises(ValueError, match="installation failed"):
-        adapter.install(context)
+    (context.home_dir / ".pi/agent/extensions/hol-guard.ts").write_text("changed", encoding="utf-8")
+    monkeypatch.setattr(
+        harness_ops, "resolved_executable", lambda harness, _context: None if harness == "pi" else sys.executable
+    )
+    with pytest.raises(ValueError, match="No supported, enabled"):
+        harness_support.install("paseo", context)
+    monkeypatch.setattr(harness_ops, "resolved_executable", lambda _harness, _context: sys.executable)
     assert receipt_path(context).read_bytes() == original
-    assert adapter.diagnostics(context)["setup_status"] == "broken"
+    assert harness_ops.diagnostics("paseo", context)["setup_status"] == "broken"
 
 
 def test_paseo_setup_contract_has_no_composite_browser_fallback() -> None:

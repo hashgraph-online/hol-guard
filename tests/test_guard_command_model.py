@@ -8,7 +8,7 @@ from codex_plugin_scanner.guard.runtime.command_model import MAX_COMMAND_BYTES, 
 def test_windows_parse_keeps_backslash_path_separators(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.runtime import command_tokens
+    from tests.python_oracles import command_tokens
 
     monkeypatch.setattr(command_tokens, "os", SimpleNamespace(name="nt"))
     tokens, exact = command_tokens.shell_tokens(r"cmd /c echo C:\Work\file.txt")

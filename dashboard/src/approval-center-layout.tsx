@@ -23,12 +23,11 @@ import type {
   DecisionScope,
 } from "./guard-types";
 import { useGuardUpdate } from "./guard-update-panel";
-import { updateSettings } from "./guard-api";
 import { dashboardEmbedsInDesktop } from "./desktop-embed";
 import { GuardUpdateBanner, readDismissedDesktopUpdateVersion } from "./guard-update-banner";
 import { desktopUpdateBannerModel } from "./guard-update-copy";
 import { WatchProtectionBanner } from "./watch-protection-banner";
-import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
+import { watchBannerModel } from "./harness-posture-ui";
 
 const McpPolicyRequestPanel = lazyWorkspace("mcp-policy-request-panel", () =>
   import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
@@ -78,6 +77,7 @@ type LayoutProps = {
   codexResume: GuardCodexResumeResult | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   homeContent: ReactNode;
+  swarmContent?: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
   extensionsContent: ReactNode;
@@ -116,17 +116,17 @@ function InboxWatchBanner(props: {
   onRestored?: () => void;
   onOpenSettings: () => void;
 }) {
-  const { snapshot } = props;
-  const handleTurnOn = useCallback(() => {
-    void updateSettings(turnProtectionOnUpdate(snapshot))
-      .then(() => {
-        props.onRestored?.();
-      })
-      .catch(() => {
-        props.onOpenSettings();
-      });
-  }, [props.onOpenSettings, props.onRestored, snapshot]);
-  return <WatchProtectionBanner model={watchBannerModel(snapshot)} onTurnProtectionOn={handleTurnOn} />;
+  const { snapshot, onRestored } = props;
+  const handleTurnedOn = useCallback(() => {
+    onRestored?.();
+  }, [onRestored]);
+  return (
+    <WatchProtectionBanner
+      model={watchBannerModel(snapshot)}
+      onTurnedOn={handleTurnedOn}
+      onOpenSettings={props.onOpenSettings}
+    />
+  );
 }
 
 function renderInboxContent(props: LayoutProps): ReactNode {
@@ -200,6 +200,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
 }
 
 function renderViewContent(props: LayoutProps): ReactNode {
+  if (props.view === "swarm") return props.swarmContent ?? null;
   if (props.view === "home") {
     return props.homeContent;
   }
@@ -291,6 +292,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
 
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(
@@ -320,6 +322,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
         onSetUpdateChannel={onSetUpdateChannel}
+        onSetUpdateMode={onSetUpdateMode}
         approvalGate={props.approvalGate ?? null}
         cloudUserProfile={
           props.runtime.kind === "ready"

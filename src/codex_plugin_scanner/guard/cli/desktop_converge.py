@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import TextIO
 
 from ...version import __version__
-from ..adapters.base import HarnessContext
 from ..desktop_foreign_installs import (
     DESKTOP_PATH_SHIM_MARKER,
     ForeignInventory,
@@ -27,6 +26,7 @@ from ..desktop_foreign_installs import (
     inventory_foreign_installs,
     remove_foreign_installs,
 )
+from ..harness_context import HarnessContext
 from ..stable_guard_cli import durable_desktop_current_hol_guard
 from ..store import GuardStore
 

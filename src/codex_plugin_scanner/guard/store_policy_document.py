@@ -5,10 +5,12 @@ from __future__ import annotations
 import sqlite3
 
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
 from .approval_gate import ApprovalGateGrant, require_high_risk
+from .native_store_policy import encode_key
 from .policy_authority import validate_policy_write_authority
 from .policy_document import GuardPolicyDocument, policy_document_digest
 from .policy_document_authority import policy_import_approval_binding
@@ -46,6 +48,22 @@ def _validate_compiled_document_rows(
     # documents the existing adapter cannot represent.
     if compile_policy_document(document) != compiled_rows:
         raise ValueError("policy_document_compilation_mismatch")
+
+
+def policy_import_result(
+    document: GuardPolicyDocument,
+    digest: str,
+    payload: Mapping[str, object],
+) -> PolicyDocumentImportResult:
+    inserted, replaced = payload.get("inserted"), payload.get("replaced")
+    if not isinstance(inserted, int) or not isinstance(replaced, int):
+        raise RuntimeError("Guard policy document was not imported.")
+    return PolicyDocumentImportResult(
+        document_id=document.metadata.id,
+        digest=digest,
+        inserted=inserted,
+        replaced=replaced,
+    )
 
 
 class StorePolicyDocumentMixin:
@@ -153,25 +171,86 @@ class StorePolicyDocumentMixin:
         )
 
         digest = policy_document_digest(document)
-        secret_material = self._policy_integrity_secret_material(create=True)
         from .native_command_control_authority_io import hold_command_control_authority_lock
 
-        with hold_command_control_authority_lock(self.guard_home), self._connect() as connection:
+        # The resident owns the row writes and the generation advance; the
+        # integrity key and control state stay here.
+        with hold_command_control_authority_lock(self.guard_home):
             refuse_legacy_import_over_business_source(cast("GuardStore", self))
-            connection.execute("begin immediate")
-            result = self._import_policy_rows_on_connection(
-                connection,
-                document=document,
-                compiled_rows=compiled_rows,
-                normalized_rows=normalized_rows,
-                mode=mode,
-                now=now,
-                digest=digest,
-                secret_material=secret_material,
-            )
-            connection.commit()
+            args = self.policy_import_args(document, normalized_rows, mode=mode, now=now, digest=digest)
+            payload = self._native_store_call("import_policy_rows", args)
+            if not isinstance(payload, dict):
+                raise RuntimeError("Guard policy document was not imported.")
+            self.finalize_policy_import(payload.get("next_control_state"))
+        return policy_import_result(document, digest, payload)
 
-        return result
+    def policy_import_args(
+        self,
+        document: GuardPolicyDocument,
+        normalized_rows: list[tuple[CompiledPolicyRow, str | None, str | None, str | None, str | None]],
+        *,
+        mode: PolicyImportMode,
+        now: str,
+        digest: str,
+    ) -> dict[str, object]:
+        """The native ``import_policy_rows`` arguments, with the signing material.
+
+        When the store is protected the pending generation is persisted first,
+        so an interrupted write leaves a generation the next start reconciles.
+        """
+
+        rows: list[dict[str, object]] = []
+        for compiled, artifact_id, artifact_hash, workspace, publisher in normalized_rows:
+            decision = compiled.decision
+            rows.append(
+                {
+                    "harness": decision.harness,
+                    "scope": decision.scope,
+                    "artifact_id": artifact_id,
+                    "artifact_hash": artifact_hash,
+                    "workspace": workspace,
+                    "publisher": publisher,
+                    "action": decision.action,
+                    "reason": decision.reason,
+                    "owner": decision.owner,
+                    "source": decision.source,
+                    "expires_at": decision.expires_at,
+                    "rule_id": compiled.rule_id,
+                    "provenance_json": compiled.provenance_json,
+                }
+            )
+        args: dict[str, object] = {
+            "mode": mode,
+            "now": now,
+            "document": {"api_version": document.api_version, "id": document.metadata.id, "digest": digest},
+            "rows": rows,
+        }
+        secret_material = self._policy_integrity_secret_material(create=True)
+        with self._connect() as connection:
+            state = self._refresh_policy_integrity_state(
+                connection,
+                now=now,
+                create_key=True,
+                secret_material=secret_material,
+                allow_cutover_resign=False,
+            )
+        key, key_id = secret_material
+        if state.get("mode") == "protected" and key is not None and key_id is not None:
+            trusted_state = self._load_policy_integrity_control_state(create=True)
+            if trusted_state is not None:
+                args["current_generation"] = self._begin_policy_integrity_generation(trusted_state)
+                args["integrity_key_b64"] = encode_key(key)
+                args["integrity_key_id"] = key_id
+        return args
+
+    def finalize_policy_import(self, next_control_state: object) -> None:
+        """Adopt the control state a native import advanced to, if any."""
+
+        if next_control_state is None:
+            return
+        if not isinstance(next_control_state, dict):
+            raise RuntimeError("Guard policy integrity control state is invalid.")
+        self._finalize_policy_integrity_control_state(next_control_state)
 
     def _normalize_compiled_rows(
         self,
@@ -212,9 +291,10 @@ class StorePolicyDocumentMixin:
     ) -> PolicyDocumentImportResult:
         """Write policy rows on a caller-owned connection (already in BEGIN IMMEDIATE).
 
-        The caller is responsible for commit/rollback.  This method is the
-        shared row-write core used by both ``import_policy_document`` and
-        ``apply_policy_creation_request``.
+        The caller is responsible for commit/rollback. Only the business
+        source import uses it, because its source swap shares the request's
+        transaction; local imports go through the resident's
+        ``import_policy_rows``.
         """
         next_control_state: dict[str, object] | None = None
         inserted_ids: set[int] = set()
@@ -316,7 +396,7 @@ class StorePolicyDocumentMixin:
             replaced=replaced,
         )
 
-    def apply_policy_creation_request(
+    def policy_creation_import_args(
         self,
         document: GuardPolicyDocument,
         compiled_rows: tuple[CompiledPolicyRow, ...],
@@ -324,13 +404,12 @@ class StorePolicyDocumentMixin:
         mode: PolicyImportMode,
         now: str,
         approval_gate_grant: ApprovalGateGrant | None,
-        connection: sqlite3.Connection,
-    ) -> PolicyDocumentImportResult:
-        """Apply policy rows on a caller-owned transaction (BEGIN IMMEDIATE).
+    ) -> dict[str, object]:
+        """The import arguments for an approved MCP policy creation request.
 
-        Used by the MCP policy creation path so that policy row writes and
-        the pending-request status transition commit atomically in one
-        shared transaction.  The caller owns commit/rollback.
+        The resident's ``apply_mcp_policy_request`` writes these rows and
+        moves the request to applied in one transaction. The caller holds the
+        command-control authority lock.
         """
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
@@ -349,21 +428,6 @@ class StorePolicyDocumentMixin:
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
+        refuse_legacy_import_over_business_source(cast("GuardStore", self))
         digest = policy_document_digest(document)
-        secret_material = self._policy_integrity_secret_material(create=True)
-        from .native_command_control_authority_io import hold_command_control_authority_lock
-
-        # Direct transaction callers cannot wait on a lease held by another
-        # owner waiting for this SQLite writer. Refuse immediately and rollback.
-        with hold_command_control_authority_lock(self.guard_home, timeout_seconds=0):
-            refuse_legacy_import_over_business_source(cast("GuardStore", self))
-            return self._import_policy_rows_on_connection(
-                connection,
-                document=document,
-                compiled_rows=compiled_rows,
-                normalized_rows=normalized_rows,
-                mode=mode,
-                now=now,
-                digest=digest,
-                secret_material=secret_material,
-            )
+        return self.policy_import_args(document, normalized_rows, mode=mode, now=now, digest=digest)

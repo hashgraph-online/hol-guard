@@ -251,9 +251,11 @@ fn a_list_of_brace_groups_is_read_as_the_lists_inside_them() {
                 format!("{{ cd {api} && cat $(echo one.txt); }} && cat {web}/two.txt"),
                 false,
             ),
-            // A single `|` or `&` after the group keeps the stage or the
-            // child the blanked text no longer has.
-            (format!("{{ cd {api} && cat one.txt; }} | cat"), false),
+            // A text filter after the group only reshapes what the list
+            // prints, so the list decides it. A stage that runs what it reads,
+            // or a `&` child, is something the blanked text no longer has.
+            (format!("{{ cd {api} && cat one.txt; }} | cat"), true),
+            (format!("{{ cd {api} && cat one.txt; }} | sh"), false),
             (
                 format!("{{ cd {api} && cat one.txt; }} & cat {web}/two.txt"),
                 false,

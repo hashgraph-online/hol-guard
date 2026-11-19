@@ -172,6 +172,14 @@ def is_file_like(relative: str) -> bool:
 PROBES_FOR_ABSENCE = frozenset(
     {
         "gauntlet-ls-missing-git-leaf-plain-dir",
+        # A build folder probed before the first build.
+        "ls-missing-build-folder-by-full-path",
+        "ls-missing-build-folder-in-sibling-checkout",
+        # Probes for an unfinished operation in a linked worktree: the lock
+        # and merge files are absent, and that absence is the whole answer.
+        "ls-linked-worktree-git-operation-state",
+        "test-linked-worktree-merge-head-in-admin-dir",
+        "check-linked-worktree-for-unfinished-merge",
         # These two measure the feature worktree's ``node_modules``, and the
         # session they were mined from had one. The fixture cannot give them
         # one yet: three other cases link the main checkout's tree in at that
@@ -191,6 +199,9 @@ PROBES_FOR_ABSENCE = frozenset(
         "gauntlet-ls-stage-missing-hidden-tmp",
         "gauntlet-ls-stage-missing-hidden-leaf",
         "observed-ls-06",
+        # A fallback listing of a build file that is not there, before a cd into the repository.
+        "or-fallback-prefix-then-cd-git-check-ignore",
+        "or-fallback-prefix-then-cd-git-status",
         # A sibling checkout that keeps no workflows, probed for them.
         "sibling-ls-missing-github-workflows",
         "sibling-find-missing-github-workflows",
@@ -204,6 +215,8 @@ PROBES_FOR_ABSENCE = frozenset(
         # whole case, since an absent name under the workspace is what the
         # missing-read screen admits without a review.
         "cat-missing-name-inside-the-worktree",
+        # A missing launch config probed inside a sibling repository's hidden editor folder.
+        "ls-absent-file-in-sibling-repo-hidden-folder",
         # A recursive read whose root is not there: the walk opens nothing,
         # which is exactly the shape these cases measure. Building the root
         # would turn them into ordinary recursive reads of a populated tree,

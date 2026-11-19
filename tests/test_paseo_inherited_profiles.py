@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.paseo import PaseoHarnessAdapter
-from codex_plugin_scanner.guard.adapters.paseo_config import paseo_providers
-from codex_plugin_scanner.guard.adapters.paseo_install import receipt_path
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_setup_plan
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.paseo_test_support import paseo_providers, receipt_path
 from tests.test_paseo_adapter import configure, statuses
 from tests.test_paseo_adapter import context as context
 
@@ -40,7 +40,7 @@ def test_inherited_provider_overrides_cannot_claim_native_protection(
     assert providers["pi-work"].enabled is True
     assert providers["pi-work"].unsupported_reason
     with pytest.raises(ValueError, match="No supported, enabled"):
-        PaseoHarnessAdapter().install(context)
+        harness_support.install("paseo", context)
     assert not receipt_path(context).exists()
 
 
@@ -53,7 +53,7 @@ def test_inherited_credentials_preserve_profile_support_without_entering_receipt
             "pi-work": {"extends": "pi", "label": "Work", "env": {"API_BASE_URL": "https://models.test"}},
         },
     )
-    manifest = PaseoHarnessAdapter().install(context)
+    manifest = harness_support.install("paseo", context)
     assert statuses(manifest)["pi-work"] == "native-hooks-installed"
     assert "private-base-credential" not in json.dumps(manifest)
 
@@ -71,12 +71,11 @@ def test_disconnect_plan_warns_that_native_protection_remains(context: HarnessCo
 def test_reinstall_repairs_deleted_native_artifacts(context: HarnessContext, artifact: str) -> None:
     """Reinstall rebuilds drifted native settings/extensions and publishes fresh proofs."""
     configure(context, {"pi": {"enabled": True}})
-    adapter = PaseoHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("paseo", context)
     target = context.home_dir / ".pi/agent" / artifact
     target.unlink()
-    assert adapter.diagnostics(context)["setup_status"] == "broken"
-    repaired = adapter.install(context)
+    assert harness_ops.diagnostics("paseo", context)["setup_status"] == "broken"
+    repaired = harness_support.install("paseo", context)
     assert target.is_file()
     assert statuses(repaired)["pi"] == "native-hooks-installed"
-    assert adapter.diagnostics(context)["setup_status"] == "active"
+    assert harness_ops.diagnostics("paseo", context)["setup_status"] == "active"

@@ -72,6 +72,7 @@ pub(in super::super) fn add_tests(
     earlier: &[Span],
     budget: Duration,
     context_on: impl Fn() -> bool,
+    shown: &mut Vec<String>,
 ) {
     let Some(Changed { names, .. }) = changed else {
         return;
@@ -90,9 +91,7 @@ pub(in super::super) fn add_tests(
     if !context_on() {
         return;
     }
-    if let Some(session) = session {
-        seen::remember(session, &tests.shown);
-    }
+    seen::keep(session, &tests.shown, shown);
     add_context(response, &tests.text);
 }
 

@@ -1,0 +1,70 @@
+{
+  "click": {
+    "url": "https://github.com/pallets/click.git",
+    "tag": "8.1.8",
+    "deps": [],
+    "src": "src/click",
+    "tests": "tests"
+  },
+  "boltons": {
+    "url": "https://github.com/mahmoud/boltons.git",
+    "tag": "25.0.0",
+    "deps": [],
+    "src": "boltons",
+    "tests": "tests"
+  },
+  "toolz": {
+    "url": "https://github.com/pytoolz/toolz.git",
+    "tag": "1.0.0",
+    "deps": [],
+    "src": "toolz",
+    "tests": "toolz/tests"
+  },
+  "moreit": {
+    "url": "https://github.com/more-itertools/more-itertools.git",
+    "tag": "v10.5.0",
+    "deps": [],
+    "src": "more_itertools",
+    "tests": "tests"
+  },
+  "jinja": {
+    "url": "https://github.com/pallets/jinja.git",
+    "tag": "3.1.4",
+    "deps": [
+      "markupsafe==3.0.2"
+    ],
+    "src": "src/jinja2",
+    "tests": "tests"
+  },
+  "pluggy": {
+    "url": "https://github.com/pytest-dev/pluggy.git",
+    "tag": "1.5.0",
+    "deps": [],
+    "src": "src/pluggy",
+    "tests": "testing"
+  },
+  "cachetools": {
+    "url": "https://github.com/tkem/cachetools.git",
+    "tag": "v5.5.0",
+    "deps": [],
+    "src": "src/cachetools",
+    "tests": "tests",
+    "heldout": true
+  },
+  "tomli": {
+    "url": "https://github.com/hukkin/tomli.git",
+    "tag": "2.2.1",
+    "deps": [],
+    "src": "src/tomli",
+    "tests": "tests",
+    "heldout": true
+  },
+  "sortedcontainers": {
+    "url": "https://github.com/grantjenks/python-sortedcontainers.git",
+    "tag": "v2.4.0",
+    "deps": [],
+    "src": "sortedcontainers",
+    "tests": "tests",
+    "heldout": true
+  }
+}

@@ -19,6 +19,8 @@ import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
+from .host_shims import without_package_shims
+
 WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
 # The same install, launched the way a Node project's own scripts name it: the
 # installed entry point relative to the workspace root rather than through
@@ -159,6 +161,10 @@ WORKSPACE_RUNNER_CASES = frozenset(
 # The same installed build, launched through the Bun the installer leaves in the
 # caller's home, spelled by the path its install instructions print.
 HOME_BUN_ENTRY_CASE = "omp-native-shell-home-spelled-bun-entry"
+# The same call with Oh My Pi's `cwd` argument naming the project, which Guard's
+# sink settles before it projects the home-spelled launcher.
+HOME_BUN_ENTRY_CWD_CASE = "omp-native-shell-home-spelled-bun-entry-with-cwd"
+HOME_BUN_ENTRY_CASES = frozenset({HOME_BUN_ENTRY_CASE, HOME_BUN_ENTRY_CWD_CASE})
 # Where Bun's own installer puts it, and the path its instructions tell you to run.
 _BUN_BIN = ".bun/bin"
 # Where nvm, the way most developers install Node, keeps each release.
@@ -911,12 +917,10 @@ def home_bun_bin(home: Path) -> Path | None:
 def _host_bun() -> str | None:
     """The host's Bun, skipping a Guard package shim that stands in front of it.
 
-    A shim is a script that hands the launch to Guard's own runtime, so a copy
-    of it would plant Guard's launcher, not Bun, where the case runs Bun.
+    A copy of a shim would plant Guard's launcher, not Bun, where the case
+    runs Bun.
     """
-    entries = os.environ.get("PATH", "").split(os.pathsep)
-    search = [entry for entry in entries if Path(entry).parts[-2:] != ("package-shims", "bin")]
-    return shutil.which("bun", path=os.pathsep.join(search))
+    return shutil.which("bun", path=without_package_shims(os.environ.get("PATH", "")))
 
 
 def add_home_bun_runtime(home: Path, scenario_id: str | None) -> None:
@@ -926,7 +930,7 @@ def add_home_bun_runtime(home: Path, scenario_id: str | None) -> None:
     ``~/.bun/bin/bun``. The host's binary is copied rather than linked, so
     nothing the fixture does can reach the file the host runs.
     """
-    if scenario_id != HOME_BUN_ENTRY_CASE:
+    if scenario_id not in HOME_BUN_ENTRY_CASES:
         return
     located = _host_bun()
     if located is None:

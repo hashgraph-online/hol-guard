@@ -50,14 +50,25 @@ pub(super) fn exact_safe_command(
     ) else {
         return false;
     };
-    let Some(repository) = routed_directory(leading, &probe.cwd)
-        .filter(|directory| fs::symlink_metadata(directory.join(".git")).is_ok_and(|m| m.is_dir()))
-    else {
+    let Some(repository) = routed_directory(leading, &probe.cwd) else {
         return false;
     };
+    let main_checkout = fs::symlink_metadata(repository.join(".git")).is_ok_and(|m| m.is_dir());
     match maintenance {
-        Maintenance::Prune => true,
+        // Pruning drops the administrative record of a worktree whose
+        // directory has already gone; it opens no checkout and removes no
+        // file. Git does that work from a linked worktree exactly as from the
+        // main checkout, and a linked worktree marks itself with a `.git` file
+        // naming the administrative directory it shares rather than a `.git`
+        // directory of its own. Reading the marker as a directory alone left
+        // every agent that tidies up from inside the worktree it just finished
+        // with -- the usual place to do it -- asking about a command that
+        // cannot touch a file.
+        Maintenance::Prune => main_checkout || super::git_routes::linked_worktree(&repository),
         Maintenance::Remove(target) => {
+            if !main_checkout {
+                return false;
+            }
             let placed = repository.join(target);
             if absent(&placed) {
                 // Nothing stands at the named path, so the removal takes away no

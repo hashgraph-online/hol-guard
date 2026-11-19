@@ -21,6 +21,35 @@ pub(super) struct IgnoreRule {
     anchored: bool,
 }
 
+impl IgnoreRule {
+    /// Whether the rule re-includes what an earlier rule hid.
+    pub(super) fn negated(&self) -> bool {
+        self.negated
+    }
+
+    /// Whether the rule matches a path below its base rather than a name.
+    pub(super) fn anchored(&self) -> bool {
+        self.anchored
+    }
+
+    /// Whether the rule matches `path` below any directory above it, for a
+    /// rule whose base is not known. A pattern that fails to compile counts
+    /// as a match.
+    pub(super) fn matches_below_any_base(&self, path: &str, is_directory: bool) -> bool {
+        if self.directory_only && !is_directory {
+            return false;
+        }
+        let mut rest = path;
+        while let Some((_, tail)) = rest.split_once('/') {
+            if !tail.is_empty() && glob_matches(&self.pattern, tail).unwrap_or(true) {
+                return true;
+            }
+            rest = tail;
+        }
+        false
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ScopeUnproven;
 

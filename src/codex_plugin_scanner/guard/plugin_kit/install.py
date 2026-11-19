@@ -47,7 +47,6 @@ SPEC_URL = "https://hol.org/api/guard/plugins/install-spec"
 #: test listings. https anywhere; plain http only on this machine or the
 #: Docker host. Listing pages must then live on the same origin.
 SPEC_URL_ENV = "HOL_GUARD_PLUGIN_SPEC_URL"
-VIA_GUARD = "hol-guard"
 #: The only programs a plan may start. Each is the runtime's own CLI.
 PROGRAMS = ("claude", "codex", "npx")
 #: The newest install-spec version this Guard reads; HOL answers in it or older.
@@ -377,22 +376,6 @@ def record(
         kit_request(request)
     except PluginKitNativeError as error:
         raise PluginInstallError(str(error)) from error
-
-
-def mark_guard_installs(report: Mapping[str, Any], guard_home: Path) -> dict[str, Any]:
-    """Tag report entries for listings ``plugin install --apply`` installed."""
-
-    ledger = recorded_installs(guard_home)
-    marked = dict(report)
-    entries = report.get("entries")
-    if isinstance(entries, list):
-        marked["entries"] = [
-            {**entry, "via": VIA_GUARD}
-            if isinstance(entry, dict) and entry.get("runtime") in ledger.get(str(entry.get("slug")), [])
-            else entry
-            for entry in entries
-        ]
-    return marked
 
 
 def _shown(argv: Sequence[str]) -> str:

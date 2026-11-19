@@ -23,12 +23,12 @@ import sys
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import copilot, cursor_hook_config
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+
 from codex_plugin_scanner.guard.mdm import runtime_request
 
 GUARD_HOME = Path("/nonexistent-guard/home")
 INTERPRETER = "/nonexistent-guard/bin/python3"
-SCRIPT = str(bounded_hook_script_path(GUARD_HOME, "copilot"))
+SCRIPT = str(GUARD_HOME / "managed" / "bounded-hooks" / "copilot.py")
 CONFIG = '{"harness":"copilot","cli_args":["guard","hook","--harness","copilot"]}'
 CLAUDE_CONFIG = '{"harness":"claude-code","cli_args":["guard","hook","--harness","claude-code"]}'
 

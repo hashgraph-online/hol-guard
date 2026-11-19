@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import final
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.agent_safety_guidance import (
     install_agent_safety_guidance,
     uninstall_agent_safety_guidance,
 )
 from codex_plugin_scanner.guard.cli import install_commands
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -289,18 +288,6 @@ def test_successful_harness_install_attaches_agent_safety_guidance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    @final
-    class FakeAdapter:
-        harness = "codex"
-
-        @staticmethod
-        def install(_context: HarnessContext) -> dict[str, object]:
-            return {"config_path": "~/.codex/config.toml"}
-
-        @staticmethod
-        def uninstall(_context: HarnessContext) -> dict[str, object]:
-            return {"removed": True}
-
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -309,11 +296,6 @@ def test_successful_harness_install_attaches_agent_safety_guidance(
         workspace_dir=workspace_dir,
         guard_home=tmp_path / "guard-home",
     )
-
-    def fake_get_adapter(_harness: str) -> FakeAdapter:
-        return FakeAdapter()
-
-    monkeypatch.setattr(install_commands, "get_adapter", fake_get_adapter)
 
     payload = install_commands.apply_managed_install(
         "install",
@@ -356,23 +338,10 @@ def test_cli_install_fails_visibly_when_guidance_cannot_be_installed(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    @final
-    class FakeAdapter:
-        harness = "opencode"
-
-        @staticmethod
-        def install(_context: HarnessContext) -> dict[str, object]:
-            return {"config_path": "~/.config/opencode/config.json"}
-
     home_dir = tmp_path / "home"
     safety_path = home_dir / ".hol-support" / "SAFETY.md"
     safety_path.parent.mkdir(parents=True)
     _ = safety_path.write_text("unmanaged\n", encoding="utf-8")
-
-    def fake_get_adapter(_harness: str) -> FakeAdapter:
-        return FakeAdapter()
-
-    monkeypatch.setattr(install_commands, "get_adapter", fake_get_adapter)
 
     return_code = main(
         [
@@ -395,14 +364,6 @@ def test_uninstall_retains_guidance_while_another_harness_is_active(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    @final
-    class FakeAdapter:
-        harness = "codex"
-
-        @staticmethod
-        def uninstall(_context: HarnessContext) -> dict[str, object]:
-            return {"removed": True}
-
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
@@ -410,11 +371,6 @@ def test_uninstall_retains_guidance_while_another_harness_is_active(
     store.set_managed_install("codex", True, None, {}, "2026-07-28T00:00:00Z")
     store.set_managed_install("pi", True, None, {}, "2026-07-28T00:00:00Z")
     _ = install_agent_safety_guidance(home_dir)
-
-    def fake_get_adapter(_harness: str) -> FakeAdapter:
-        return FakeAdapter()
-
-    monkeypatch.setattr(install_commands, "get_adapter", fake_get_adapter)
 
     payload = install_commands.apply_managed_install(
         "uninstall",

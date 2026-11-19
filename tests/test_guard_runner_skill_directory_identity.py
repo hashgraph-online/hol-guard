@@ -8,9 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
@@ -50,7 +50,7 @@ def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
     def detect(_harness: str, _context: HarnessContext):
         nonlocal detect_count
         detect_count += 1
-        return GeminiHarnessAdapter().detect(context)
+        return harness_ops.detect("gemini", context)
 
     def allow_once(_detection, evaluation: dict[str, object]) -> dict[str, object]:
         items = evaluation.get("artifacts")

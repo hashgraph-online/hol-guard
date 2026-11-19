@@ -357,3 +357,32 @@ fn reading_stops_at_the_deadline() {
     );
     assert!(parts.is_empty() && names.is_empty());
 }
+
+/// CIGAR turned off for one app on the Protect screen leaves that app's
+/// prompts alone while other apps keep project context.
+#[test]
+fn an_app_with_cigar_off_gets_no_project_context() {
+    let on = fixture(ON);
+    assert!(project_context_on(on.home.path(), &on.root, "codex"));
+    let off = fixture(&format!("{ON}[harness_cigar]\ncodex = \"off\"\n"));
+    assert!(!project_context_on(off.home.path(), &off.root, "codex"));
+    assert!(project_context_on(
+        off.home.path(),
+        &off.root,
+        "claude-code"
+    ));
+}
+
+/// A docstring mark opens a docstring only outside a one-line string: the
+/// line `"'''",` holds a string, and a docstring that opens and closes on
+/// one line, or a string after it, leaves nothing open.
+#[test]
+fn a_docstring_mark_inside_a_string_opens_nothing() {
+    assert_eq!(opened("    \"'''\","), None);
+    assert_eq!(opened("    delim = '\"'"), None);
+    assert_eq!(opened("    x = \"a\\\"'''\""), None);
+    assert_eq!(opened("    \"\"\"Doc.\"\"\""), None);
+    assert_eq!(opened("    \"\"\"Don't"), Some("\"\"\""));
+    assert_eq!(opened("    x = '''"), Some("'''"));
+    assert_eq!(opened("/* start"), Some("*/"));
+}

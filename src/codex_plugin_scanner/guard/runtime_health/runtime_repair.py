@@ -2,22 +2,50 @@
 
 from __future__ import annotations
 
+import time
+from contextlib import ExitStack
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
-from ..cursor_hook_rebind import rebind_stale_cursor_hooks
+from ..cursor_hook_ops import rebind_stale_cursor_hooks
 from ..native_daemon_manage import (
+    GuardDaemonStartLockTimeoutError,
     _guard_daemon_state_matches_current_runtime,
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
+    record_daemon_repair,
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
 from ..native_daemon_manage import guard_daemon_start_lock as _guard_daemon_start_lock
 from ..native_daemon_peer import verified_live_guard_daemon_identity
+
+# A start or another repair holds the lock for as long as a daemon takes to
+# come up, which a migration can stretch to most of a minute. Waiting past
+# that never helps: the holder is wedged, and the caller needs to know.
+REPAIR_LOCK_TIMEOUT_SECONDS = 90.0
+
+
+class DaemonRepairBusyError(RuntimeError):
+    """Another process held the daemon start lock for the whole repair wait.
+
+    ``reason_code`` and ``recovery`` are what ``hol-guard daemon repair`` prints
+    so the caller sees a bounded, actionable state instead of a hung command.
+    """
+
+    reason_code = "daemon_repair_busy"
+
+    def __init__(self, waited_seconds: float) -> None:
+        self.waited_seconds = round(waited_seconds, 1)
+        self.recovery = (
+            "Another Guard process is starting or repairing the daemon. Run `hol-guard daemon status` "
+            "to see whether it came up, wait for that process to finish, then run `hol-guard daemon repair` "
+            "again. Existing approvals, audit records, policies and credentials are untouched."
+        )
+        super().__init__(f"Guard daemon repair waited {self.waited_seconds}s for the daemon start lock.")
 
 
 def _verified_live_runtime(
@@ -77,13 +105,25 @@ def repair_guard_daemon_runtime(
     guard_home: Path,
     *,
     home_dir: Path | None = None,
+    lock_timeout_seconds: float | None = REPAIR_LOCK_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
-    """Repair discovery state and replace an authenticated older runtime."""
+    """Repair discovery state and replace an authenticated older runtime.
+
+    Raises ``DaemonRepairBusyError`` when another process keeps the daemon
+    start lock for ``lock_timeout_seconds``; ``None`` waits without a limit.
+    """
 
     trusted_home = (home_dir or Path.home()).expanduser().resolve(strict=True)
     if not trusted_home.is_dir():
         raise RuntimeError("Guard daemon requires a user home directory.")
-    with _guard_daemon_start_lock(guard_home):
+    record_daemon_repair(guard_home)
+    started = time.monotonic()
+    deadline = None if lock_timeout_seconds is None else started + max(lock_timeout_seconds, 0.0)
+    with ExitStack() as held:
+        try:
+            held.enter_context(_guard_daemon_start_lock(guard_home, deadline=deadline))
+        except GuardDaemonStartLockTimeoutError as error:
+            raise DaemonRepairBusyError(time.monotonic() - started) from error
         result = repair_approval_center_locator(guard_home)
         identity = verified_live_guard_daemon_identity(guard_home)
         verified_runtime = _verified_live_runtime(identity) if identity is not None else None
@@ -122,4 +162,4 @@ def repair_guard_daemon_runtime(
     }
 
 
-__all__ = ["repair_guard_daemon_runtime"]
+__all__ = ["REPAIR_LOCK_TIMEOUT_SECONDS", "DaemonRepairBusyError", "repair_guard_daemon_runtime"]

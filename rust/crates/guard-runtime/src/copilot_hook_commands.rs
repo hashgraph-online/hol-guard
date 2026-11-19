@@ -102,6 +102,11 @@ pub(crate) fn is_managed(command: &str, bridge: Option<(&str, &str)>) -> bool {
     let Some(mut tokens) = shlex_split(command) else {
         return false;
     };
+    if let [runtime, command, config] = tokens.as_slice() {
+        if !runtime.is_empty() && command == NATIVE_BOUNDED_HOOK_COMMAND {
+            return config_targets_copilot(config);
+        }
+    }
     if tokens.len() > 2 && !tokens[0].is_empty() && tokens[1] == NATIVE_BOUNDED_HOOK_COMMAND {
         tokens = tokens.split_off(2);
     }

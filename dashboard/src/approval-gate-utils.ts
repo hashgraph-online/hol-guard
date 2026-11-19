@@ -4,6 +4,8 @@ export type BulkGateCredentials = {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  /** Ask the YID app instead: Pulse replaces the password and the code. */
+  approval_gate_pulse?: boolean;
 };
 
 export function approvalGateLockRemainingSeconds(

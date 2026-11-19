@@ -149,3 +149,55 @@ def _write_authenticated_daemon_files(guard_home: Path, port: int) -> None:
     _DaemonHandler.response_body = b"{}"
     _DaemonHandler.challenge_mode = "valid"
     _DaemonHandler.challenge_count = 0
+
+
+def signed_native_bridge_argv(runtime: Path, guard_home: Path, registered: dict[str, object]) -> tuple[str, ...]:
+    """The bridge argv a real install registers, with the signed manifest it authenticates.
+
+    The native bridge runs nothing until the registration matches a manifest
+    signed with this home's key, so a test that runs the bridge directly
+    records one the way the installer does.
+    """
+    from datetime import datetime, timezone
+
+    from codex_plugin_scanner.guard.codex_hook_file_integrity import (
+        describe_executable_file,
+        describe_regular_file,
+    )
+    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_bytes
+    from tests.codex_hook_integrity_fixtures import load_or_create_hook_secret, sign_hook_manifest
+    from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_manifest_path
+
+    def canonical_path(path):
+        return str(Path(path).expanduser().resolve(strict=False))
+
+    config_target = guard_home.parent / ".codex" / "config.toml"
+    config_target.parent.mkdir(parents=True, exist_ok=True)
+    config_target.touch()
+    manifest_path = hook_manifest_path(guard_home, config_target)
+    config = dict(registered)
+    config["manifest_path"] = str(manifest_path)
+    config_argument = json.dumps(config, separators=(",", ":"))
+    argv = (str(runtime), "codex-hook-bridge", config_argument)
+    secret = load_or_create_hook_secret(guard_home)
+    interpreter = describe_executable_file(Path(sys.executable), role="interpreter")
+    unsigned: dict[str, object] = {
+        "schema_version": 2,
+        "harness": "codex",
+        "installation_id": secret.installation_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "context": {"runtime_guard_home": canonical_path(guard_home)},
+        "config": {"scope": "global", "target": canonical_path(config_target)},
+        "interpreter": interpreter,
+        "packaged_files": [describe_regular_file(runtime, role="bridge", executable_required=True)],
+        "events": [{"argv": list(argv)}],
+        "fallback": {"argv": list(config["fallback_command"]), "interpreter": interpreter},
+        "daemon_start": {"argv": list(config["start_command"]), "interpreter": interpreter},
+    }
+    atomic_write_bytes(
+        manifest_path,
+        canonical_manifest_bytes(sign_hook_manifest(unsigned, secret)),
+        mode=0o600,
+        private=True,
+    )
+    return argv

@@ -17,15 +17,15 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guard_hook_payload_module
-from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
+from tests.codex_toml_support import read_toml_payload
 from tests.conftest import guard_commands_module
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode", "native_prompt_runtime")
@@ -91,8 +91,8 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
-    CodexHarnessAdapter._write_authenticated_hook_config(
+    publication_helpers.install_config_hooks(payload, context, config_path=config_path)
+    publication_helpers.write_authenticated_hook_config(
         context,
         config_path=config_path,
         payload=payload,

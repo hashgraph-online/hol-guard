@@ -150,16 +150,56 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         );
         return Ok(cli_payload(CliOutcome::Document(document)));
     }
+    if request.kind == "binding_recording_only" {
+        // Whether an acknowledged binding records instead of stopping is the
+        // resident's reading of the posture map and the snapshot mode; the
+        // daemon asks it before it acts on the binding.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let binding = params.get("binding");
+        let harness = params.get("harness").unwrap_or(&Value::Null);
+        let mut document = Object::new();
+        document.insert(
+            "value".into(),
+            Value::Bool(crate::hook_render_posture::recording_only_for_binding(
+                binding, harness,
+            )),
+        );
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
     if request.kind == "cursor_shell_route" {
         // Whether Cursor's probe moves into the sandbox, and whether a shell
         // call is the sink command a probe wrote, is the resident's reading
         // on the daemon path as on the direct lane.
+        //
+        // The daemon also asks which route a call takes before its edge
+        // reviews it (`route`), and what a reviewed probe is answered
+        // (`probe_response`), and whether a probe is reviewed at all
+        // (`probe_gate`).
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let value = match params.get("op").and_then(Value::as_str) {
+            None => crate::hook_direct::cursor::daemon_answer(params)?.unwrap_or(Value::Null),
+            Some("route") => {
+                let payload =
+                    object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+                json!(crate::hook_direct::cursor_route::route_name(payload))
+            }
+            Some("probe_gate") => {
+                let has_workspace = params
+                    .get("has_workspace")
+                    .and_then(Value::as_bool)
+                    .ok_or("native_hook_render_invalid")?;
+                Value::Bool(crate::hook_render_posture::cursor_probe_reviews(
+                    params.get("snapshot"),
+                    has_workspace,
+                ))
+            }
+            Some("probe_response") => {
+                crate::hook_direct::cursor_route::probe_response(params.get("edge"))
+            }
+            Some(_) => return Err("native_hook_render_invalid"),
+        };
         let mut document = Object::new();
-        document.insert(
-            "value".into(),
-            crate::hook_direct::cursor::daemon_answer(params)?.unwrap_or(Value::Null),
-        );
+        document.insert("value".into(), value);
         return Ok(cli_payload(CliOutcome::Document(document)));
     }
     if request.kind == "hermes_bridge" {

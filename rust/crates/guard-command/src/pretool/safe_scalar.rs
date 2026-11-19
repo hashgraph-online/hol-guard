@@ -169,6 +169,15 @@ fn process_id_list(value: &str) -> bool {
             .all(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
+/// `launchctl list` with no label prints the service table: each job's label,
+/// its last exit status and its pid, the same process view `ps` already
+/// proves. A label operand prints that one job's whole definition, including
+/// its `EnvironmentVariables`, and every other subcommand loads, starts,
+/// stops or reconfigures a job, so only the bare listing proves safe.
+pub(super) fn safe_launchctl_arguments(arguments: &[String]) -> bool {
+    matches!(arguments, [subcommand] if subcommand == "list")
+}
+
 /// `ps` lists processes and their arguments, the same view `pgrep -f`
 /// already exposes. Environment display (BSD `e`, and `-e`/`-E` on macOS)
 /// stays out because it prints other processes' variables.
@@ -182,12 +191,25 @@ pub(super) fn safe_ps_arguments(arguments: &[String]) -> bool {
             continue;
         }
         let Some(flags) = argument.strip_prefix('-') else {
-            if argument.is_empty()
-                || !argument
-                    .bytes()
-                    .all(|flag| matches!(flag, b'a' | b'u' | b'x' | b'w' | b'j' | b'l' | b'c'))
-            {
+            if argument.is_empty() {
                 return false;
+            }
+            // BSD style takes `o`/`O` inside the cluster, with the column list
+            // glued on or in the next word: `ps axo pid,command`.
+            for (index, flag) in argument.char_indices() {
+                match flag {
+                    'a' | 'u' | 'x' | 'w' | 'j' | 'l' | 'c' => {}
+                    'o' | 'O' => {
+                        let rest = &argument[index + 1..];
+                        if rest.is_empty() {
+                            expect_value = Some(flag);
+                        } else if !ps_option_value(flag, rest) {
+                            return false;
+                        }
+                        break;
+                    }
+                    _ => return false,
+                }
             }
             continue;
         };
@@ -326,54 +348,8 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
 }
 
 #[cfg(test)]
-mod process_listing_tests {
-    fn arguments(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_owned()).collect()
-    }
-
-    #[test]
-    fn pgrep_reads_the_children_of_a_parent_id() {
-        for values in [
-            &["-P", "4120", "-fl", "."][..],
-            &["-P", "4120"],
-            &["-l", "-P4120,4121"],
-            &["-fl", "node"],
-        ] {
-            assert!(
-                super::safe_pgrep_arguments(&arguments(values)),
-                "{values:?}"
-            );
-        }
-        for values in [
-            &["-P"][..],
-            &["-P", "$PID"],
-            &["-P", "4120,"],
-            &["-Pf", "node"],
-            &["-F", "app.pid"],
-            &["-P", "4120", "node", "-l"],
-            &["node", "python"],
-            &[],
-        ] {
-            assert!(
-                !super::safe_pgrep_arguments(&arguments(values)),
-                "{values:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn ps_reads_a_column_width() {
-        assert!(super::safe_ps_arguments(&arguments(&[
-            "-o",
-            "pid,etime,wchan:30,state",
-            "-p",
-            "4120",
-        ])));
-        assert!(!super::safe_ps_arguments(&arguments(&[
-            "-o", "pid;id", "-p", "4120",
-        ])));
-    }
-}
+#[path = "safe_scalar_process_listing_tests.rs"]
+mod process_listing_tests;
 
 #[cfg(test)]
 mod psql_environment_tests {

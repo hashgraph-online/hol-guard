@@ -493,6 +493,8 @@ fn is_tail(body: &str) -> bool {
     !body.is_empty() && is_body(body)
 }
 
+#[path = "secret_detection_encoded_payloads.rs"]
+pub(super) mod payloads;
 #[cfg(test)]
 #[path = "secret_detection_encoded_tests.rs"]
 mod tests;

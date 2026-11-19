@@ -1073,6 +1073,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-swarm"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "guard-runtime-windows-process",
+ "nix",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sysinfo",
+ "tempfile",
+]
+
+[[package]]
 name = "guard-yanez-pulse"
 version = "0.1.0"
 dependencies = [
@@ -1147,6 +1161,7 @@ dependencies = [
  "capctl",
  "caseless",
  "cbc",
+ "fancy-regex 0.19.2",
  "flate2",
  "fs2",
  "getrandom 0.3.4",
@@ -1171,6 +1186,8 @@ dependencies = [
  "guard-scanner",
  "guard-seatbelt",
  "guard-secure-fs",
+ "guard-swarm",
+ "guard-yanez-pulse",
  "hex",
  "hmac",
  "landlock",
@@ -1197,6 +1214,9 @@ dependencies = [
  "tempfile",
  "toml 0.8.23",
  "toml_edit",
+ "tree-sitter",
+ "tree-sitter-language",
+ "tree-sitter-python",
  "unicode-normalization",
  "windows-permissions",
  "zeroize",
@@ -2121,9 +2141,9 @@ checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
 name = "rustix"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
 dependencies = [
  "bitflags 2.13.2",
  "errno",
@@ -2699,6 +2719,16 @@ name = "tree-sitter-language"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
+
+[[package]]
+name = "tree-sitter-python"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bf85fd39652e740bf60f46f4cda9492c3a9ad75880575bf14960f775cb74a1c"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
 
 [[package]]
 name = "typed-path"

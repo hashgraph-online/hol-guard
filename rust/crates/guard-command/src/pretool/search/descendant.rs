@@ -2,9 +2,11 @@
 //!
 //! The walk judges each descendant by its name and metadata alone: it never
 //! opens a file to decide. A hidden entry must be on a short benign list,
-//! because recursion would otherwise reach `.env`, `.ssh` or `.git`. A
-//! credential-named file is refused unless it is source code or test data
-//! below a test-data directory inside the walk.
+//! because recursion would otherwise reach `.env`, `.ssh` or `.git`, or hold
+//! only documents the repository commits (see `committed_hidden`). A
+//! credential-named file is refused unless it is source code, test data
+//! below a test-data directory inside the walk, or a document or raster image
+//! the repository tracks and the tracked-file proof clears.
 use std::path::Path;
 
 /// Hidden names that carry no credentials and are common in source trees.
@@ -36,6 +38,13 @@ pub(in crate::pretool) const SECRET_EXTENSIONS: &[&str] = &[
     "pem", "p12", "pfx", "jks", "keystore", "asc", "gpg", "kdbx", "ppk",
 ];
 
+/// A key or certificate file (`server.pem`) by its extension.
+pub(in crate::pretool) fn key_file_name(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        SECRET_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    })
+}
+
 pub(in crate::pretool::search) fn hidden_allowed(name: &str) -> bool {
     BENIGN_HIDDEN_NAMES.contains(&name.to_ascii_lowercase().as_str())
 }
@@ -61,8 +70,11 @@ pub(in crate::pretool::search) fn descendant_allowed(
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    if (name.starts_with('.') && !hidden_allowed(name) && !package_store_bin(path, name))
-        || guard_secure_fs::sensitive_path_family(path).is_some()
+    if guard_secure_fs::sensitive_path_family(path).is_some()
+        || (name.starts_with('.')
+            && !hidden_allowed(name)
+            && !package_store_bin(path, name)
+            && !super::committed_hidden::committed_hidden(path, is_file))
     {
         return false;
     }
@@ -78,7 +90,8 @@ pub(in crate::pretool::search) fn descendant_allowed(
     !SECRET_EXTENSIONS.contains(&extension.as_str())
         && (!guard_secure_fs::credential_named_path(relative)
             || synthetic_fixture(root, relative)
-            || crate::pretool::search_scope_tracked::names::committed_document(path))
+            || crate::pretool::search_scope_tracked::names::committed_document(path)
+            || crate::pretool::search_scope_tracked::names::committed_image(path))
 }
 
 /// Directories that hold a project's test data.

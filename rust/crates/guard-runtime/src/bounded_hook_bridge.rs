@@ -1,6 +1,6 @@
 //! Native bounded hook bridge: the daemon path of `main_from_argv` in
-//! `adapters/bounded_cli_hook_bridge.py` for Copilot, Kimi, Devin, ZCode and
-//! OpenClaw. Those harnesses run
+//! `adapters/bounded_cli_hook_bridge.py` for Copilot, Kimi, Devin, ZCode,
+//! OpenClaw and Muse. Those harnesses run
 //! `guard-runtime bounded-hook-bridge <python> -I -c <bootstrap> <config>`
 //! once per hook. The native bridge reads the hook within its deadline,
 //! posts it to the loopback Guard daemon with the daemon auth token and
@@ -50,6 +50,8 @@ use daemon::post_hook;
 pub(crate) use daemon::{
     daemon_target, post_hook_reply_missed, transport_deadline, DaemonTarget, PostFailure,
 };
+#[path = "bounded_hook_bridge_muse.rs"]
+mod muse;
 #[path = "bounded_hook_bridge_output.rs"]
 mod output;
 pub(crate) use output::write_stdout;
@@ -57,6 +59,9 @@ use output::{emit, fail};
 
 pub(crate) const BRIDGE_COMMAND: &str = "bounded-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "bounded-hook-bridge-v1";
+/// The bounded bridge also answers Muse. A runtime without it refuses a Muse
+/// config, so an install registers Muse natively only with this feature.
+pub(crate) const MUSE_BRIDGE_FEATURE: &str = "bounded-hook-bridge-muse-v1";
 
 pub(crate) const MAX_HOOK_INPUT_BYTES: usize = 1_000_000;
 const READ_CHUNK: usize = 65_536;
@@ -76,8 +81,8 @@ mod config;
 #[cfg(unix)]
 #[path = "bounded_hook_bridge_successor.rs"]
 mod successor;
-pub(crate) use config::{config_argument, parse_launch_config, BridgeConfig};
-use config::{frozen_launch, positive_seconds};
+pub(crate) use config::{config_argument, parse_launch_config, positive_seconds, BridgeConfig};
+use config::{frozen_launch, refuse_config};
 #[cfg(unix)]
 use successor::successor_route;
 
@@ -112,11 +117,15 @@ impl Prepared {
     ///
     /// `guard_home` is the home this bridge was launched against, which an
     /// authority block names in the recovery command it offers.
+    ///
+    /// Muse waits for the approvals a review names before it renders, so
+    /// its answer is bounded by the hook's `deadline`.
     fn render(
         &self,
         harness: &str,
         answer: &SurrogateMapped,
         guard_home: &Path,
+        deadline: Instant,
     ) -> Option<Rendered> {
         let PyVal::Dict(entries) = &answer.value else {
             return None;
@@ -124,6 +133,17 @@ impl Prepared {
         let unmap = self.mapped || answer.mapped;
         if unmap && (self.collision || answer.collision) {
             return None;
+        }
+        if harness == "muse" {
+            let daemon = daemon_target(guard_home, harness);
+            return Some(muse::muse_answer(
+                entries,
+                &self.event_name,
+                unmap,
+                guard_home,
+                daemon.as_ref(),
+                deadline,
+            ));
         }
         daemon_response_to_native(entries, harness, &self.event_name, unmap, Some(guard_home))
     }
@@ -255,7 +275,8 @@ pub(crate) fn route_hook_from(
                 Some(miss),
             ) {
                 Some(answer) => {
-                    let rendered = prepared.render(&config.harness, &answer, &config.guard_home);
+                    let rendered =
+                        prepared.render(&config.harness, &answer, &config.guard_home, deadline);
                     return answered_route(rendered, &prepared, deadline);
                 }
                 None => Some(target),
@@ -319,7 +340,7 @@ fn restarted_route(
     let Some(answer) = answer else {
         return paused_route(config, &prepared, deadline, budget);
     };
-    let rendered = prepared.render(&config.harness, &answer, &config.guard_home);
+    let rendered = prepared.render(&config.harness, &answer, &config.guard_home, deadline);
     answered_route(rendered, &prepared, deadline)
 }
 
@@ -429,7 +450,7 @@ fn direct_route(
     // never reaches the daemon.
     let rendered = pyjson::parse_mapping_lone_surrogates(&answer)
         .ok()
-        .and_then(|parsed| prepared.render(&config.harness, &parsed, &config.guard_home));
+        .and_then(|parsed| prepared.render(&config.harness, &parsed, &config.guard_home, deadline));
     Ok(answered_route(rendered, prepared, deadline))
 }
 
@@ -437,6 +458,11 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     let started = Instant::now();
     if python_argv.len() == 4 && python_argv[1] == "-I" && python_argv[2] != "-c" {
         return crate::bounded_hook_bridge_grok::run(python_argv, started);
+    }
+    if let Some(argument) = config_argument(python_argv)
+        .filter(|argument| crate::bounded_hook_bridge_grok::names_grok(argument))
+    {
+        return crate::bounded_hook_bridge_grok::run_config(argument, started);
     }
     let frozen = frozen_launch(python_argv);
     let config =
@@ -456,37 +482,6 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     )
 }
 
-/// `main_from_argv` for a config the native bridge does not serve: the
-/// `_emit_failure` answer Python gives a config it refuses. Python fails
-/// one without a usable timeout before reading the hook, and any other
-/// for the event the hook names. No install writes such a config for the
-/// native bridge, so the hook fails closed rather than running Python.
-fn refuse_config(argument: Option<&str>, started: Instant) -> i32 {
-    let payload = argument
-        .and_then(|text| pyjson::parse_mapping_lone_surrogates(text).ok())
-        .map(|parsed| parsed.value)
-        .filter(|value| value.as_dict().is_some());
-    let harness = payload
-        .as_ref()
-        .and_then(|value| value.get("harness")?.as_str().map(str::to_owned))
-        .unwrap_or_else(|| "unknown".to_owned());
-    let deadline = payload
-        .as_ref()
-        .and_then(|value| positive_seconds(value.get("timeout_seconds")))
-        .and_then(|timeout| started.checked_add(timeout));
-    let Some(deadline) = deadline else {
-        return fail(&harness, DEFAULT_EVENT, false);
-    };
-    let Input::Read(raw) = read_hook_input(deadline) else {
-        return fail(&harness, DEFAULT_EVENT, false);
-    };
-    let route = match prepare(&raw) {
-        Ok(prepared) => prepared.failed(),
-        Err(refused) => refused,
-    };
-    emit(&harness, route)
-}
-
 #[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_tests.rs"]
 mod tests;
@@ -494,3 +489,7 @@ mod tests;
 #[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_frozen_tests.rs"]
 mod frozen_tests;
+
+#[cfg(all(test, unix))]
+#[path = "bounded_hook_bridge_muse_tests.rs"]
+mod muse_tests;

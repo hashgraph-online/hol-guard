@@ -11,6 +11,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from .evidence import TRANSCRIPT_LIMIT
+from .host_shims import prepend_path, without_package_shims
 from .workspace_runner_fixtures import home_bun_bin
 
 # Set by a ``--jobs`` case worker so its parent can reap agent sessions that the
@@ -52,6 +53,11 @@ def python_shim(directory: Path, search_path: str) -> str | None:
     developer shell does not resolve ``python3`` to a tool's private interpreter. Link ``python3``
     and ``python`` to the first ``python3`` on PATH outside any virtualenv whose real path lies in a
     root Guard's contained runner trusts; without one, add nothing.
+
+    When the interpreter's own installation already ships an unversioned ``python`` (Homebrew's
+    ``libexec/bin``), return that directory and the interpreter's real one instead of a link
+    directory. A link directory lives under the run's temporary work root, which Guard rightly
+    keeps off the sandbox PATH, so ``python script.py`` would be reviewed for the rig's sake.
     """
     if os.name != "posix":
         return None
@@ -66,6 +72,8 @@ def python_shim(directory: Path, search_path: str) -> str | None:
             and os.access(interpreter, os.X_OK)
             and any(interpreter.resolve().is_relative_to(root) for root in TRUSTED_PYTHON_ROOTS)
         ):
+            if installed := _installed_unversioned_python(interpreter):
+                return installed
             directory.mkdir(mode=0o700, parents=True, exist_ok=True)
             for name in ("python3", "python"):
                 (directory / name).unlink(missing_ok=True)
@@ -74,10 +82,37 @@ def python_shim(directory: Path, search_path: str) -> str | None:
     return None
 
 
+def _installed_unversioned_python(interpreter: Path) -> str | None:
+    """``<prefix>/libexec/bin`` and ``<prefix>/bin`` when the installation ships ``python`` itself.
+
+    Homebrew's ``bin/python3`` links to ``Cellar/python@X/<version>/bin/python3``, which links on
+    into the framework, so each hop of the link chain is checked for a sibling ``libexec/bin``.
+    """
+    hop = Path(os.path.abspath(interpreter))
+    for _ in range(8):
+        unversioned = hop.parent.parent / "libexec" / "bin"
+        python = unversioned / "python"
+        if (
+            python.is_file()
+            and os.access(python, os.X_OK)
+            and any(python.resolve().is_relative_to(root) for root in TRUSTED_PYTHON_ROOTS)
+            and any(hop.parent.resolve().is_relative_to(root) for root in TRUSTED_PYTHON_ROOTS)
+        ):
+            return os.pathsep.join([str(unversioned), str(hop.parent)])
+        if not hop.is_symlink():
+            return None
+        hop = Path(os.path.abspath(hop.parent / os.readlink(hop)))
+    return None
+
+
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
     """The model/host receives no inherited provider, cloud or GitHub credential."""
     environment = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR") if key in os.environ}
-    environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
+    # The SDK's `omp` launcher is `#!/usr/bin/env bun`: a host Guard's Bun shim
+    # would review the agent launch itself, prompt included, before the case
+    # Guard sees anything.
+    host_path = without_package_shims(environment.get("PATH", ""))
+    environment["PATH"] = prepend_path(str(Path(sys.executable).parent), host_path)
     if shim := python_shim(agent_dir.parent / "python-bin", environment["PATH"]):
         environment["PATH"] = shim + os.pathsep + environment["PATH"]
     if os.name == "nt":

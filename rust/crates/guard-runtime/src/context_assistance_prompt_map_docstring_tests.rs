@@ -1,4 +1,4 @@
-use super::docstring::asks_for_docstring;
+use super::docstring::{asks_for_docstring, Asks};
 use super::tests::{files, later, looking_for};
 use super::*;
 use std::path::Path;
@@ -30,7 +30,10 @@ fn mapped_in(path: &str, text: &str, docstring: bool) -> String {
 /// The map of `text` at `path` in a project at `root`.
 fn mapped_at(root: &Path, path: &str, text: &str, docstring: bool) -> String {
     let asked = Asked {
-        docstring,
+        docstring: Asks {
+            any: docstring,
+            examples: docstring,
+        },
         root: root.to_path_buf(),
         ..Asked::default()
     };
@@ -41,8 +44,11 @@ fn mapped_at(root: &Path, path: &str, text: &str, docstring: bool) -> String {
 }
 
 const RUN: &str = "\nRun just its doctest with `python -m pytest -q --doctest-modules ";
-const CHECK: &str = "That run is the check an added example needs, and the edit's own reply \
-confirms the edit, so the file need not be read again.";
+const CHECK: &str =
+    "If an example you added fails, write the value it prints under `Got:` into that example \
+and run it again: it stops at the first failure. A memory address such as `0x7f3a` in that \
+value changes every run, so show a value without one. A passing run is the check an added example \
+needs, and the edit's own reply confirms the edit, so the file need not be read again.";
 
 #[test]
 fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {
@@ -51,6 +57,98 @@ fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {
     assert!(asks_for_docstring("make the doctests pass"));
     assert!(!asks_for_docstring("Update the docs for remap"));
     assert!(!asks_for_docstring("document remap"));
+    assert!(asks_for_docstring(
+        "Add a usage example to remap's docstring"
+    ));
+    assert!(asks_for_docstring("put a little >>> line in remap"));
+    // An example names no docstring by itself.
+    assert!(!asks_for_docstring(
+        "Fix remap, for example when root is empty"
+    ));
+    assert!(!asks_for_docstring("Fix remap in example.py"));
+    assert!(!asks_for_docstring("update the examples folder"));
+    // A prompt that reads a docstring for what to build asks for the code.
+    assert!(!asks_for_docstring(
+        "remap was stubbed out. Implement it again so it does what its docstring says."
+    ));
+    assert!(!asks_for_docstring(
+        "Write the implementation; the docstring and tests describe the expected behavior."
+    ));
+}
+
+/// A docstring with no example has no doctest to run: named one for a stub
+/// ("the tests and docstring say what it should do"), agents ran the
+/// command, read "not found" and tried others. A nested helper's example is
+/// not the function's doctest.
+#[test]
+fn a_docstring_without_an_example_gets_no_doctest_command() {
+    assert!(asks_for_docstring(
+        "Write a docstring to explain what remap returns"
+    ));
+    assert!(asks_for_docstring(
+        "Add a docstring that explains remap's behavior"
+    ));
+    let plain = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n    raise NotImplementedError\n";
+    let shown_with = |asks: Asks, text: &str| {
+        let asked = Asked {
+            docstring: asks,
+            ..Asked::default()
+        };
+        let list = files(&[("src/iterutils.py", text)]);
+        let terms = looking_for(&[("remap", true, 1)]);
+        map(&list, &terms, &asked, later()).unwrap().text
+    };
+    let docstring = Asks {
+        any: true,
+        examples: false,
+    };
+    let shown = shown_with(docstring, plain);
+    assert!(!shown.contains("--doctest-modules"), "{shown}");
+    assert!(!shown.contains("not a raw string"), "{shown}");
+    let example =
+        "def remap(root):\n    \"\"\"Remap it.\n\n    >>> remap(1)\n    1\n    \"\"\"\n    \
+raise NotImplementedError\n";
+    let nested = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n\n    def visit(x):\n        \
+\"\"\"Visit.\n\n        >>> visit(1)\n        1\n        \"\"\"\n        return x\n\n    \
+raise NotImplementedError\n";
+    let shown = shown_with(docstring, nested);
+    assert!(!shown.contains("--doctest-modules"), "{shown}");
+    let shown = shown_with(docstring, example);
+    assert!(shown.contains(RUN), "{shown}");
+    assert!(shown.contains("not a raw string"), "{shown}");
+    let wanted = Asks {
+        any: true,
+        examples: true,
+    };
+    assert!(shown_with(wanted, plain).contains(RUN));
+}
+
+/// The doctest and backslash notes are said in full once, for the first
+/// function shown: a function shown beside it gets the command for its own
+/// doctest only.
+#[test]
+fn the_doctest_note_is_given_once() {
+    let text = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n    return root\n\n\n\
+def walk(root):\n    \"\"\"Walk it.\"\"\"\n    return root\n";
+    let asked = Asked {
+        docstring: Asks {
+            any: true,
+            examples: true,
+        },
+        ..Asked::default()
+    };
+    let list = files(&[("src/iterutils.py", text)]);
+    let terms = looking_for(&[("remap", true, 1), ("walk", true, 1)]);
+    let shown = map(&list, &terms, &asked, later()).unwrap().text;
+    assert_eq!(shown.matches("```").count(), 4, "{shown}");
+    assert_eq!(shown.matches(CHECK).count(), 1, "{shown}");
+    assert_eq!(shown.matches("--doctest-modules").count(), 2, "{shown}");
+    assert!(shown.contains("iterutils.py::iterutils.walk`."), "{shown}");
+    assert_eq!(shown.matches("not a raw string").count(), 1, "{shown}");
+    // With no command to name, the backslash note is still said once.
+    let spaced = files(&[("my src/iterutils.py", text)]);
+    let shown = map(&spaced, &terms, &asked, later()).unwrap().text;
+    assert_eq!(shown.matches("not a raw string").count(), 1, "{shown}");
 }
 
 /// A prompt about the docstring of a function too long to show whole gets

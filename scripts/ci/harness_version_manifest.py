@@ -12,13 +12,22 @@ not covered, however close it is to a listed one.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
+_CONTRACTS_FILE = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "codex_plugin_scanner"
+    / "guard"
+    / "contracts"
+    / "harness-protection-contracts.v1.json"
+)
 
 SCHEMA_VERSION = "hol-guard-harness-version-coverage.v1"
 MANIFEST_FILENAME = "harness_version_coverage_v1.json"
@@ -250,8 +259,7 @@ def _record(harness: str, value: object, field: str) -> CoverageRecord:
         raise ManifestError(f"{field}.suite.result must be passed")
     if transport != eligible.transport or not events or not set(events) <= eligible.events:
         raise ManifestError(f"{field} claims a transport or events its suite does not exercise")
-    contract = contract_for(harness)
-    declared = {(row.event, row.transport) for row in (contract.capability_events if contract else ())}
+    declared = _declared_events().get(harness, frozenset())
     if any((event, transport) not in declared for event in events):
         raise ManifestError(f"{field} names an event that the {harness} adapter does not declare")
     evidence_level = _text(entry["evidence_level"], f"{field}.evidence_level", limit=32)
@@ -281,6 +289,21 @@ def _record(harness: str, value: object, field: str) -> CoverageRecord:
     )
 
 
+@lru_cache(maxsize=1)
+def _declared_events() -> dict[str, frozenset[tuple[str, str]]]:
+    """Canonical harness id -> declared (event, transport) pairs, read from the bundled contracts file.
+
+    This CI validator runs without a Guard runtime, so it reads the data file directly;
+    the runtime applies the full contract validation when it loads the same file.
+    """
+
+    document = json.loads(_CONTRACTS_FILE.read_text(encoding="utf-8"))
+    return {
+        row["harness"]: frozenset((event["event"], event["transport"]) for event in row["capability_events"])
+        for row in document["contracts"]
+    }
+
+
 def parse_manifest(payload: object) -> CoverageManifest:
     """Validate a decoded manifest; raise ``ManifestError`` on any defect."""
 
@@ -292,12 +315,12 @@ def parse_manifest(payload: object) -> CoverageManifest:
     if not isinstance(harness_entries, list) or len(harness_entries) > 64:
         raise ManifestError("manifest.harnesses must be a list")
     harnesses: dict[str, HarnessCoverage] = {}
+    declared_events = _declared_events()
     for index, raw in enumerate(harness_entries):
         field = f"manifest.harnesses[{index}]"
         entry = _keys(raw, _HARNESS_KEYS, field)
         harness = _text(entry["harness"], f"{field}.harness", limit=64)
-        contract = contract_for(harness)
-        if contract is None or contract.harness != harness:
+        if harness not in declared_events:
             raise ManifestError(f"{field}.harness must be a canonical harness id")
         if harness in harnesses:
             raise ManifestError(f"{field}.harness is listed twice")

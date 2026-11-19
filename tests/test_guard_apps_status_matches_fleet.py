@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification, list_harness_setup_items
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, iso
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -60,6 +60,20 @@ def test_installed_app_whose_setup_check_failed_needs_repair(tmp_path: Path) -> 
     assert codex["status"] == "needs_repair"
     assert codex["installed"] is False
     assert "hol-guard repair" in str(codex["observed_copy"])
+    assert codex["warnings"] == []
+
+
+def test_unmanaged_leftover_config_exposes_cleanup_guidance(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = datetime.now(timezone.utc)
+    _record_fleet_check(store, now - timedelta(minutes=5), grok="broken")
+
+    grok = _items_by_harness(context, store)["grok"]
+
+    assert grok["status"] == "needs_repair"
+    assert grok["installed"] is False
+    assert grok["warnings"] == ["Guard-managed configuration remains, but this app is not connected to Guard."]
 
 
 def test_install_change_after_the_last_setup_check_wins(tmp_path: Path) -> None:

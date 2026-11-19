@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,9 +23,12 @@ from .installed_registration import (
     install_harness,
     load_contract,
     read_config,
+    stop_daemon,
 )
-from .installed_replay import argv_for_event, registered_argv, replay_harness
+from .installed_replay import EXPECTATIONS, argv_for_event, registered_argv, replay_harness
+from .installed_restore import restore_pass
 from .installed_runtime import InstalledRuntime, InstalledRuntimeError, resolve_runtime
+from .installed_startup import startup_timeline
 from .installed_store import age_home, assess_aged
 
 EVIDENCE_VERSION = "hol-guard-installed-acceptance.v1"
@@ -74,6 +78,30 @@ def undeclared_case_events(contract: dict[str, Any]) -> list[str]:
     return sorted(wanted - declared)
 
 
+def unreplayed_cases(contract: dict[str, Any]) -> list[str]:
+    """Cases that no replayable harness would run.
+
+    A case limited to ``harnesses`` that do not replay, or that do not declare
+    the case's event, is skipped everywhere while the lane passes. Like an
+    undeclared event, that is coverage the lane does not have.
+    """
+
+    missing: list[str] = []
+    for case in contract["replay_cases"]:
+        only = case.get("harnesses")
+        names = contract["harnesses"] if only is None else only
+        event = case.get("event")
+        runs = any(
+            (expectation := contract["harnesses"].get(str(name))) is not None
+            and expectation.get("replay")
+            and (event is None or event in expectation.get("replay_events", []))
+            for name in names
+        )
+        if not runs:
+            missing.append(str(case["id"]))
+    return missing
+
+
 def harness_pass(
     runtime: InstalledRuntime,
     harness: str,
@@ -88,13 +116,17 @@ def harness_pass(
     home = build_home(root, f"home-{harness}")
     guard_home = home / ".hol-guard"
     workspace = build_workspace(root / harness)
+    install_started_ns = time.time_ns()
     install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+    installed_ns = time.time_ns()
     registration = assess_harness(home, harness, expectation)
     result: dict[str, Any] = {"install": install, "registration": registration}
     failures = list(registration["failures"])
     if install["exit_code"] != 0:
         failures.append(f"{harness}: install exited {install['exit_code']}: {install['stderr_tail']}")
+    replay_started_ns: int | None = None
     if expectation.get("replay") and not failures:
+        replay_started_ns = time.time_ns()
         config = read_config(home / expectation["config"]) or {}
         argv = registered_argv(home, expectation, config)
         if argv is None:
@@ -121,6 +153,13 @@ def harness_pass(
             failures.extend(replay["failures"])
     elif not expectation.get("replay"):
         result["replay_gap"] = expectation.get("replay_gap")
+    # Read after the replay, so a daemon the first hook outran still shows when it came up.
+    result["startup"] = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
+    if replay_started_ns is not None:
+        result["startup"]["replay_started_ms"] = round((replay_started_ns - installed_ns) / 1_000_000, 1)
+    # A user runs one daemon. Left running, this home's daemon would compete
+    # with every later harness's cold start and inflate its readiness timings.
+    result["startup"]["daemon_stop_exit_code"] = stop_daemon(runtime, home=home, guard_home=guard_home)
     result["failures"] = failures
     result["passed"] = not failures
     return result
@@ -171,6 +210,38 @@ def aged_pass(
     return assessment
 
 
+PREWARM_WAIT_SECONDS = 60.0
+
+
+def prewarm_probe(runtime: InstalledRuntime, harness: str, *, root: Path) -> dict[str, Any]:
+    """How long the install's own prewarm takes to bring the daemon up, with no hook in the way.
+
+    The harness passes replay straight after install, so their first hook races the
+    prewarm and may start a daemon of its own. This pass installs into a fresh home,
+    sends no hook and waits for the daemon's ``ready`` journal entry. It is evidence,
+    not a verdict: a slow or absent prewarm shows up in the harness passes already.
+    """
+
+    home = build_home(root, f"prewarm-{harness}")
+    guard_home = home / ".hol-guard"
+    workspace = build_workspace(root / f"prewarm-{harness}")
+    install_started_ns = time.time_ns()
+    install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+    installed_ns = time.time_ns()
+    deadline = time.monotonic() + PREWARM_WAIT_SECONDS
+    timeline = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
+    while timeline["ready_ms"] is None and time.monotonic() < deadline:
+        time.sleep(0.25)
+        timeline = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
+    # The probe's daemon would otherwise keep running beside the harness passes
+    # and skew their cold-start timings.
+    timeline["daemon_stop_exit_code"] = stop_daemon(runtime, home=home, guard_home=guard_home)
+    timeline["harness"] = harness
+    timeline["install_exit_code"] = install["exit_code"]
+    timeline["waited_seconds"] = PREWARM_WAIT_SECONDS
+    return timeline
+
+
 def run_lane(
     *,
     runtime_path: Path,
@@ -179,6 +250,7 @@ def run_lane(
     require_frozen: bool,
     aged_store: bool,
     output: Path,
+    uninstall_restore: bool = False,
     work_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the whole lane and return its evidence."""
@@ -192,6 +264,18 @@ def run_lane(
         raise InstalledRuntimeError(
             "no harness declares replay_events for "
             f"{', '.join(undeclared)}; a case no harness replays is coverage the lane does not have"
+        )
+    unexpected = sorted(case["id"] for case in contract["replay_cases"] if case.get("expect") not in EXPECTATIONS)
+    if unexpected:
+        raise InstalledRuntimeError(
+            f"{', '.join(unexpected)} expect an outcome the lane cannot judge; "
+            f"use one of {', '.join(sorted(EXPECTATIONS))}"
+        )
+    unreplayed = unreplayed_cases(contract)
+    if unreplayed:
+        raise InstalledRuntimeError(
+            f"no replayable harness runs {', '.join(unreplayed)}; "
+            "a case no harness replays is coverage the lane does not have"
         )
     output.mkdir(parents=True, exist_ok=True)
     root = work_root or (output / "work")
@@ -207,6 +291,7 @@ def run_lane(
     }
     failures: list[str] = []
     try:
+        evidence["prewarm_probe"] = prewarm_probe(runtime, harnesses[0], root=root)
         for harness in harnesses:
             result = harness_pass(
                 runtime,
@@ -222,6 +307,16 @@ def run_lane(
             replayable = [harness for harness in harnesses if contract["harnesses"][harness].get("replay")]
             evidence["aged_store"] = aged_pass(runtime, replayable or harnesses, contract, root=root)
             failures.extend(evidence["aged_store"]["failures"])
+        if uninstall_restore:
+            # Removing Guard must hand the user's own settings back unchanged.
+            evidence["uninstall_restore"] = restore_pass(
+                runtime,
+                harnesses,
+                contract,
+                home=build_home(root, "home-restore"),
+                workspace=build_workspace(root / "restore"),
+            )
+            failures.extend(evidence["uninstall_restore"]["failures"])
     except GateBlockedError as blocked:
         evidence["gate_blocked"] = str(blocked)
         evidence["accepted"] = False
@@ -247,6 +342,8 @@ __all__ = [
     "build_home",
     "build_workspace",
     "harness_pass",
+    "prewarm_probe",
     "run_lane",
     "undeclared_case_events",
+    "unreplayed_cases",
 ]

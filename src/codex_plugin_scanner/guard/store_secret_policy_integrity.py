@@ -21,6 +21,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
+from .store_policy_integrity_key_mint import mint_policy_integrity_key_once
 from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
@@ -460,18 +461,25 @@ class StoreSecretPolicyIntegrityMixin:
             )
 
             native_state = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
-            if any(
-                os.path.lexists(native_state / name) for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
-            ):
+            key_ref = self._policy_integrity_key_ref
+
+            def _native_controls_armed() -> bool:
                 # A different process may have armed native controls with an
                 # inaccessible keyring key. Never mint a second signing key.
-                return None, None
-            generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+                return any(
+                    os.path.lexists(native_state / name)
+                    for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
+                )
+
             try:
-                secret_store.set_secret(self._policy_integrity_key_ref, generated_key)
+                encoded_key = mint_policy_integrity_key_once(
+                    self.guard_home,
+                    read_key=lambda: self._get_policy_integrity_secret_from_store(key_ref),
+                    write_key=lambda value: secret_store.set_secret(key_ref, value),
+                    native_controls_armed=_native_controls_armed,
+                )
             except Exception:
                 return None, None
-            encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None:
             return None, None
         try:

@@ -42,8 +42,11 @@ mod gate;
 mod gate_config;
 #[path = "daemon_edge_headless.rs"]
 pub(super) mod headless;
+#[path = "daemon_edge_policy_write.rs"]
+mod policy_write;
 #[path = "daemon_edge_protection_repair.rs"]
 mod protection_repair;
+pub(in crate::daemon_edge) use protection_repair::record_diagnostic;
 #[path = "daemon_edge_reconnect.rs"]
 mod reconnect;
 #[path = "daemon_edge_resolve.rs"]
@@ -102,6 +105,7 @@ pub(super) fn respond(
             &payload,
             local,
             !link_bound,
+            resolve::replay_stored(config, reads),
             resolve::call_library(config),
         )?;
         return Some((status, body, caller.cors_origin, no_store));
@@ -116,7 +120,7 @@ pub(super) fn respond(
         return Some((status, body, caller.cors_origin, no_store));
     }
     if let Some((name, args)) = (request.method == "POST")
-        .then(|| route_calls::resident_route(request.path))
+        .then(|| route_calls::resident_route(request.path, config.user_home.as_deref()))
         .flatten()
     {
         let caller = authorize_write(request, &config.token)?;
@@ -125,6 +129,21 @@ pub(super) fn respond(
         let (status, body, no_store) =
             route_calls::respond(args, &payload, route_calls::call_resident(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
+    }
+    if request.method == "POST"
+        && matches!(request.path, "/v1/policy/decisions" | "/v1/policy/clear")
+    {
+        let caller = authorize_write(request, &config.token)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
+        reads.report_activity();
+        let answer = if request.path == "/v1/policy/clear" {
+            policy_write::clear(&payload, config, reads)
+        } else {
+            policy_write::upsert(&payload, config, reads)
+        };
+        // The gate may have run, so an unanswered write closes the connection.
+        let (status, body) = answer.unwrap_or((DROPPED, Value::Null));
+        return Some((status, body, caller.cors_origin, false));
     }
     if let Some((name, args)) = (request.method == "POST")
         .then(|| route_calls::route(request.path))

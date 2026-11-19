@@ -45,6 +45,8 @@ use crate::CanonicalCommandV1;
 mod case_labels;
 #[path = "native_command_unmodeled_compound.rs"]
 mod compound;
+#[path = "native_command_unmodeled_disabled_reach.rs"]
+mod disabled_reach;
 #[path = "native_command_unmodeled_expansion.rs"]
 mod expansion;
 #[path = "native_command_unmodeled_fd_exec.rs"]
@@ -55,6 +57,8 @@ mod find_exec;
 mod functions;
 #[path = "native_command_unmodeled_heredoc.rs"]
 mod heredoc;
+#[path = "native_command_unmodeled_heredoc_lead.rs"]
+mod heredoc_lead;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
 #[path = "native_command_unmodeled_operands.rs"]
@@ -157,6 +161,8 @@ const INTERPRETERS: &[&str] = &[
     "osascript",
     "awk",
     "gawk",
+    "mawk",
+    "nawk",
     "watch",
     "parallel",
     "su",
@@ -221,7 +227,14 @@ impl CompiledNativeCommandControls {
         }
         // A lookup such as `command -v doctl` only prints a path: it never
         // runs the program it names, so it owns nothing.
-        let looked = without_lookups(&command.normalized_text);
+        //
+        // An escaped backtick is a literal one. The word reader below ends a
+        // command at every backtick, so leaving them in made `grep -F "| \`$f\`
+        // |"` read its own operand as a command position holding a parameter,
+        // and the markdown row an ordinary release note greps for blocked
+        // outright with no approval left to give it.
+        let looked =
+            substitution::without_escaped_backticks(&without_lookups(&command.normalized_text));
         let text = &looked;
         let heredocs = data_heredocs(text);
         let shell = match &heredocs {
@@ -239,7 +252,11 @@ impl CompiledNativeCommandControls {
         // name in an operand position runs nothing: `rg env src` searches for
         // the word, the way `rg bar src` always has, and reading the operand
         // as a program refused it outright with no approval left to give it.
-        let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
+        // A double-quoted `"$HOME/..."` is a fixed path, so it is read as one
+        // when telling operands from programs.
+        let commanded = named_words(&joined_quotes(&text_in_command_positions(
+            &xargs::with_fixed_home(&bare),
+        )));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -599,7 +616,7 @@ fn named_xargs_pipeline(text: &str) -> bool {
     text.contains("xargs")
         && xargs_names_its_program(text)
         && xargs_input_is_named(text)
-        && !text.contains(['<', '`', '$', '\n'])
+        && !xargs::with_fixed_home(text).contains(['<', '`', '$', '\n'])
         && !moves_data(&unquoted_literal(&kept.join(" ")))
 }
 
@@ -837,11 +854,13 @@ fn reviewable_structure(
         // Any other substitution is read as the words it prints when every
         // command it runs is named in its text (see `substitution`).
         Some("command_substitution_not_yet_supported") => {
-            let looked = without_lookups(&command.normalized_text);
+            let looked =
+                substitution::without_escaped_backticks(&without_lookups(&command.normalized_text));
             bounded_substitutions(&looked)
                 .or_else(|| {
-                    reviewable_substitutions(&looked)
-                        .filter(|bounded| plain_sequence(&bounded.text))
+                    reviewable_substitutions(&looked).filter(|bounded| {
+                        plain_sequence(&bounded.text) || interpreter_free(&bounded.text)
+                    })
                 })
                 .is_some_and(|bounded| {
                     let text = bounded.text;
@@ -980,6 +999,26 @@ fn plain_sequence(text: &str) -> bool {
         )
     });
     !construct
+}
+
+/// A loop or conditional, read with each substitution as the word it prints,
+/// that puts no interpreter or launcher in a command position. Its body runs
+/// only programs the text names, so the owners below bound it the way they
+/// bound the same loop with no substitution, which reaches review. Until this
+/// was read, `for e in a b; do sum=$(shasum -a 256 "$e"); test "$sum" = x;
+/// done` blocked with no approval left to give, while the same loop holding
+/// a plain value reviewed. An interpreter in the body still keeps the
+/// evaluation failure: the value a substitution keeps may become the text it
+/// runs.
+fn interpreter_free(text: &str) -> bool {
+    let bare = without_plain_awk(&without_redirections(&shell_text(text)));
+    let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
+    // `trap` and `.` run text they are handed, as the interpreters do.
+    !INTERPRETERS
+        .iter()
+        .chain(substitution::LAUNCHERS)
+        .chain(&["trap", ".", "alias"])
+        .any(|name| commanded.contains(*name))
 }
 
 /// Every word the shell could read as a program name or keyword token, with
@@ -1391,7 +1430,8 @@ fn glues_a_word(character: char) -> bool {
 }
 
 fn synthesizes_program(literal: &str, sourced: bool) -> bool {
-    let masked = mask_double_quoted_separators(&without_case_labels(literal));
+    let plain = expansion::without_literal_subscripts(literal);
+    let masked = mask_double_quoted_separators(&without_case_labels(&plain));
     let mut words = command_words(&masked).filter(|word| !is_assignment(word));
     words.any(|word| {
         !matches!(
@@ -1571,6 +1611,10 @@ mod sourced_tests;
 mod bounded_tests;
 
 #[cfg(test)]
+#[path = "native_command_unmodeled_heredoc_lead_tests.rs"]
+mod heredoc_lead_tests;
+
+#[cfg(test)]
 #[path = "native_command_unmodeled_fd_exec_tests.rs"]
 mod fd_exec_tests;
 
@@ -1607,3 +1651,7 @@ mod quoted_angle_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_substitution_tests.rs"]
 mod substitution_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_substitution_loop_tests.rs"]
+mod substitution_loop_tests;

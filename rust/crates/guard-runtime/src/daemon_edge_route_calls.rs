@@ -1,5 +1,5 @@
 //! Control routes whose work is one Guard library call that also shapes the
-//! reply: policy writes and lookups, bulk allow-once and the resume retry.
+//! reply: policy lookups, bulk allow-once and the resume retry.
 //!
 //! The route, the caller check and the body read are the daemon's. The call
 //! answers `{"status", "body", "no_store"}` and the daemon writes exactly
@@ -13,8 +13,6 @@ use super::DROPPED;
 /// The library call that answers `POST path`, with its path arguments.
 pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<String, Value>)> {
     let name = match path {
-        "/v1/policy/clear" => "route.policy_clear",
-        "/v1/policy/decisions" => "route.policy_upsert",
         "/v1/policy/resolve" => "route.policy_resolve",
         "/v1/policy/claim" => "route.policy_claim",
         "/v1/requests/bulk-allow-once" => "route.bulk_allow_once",
@@ -26,6 +24,14 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         "/v1/cloud-actions/status" => "route.cloud_actions_check",
         "/v1/protection/repair/approval-gate/setup" => "route.approval_gate_setup",
         "/v1/update/channel" => "route.update_channel",
+        _ if pulse_action(path).is_some() => {
+            let mut args = Map::new();
+            args.insert(
+                "action".to_owned(),
+                Value::String(pulse_action(path).unwrap_or_default().to_owned()),
+            );
+            return Some(("route.approval_gate_pulse", args));
+        }
         "/v1/repair" | "/v1/protection/remove-hooks" => {
             let mut args = Map::new();
             args.insert("path".to_owned(), Value::String(path.to_owned()));
@@ -46,10 +52,21 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
 /// the resident after the request that started it.
 pub(in crate::daemon_edge) fn resident_route(
     path: &str,
+    user_home: Option<&str>,
 ) -> Option<(&'static str, Map<String, Value>)> {
     if path == "/v1/policy/sync" {
         // An accepted bundle republishes the resident's extension controls.
         return Some(("route.policy_sync", Map::new()));
+    }
+    if let ["v1", "requests", request_id, "live-decision"] =
+        crate::daemon_route_paths::segments(path).as_slice()
+    {
+        // The waiting Codex hook's decision is re-reviewed by the resident's
+        // hook worker before the store records it.
+        let mut args = Map::new();
+        args.insert("request_id".to_owned(), Value::from(*request_id));
+        args.insert("home_dir".to_owned(), user_home.into());
+        return Some(("hook.codex_live_decision", args));
     }
     if crate::daemon_route_paths::route_class(path) != "local_cli" {
         return None;
@@ -120,7 +137,7 @@ pub(in crate::daemon_edge) fn extension_control_args(
 }
 
 /// `/v1/context-assistance/...` writes, run before the daemon's route classes.
-const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
+const CONTEXT_ASSISTANCE_WRITES: [&str; 10] = [
     "/v1/context-assistance/versions",
     "/v1/context-assistance/recheck",
     "/v1/context-assistance/activate",
@@ -130,6 +147,7 @@ const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
     "/v1/context-assistance/workspace-grant",
     "/v1/context-assistance/folders",
     "/v1/context-assistance/codex-lean",
+    "/v1/context-assistance/codex-short-replies",
 ];
 const HARNESS_VERSION_WRITES: [&str; 3] = [
     "/v1/harness-versions/refresh",
@@ -146,11 +164,21 @@ const WORKSPACE_ASSESSMENT_WRITES: [&str; 7] = [
     "/v1/supply-chain/workspace-assessments/resume",
 ];
 const FIX_PROPOSALS_PREFIX: &str = "/v1/supply-chain/workspace-fix-proposals/";
+const SWARM_WRITES: [&str; 3] = ["/v1/swarm/launch", "/v1/swarm/action", "/v1/swarm/events"];
 
 /// Whether `route.handler_post` runs the daemon's own handler for `path`
 /// (`routes/calls.py`).
+/// The Yanez Pulse setup action of `POST /v1/approval-gate/pulse/<action>`.
+fn pulse_action(path: &str) -> Option<&str> {
+    path.strip_prefix("/v1/approval-gate/pulse/")
+        .filter(|action| PULSE_ACTIONS.contains(action))
+}
+
+const PULSE_ACTIONS: [&str; 5] = ["enroll", "confirm", "poll", "disable", "recover"];
+
 fn runs_handler(path: &str) -> bool {
-    if CONTEXT_ASSISTANCE_WRITES.contains(&path)
+    if SWARM_WRITES.contains(&path)
+        || CONTEXT_ASSISTANCE_WRITES.contains(&path)
         || HARNESS_VERSION_WRITES.contains(&path)
         || WORKSPACE_ASSESSMENT_WRITES.contains(&path)
     {

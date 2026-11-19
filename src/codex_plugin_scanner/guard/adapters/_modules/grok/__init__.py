@@ -1,1 +1,0 @@
-"""Internal grok adapter helpers."""

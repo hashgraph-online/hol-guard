@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.agent-nexus",
+  "version": "1.1.0",
+  "name": "Agent Nexus",
+  "description": "Hosted discovery and trust registry for AI agents at https://agentnexus.app/mcp. Finds human-reviewed APIs, MCP servers and CLIs from a plain-language need, with live health, auth shape and rate limits. Read tools are keyless; submit_entry only queues a pending entry for human review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "app.agentnexus",
+    "displayName": "Agent Nexus",
+    "url": "https://agentnexus.app"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://agentnexus.app",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://agentnexus.app/mcp",
+    "serverNames": [
+      "agent-nexus",
+      "agentnexus"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-public-data-read",
+    "external-public-listing",
+    "external-shared-state-write",
+    "external-account-read"
+  ],
+  "tools": [
+    {
+      "name": "discover_capabilities",
+      "state": "inherit"
+    },
+    {
+      "name": "search_registry",
+      "state": "inherit"
+    },
+    {
+      "name": "get_entry",
+      "state": "inherit"
+    },
+    {
+      "name": "list_entries",
+      "state": "inherit"
+    },
+    {
+      "name": "list_categories",
+      "state": "inherit"
+    },
+    {
+      "name": "submit_entry",
+      "state": "review"
+    },
+    {
+      "name": "vote_entry",
+      "state": "review"
+    },
+    {
+      "name": "report_invocation",
+      "state": "review"
+    },
+    {
+      "name": "list_my_submissions",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://agentnexus.app/connect",
+    "https://agentnexus.app/openapi.json",
+    "https://agentnexus.app/privacy",
+    "https://agentnexus.app/terms",
+    "https://github.com/Strategiumfinancepartner/AgentNexus"
+  ],
+  "saferAlternatives": [
+    "Use only the read tools (discover_capabilities, search_registry, get_entry, list_entries, list_categories); they need no credentials and change nothing.",
+    "Keep submit_entry, vote_entry and report_invocation on Review: they send metadata to Agent Nexus. Submissions stay pending until a human approves them."
+  ]
+}

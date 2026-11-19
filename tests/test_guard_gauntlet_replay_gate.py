@@ -85,8 +85,9 @@ def replay_environment(
     # Git finds the fixture ~/.gitconfig through HOME, as on a real host. The native Git
     # proofs fail closed on any inherited GIT_*, LD_* or DYLD_* override, so the clean
     # lane starts without them; the realistic overlay adds back what developer shells carry.
+    # An inherited OPENSSL_* configuration keeps openssl digests on review the same way.
     for name in list(os.environ):
-        if name.upper().startswith(("GIT_", "LD_", "DYLD_")):
+        if name.upper().startswith(("GIT_", "LD_", "DYLD_", "OPENSSL_")):
             patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
@@ -147,13 +148,14 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     # the answer being judged.
     result = review_with_unavailable_retry(
         case.case_id,
-        lambda: worker.review_http_payload(
+        lambda deadline: worker.review_http_payload(
             payload=payload,
             params={},
             default_harness=case.harness,
             home_dir=fixture.home,
             guard_home=fixture.guard_home,
             workspace=fixture.cwd(case.cwd),
+            deadline=deadline,
         ),
         on_retry=approvals.mark_retry,
     )

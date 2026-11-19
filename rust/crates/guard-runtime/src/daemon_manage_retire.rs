@@ -9,13 +9,20 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
-use crate::daemon_edge::lifecycle;
 use crate::daemon_policy_authority::{
     load_authenticated_daemon_identity, load_authenticated_daemon_state,
 };
 
 use super::host::{self, Caller};
+use super::leftovers;
 use super::records::{self, int, owner, text};
+
+#[path = "daemon_manage_retire_state.rs"]
+mod state;
+
+pub(super) use leftovers::identity_for_retirement;
+pub(super) use state::record_retirement;
+use state::retire_state_daemon;
 
 const DEFAULT_WAIT: Duration = Duration::from_secs(1);
 const ORPHAN_REAP_TIMEOUT: Duration = Duration::from_secs(15);
@@ -28,6 +35,12 @@ pub(super) struct Expected<'a> {
     pub(super) creation_time: Option<i64>,
     pub(super) start_marker: Option<&'a str>,
     pub(super) owner_marker: Option<&'a str>,
+    /// Why the caller retires the process. When set, `retire_pid` journals
+    /// `retirement_requested` for it, naming the caller, once the process has
+    /// passed its checks and before the first signal.
+    pub(super) reason: Option<&'a str>,
+    /// The daemon state's id, journaled with the retirement when known.
+    pub(super) session_id: Option<&'a str>,
 }
 
 /// The shared deadline of one management request.
@@ -63,6 +76,24 @@ fn owner_marker_matches(pid: i64, expected: Option<&str>) -> bool {
     }
 }
 
+/// A generation-bound launch receipt may be cleared when its exact PID and
+/// owner are still present but the command is known to be foreign. This does
+/// not retire the process; it only prevents a stalled wrapper from keeping a
+/// pending launch open forever. An unreadable identity remains fail-closed.
+pub(super) fn known_foreign_process(
+    caller: &Caller,
+    pid: i64,
+    expected: &Expected<'_>,
+    deadline: Deadline,
+) -> bool {
+    if host::pid_is_proven_dead(pid) || deadline.passed() {
+        return false;
+    }
+    start_marker_matches(pid, expected.start_marker)
+        && owner_marker_matches(pid, expected.owner_marker)
+        && host::command_identity(caller, pid, Some(&caller.guard_home)) == Some(false)
+}
+
 /// `_retire_guard_daemon_process`: one recorded generation, by its start
 /// marker and owner.
 pub(super) fn retire_generation(
@@ -70,12 +101,15 @@ pub(super) fn retire_generation(
     pid: i64,
     start_marker: &str,
     owner_marker: Option<&str>,
+    reason: &str,
     deadline: Deadline,
 ) -> bool {
     let expected = Expected {
         creation_time: None,
         start_marker: Some(start_marker),
         owner_marker,
+        reason: Some(reason),
+        session_id: None,
     };
     retire_pid(caller, pid, &expected, deadline)
 }
@@ -93,9 +127,10 @@ pub(super) fn retire_pid(
         Some(remaining) => host::wait_for_death(pid, remaining.min(DEFAULT_WAIT)),
     };
     let terminate_exact = |creation_time: i64| {
-        start_marker_matches(pid, marker)
-            && owner_marker_matches(pid, expected.owner_marker)
-            && host::windows_terminate_if_creation_time(pid, creation_time, deadline.remaining())
+        start_marker_matches(pid, marker) && owner_marker_matches(pid, expected.owner_marker) && {
+            record_retirement(caller, pid, expected.reason, expected.session_id);
+            host::windows_terminate_if_creation_time(pid, creation_time, deadline.remaining())
+        }
     };
     if host::pid_is_proven_dead(pid) {
         return true;
@@ -124,9 +159,9 @@ pub(super) fn retire_pid(
     };
     let identity = host::command_identity(caller, pid, Some(&caller.guard_home));
     if identity != Some(true) {
-        // Another command now owns the pid: nothing of ours to stop, so the
-        // caller may clear the stale state. An unreadable command fails closed.
-        return identity == Some(false);
+        // A mismatched or unreadable command does not prove the recorded
+        // process exited. Leave it untouched and preserve its state.
+        return false;
     }
     if let Some(creation_time) = observed_creation_time {
         return terminate_exact(creation_time);
@@ -137,6 +172,9 @@ pub(super) fn retire_pid(
         }
         if !start_marker_matches(pid, marker) || !owner_marker_matches(pid, expected.owner_marker) {
             return false;
+        }
+        if !kill_now {
+            record_retirement(caller, pid, expected.reason, expected.session_id);
         }
         match host::signal(pid, kill_now) {
             Ok(false) => return true,
@@ -150,17 +188,8 @@ pub(super) fn retire_pid(
     false
 }
 
-/// `_guard_daemon_pid_identity_for_retirement`: the generation and owner an
-/// inventoried process must keep, when it runs as this user.
-pub(super) fn identity_for_retirement(pid: i64) -> Option<(String, String)> {
-    let marker = host::start_marker(pid)?;
-    let owner = host::owner_marker(pid)?;
-    let own = host::own_owner_marker()?;
-    host::same_text(&owner, &own).then_some((marker, owner))
-}
-
 /// `_guard_daemon_pending_launch_is_abandoned`.
-fn pending_is_abandoned(pending: Option<&Map<String, Value>>) -> bool {
+pub(super) fn pending_is_abandoned(pending: Option<&Map<String, Value>>) -> bool {
     let Some(pending) = pending.filter(|p| records::is_generation_bound(Some(p))) else {
         return false;
     };
@@ -307,14 +336,20 @@ fn resolve_handed_off(caller: &Caller, pending: Option<&Map<String, Value>>) -> 
 }
 
 /// `_resolve_abandoned_guard_daemon_pending_launch`.
-pub(super) fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Value>>) -> bool {
+pub(super) fn resolve_abandoned(
+    caller: &Caller,
+    pending: Option<&Map<String, Value>>,
+    deadline: Deadline,
+) -> bool {
     if resolve_handed_off(caller, pending) {
         return true;
     }
     let Some(pending) = pending.filter(|p| pending_is_abandoned(Some(p))) else {
         return false;
     };
-    if host::daemon_inventory(caller).as_deref() != Some(&[]) {
+    // A daemon of this home that Guard can prove is its own may still be the
+    // launch's; one it cannot prove is never signalled and holds nothing.
+    if leftovers::only_unproven(caller, deadline).is_none() {
         return false;
     }
     let Some(pid) = int(pending, "pid") else {
@@ -330,7 +365,14 @@ pub(super) fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Va
 }
 
 /// `_retire_guard_daemons_for_home`: the pids it proved stopped.
-pub(super) fn retire_all(caller: &Caller, keep_port: Option<i64>, deadline: Deadline) -> Vec<i64> {
+/// `reason` names why the caller retires them, and is journaled for each
+/// daemon it signals.
+pub(super) fn retire_all(
+    caller: &Caller,
+    keep_port: Option<i64>,
+    reason: &str,
+    deadline: Deadline,
+) -> Vec<i64> {
     let home = caller.guard_home.as_path();
     let mut retired: Vec<i64> = Vec::new();
     let mut handled: Vec<i64> = Vec::new();
@@ -361,6 +403,7 @@ pub(super) fn retire_all(caller: &Caller, keep_port: Option<i64>, deadline: Dead
                     handled.push(pid);
                     let expected = Expected {
                         creation_time: Some(creation_time),
+                        reason: Some(reason),
                         ..Expected::default()
                     };
                     if retire_pid(caller, pid, &expected, deadline) && host::pid_is_proven_dead(pid)
@@ -400,13 +443,14 @@ pub(super) fn retire_all(caller: &Caller, keep_port: Option<i64>, deadline: Dead
             caller,
             state,
             keep_port,
+            reason,
             deadline,
             &mut handled,
             &mut retired,
         );
     }
 
-    if let Some(inventory) = host::daemon_inventory(caller) {
+    if let Some(inventory) = leftovers::inventory(caller, deadline) {
         for &(pid, port) in &inventory {
             if handled.contains(&pid) || keep_port == Some(port) {
                 continue;
@@ -417,6 +461,7 @@ pub(super) fn retire_all(caller: &Caller, keep_port: Option<i64>, deadline: Dead
             let expected = Expected {
                 start_marker: Some(&marker),
                 owner_marker: Some(&owner),
+                reason: Some(reason),
                 ..Expected::default()
             };
             if retire_pid(caller, pid, &expected, deadline) && host::pid_is_proven_dead(pid) {
@@ -426,79 +471,17 @@ pub(super) fn retire_all(caller: &Caller, keep_port: Option<i64>, deadline: Dead
                 }
             }
         }
-        let remaining = host::daemon_inventory(caller);
-        let empty = Some(Vec::new());
-        let confirmed = if inventory.is_empty() {
-            remaining == empty
-        } else {
-            remaining == empty && host::daemon_inventory(caller) == empty
-        };
+        // Read twice after signalling: what remains must be only processes
+        // Guard cannot prove are its own, and so must leave alone.
+        let settled = || leftovers::only_unproven(caller, deadline).is_some();
+        let confirmed = settled() && (inventory.is_empty() || settled());
         if confirmed && keep_port.is_none() {
             records::reconcile_invalid(home);
-            resolve_abandoned(caller, pending.as_ref());
+            resolve_abandoned(caller, pending.as_ref(), deadline);
         }
     }
     reap_orphaned_workers(caller, deadline);
     retired
-}
-
-fn retire_state_daemon(
-    caller: &Caller,
-    state: &Map<String, Value>,
-    keep_port: Option<i64>,
-    deadline: Deadline,
-    handled: &mut Vec<i64>,
-    retired: &mut Vec<i64>,
-) {
-    let home = caller.guard_home.as_path();
-    let (Some(pid), Some(port)) = (int(state, "pid").filter(|pid| *pid > 0), int(state, "port"))
-    else {
-        return;
-    };
-    if keep_port == Some(port) {
-        handled.push(pid);
-        return;
-    }
-    if handled.contains(&pid) {
-        if host::pid_is_proven_dead(pid) {
-            records::clear_state_if_current(home, state);
-        }
-        return;
-    }
-    handled.push(pid);
-    if let Ok(raw_pid) = u32::try_from(pid) {
-        lifecycle::record_for_pid(
-            home,
-            raw_pid,
-            "retirement_requested",
-            Some("managed_retirement"),
-            text(state, "state_id"),
-        );
-    }
-    let succeeded = match text(state, "process_start_marker").filter(|m| !m.trim().is_empty()) {
-        Some(marker) => {
-            let expected = Expected {
-                start_marker: Some(marker),
-                owner_marker: text(state, "user").filter(|user| !user.is_empty()),
-                ..Expected::default()
-            };
-            retire_pid(caller, pid, &expected, deadline)
-        }
-        // A markerless state cannot name a pid generation: only a proven
-        // exit counts, and nothing is signalled.
-        None => host::pid_is_proven_dead(pid),
-    };
-    if !succeeded {
-        return;
-    }
-    if host::pid_is_proven_dead(pid) {
-        records::clear_state_if_current(home, state);
-        if !retired.contains(&pid) {
-            retired.push(pid);
-        }
-    } else if host::command_identity(caller, pid, Some(home)) == Some(false) {
-        records::clear_state_if_current(home, state);
-    }
 }
 
 /// `reap_orphaned_daemon_workers`.
@@ -525,7 +508,7 @@ pub(super) fn reap_orphaned_workers(caller: &Caller, deadline: Deadline) {
 }
 
 /// `guard_daemon_retirement_is_complete`.
-pub(super) fn retirement_is_complete(caller: &Caller) -> bool {
+pub(super) fn retirement_is_complete(caller: &Caller, deadline: Deadline) -> bool {
     let home = caller.guard_home.as_path();
     if let Some(state) = load_authenticated_daemon_state(home) {
         let Some(pid) = int(&state, "pid").filter(|pid| *pid > 0) else {
@@ -541,11 +524,11 @@ pub(super) fn retirement_is_complete(caller: &Caller) -> bool {
         }
     }
     if !records::pending_is_resolved(home)
-        && !resolve_abandoned(caller, records::load_pending(home).as_ref())
+        && !resolve_abandoned(caller, records::load_pending(home).as_ref(), deadline)
     {
         return false;
     }
-    host::daemon_inventory(caller).as_deref() == Some(&[])
+    leftovers::only_unproven(caller, deadline).is_some()
 }
 
 /// `_guard_daemon_pid_command_identity` for a state pid that is running.

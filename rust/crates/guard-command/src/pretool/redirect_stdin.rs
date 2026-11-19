@@ -29,6 +29,9 @@
 use super::Quote;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
+#[path = "redirect_stdin_python_text.rs"]
+mod python_text;
+
 /// Programs that read standard input as data. Each prints, counts, filters or
 /// reshapes what it reads; none runs, applies or installs it.
 const FILTERS: &[&str] = &[
@@ -54,6 +57,65 @@ pub(super) fn reads_data(model: &CanonicalCommandV1, separated_after: bool) -> b
     } else {
         model.segments.last().is_some_and(segment_reads_data)
     }
+}
+
+/// Whether `segment` is one plain `git commit -F -`, which reads a quoted
+/// heredoc only as the message it records, with nothing else reading standard
+/// input. The decision's projection already lets such a commit take the
+/// bytes; the workspace sandbox's projection asks the same question of the
+/// segment a heredoc feeds, so a commit routed to the sandbox can be planned.
+pub(in crate::pretool) fn heredoc_records_commit_message(segment: &str) -> bool {
+    crate::parse_command(&crate::CommandModelRequestV1 {
+        command: segment.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .is_ok_and(|model| {
+        model.confidence == "exact"
+            && model.uncertainty_reason.is_none()
+            && model.wrapper_chain.is_empty()
+            && !model.path_overridden
+            && model.segments.len() == 1
+            && segment_reads_data(&model.segments[0])
+            && model.segments[0].executable.as_deref() == Some("git")
+    })
+}
+
+/// The command a heredoc operator at the end of `out` belongs to: the text
+/// after the last unquoted separator. `None` when a comment is open there,
+/// because the shell then ignores the operator and runs the lines meant as
+/// its body as commands.
+pub(in crate::pretool) fn heredoc_segment(out: &str) -> Option<&str> {
+    let (mut quote, mut escaped, mut commented) = (Quote::None, false, false);
+    let (mut start, mut word_start) = (0, true);
+    for (position, value) in out.char_indices() {
+        let at_word_start = std::mem::replace(&mut word_start, false);
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        // A comment runs to the end of its line, quotes and all.
+        if commented {
+            if value == '\n' {
+                (commented, start, word_start) = (false, position + 1, true);
+            }
+            continue;
+        }
+        match (quote, value) {
+            (Quote::Single, '\'') | (Quote::Double, '"') => quote = Quote::None,
+            (Quote::Double | Quote::None, '\\') => escaped = true,
+            (Quote::Single | Quote::Double, _) => {}
+            (Quote::None, '\'') => quote = Quote::Single,
+            (Quote::None, '"') => quote = Quote::Double,
+            (Quote::None, '#') if at_word_start => commented = true,
+            (Quote::None, ';' | '|' | '&' | '\n' | '(' | ')' | '{' | '}') => {
+                (start, word_start) = (position + 1, true);
+            }
+            (Quote::None, value) => word_start = value.is_whitespace(),
+        }
+    }
+    (!commented).then(|| &out[start..])
 }
 
 /// Whether one segment, spelled plainly by name with no wrapper, environment
@@ -218,4 +280,112 @@ fn plain_expansion(chars: &[char], start: usize) -> Option<usize> {
         return None;
     }
     Some(index)
+}
+
+/// Skips the bodies of the pending heredocs in order, as
+/// `skip_heredoc_bodies` does. A body that feeds Python must fit the sandbox
+/// ([`python_program_fits`]); `wide` is set once one uses more than builtins.
+pub(in crate::pretool) fn skip_bodies(
+    chars: &[char],
+    mut index: usize,
+    heredocs: &mut Vec<(String, bool)>,
+    programs: &mut Vec<bool>,
+    wide: &mut bool,
+) -> Option<usize> {
+    if heredocs.len() != programs.len() {
+        return None;
+    }
+    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
+        let start = index;
+        index = super::skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
+        if program {
+            let text: String = chars[start..index].iter().collect();
+            let text = text.strip_suffix('\n').unwrap_or(&text);
+            // The last line is the delimiter.
+            let body: Vec<&str> = match text.rsplit_once('\n') {
+                Some((body, _)) => body.split('\n').collect(),
+                None => Vec::new(),
+            };
+            // Apply physical-line safety even to builtins-only programs:
+            // the fast path otherwise skips python_program_fits entirely.
+            let source = format!("{}\n", body.join("\n"));
+            if !python_has_no_bare_cr(&source) {
+                return None;
+            }
+            // Non-ASCII text in comments and plain strings is read masked;
+            // anywhere else it keeps the hold (`python_text`).
+            let view = if source.is_ascii() {
+                None
+            } else {
+                Some(python_text::ascii_view(&source)?)
+            };
+            let body: Vec<&str> = match &view {
+                Some(view) => view
+                    .strip_suffix('\n')
+                    .unwrap_or(view)
+                    .split('\n')
+                    .collect(),
+                None => body,
+            };
+            if !crate::native_command_controls::python_is_builtin_only(&body) {
+                *wide = true;
+                if !python_program_fits(&body) {
+                    return None;
+                }
+            }
+        }
+    }
+    Some(index)
+}
+
+/// Whether a program fed to Python on standard input may run in the
+/// workspace sandbox. A program that uses only builtins can start nothing.
+/// Any other program is held to the bar a script file in the workspace
+/// meets: it may import modules, the project's own included, but needs
+/// neither the network nor a credential store. The sandbox, not this scan,
+/// bounds what it does; the scan keeps a program that would fail there on
+/// review. It must also stay inside the workspace: a program that observes
+/// or signals other processes, runs code built at run time, or names a path
+/// outside the checkout or inside its `.git` directory keeps its review,
+/// since the sandbox still exposes those (`script_content::host_reach`). The text
+/// scanned has to be plain ASCII with no coding declaration, so it is the text
+/// Python runs; `skip_bodies` passes non-ASCII text in comments and plain
+/// strings masked (`python_text`).
+/// Such a program is only taken when it is the whole command
+/// (`script_content::fed::python_alone`).
+fn python_program_fits(body: &[&str]) -> bool {
+    // skip_bodies strips the LF before the closing heredoc delimiter.
+    // Restore it so final CRLF and Python physical lines are represented exactly.
+    let source = format!("{}\n", body.join("\n"));
+    // Python treats a bare CR as a physical line break. The heredoc parser
+    // splits on LF; reject only CR that is not part of CRLF, so the encoding
+    // header check and interpreter agree without holding ordinary CRLF input.
+    body.iter().all(|row| row.is_ascii())
+        && python_has_no_bare_cr(&source)
+        && !body.iter().take(2).any(|row| coding_comment(row))
+        && crate::pretool::script_content::fed::source_clean(
+            crate::pretool::script_content::Language::Python,
+            &source,
+        )
+        && !crate::pretool::script_content::host_reach::python_reaches_host(&source)
+}
+
+/// A bare CR changes Python's physical source-line boundaries; CRLF is fine.
+fn python_has_no_bare_cr(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    bytes
+        .iter()
+        .enumerate()
+        .all(|(i, byte)| *byte != b'\r' || bytes.get(i + 1) == Some(&b'\n'))
+}
+
+/// Whether a row may be a source-encoding declaration. Python reads one only
+/// from a comment on the first or second line (PEP 263), so the caller asks
+/// just those two; anywhere else `coding` is ordinary text, as in
+/// `open(path, encoding="utf-8")`. Any comment naming `coding` there counts,
+/// looser than Python's own pattern.
+fn coding_comment(row: &str) -> bool {
+    row.trim_start_matches([' ', '\t', '\x0c'])
+        .strip_prefix('#')
+        .is_some_and(|comment| comment.to_ascii_lowercase().contains("coding"))
 }

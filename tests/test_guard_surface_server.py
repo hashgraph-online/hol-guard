@@ -18,10 +18,10 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.approvals import primary_approval_browser_url
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
@@ -1100,9 +1100,6 @@ class TestGuardSurfaceServer:
         assert hook_payload["approval_request_id"]
 
     def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
-        # This tests audit contents, not the production write deadline. Coverage
-        # tracing can keep a background SQLite writer busy beyond that deadline.
-        monkeypatch.setattr(daemon_server_module, "_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS", 5.0)
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -2002,7 +1999,6 @@ class TestGuardSurfaceServer:
         assert payload["latest_connect_state"]["milestone"] == "first_sync_succeeded"
 
     def test_guard_daemon_receipts_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(daemon_server_module, "_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS", 5.0)
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -3017,18 +3013,13 @@ class TestGuardSurfaceServer:
         assert opened_urls == []
 
     def test_copilot_adapter_implements_surface_runtime_contract(self, tmp_path) -> None:
-        adapter = get_adapter("copilot")
         context = HarnessContext(
             home_dir=tmp_path / "home",
             workspace_dir=tmp_path / "workspace",
             guard_home=tmp_path / "guard-home",
         )
 
-        operation = adapter.start_operation(
-            context,
-            session_id="session-123",
-            operation_type="run",
-        )
+        operation = harness_ops.start_operation("copilot", context, session_id="session-123", operation_type="run")
 
         assert operation["operation_type"] == "run"
 

@@ -1,0 +1,411 @@
+//! What each adapter this kind owns is: its names, launcher, approval flow and
+//! which generic steps Python runs for it.
+
+/// How Python installs a harness.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Install {
+    /// Only the launcher shim.
+    Shim,
+    /// The shim plus the file plan `prepare_install` returns.
+    Plan,
+    /// Paseo: native installs of other adapters, then a receipt.
+    Delegated,
+}
+
+/// How the bounded hook argv reaches the plan.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Hook {
+    None,
+    /// Joined into one shell command line.
+    Shell,
+    /// Kept as an argv list.
+    Argv,
+}
+
+pub(crate) struct Spec {
+    pub(crate) harness: &'static str,
+    pub(crate) aliases: &'static [&'static str],
+    pub(crate) executable: &'static str,
+    pub(crate) launcher_name: &'static str,
+    pub(crate) display_name: Option<&'static str>,
+    pub(crate) tier: &'static str,
+    pub(crate) summary: &'static str,
+    pub(crate) fallback: &'static str,
+    pub(crate) channel: &'static str,
+    pub(crate) auto_open: bool,
+    pub(crate) workspace_aibom: bool,
+    pub(crate) hook: Hook,
+    pub(crate) install: Install,
+    pub(crate) dynamic: bool,
+}
+
+const CENTER: &str = "approval-center";
+
+/// Native harnesses Paseo delegates to, as Python's adapter registry names them.
+pub(crate) const PASEO_DELEGATES: [&str; 6] =
+    ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
+
+/// Copilot ops that read or rewrite Guard's hook entries.
+const COPILOT_HOOK_OPS: [&str; 7] = [
+    "install_detection",
+    "prepare_install",
+    "apply_install",
+    "apply_uninstall",
+    "adapter_install",
+    "adapter_uninstall",
+    "managed_install",
+];
+
+pub(crate) use super::describe_env::{ENV_NAMES, ENV_PREFIXES};
+
+pub(crate) const SPECS: [Spec; 18] = [
+    Spec {
+        harness: "devin",
+        aliases: &["devin", "devin-cli", "cognition-devin"],
+        executable: "devin",
+        launcher_name: "devin",
+        display_name: Some("devin"),
+        tier: CENTER,
+        summary: "Guard scans Devin config, hooks, skills, and MCP registrations before launch \
+                  and routes blocked actions to the local approval center.",
+        fallback: "Devin gets preflight approval through Guard until it exposes a richer native \
+                   approval surface. Use the Guard approval center when native prompting is \
+                   unavailable.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "antigravity",
+        aliases: &[],
+        executable: "antigravity",
+        launcher_name: "",
+        display_name: None,
+        tier: CENTER,
+        summary: "Guard scans Antigravity extensions, MCP registrations, and skills before \
+                  launch and routes review through the local approval center.",
+        fallback: "Use Guard review for new Antigravity artifacts before launch, then hand off \
+                   to the local editor normally.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Shim,
+        dynamic: false,
+    },
+    Spec {
+        harness: "gemini",
+        aliases: &[],
+        executable: "gemini",
+        launcher_name: "",
+        display_name: None,
+        tier: CENTER,
+        summary: "Guard scans Gemini settings, extensions, hooks, skills, and MCP registrations \
+                  before launch and sends blocked changes to the local approval center.",
+        fallback: "Gemini gets preflight approval through Guard until it exposes a richer \
+                   native approval surface.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Shim,
+        dynamic: false,
+    },
+    Spec {
+        harness: "kimi",
+        aliases: &["kimi", "kimi-code", "kimi-cli"],
+        executable: "kimi",
+        launcher_name: "kimi",
+        display_name: Some("kimi"),
+        tier: CENTER,
+        summary: "Guard scans Kimi Code config, hooks, and MCP registrations before launch and \
+                  routes blocked changes to the local approval center.",
+        fallback: "Kimi Code gets preflight approval through Guard until it exposes a richer \
+                   native approval surface.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "openclaw",
+        aliases: &[],
+        executable: "openclaw",
+        launcher_name: "",
+        display_name: None,
+        tier: CENTER,
+        summary: "Guard can scan OpenClaw gateway config, channels, skills, and MCP servers \
+                  before agent sessions run.",
+        fallback: "Connect OpenClaw through the Guard-managed overlay or resolve requests in \
+                   the approval center.",
+        channel: "native-fallback",
+        auto_open: false,
+        workspace_aibom: false,
+        hook: Hook::Argv,
+        install: Install::Plan,
+        dynamic: true,
+    },
+    Spec {
+        harness: "paseo",
+        aliases: &[],
+        executable: "paseo",
+        launcher_name: "",
+        display_name: None,
+        tier: CENTER,
+        summary: "Approvals use each provider's native Guard integration on the Paseo daemon \
+                  host.",
+        fallback: "Check the native provider in Guard on the daemon host; Paseo notifications \
+                   do not enforce policy.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: false,
+        hook: Hook::None,
+        install: Install::Delegated,
+        dynamic: true,
+    },
+    Spec {
+        harness: "muse",
+        aliases: &["muse", "muse-code"],
+        executable: "muse",
+        launcher_name: "muse",
+        display_name: Some("muse"),
+        tier: "native-or-center",
+        summary: "Guard scans Muse config, hooks, skills, plugins, and MCP registrations before \
+                  launch and routes blocked actions to the local approval center. Approving a \
+                  blocked tool call resumes that exact call.",
+        fallback: "Muse resumes an approved tool call inside the pending hook. Use the Guard \
+                   approval center when native prompting is unavailable.",
+        channel: "hook",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "grok",
+        aliases: &["grok-build", "grok-build-cli", "xai-grok"],
+        executable: "grok",
+        launcher_name: "grok",
+        display_name: Some("grok"),
+        tier: CENTER,
+        summary: "Guard intercepts every Grok tool call, including subagent and MCP tools, \
+                  through a catch-all PreToolUse hook and routes blocked actions to the local \
+                  approval center.",
+        fallback: "Guard screens submitted prompts and intercepts tool calls on PreToolUse. Use \
+                   the Guard approval center when a tool call is denied.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "zcode",
+        aliases: &["zcode", "zai", "z-code", "zai-zcode"],
+        executable: "zcode",
+        launcher_name: "zcode",
+        display_name: Some("zcode"),
+        tier: CENTER,
+        summary: "Guard scans ZCode config, plugins, hooks, skills, and MCP registrations before \
+                  launch and routes blocked actions to the local approval center.",
+        fallback: "ZCode gets preflight approval through Guard until it exposes a richer native \
+                   approval surface. Use the Guard approval center when native prompting is \
+                   unavailable.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "pi",
+        aliases: &["pi", "pi-agent", "pi-coding-agent"],
+        executable: "pi",
+        launcher_name: "pi",
+        display_name: Some("Pi"),
+        tier: CENTER,
+        summary: "Guard scans Pi packages, extensions, skills, prompts, and themes before launch \
+                  and uses a managed Pi extension to review prompts and tool calls inline.",
+        fallback: "Pi keeps the blocked request in Guard and shows the reason inline before you \
+                   retry.",
+        channel: "native-fallback",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: true,
+    },
+    Spec {
+        harness: "omp",
+        aliases: &["omp", "oh-my-pi"],
+        executable: "omp",
+        launcher_name: "omp",
+        display_name: Some("Oh My Pi"),
+        tier: CENTER,
+        summary: "Guard scans Oh My Pi packages, extensions, skills, prompts, and themes before \
+                  launch and uses a managed Oh My Pi extension to review prompts and tool calls \
+                  inline.",
+        fallback: "Oh My Pi keeps the blocked request in Guard and shows the reason inline before \
+                   you retry.",
+        channel: "native-fallback",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: true,
+    },
+    Spec {
+        harness: "opencode",
+        aliases: &[],
+        executable: "opencode",
+        launcher_name: "",
+        display_name: None,
+        tier: "mixed",
+        summary: "Guard evaluates OpenCode skills, MCP servers, commands, and plugins before \
+                  launch, and the managed runtime overlay keeps managed MCP tools on native ask.",
+        fallback: "Use Guard approvals for blocked artifacts and OpenCode's native allow once or \
+                   allow session flow for managed MCP tools.",
+        channel: "native",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "cline",
+        aliases: &["cline-cli", "cline-vscode"],
+        executable: "cline",
+        launcher_name: "cline",
+        display_name: None,
+        tier: "approval-center",
+        summary: "Guard blocks Cline PreToolUse actions synchronously and routes review-required \
+                  actions through the local approval center.",
+        fallback: "Resolve the Guard request, then retry the exact Cline tool action.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: false,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "copilot",
+        aliases: &[],
+        executable: "copilot",
+        launcher_name: "",
+        display_name: None,
+        tier: "native-or-center",
+        summary: "Guard uses native Copilot prompts through Copilot CLI hook surfaces and VS Code \
+                  workspace hooks when those surfaces are installed. Guard falls back to the local \
+                  approval center only when the active Copilot surface cannot prompt.",
+        fallback: "Guard prefers native Copilot prompts where the active Copilot surface exposes \
+                   them. Proof for Copilot should come from native hook responses and Guard runtime \
+                   receipts in Copilot CLI or VS Code workspace hooks, or from the local approval \
+                   center when prompting is unavailable.",
+        channel: "hook",
+        auto_open: false,
+        workspace_aibom: false,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "cursor",
+        aliases: &[],
+        executable: "cursor-agent",
+        launcher_name: "cursor-agent",
+        display_name: None,
+        tier: "native-harness",
+        summary: "Cursor already owns tool approval, so Guard focuses on artifact trust, \
+                  provenance, and preflight review.",
+        fallback: "Resolve package-level trust in Guard and let Cursor keep its built-in tool \
+                   approval flow.",
+        channel: "native",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "claude-code",
+        aliases: &["claude"],
+        executable: "claude",
+        launcher_name: "claude",
+        display_name: Some("claude"),
+        tier: "native-or-center",
+        summary: "Guard uses Claude hooks first and falls back to the local approval center \
+                  when the shell cannot prompt.",
+        fallback: "Claude is the best current harness for deferred Guard approvals.",
+        channel: "hook",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "hermes",
+        aliases: &[],
+        executable: "hermes",
+        launcher_name: "",
+        display_name: None,
+        tier: CENTER,
+        summary: "Guard can scan Hermes skills before execution and hand blocked artifacts to \
+                  the local approval center.",
+        fallback: "Configure Hermes to use Guard-launched sessions for skill execution.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: false,
+        hook: Hook::Argv,
+        install: Install::Plan,
+        dynamic: true,
+    },
+    Spec {
+        harness: "codex",
+        aliases: &[],
+        executable: "codex",
+        launcher_name: "",
+        display_name: None,
+        tier: "native-or-center",
+        summary: "Guard uses native Codex PreToolUse hooks as the authoritative complete-command \
+                  boundary, PermissionRequest hooks for Codex approval prompts, prompt hooks for \
+                  sensitive file-read requests, keeps same-chat approvals for managed MCP tool \
+                  calls, and falls back to the local approval center when Codex cannot answer.",
+        fallback: "If Codex cannot render or return the inline approval request, or the native \
+                   PreToolUse hook blocks a sensitive complete command, Guard will queue it in the \
+                   local approval center.",
+        channel: "native",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+];
+
+pub(crate) fn spec(harness: &str) -> Option<&'static Spec> {
+    SPECS.iter().find(|spec| spec.harness == harness)
+}
+
+/// `get_adapter`: the adapter a harness name or alias selects.
+pub(crate) fn resolve(name: &str) -> Option<&'static Spec> {
+    SPECS
+        .iter()
+        .find(|spec| spec.harness == name || spec.aliases.contains(&name))
+}
+
+#[path = "describe_facts.rs"]
+mod facts;
+#[path = "describe_wire.rs"]
+mod wire;
+pub(crate) use wire::describe;

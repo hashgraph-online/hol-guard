@@ -93,7 +93,9 @@ fn keeps_tree(arguments: &[String]) -> bool {
         {
             true
         }
-        [command, ..] => KEEPS_TREE.contains(&command.as_str()),
+        [command, ..] => KEEPS_TREE.contains(
+            &crate::command_compatibility::canonical_git_subcommand(command),
+        ),
         [] => false,
     }
 }

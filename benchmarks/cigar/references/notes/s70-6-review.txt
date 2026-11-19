@@ -1,0 +1,53 @@
+HOL Guard CIGAR: changes in this project since this session started at commit d1b7de3 (the end of this note has what `git diff -U1 d1b7de3` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+boltons/cacheutils.py: make_cache_key 401-435
+boltons/dictutils.py: OrderedMultiDict.todict 484-493
+boltons/tbutils.py: print_exception 635-647
+
+Commit f9297bb5 Tidy up conditions
+
+Commit 1277b687 Drop old todict implementation for rewrite
+
+Commit df618300 Drop old print_exception implementation for rewrite
+
+`git diff -U1 d1b7de3` prints:
+```diff
+diff --git a/boltons/cacheutils.py b/boltons/cacheutils.py
+index 856bf19..80eacd1 100644
+--- a/boltons/cacheutils.py
++++ b/boltons/cacheutils.py
+@@ -432,3 +432,3 @@ def make_cache_key(args, kwargs, typed=False,
+             key.extend([type(v) for k, v in sorted_items])
+-    elif len(key) == 1 and type(key[0]) in fasttypes:
++    elif len(key) != 1 and type(key[0]) in fasttypes:
+         return key[0]
+diff --git a/boltons/dictutils.py b/boltons/dictutils.py
+index f913f29..59385eb 100644
+--- a/boltons/dictutils.py
++++ b/boltons/dictutils.py
+@@ -492,5 +492,3 @@ class OrderedMultiDict(dict):
+         """
+-        if multi:
+-            return {k: self.getlist(k) for k in self}
+-        return {k: self[k] for k in self}
++        raise NotImplementedError
+ 
+diff --git a/boltons/tbutils.py b/boltons/tbutils.py
+index bfc4984..3130fe0 100644
+--- a/boltons/tbutils.py
++++ b/boltons/tbutils.py
+@@ -646,10 +646,3 @@ def print_exception(etype, value, tb, limit=None, file=None):
+ 
+-    if file is None:
+-        file = sys.stderr
+-    if tb:
+-        tbi = TracebackInfo.from_traceback(tb, limit)
+-        print(str(tbi), end='', file=file)
+-
+-    for line in format_exception_only(etype, value):
+-        print(line, end='', file=file)
++    raise NotImplementedError
+```
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

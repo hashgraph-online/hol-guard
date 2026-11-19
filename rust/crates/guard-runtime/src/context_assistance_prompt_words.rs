@@ -1,8 +1,11 @@
 //! The words, quoted phrases and file names a typed prompt gives, which the
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
+pub(crate) use no_change::asks_no_change;
 use paths::without_paths;
 
+#[path = "context_assistance_prompt_no_change.rs"]
+mod no_change;
 #[path = "context_assistance_prompt_paths.rs"]
 mod paths;
 
@@ -33,7 +36,8 @@ const STOP_WORDS: &[&str] = &[
 ];
 /// Words that, written plainly, say what to do or how a task came about, not
 /// which code it is about: "find the root cause after the last commit" names
-/// no function `find`, `root` or `last`. Written like code they still count.
+/// no function `find`, `root` or `last`, and "tests are red on main, sort it
+/// out" none named `red`, `main` or `out`. Written like code they still count.
 const TASK_WORDS: &[&str] = &[
     "actually",
     "alone",
@@ -60,6 +64,7 @@ const TASK_WORDS: &[&str] = &[
     "failing",
     "find",
     "first",
+    "green",
     "implement",
     "implementation",
     "last",
@@ -68,6 +73,8 @@ const TASK_WORDS: &[&str] = &[
     "line",
     "lines",
     "look",
+    "main",
+    "out",
     "output",
     "pass",
     "passes",
@@ -76,6 +83,7 @@ const TASK_WORDS: &[&str] = &[
     "pushed",
     "question",
     "recently",
+    "red",
     "refactor",
     "remove",
     "rename",
@@ -84,10 +92,12 @@ const TASK_WORDS: &[&str] = &[
     "root",
     "run",
     "short",
+    "since",
     "something",
     "started",
     "sure",
     "teammate",
+    "touch",
     "track",
     "usage",
     "write",

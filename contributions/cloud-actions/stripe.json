@@ -1,0 +1,1062 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "stripe",
+    "name": "Stripe",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.stripe.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "read_write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "stripe.balance.get",
+      "title": "Read the account balance",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.stripe.com",
+          "path": "/v1/balance",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {},
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "payment"
+        },
+        "scope": {
+          "const": "single"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "available",
+            "value": {
+              "list": {
+                "from": "available",
+                "maxItems": 32,
+                "fields": [
+                  {
+                    "name": "amount",
+                    "value": {
+                      "from": "amount"
+                    }
+                  },
+                  {
+                    "name": "currency",
+                    "value": {
+                      "from": "currency"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "pending",
+            "value": {
+              "list": {
+                "from": "pending",
+                "maxItems": 32,
+                "fields": [
+                  {
+                    "name": "amount",
+                    "value": {
+                      "from": "amount"
+                    }
+                  },
+                  {
+                    "name": "currency",
+                    "value": {
+                      "from": "currency"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "read_write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads the balance",
+          "kind": "safe",
+          "arguments": {},
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an unknown argument",
+          "kind": "risky",
+          "arguments": {
+            "account": "acct_x"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "stripe.refunds.create",
+      "title": "Refund a payment",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.stripe.com",
+          "path": "/v1/refunds",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1,
+          "body": {
+            "form": [
+              {
+                "name": "payment_intent",
+                "value": {
+                  "arg": "payment_intent"
+                }
+              },
+              {
+                "name": "amount",
+                "value": {
+                  "arg": "amount"
+                }
+              },
+              {
+                "name": "reason",
+                "value": {
+                  "arg": "reason"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "arguments": {
+        "payment_intent": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^pi_[A-Za-z0-9]{1,250}$"
+        },
+        "amount": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 99999999
+        },
+        "reason": {
+          "type": "string",
+          "required": false,
+          "maxLength": 32,
+          "pattern": "^(?:duplicate|fraudulent|requested_by_customer)$"
+        }
+      },
+      "facts": {
+        "class": "pay",
+        "object": {
+          "const": "payment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "amount",
+            "value": {
+              "from": "amount"
+            }
+          },
+          {
+            "name": "currency",
+            "value": {
+              "from": "currency"
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "status"
+            }
+          },
+          {
+            "name": "payment_intent",
+            "value": {
+              "from": "payment_intent"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "read_write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "refunds part of a payment",
+          "kind": "safe",
+          "arguments": {
+            "payment_intent": "pi_3PqA1b2C3d4E5f6G",
+            "amount": 2500,
+            "reason": "requested_by_customer"
+          },
+          "expect": {
+            "facts": {
+              "class": "pay",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refunds a whole payment",
+          "kind": "safe",
+          "arguments": {
+            "payment_intent": "pi_3PqA1b2C3d4E5f6G"
+          },
+          "expect": {
+            "facts": {
+              "class": "pay",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a charge id in place of a payment intent",
+          "kind": "risky",
+          "arguments": {
+            "payment_intent": "ch_3PqA1b2C3d4E5f6G"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a negative amount",
+          "kind": "risky",
+          "arguments": {
+            "payment_intent": "pi_3PqA1b2C3d4E5f6G",
+            "amount": -100
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses an unknown reason",
+          "kind": "risky",
+          "arguments": {
+            "payment_intent": "pi_3PqA1b2C3d4E5f6G",
+            "reason": "goodwill"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "stripe.payouts.create",
+      "title": "Pay out the balance to the bank account",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.stripe.com",
+          "path": "/v1/payouts",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1,
+          "body": {
+            "form": [
+              {
+                "name": "amount",
+                "value": {
+                  "arg": "amount"
+                }
+              },
+              {
+                "name": "currency",
+                "value": {
+                  "arg": "currency"
+                }
+              },
+              {
+                "name": "description",
+                "value": {
+                  "arg": "description"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "arguments": {
+        "amount": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 99999999
+        },
+        "currency": {
+          "type": "string",
+          "required": true,
+          "maxLength": 3,
+          "pattern": "^[A-Za-z]{3}$"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "maxLength": 256,
+          "pattern": "^[^\\r\\n]*$"
+        }
+      },
+      "facts": {
+        "class": "pay",
+        "object": {
+          "const": "payment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "money": {
+          "amount": "amount",
+          "currencyArgument": "currency",
+          "direction": "out"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "amount",
+            "value": {
+              "from": "amount"
+            }
+          },
+          {
+            "name": "currency",
+            "value": {
+              "from": "currency"
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "status"
+            }
+          },
+          {
+            "name": "arrival_date",
+            "value": {
+              "from": "arrival_date"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "read_write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "pays out 999.99",
+          "kind": "safe",
+          "arguments": {
+            "amount": 99999,
+            "currency": "usd"
+          },
+          "expect": {
+            "facts": {
+              "class": "pay",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "money": {
+                "state": "known",
+                "value": {
+                  "amount_minor": 99999,
+                  "currency": "USD",
+                  "direction": "out"
+                }
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "pays out 1,000.00",
+          "kind": "safe",
+          "arguments": {
+            "amount": 100000,
+            "currency": "usd",
+            "description": "Weekly payout"
+          },
+          "expect": {
+            "facts": {
+              "class": "pay",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "money": {
+                "state": "known",
+                "value": {
+                  "amount_minor": 100000,
+                  "currency": "USD",
+                  "direction": "out"
+                }
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a payout with no currency",
+          "kind": "risky",
+          "arguments": {
+            "amount": 5000
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        },
+        {
+          "name": "refuses a currency that is not a three-letter code",
+          "kind": "risky",
+          "arguments": {
+            "amount": 5000,
+            "currency": "usdollars"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a zero amount",
+          "kind": "risky",
+          "arguments": {
+            "amount": 0,
+            "currency": "usd"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "stripe.transfers.create",
+      "title": "Transfer funds to a connected account",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.stripe.com",
+          "path": "/v1/transfers",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1,
+          "body": {
+            "form": [
+              {
+                "name": "amount",
+                "value": {
+                  "arg": "amount"
+                }
+              },
+              {
+                "name": "currency",
+                "value": {
+                  "arg": "currency"
+                }
+              },
+              {
+                "name": "destination",
+                "value": {
+                  "arg": "destination"
+                }
+              },
+              {
+                "name": "description",
+                "value": {
+                  "arg": "description"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "arguments": {
+        "amount": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 99999999
+        },
+        "currency": {
+          "type": "string",
+          "required": true,
+          "maxLength": 3,
+          "pattern": "^[A-Za-z]{3}$"
+        },
+        "destination": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^acct_[A-Za-z0-9]{1,250}$"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "maxLength": 256,
+          "pattern": "^[^\\r\\n]*$"
+        }
+      },
+      "facts": {
+        "class": "pay",
+        "object": {
+          "const": "payment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "money": {
+          "amount": "amount",
+          "currencyArgument": "currency",
+          "direction": "out"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "amount",
+            "value": {
+              "from": "amount"
+            }
+          },
+          {
+            "name": "currency",
+            "value": {
+              "from": "currency"
+            }
+          },
+          {
+            "name": "destination",
+            "value": {
+              "from": "destination"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "read_write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "transfers 999.99",
+          "kind": "safe",
+          "arguments": {
+            "amount": 99999,
+            "currency": "eur",
+            "destination": "acct_1PqA1b2C3d4E5f6G"
+          },
+          "expect": {
+            "facts": {
+              "class": "pay",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "money": {
+                "state": "known",
+                "value": {
+                  "amount_minor": 99999,
+                  "currency": "EUR",
+                  "direction": "out"
+                }
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "transfers 1,000.00",
+          "kind": "safe",
+          "arguments": {
+            "amount": 100000,
+            "currency": "EUR",
+            "destination": "acct_1PqA1b2C3d4E5f6G",
+            "description": "Order 1042 & fees"
+          },
+          "expect": {
+            "facts": {
+              "class": "pay",
+              "object": {
+                "state": "known",
+                "value": "payment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "money": {
+                "state": "known",
+                "value": {
+                  "amount_minor": 100000,
+                  "currency": "EUR",
+                  "direction": "out"
+                }
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a destination that is not an account id",
+          "kind": "risky",
+          "arguments": {
+            "amount": 100,
+            "currency": "eur",
+            "destination": "ba_123"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a transfer with no destination",
+          "kind": "risky",
+          "arguments": {
+            "amount": 100,
+            "currency": "eur"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "stripe.prices.create",
+      "title": "Create a price for a product",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.stripe.com",
+          "path": "/v1/prices",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1,
+          "body": {
+            "form": [
+              {
+                "name": "product",
+                "value": {
+                  "arg": "product"
+                }
+              },
+              {
+                "name": "unit_amount",
+                "value": {
+                  "arg": "unit_amount"
+                }
+              },
+              {
+                "name": "currency",
+                "value": {
+                  "arg": "currency"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "arguments": {
+        "product": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^prod_[A-Za-z0-9]{1,250}$"
+        },
+        "unit_amount": {
+          "type": "integer",
+          "required": true,
+          "minimum": 0,
+          "maximum": 99999999
+        },
+        "currency": {
+          "type": "string",
+          "required": true,
+          "maxLength": 3,
+          "pattern": "^[A-Za-z]{3}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "money": {
+          "amount": "unit_amount",
+          "currencyArgument": "currency",
+          "direction": "in"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "unit_amount",
+            "value": {
+              "from": "unit_amount"
+            }
+          },
+          {
+            "name": "currency",
+            "value": {
+              "from": "currency"
+            }
+          },
+          {
+            "name": "product",
+            "value": {
+              "from": "product"
+            }
+          },
+          {
+            "name": "active",
+            "value": {
+              "from": "active"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "read_write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "prices a product at 49.00",
+          "kind": "safe",
+          "arguments": {
+            "product": "prod_PqA1b2C3d4E5f6",
+            "unit_amount": 4900,
+            "currency": "usd"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "money": {
+                "state": "known",
+                "value": {
+                  "amount_minor": 4900,
+                  "currency": "USD",
+                  "direction": "in"
+                }
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a product id that is a path",
+          "kind": "risky",
+          "arguments": {
+            "product": "../v1/charges",
+            "unit_amount": 4900,
+            "currency": "usd"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

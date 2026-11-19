@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,7 +28,8 @@ from codex_plugin_scanner.guard.harness_posture import (
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.native_policy_snapshot_harness_postures import (
     read_harness_postures_sidecar,
-    recording_only_for_binding,
+    sidecar_generation_to_retire,
+    signed_watch_ends,
     write_harness_postures_sidecar,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -190,19 +193,6 @@ def test_settings_set_protection_payload_for_harness_and_inherit() -> None:
     assert protection_settings_payload("watch", harness=None, inherit=False)["protection_posture"] == "watch"
 
 
-def test_recording_only_for_binding_semantics() -> None:
-    assert recording_only_for_binding(None, "codex") is False
-    assert recording_only_for_binding({"mode": "observe"}, "codex") is True
-    assert recording_only_for_binding({"mode": "enforce"}, "codex") is False
-    enforce_with_watch = {"mode": "enforce", "harness_postures": {"codex": "watch"}}
-    assert recording_only_for_binding(enforce_with_watch, "codex") is True
-    assert recording_only_for_binding(enforce_with_watch, "claude-code") is False
-    observe_with_protected = {"mode": "observe", "harness_postures": {"codex": "protected"}}
-    assert recording_only_for_binding(observe_with_protected, "codex") is False
-    assert recording_only_for_binding(observe_with_protected, "claude-code") is True
-    assert recording_only_for_binding({"mode": "enforce", "harness_postures": {"codex": "bogus"}}, "codex") is False
-
-
 def test_sidecar_is_bound_to_generation_and_digest_and_authenticated(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store._policy_integrity_secret_material(create=True)
@@ -219,14 +209,90 @@ def test_sidecar_is_bound_to_generation_and_digest_and_authenticated(tmp_path: P
     assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == {}
 
 
-def test_sidecar_without_postures_removes_stale_file(tmp_path: Path) -> None:
+def test_sidecar_without_postures_signs_an_empty_override_map(tmp_path: Path) -> None:
+    import codex_plugin_scanner.guard.native_policy_snapshot_harness_postures as sidecar_module
+
     store = GuardStore(tmp_path / "guard-home")
     store._policy_integrity_secret_material(create=True)
     digest = "d" * 64
     write_harness_postures_sidecar(store, generation=1, policy_digest=digest, postures={"codex": "watch"})
-    write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={})
+    assert write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={}) == {}
     assert read_harness_postures_sidecar(store, generation=1, policy_digest=digest) == {}
-    assert not (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").exists()
+    assert read_harness_postures_sidecar(store, generation=2, policy_digest=digest) == {}
+
+    document = json.loads(
+        (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").read_text(encoding="utf-8")
+    )
+    assert document["generation"] == 2
+    assert document["harness_postures"] == {}
+    verifier_key = sidecar_module._verifier_key_for_store(store)
+    assert verifier_key is not None
+    assert (
+        document["mac"]
+        == hmac.new(
+            verifier_key,
+            b"hol-guard/harness-postures/v2\0"
+            + json.dumps(
+                {
+                    "generation": 2,
+                    "harness_postures": {},
+                    "harness_watch_ends_at_us": {},
+                    "policy_digest": digest,
+                    "watch_ends_at_us": 0,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+    )
+
+
+def test_sidecar_signs_when_each_watch_ends(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store._policy_integrity_secret_material(create=True)
+    digest = "d" * 64
+    sidecar = tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json"
+    postures = {"codex": "watch", "cursor": "protected"}
+    write_harness_postures_sidecar(
+        store,
+        generation=3,
+        policy_digest=digest,
+        postures=postures,
+        watch_ends=(None, {"codex": 1_700_000_000_000_000, "cursor": 5}),
+    )
+    document = json.loads(sidecar.read_text(encoding="utf-8"))
+    # Only a Watch override keeps a deadline.
+    assert document["harness_watch_ends_at_us"] == {"codex": 1_700_000_000_000_000}
+    assert document["watch_ends_at_us"] is None
+    assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == postures
+
+    # A moved deadline breaks the MAC.
+    document["harness_watch_ends_at_us"] = {"codex": 1_800_000_000_000_000}
+    sidecar.write_text(json.dumps(document), encoding="utf-8")
+    assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == {}
+
+    # Deadlines that could not be resolved sign every Watch as already over.
+    write_harness_postures_sidecar(store, generation=4, policy_digest=digest, postures=postures)
+    document = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert document["harness_watch_ends_at_us"] == {"codex": 0}
+    assert document["watch_ends_at_us"] == 0
+
+
+def test_a_changed_sidecar_retires_its_generation(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store._policy_integrity_secret_material(create=True)
+    digest = "d" * 64
+    watch = {"codex": "watch"}
+    ends = signed_watch_ends(watch, (None, {"codex": 9}))
+    assert sidecar_generation_to_retire(store, postures=watch, watch_ends=ends) is None
+    write_harness_postures_sidecar(
+        store, generation=3, policy_digest=digest, postures=watch, watch_ends=(None, {"codex": 9})
+    )
+    assert sidecar_generation_to_retire(store, postures=watch, watch_ends=ends) is None
+    assert sidecar_generation_to_retire(store, postures={}, watch_ends=signed_watch_ends({}, (None, {}))) == 3
+    moved = signed_watch_ends(watch, (None, {"codex": 10}))
+    assert sidecar_generation_to_retire(store, postures=watch, watch_ends=moved) == 3
 
 
 def test_full_settings_save_keeps_global_watch_timer(tmp_path: Path) -> None:

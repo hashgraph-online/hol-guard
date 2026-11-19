@@ -83,7 +83,7 @@ def test_the_workspace_comes_from_the_pairing(tmp_path: Path, capsys: pytest.Cap
 
 
 def _codex_bridge_args(home: Path) -> list[str]:
-    from codex_plugin_scanner.guard.codex_config import tomllib
+    import tomllib
 
     document = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
     return document["mcp_servers"]["hol-guard-cloud"]["args"]

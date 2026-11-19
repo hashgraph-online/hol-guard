@@ -109,6 +109,10 @@ fn load_from_home(request: &LoadRequest, home: &Map<String, Value>) -> Result<Va
         merged = apply_managed_policy(&merged, policy);
     }
     let mut value = coerce_config(&merged, request.managed.as_ref());
+    // A person's own CIGAR "off" holds: project or managed settings can add one, never clear it.
+    let mut cigar_off = harness::loaded_cigar(value.get("harness_cigar"));
+    cigar_off.extend(harness::loaded_cigar(home.get("harness_cigar")));
+    value["harness_cigar"] = json!(cigar_off);
     // Preserve validated local intent for presentation/settings round trips.
     // Enforcement continues to use the restricted context_assistance value.
     value["context_assistance_requested"] = match home.get("context_assistance") {
@@ -180,6 +184,16 @@ fn context_assistance_at(
 ) -> Result<AssistanceSettings, String> {
     let home_config = context_snapshot::read_home(home)?;
     context_assistance_from_home(home, workspace, source, &home_config)
+}
+
+/// Whether CIGAR is off for `app` in the composed settings (home,
+/// `workspace` and managed policy), where the home "off" always holds. A
+/// config Guard cannot read leaves the choice to CIGAR's own policy.
+pub(crate) fn cigar_off_for(home: &Path, workspace: Option<&Path>, app: &str) -> bool {
+    let mut source = ManagedPolicySource::native();
+    source.write_cache = false;
+    effective_config(home, workspace, &source)
+        .is_ok_and(|config| harness::loaded_cigar(config.get("harness_cigar")).contains_key(app))
 }
 
 /// Hypothetical local intent is composed through the same native machine
@@ -303,6 +317,30 @@ pub(crate) fn desktop_notifications(
     )
 }
 
+/// Effective evidence retention for storage maintenance: detail retention
+/// days and the receipt-detail and guard-event row limits, each limit
+/// defaulting to 250,000 when unset.
+pub(crate) fn evidence_retention(guard_home: &Path) -> Result<(i64, i64, i64), String> {
+    const DEFAULT_LIMIT: i64 = 250_000;
+    let config = effective_config(guard_home, None, &ManagedPolicySource::native())?;
+    let int = |key: &str| config.get(key).and_then(Value::as_i64);
+    Ok((
+        int("evidence_retain_days").unwrap_or(90),
+        int("receipt_detail_limit").unwrap_or(DEFAULT_LIMIT),
+        int("guard_event_limit").unwrap_or(DEFAULT_LIMIT),
+    ))
+}
+
+pub(crate) fn approval_browser_allowed_under(
+    guard_home: &Path,
+    source: &ManagedPolicySource,
+) -> Result<bool, String> {
+    Ok(effective_config(guard_home, None, source)?
+        .get("approval_surface_policy")
+        .and_then(Value::as_str)
+        != Some("native-only"))
+}
+
 fn effective_config(
     guard_home: &Path,
     workspace: Option<&Path>,
@@ -403,6 +441,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
         "watch_entered_at": watch_entered_at(get("watch_entered_at")),
         "harness_postures": postures,
         "harness_watch_entered_at": stamps,
+        "harness_cigar": harness::loaded_cigar(get("harness_cigar")),
         "default_action": action_text(get("default_action"), GuardAction::Warn),
         "unknown_publisher_action": action_text(get("unknown_publisher_action"), GuardAction::Review),
         "changed_hash_action": action_text(get("changed_hash_action"), GuardAction::RequireReapproval),
@@ -418,6 +457,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
             other => coerce::loaded_bool(other),
         },
         "update_channel": coerce::update_channel(get("update_channel")),
+        "update_mode": coerce::update_mode(get("update_mode")),
         "telemetry": coerce::python_truthy(get("telemetry")),
         "sync": coerce::python_truthy(get("sync")),
         "billing": coerce::python_truthy(get("billing")),

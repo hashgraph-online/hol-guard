@@ -486,6 +486,8 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
     } else {
         Value::Null
     };
+    let saved = allow && persistence == "persisted" && scope == "artifact";
+    let package_decision = crate::package_approval_key::decision(approval, saved);
     Ok(json!({
         "decision": decision,
         "persistence": persistence,
@@ -493,6 +495,7 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
         "local_once": local_once_row,
         "matching": matching,
         "exact_context_allow": exact_context_allow,
+        "package_decision": package_decision,
     }))
 }
 

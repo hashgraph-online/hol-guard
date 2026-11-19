@@ -96,14 +96,16 @@ pub(super) fn reaches_outside(
     {
         return false;
     }
-    segment.arguments.iter().any(|argument| {
-        if granted_script == Some(argument.as_str()) || (guide && argument == SAFETY_GUIDE) {
+    // A name pattern is matched against what the walk finds and never opened,
+    // so `-not -path './.git/*'` or `--exclude-dir=.git` reaches nothing.
+    name_patterns::opened(name, &segment.arguments).any(|argument| {
+        if granted_script == Some(argument) || (guide && argument == SAFETY_GUIDE) {
             return false;
         }
         let value = match argument.split_once('=') {
             Some((option, value)) if option.starts_with('-') => value,
             _ if argument.starts_with('-') => return false,
-            _ => argument.as_str(),
+            _ => argument,
         };
         outside_from(value, name, workspace, below)
     })
@@ -420,8 +422,9 @@ fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool
         // Only a path whose top directory exists names the file system; a
         // pattern such as `/api/v1` does not.
         let top = path.components().nth(1);
-        let names_file_system =
-            top.is_some_and(|top| Path::new("/").join(top.as_os_str()).exists());
+        let names_file_system = top
+            .is_some_and(|top| Path::new("/").join(top.as_os_str()).exists())
+            || home_paths::names_a_home_file(path);
         return names_file_system
             && !inside_workspace(path, workspace)
             && !through_root_link(path, workspace)
@@ -489,6 +492,12 @@ pub(super) fn through_root_link(path: &Path, workspace: &Path) -> bool {
             .join(path.strip_prefix("/").unwrap_or(path))
             .starts_with(workspace)
 }
+
+#[path = "workspace_contained_name_patterns.rs"]
+mod name_patterns;
+
+#[path = "workspace_contained_home_paths.rs"]
+mod home_paths;
 
 #[cfg(test)]
 #[path = "workspace_contained_reach_prefix_tests.rs"]

@@ -35,7 +35,7 @@ def _isolate_command_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
 
     class DaemonInspectionClient:
-        def inspect_command(self, request: dict[str, str]) -> dict[str, object]:
+        def inspect_command(self, request: dict[str, str], timeout: float | None = None) -> dict[str, object]:
             return command_inspection.inspect_command(
                 request["command"],
                 cwd=Path(request["cwd"]),

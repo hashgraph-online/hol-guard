@@ -278,3 +278,55 @@ fn malformed_requests_are_refused() {
         Err(ERR_INVALID)
     );
 }
+
+fn launch_env(configured: Value, present: &[&str]) -> Value {
+    dispatch(&json!({"op": "launch_env", "configured": configured, "present": present}))
+        .expect("launch_env answers")
+}
+
+#[test]
+fn a_probe_takes_only_keys_the_config_leaves_unset_or_unexpanded() {
+    let configured = json!([
+        ["SET", "value"],
+        ["PLACEHOLDER", " ${TOKEN} "],
+        ["TOO_SHORT", "${}"],
+        ["UNCLOSED", "${TOKEN"],
+        ["EMPTY", ""],
+    ]);
+    let present = [
+        "SET",
+        "PLACEHOLDER",
+        "TOO_SHORT",
+        "UNCLOSED",
+        "EMPTY",
+        "UNSET",
+    ];
+
+    assert_eq!(
+        launch_env(configured, &present),
+        json!({ "from_process": ["PLACEHOLDER", "UNSET"] })
+    );
+}
+
+#[test]
+fn a_later_configured_value_decides_the_key() {
+    let configured = json!([["KEY", "${KEY}"], ["KEY", "value"]]);
+
+    assert_eq!(
+        launch_env(configured, &["KEY"]),
+        json!({ "from_process": [] })
+    );
+}
+
+#[test]
+fn malformed_launch_env_requests_are_refused() {
+    for request in [
+        json!({"op": "launch_env", "configured": []}),
+        json!({"op": "launch_env", "configured": null, "present": []}),
+        json!({"op": "launch_env", "configured": [["KEY"]], "present": []}),
+        json!({"op": "launch_env", "configured": [], "present": [1]}),
+        json!({"op": "launch_env", "configured": [], "present": [], "extra": 1}),
+    ] {
+        assert_eq!(dispatch(&request).unwrap_err(), ERR_INVALID, "{request}");
+    }
+}

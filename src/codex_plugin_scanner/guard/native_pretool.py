@@ -98,9 +98,13 @@ _POLICY_ACTIONS = {
     "block",
 }
 _ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
-# The actions a command-string review may answer: its callers have no
-# containment or reapproval route.
-_LEGACY_REVIEW_ACTIONS = {"allow", "review", "block"}
+# The floors a command-string review may answer. Its callers (`command explain`
+# and `command test`) report the floor and enforce nothing, so a reapproval or
+# containment floor is an answer to show, not a missing one.
+_COMMAND_REVIEW_ACTIONS = {"allow", "review", "require-reapproval", "sandbox-required", "block"}
+# A reapproval or containment floor is a hold; a reply that pairs one with an
+# allow decision is malformed.
+REVIEW_TIER_ACTIONS = frozenset({"require-reapproval", "sandbox-required"})
 
 
 def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
@@ -179,7 +183,7 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
         not isinstance(decision, str)
         or decision not in {"allow", "deny"}
         or not isinstance(action, str)
-        or action not in _LEGACY_REVIEW_ACTIONS
+        or action not in _COMMAND_REVIEW_ACTIONS
         or not isinstance(reason_code, str)
         or not reason_code
         or not isinstance(reason, str)
@@ -190,6 +194,8 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
     ):
         return record_native_hook_result("native_fail_safe", None)
     if explicitly_benign != (decision == "allow" and action == "allow"):
+        return record_native_hook_result("native_fail_safe", None)
+    if action in REVIEW_TIER_ACTIONS and decision != "deny":
         return record_native_hook_result("native_fail_safe", None)
     return payload
 
@@ -204,6 +210,7 @@ def review_pre_tool_native(
     timeout_seconds: float = 0.5,
     record_health: bool = True,
     extension_evidence: bool = False,
+    timeout_ceiling_seconds: float = 1.0,
 ) -> dict[str, Any] | None:
     """Return the Rust PreToolUse decision, or None when native cannot decide.
 
@@ -228,6 +235,10 @@ def review_pre_tool_native(
     ``command_extensions`` evidence with the decision. A caller that resolves
     the review against those controls needs it, and fails closed on a reply
     that carries none.
+
+    ``timeout_ceiling_seconds`` bounds ``timeout_seconds``. A hook keeps the
+    one-second default; a diagnostic caller that enforces nothing, such as
+    command inspection, may raise it to wait for a warming runtime.
     """
     status = native_runtime_status()
     if (
@@ -239,7 +250,7 @@ def review_pre_tool_native(
         or timeout_seconds <= 0
     ):
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = min(timeout_seconds, 1.0)
+    timeout_seconds = min(timeout_seconds, max(0.0, min(timeout_ceiling_seconds, 9.0)))
     deadline_started = time.monotonic()
     deadline_monotonic = deadline_started + timeout_seconds
     deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
@@ -295,7 +306,7 @@ def review_pre_tool_native(
             payload = json.loads(output)
         except (UnicodeDecodeError, json.JSONDecodeError):
             payload = None
-        if _native_error(payload) == "native_overloaded":
+        if _native_error(payload, deadline_monotonic=deadline_monotonic) == "native_overloaded":
             if record_health:
                 native_record_overload(status.identity.sha256, guard_home)
             return record_native_hook_result("native_fail_safe", None)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from bundled_harness_names import prime
 from command_activity_factories import (
     at,
     evidence_a,
@@ -27,6 +28,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
 from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import CommandShadowCohort
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 
+prime()
 REQUEST = CorrelationKind.REQUEST
 NOW = at(2026, 7, 20, 12)
 ACTIVITY_INSERT = (

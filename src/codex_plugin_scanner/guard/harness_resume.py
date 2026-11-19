@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from contextlib import suppress
 
-from .adapters.contracts import contract_for
 from .continuation_runtime import continue_request_after_application
+from .setup_contracts import contract_for
 from .store import GuardStore
 
 

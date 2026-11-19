@@ -13,6 +13,15 @@ _SCRIPT = b"#!/bin/sh\necho verified\n"
 _OTHER = b"#!/bin/sh\necho other\n"
 
 
+@pytest.fixture(autouse=True)
+def _no_copy_from_another_test(monkeypatch: pytest.MonkeyPatch):
+    # These cover the per-process copy; a Guard home's kept copy is covered in its own tests.
+    monkeypatch.setattr(root_module, "_private_roots", [])
+    root_module.release_copies()
+    yield
+    root_module.release_copies()
+
+
 def _materializations(monkeypatch: pytest.MonkeyPatch) -> list[bytes]:
     made: list[bytes] = []
     real = root_module._materialize

@@ -364,6 +364,17 @@ fn unauthorized(request: &Request<'_>, config: &ReadConfig, reads: &NativeReads)
 
 /// `audit_persistence.persist`: whether the row landed.
 fn record(event_name: &str, payload: &PyVal, config: &ReadConfig, reads: &NativeReads) -> bool {
+    record_within(event_name, payload, config, reads, u64::MAX)
+}
+
+/// `record`, waiting at most `busy_ms` for a store another writer holds.
+pub(super) fn record_within(
+    event_name: &str,
+    payload: &PyVal,
+    config: &ReadConfig,
+    reads: &NativeReads,
+    busy_ms: u64,
+) -> bool {
     let micros = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_micros() as i64);
@@ -372,17 +383,17 @@ fn record(event_name: &str, payload: &PyVal, config: &ReadConfig, reads: &Native
     else {
         return false;
     };
+    let event = json!({
+        "event_name": event_name,
+        "payload_json": payload_json,
+        "occurred_at": occurred_at,
+    });
+    if busy_ms == u64::MAX {
+        return reads.store_write(config, "add_event", event).is_ok();
+    }
     reads
-        .store_write(
-            config,
-            "add_event",
-            json!({
-                "event_name": event_name,
-                "payload_json": payload_json,
-                "occurred_at": occurred_at,
-            }),
-        )
-        .is_ok()
+        .store_read_within(config, "add_event", event, busy_ms)
+        .is_some()
 }
 
 #[cfg(all(test, unix))]

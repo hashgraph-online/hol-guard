@@ -24,6 +24,8 @@ mod known_folders;
 #[cfg(windows)]
 mod owner;
 #[cfg(windows)]
+mod path_forms;
+#[cfg(windows)]
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
@@ -41,20 +43,21 @@ pub use windows::ManagedChild;
 pub use windows::{
     attach_suspended_process, capture_managed_child, capture_owned_child, capture_pipes,
     disinherit_standard_handles, CaptureCommand, CapturePipes, CapturedOutput, ChildJobGuard,
-    ChildTree, InheritWindow, ResourceLimits, CHILD_TREE_CREATION_FLAGS,
+    ChildTree, ChildTreeOptions, InheritWindow, ResourceLimits, CHILD_TREE_CREATION_FLAGS,
 };
 
 #[cfg(windows)]
 pub use windows::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     create_private_file, delete_private_file_handle, directory_file_id, handle_file_id,
-    handle_final_path, is_single_link_file, is_single_link_handle, open_bound_executable_file,
-    open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
-    open_private_file, open_skill_directory, path_is_within, path_stat, process_ids,
-    process_liveness, process_parent_ids, process_start_marker, regular_file_id,
-    remove_file_if_same, rename_no_replace, running_process_image_path,
-    running_process_start_marker, terminate_process, terminate_process_verified,
-    wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding, ProcessQuery,
+    handle_final_path, is_single_link_file, is_single_link_handle, link_stat,
+    mark_handle_for_delete, open_bound_executable_file, open_bound_regular_file,
+    open_bound_replaceable_file, open_private_directory, open_private_file, open_skill_directory,
+    path_is_within, path_stat, process_ids, process_liveness, process_parent_ids,
+    process_start_marker, regular_file_id, remove_file_if_same, rename_into_directory,
+    rename_no_replace, running_process_image_path, running_process_start_marker, terminate_process,
+    terminate_process_verified, wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding,
+    ProcessQuery,
 };
 
 #[cfg(windows)]
@@ -77,12 +80,18 @@ pub use trusted_directories::{
 };
 
 #[cfg(windows)]
-pub use owner::{create_owner_only_directory, owned_by_current_user, writable_only_by_trusted};
+pub use owner::{
+    create_owner_only_directory, owned_by_current_user, owned_exactly_by_current_user,
+    writable_only_by_trusted,
+};
 
 #[cfg(windows)]
 pub use windows::{
     command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
 };
+
+#[cfg(windows)]
+pub use path_forms::{long_path_name, short_path_name};
 
 #[cfg(windows)]
 pub use registry::{read_machine_registry_string, MachineRegistryString};
@@ -176,6 +185,16 @@ pub fn real_directory(_path: &str) -> Option<String> {
 
 #[cfg(not(windows))]
 pub fn real_regular_file(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn short_path_name(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn long_path_name(_path: &str) -> Option<String> {
     None
 }
 

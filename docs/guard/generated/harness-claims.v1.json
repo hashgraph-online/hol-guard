@@ -1,0 +1,1919 @@
+{
+  "schema": "hol-guard.harness-claims.v1",
+  "source": "src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json",
+  "contract_schema": "hol-guard.harness-protection-contracts.v1",
+  "claims": [
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "Bash",
+        "Read",
+        "mcp__*"
+      ],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "apply_patch"
+      ],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Edits the model applies without an apply_patch tool call are not visible to Guard.",
+        "PostToolUse does not match apply_patch, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "Write",
+        "Edit",
+        "MultiEdit"
+      ],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them.",
+        "PostToolUse does not match these tools, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
+      "event": "PermissionRequest",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "approval",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Native approval UX and Guard evidence still require a live host/version check."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "screening",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Native post-tool observation does not prove model-visible output replacement."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "claude-code",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+        "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "claude-code",
+      "event": "PermissionRequest",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "approval",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "claude-code",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Native PostToolUse is not a general model-visible result replacement boundary."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "claude-code",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "screening",
+      "surface": "foreground",
+      "failure_behavior": "fail_open",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "opencode",
+      "event": "shell",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "opencode",
+      "event": "mcp_tool",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "opencode",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt content is not available through the declared OpenCode hooks."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "copilot",
+      "event": "shell",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "copilot",
+      "event": "prompt",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "beforeShellExecution",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Cursor terminal actions outside an agent hook path remain outside this boundary."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "beforeMCPExecution",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Only MCP traffic entering Cursor's declared hook surface is covered."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "beforeReadFile",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Reads outside the Cursor hook path are not covered."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "preToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Inline edits that bypass the declared Cursor hook are not covered."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "afterShellExecution",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "editor",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Observation does not block or undo the completed shell command."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "afterMCPExecution",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "editor",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Observation does not block or replace a result already returned by Cursor."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "editor",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt submission is not surfaced through the declared Cursor hooks."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "cli",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+        "Running cursor-agent directly instead of the Guard shim skips the launch check."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "cloud-agent",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "terminal",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Emergency-safe inspection actions can continue during Guard authority failure.",
+        "JetBrains protection remains unverified until a live pre-tool deny proof is observed."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "agent_plugin",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Plugin load and live pre-tool suppression still require an installed-host proof."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Native Cline PostToolUse is observation-only and cannot provide model-visible replacement."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "agent_plugin",
+      "mode": "replace_or_withhold",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Synthetic plugin canaries do not prove live Cline model-visible replacement."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt observation does not block submission or prove final model request redaction."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "TaskStart",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Lifecycle observations do not establish a blocking boundary."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "TaskError",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Lifecycle observations do not establish a blocking boundary."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cline",
+      "event": "SessionShutdown",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Lifecycle observations do not establish a blocking boundary."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "gemini",
+      "event": "shell",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "gemini",
+      "event": "mcp_tool",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "hermes",
+      "event": "shell",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "hermes",
+      "event": "mcp_tool",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "hermes",
+      "event": "prompt",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "openclaw",
+      "event": "mcp_tool",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Shell commands and prompt events are not currently observable. Guard only intercepts MCP tool calls via the proxy layer."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "antigravity",
+      "event": "mcp_tool",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "editor",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "antigravity",
+      "event": "prompt",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "editor",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "kimi",
+      "event": "shell",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "kimi",
+      "event": "prompt",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "grok",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Post-tool events do not prevent an action that already executed."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_open",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "grok",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Post-tool observation does not block or replace model-visible output."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "pi",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "managed_extension",
+      "mode": "screening",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Package installation and update flows happen outside the runtime extension bridge."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "pi",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "managed_extension",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A present extension file alone does not prove Pi loaded it or suppressed a live tool call."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "pi",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "managed_extension",
+      "mode": "replace_or_withhold",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A synthetic extension canary does not prove live Pi model-visible replacement."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "omp",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "managed_extension",
+      "mode": "screening",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Package installation and update flows happen outside the runtime extension bridge."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "omp",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "managed_extension",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A present extension file alone does not prove live tool suppression."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "omp",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "managed_extension",
+      "mode": "replace_or_withhold",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A synthetic extension canary does not prove live model-visible replacement."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "zcode",
+      "event": "shell",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "zcode",
+      "event": "prompt",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "zcode",
+      "event": "mcp_tool",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "zcode",
+      "event": "file_read",
+      "tools": [],
+      "transport": "adapter_declared",
+      "mode": "declared",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "devin",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A source declaration does not prove that a live Devin session honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "devin",
+      "event": "PermissionRequest",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "approval",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Native approval UX and Guard evidence still require a live host/version check."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "devin",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "screening",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "devin",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Post-tool observation does not block or replace model-visible output."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "muse",
+      "event": "PreToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "A source declaration does not prove that a live Muse session honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "muse",
+      "event": "PermissionRequest",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "approval",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Native approval UX and Guard evidence still require a live host/version check."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "muse",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "screening",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "muse",
+      "event": "PostToolUse",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Post-tool observation does not block or replace model-visible output."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "muse",
+      "event": "SessionStart",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Session context does not prove that later tool calls were reviewed."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "muse",
+      "event": "Stop",
+      "tools": [],
+      "transport": "native_hook",
+      "mode": "observe",
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Stop observation does not prove that earlier tool calls were reviewed."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "paseo",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Protection is delegated to supported native providers on the Paseo daemon host. Paseo permission notifications are not blocking hooks. Terminals, daemon git/browser actions, plugin code, custom commands, ACP providers, relocated native homes, and remote hosts are not covered. Native runtime failure behavior and approval/resume support remain provider-specific."
+      ],
+      "evidence": {}
+    }
+  ],
+  "non_coverage": [
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "Bash",
+        "Read",
+        "mcp__*"
+      ],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "apply_patch"
+      ],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Edits the model applies without an apply_patch tool call are not visible to Guard.",
+        "PostToolUse does not match apply_patch, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "Write",
+        "Edit",
+        "MultiEdit"
+      ],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them.",
+        "PostToolUse does not match these tools, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
+      "event": "PermissionRequest",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Native approval UX and Guard evidence still require a live host/version check."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Native post-tool observation does not prove model-visible output replacement."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "claude-code",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+        "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "claude-code",
+      "event": "PermissionRequest",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "claude-code",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Native PostToolUse is not a general model-visible result replacement boundary."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "claude-code",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_open",
+      "state": "configured",
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "opencode",
+      "event": "shell",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "opencode",
+      "event": "mcp_tool",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "opencode",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Prompt content is not available through the declared OpenCode hooks."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "copilot",
+      "event": "shell",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "copilot",
+      "event": "prompt",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "beforeShellExecution",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Cursor terminal actions outside an agent hook path remain outside this boundary."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "beforeMCPExecution",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Only MCP traffic entering Cursor's declared hook surface is covered."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "beforeReadFile",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Reads outside the Cursor hook path are not covered."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "preToolUse",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Inline edits that bypass the declared Cursor hook are not covered."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "afterShellExecution",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Observation does not block or undo the completed shell command."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "afterMCPExecution",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Observation does not block or replace a result already returned by Cursor."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Prompt submission is not surfaced through the declared Cursor hooks."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "cli",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+        "Running cursor-agent directly instead of the Guard shim skips the launch check."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "cloud-agent",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "terminal",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Emergency-safe inspection actions can continue during Guard authority failure.",
+        "JetBrains protection remains unverified until a live pre-tool deny proof is observed."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Plugin load and live pre-tool suppression still require an installed-host proof."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Native Cline PostToolUse is observation-only and cannot provide model-visible replacement."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Synthetic plugin canaries do not prove live Cline model-visible replacement."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Prompt observation does not block submission or prove final model request redaction."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "TaskStart",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Lifecycle observations do not establish a blocking boundary."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "TaskError",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Lifecycle observations do not establish a blocking boundary."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cline",
+      "event": "SessionShutdown",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Lifecycle observations do not establish a blocking boundary."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "gemini",
+      "event": "shell",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "gemini",
+      "event": "mcp_tool",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "hermes",
+      "event": "shell",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "hermes",
+      "event": "mcp_tool",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "hermes",
+      "event": "prompt",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "openclaw",
+      "event": "mcp_tool",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Shell commands and prompt events are not currently observable. Guard only intercepts MCP tool calls via the proxy layer."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "antigravity",
+      "event": "mcp_tool",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "antigravity",
+      "event": "prompt",
+      "tools": [],
+      "surface": "editor",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "kimi",
+      "event": "shell",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "kimi",
+      "event": "prompt",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "grok",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Post-tool events do not prevent an action that already executed."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "grok",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_open",
+      "state": "configured",
+      "known_blind_spots": [
+        "Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "grok",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Post-tool observation does not block or replace model-visible output."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "pi",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Package installation and update flows happen outside the runtime extension bridge."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "pi",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A present extension file alone does not prove Pi loaded it or suppressed a live tool call."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "pi",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A synthetic extension canary does not prove live Pi model-visible replacement."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "omp",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Package installation and update flows happen outside the runtime extension bridge."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "omp",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A present extension file alone does not prove live tool suppression."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "omp",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A synthetic extension canary does not prove live model-visible replacement."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "zcode",
+      "event": "shell",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "zcode",
+      "event": "prompt",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "zcode",
+      "event": "mcp_tool",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "zcode",
+      "event": "file_read",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "devin",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A source declaration does not prove that a live Devin session honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "devin",
+      "event": "PermissionRequest",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Native approval UX and Guard evidence still require a live host/version check."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "devin",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "devin",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Post-tool observation does not block or replace model-visible output."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "muse",
+      "event": "PreToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "A source declaration does not prove that a live Muse session honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "muse",
+      "event": "PermissionRequest",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Native approval UX and Guard evidence still require a live host/version check."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "muse",
+      "event": "UserPromptSubmit",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Prompt screening does not prove downstream model or host request rewriting."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "muse",
+      "event": "PostToolUse",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Post-tool observation does not block or replace model-visible output."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "muse",
+      "event": "SessionStart",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Session context does not prove that later tool calls were reviewed."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "muse",
+      "event": "Stop",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "observe_only",
+      "state": "observe_only",
+      "known_blind_spots": [
+        "Stop observation does not prove that earlier tool calls were reviewed."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "paseo",
+      "event": "*",
+      "tools": [],
+      "surface": "foreground",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Protection is delegated to supported native providers on the Paseo daemon host. Paseo permission notifications are not blocking hooks. Terminals, daemon git/browser actions, plugin code, custom commands, ACP providers, relocated native homes, and remote hosts are not covered. Native runtime failure behavior and approval/resume support remain provider-specific."
+      ],
+      "limitations": []
+    }
+  ]
+}

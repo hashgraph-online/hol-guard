@@ -7,13 +7,20 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_install_snapshot
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter, OpenCodeInstallConfigError
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import (
-    CONFIG_FILENAMES,
-    runtime_config_path,
-)
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+
+CONFIG_FILENAMES = ("opencode.json", "opencode.jsonc")
+
+
+def runtime_config_path(ctx: HarnessContext) -> Path:
+    return ctx.guard_home / "opencode" / "runtime-config.json"
+
+
+def _target(ctx: HarnessContext) -> Path:
+    return Path(str(harness_install_ops.prepare_install("opencode", ctx).manifest["managed_config_path"]))
 
 
 def _ctx(
@@ -44,63 +51,56 @@ def _write_mcp_config(path: Path, servers: dict[str, object]) -> None:
 
 class TestOpenCodeAdapterIdentity:
     def test_harness_identifier_is_opencode(self) -> None:
-        assert OpenCodeHarnessAdapter.harness == "opencode"
+        assert harness_ops.canonical_harness("opencode") == "opencode"
 
     def test_executable_is_opencode(self) -> None:
-        assert OpenCodeHarnessAdapter.executable == "opencode"
+        assert harness_ops.executable_of("opencode") == "opencode"
 
-    def test_approval_tier_is_mixed(self) -> None:
-        assert OpenCodeHarnessAdapter.approval_tier == "mixed"
-
-    def test_approval_prompt_channel_is_native(self) -> None:
-        assert OpenCodeHarnessAdapter.approval_prompt_channel == "native"
-
-    def test_auto_open_browser_is_disabled(self) -> None:
-        assert OpenCodeHarnessAdapter.approval_auto_open_browser is False
-
-    def test_approval_summary_mentions_opencode(self) -> None:
-        assert "OpenCode" in OpenCodeHarnessAdapter.approval_summary
-
-    def test_fallback_hint_mentions_native_flow(self) -> None:
-        assert "native" in OpenCodeHarnessAdapter.fallback_hint.lower()
+    def test_approval_flow_is_mixed_and_native(self) -> None:
+        flow = harness_ops.approval_flow("opencode")
+        assert flow["tier"] == "mixed"
+        assert flow["prompt_channel"] == "native"
+        assert flow["auto_open_browser"] is False
+        assert "OpenCode" in str(flow["summary"])
+        assert "native" in str(flow["fallback_hint"]).lower()
 
 
 class TestOpenCodePolicyPath:
     def test_policy_path_uses_workspace_config_when_provided(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
-        result = OpenCodeHarnessAdapter().policy_path(ctx)
+        result = harness_ops.policy_path("opencode", ctx)
         assert ctx.workspace_dir is not None
         assert result.is_relative_to(ctx.workspace_dir)
 
     def test_policy_path_falls_back_to_global_config_without_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=False)
-        result = OpenCodeHarnessAdapter().policy_path(ctx)
+        result = harness_ops.policy_path("opencode", ctx)
         assert result.is_relative_to(ctx.home_dir)
 
     def test_policy_path_filename_is_opencode_json(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = OpenCodeHarnessAdapter().policy_path(ctx)
+        result = harness_ops.policy_path("opencode", ctx)
         assert result.name in CONFIG_FILENAMES
 
 
 class TestOpenCodeDetectEmptyConfig:
     def test_empty_home_returns_not_installed_without_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.harness == "opencode"
         assert result.artifacts == ()
         assert result.config_paths == ()
 
     def test_empty_workspace_yields_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.artifacts == ()
 
     def test_config_with_no_mcp_key_yields_no_mcp_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_config(config, {"model": "gpt-4"})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.installed is True
         assert not any(a.artifact_type == "mcp_server" for a in result.artifacts)
 
@@ -108,7 +108,7 @@ class TestOpenCodeDetectEmptyConfig:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_config(config, {"mcp": {}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert not any(a.artifact_type == "mcp_server" for a in result.artifacts)
 
 
@@ -117,7 +117,7 @@ class TestOpenCodeDetectWithMcpServers:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"my-server": {"type": "local", "command": ["node", "server.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         artifact_ids = [a.artifact_id for a in result.artifacts]
         assert any("my-server" in aid for aid in artifact_ids)
 
@@ -126,7 +126,7 @@ class TestOpenCodeDetectWithMcpServers:
         assert ctx.workspace_dir is not None
         config = ctx.workspace_dir / "opencode.json"
         _write_mcp_config(config, {"ws-server": {"type": "local", "command": ["node", "ws.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         ws_artifacts = [a for a in result.artifacts if "ws-server" in a.artifact_id]
         assert len(ws_artifacts) == 1
         assert ws_artifacts[0].source_scope == "project"
@@ -135,7 +135,7 @@ class TestOpenCodeDetectWithMcpServers:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"global-srv": {"type": "local", "command": ["node", "g.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         global_artifacts = [a for a in result.artifacts if "global-srv" in a.artifact_id]
         assert global_artifacts[0].source_scope == "global"
 
@@ -149,7 +149,7 @@ class TestOpenCodeDetectWithMcpServers:
                 "server-b": {"type": "local", "command": ["node", "b.js"]},
             },
         )
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         names = {a.name for a in result.artifacts}
         assert "server-a" in names
         assert "server-b" in names
@@ -158,7 +158,7 @@ class TestOpenCodeDetectWithMcpServers:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"srv": {"type": "local", "command": ["node", "s.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert str(config) in result.config_paths
 
 
@@ -168,7 +168,7 @@ class TestOpenCodeDetectSkillsAndCommands:
         skill_dir = ctx.home_dir / ".agents" / "skills" / "my-skill"
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text("# My Skill", encoding="utf-8")
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         skill_artifacts = [a for a in result.artifacts if a.artifact_type == "skill"]
         assert any("my-skill" in a.artifact_id for a in skill_artifacts)
 
@@ -177,7 +177,7 @@ class TestOpenCodeDetectSkillsAndCommands:
         cmd_dir = ctx.home_dir / ".config" / "opencode" / "commands"
         cmd_dir.mkdir(parents=True, exist_ok=True)
         (cmd_dir / "my-command.md").write_text("# My Command", encoding="utf-8")
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         cmd_artifacts = [a for a in result.artifacts if a.artifact_type == "command"]
         assert any("my-command" in a.artifact_id for a in cmd_artifacts)
 
@@ -186,7 +186,7 @@ class TestOpenCodeDetectSkillsAndCommands:
         plugin_dir = ctx.home_dir / ".config" / "opencode" / "plugins"
         plugin_dir.mkdir(parents=True, exist_ok=True)
         (plugin_dir / "my-plugin.js").write_text("// plugin", encoding="utf-8")
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         plugin_artifacts = [a for a in result.artifacts if a.artifact_type == "plugin"]
         assert any("my-plugin" in a.artifact_id for a in plugin_artifacts)
 
@@ -196,7 +196,7 @@ class TestOpenCodeDetectSkillsAndCommands:
         skill_dir = ctx.workspace_dir / ".opencode" / "skills" / "ws-skill"
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text("# WS Skill", encoding="utf-8")
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         ws_skills = [a for a in result.artifacts if a.artifact_type == "skill" and "ws-skill" in a.artifact_id]
         assert ws_skills[0].source_scope == "project"
 
@@ -209,7 +209,7 @@ class TestOpenCodeConfigPrecedence:
         workspace_config = ctx.workspace_dir / "opencode.json"
         _write_mcp_config(global_config, {"global-only": {"type": "local", "command": ["g"]}})
         _write_mcp_config(workspace_config, {"workspace-only": {"type": "local", "command": ["w"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         names = {a.name for a in result.artifacts}
         assert "workspace-only" in names
         assert "global-only" in names
@@ -221,26 +221,25 @@ class TestOpenCodeConfigPrecedence:
         existing = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         existing.parent.mkdir(parents=True, exist_ok=True)
         existing.write_text("{}", encoding="utf-8")
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         assert target == existing
 
     def test_target_config_path_uses_global_dir_for_new_install(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         assert target == ctx.home_dir / ".config" / "opencode" / CONFIG_FILENAMES[0]
 
     def test_target_config_path_uses_global_dir_when_no_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=False)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         assert target.is_relative_to(ctx.home_dir)
 
 
 class TestOpenCodeInstall:
     def test_fresh_install_creates_contract_and_is_idempotent(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        adapter = OpenCodeHarnessAdapter()
-        first_result = adapter.install(ctx)
+        first_result = harness_support.install("opencode", ctx)
 
         managed_config = Path(first_result["managed_config_path"])
         assert managed_config.is_file()
@@ -265,17 +264,17 @@ class TestOpenCodeInstall:
         assert len(first_result["notes"]) > 0
         assert first_result["runtime_env_var"] == "OPENCODE_CONFIG_CONTENT"
 
-        second_result = adapter.install(ctx)
+        second_result = harness_support.install("opencode", ctx)
         assert first_result["managed_config_path"] == second_result["managed_config_path"]
         assert Path(second_result["managed_config_path"]).is_file()
 
     def test_install_backup_preserves_original_content(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         original = '{"model": "gpt-4"}'
         target.write_text(original, encoding="utf-8")
-        result = OpenCodeHarnessAdapter().install(ctx)
+        result = harness_support.install("opencode", ctx)
         backup_path = Path(result["backup_path"])
         backup_payload = json.loads(backup_path.read_text(encoding="utf-8"))
         assert backup_payload["existed"] is True
@@ -283,16 +282,16 @@ class TestOpenCodeInstall:
 
     def test_install_with_existing_mcp_adds_permission_rules(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         _write_mcp_config(target, {"my-server": {"type": "local", "command": ["node", "s.js"]}})
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(target.read_text(encoding="utf-8"))
         assert "permission" in managed_config
 
     def test_install_keeps_original_mcp_servers_on_disk(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         _write_mcp_config(
             target,
@@ -309,7 +308,7 @@ class TestOpenCodeInstall:
                 },
             },
         )
-        result = OpenCodeHarnessAdapter().install(ctx)
+        result = harness_support.install("opencode", ctx)
         managed_config = json.loads(target.read_text(encoding="utf-8"))
         chrome = managed_config["mcp"]["chrome-devtools"]
         assert chrome["command"] == ["npx", "-y", "chrome-devtools-mcp@latest"]
@@ -330,8 +329,8 @@ class TestOpenCodeInstall:
             workspace_config,
             {"project-mcp": {"type": "local", "command": ["node", "project-mcp.js"]}},
         )
-        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
-        OpenCodeHarnessAdapter().install(ctx)
+        global_config = _target(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
         assert "project-mcp" not in managed_config.get("mcp", {})
         assert "hol-guard::project-mcp" not in managed_config.get("mcp", {})
@@ -339,7 +338,7 @@ class TestOpenCodeInstall:
     def test_install_keeps_global_companion_when_workspace_shadows_name(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
-        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        global_config = _target(ctx)
         _write_mcp_config(
             global_config,
             {"shared-lab": {"type": "local", "command": ["node", "global-shared-lab.js"]}},
@@ -348,7 +347,7 @@ class TestOpenCodeInstall:
             ctx.workspace_dir / "opencode.json",
             {"shared-lab": {"type": "local", "command": ["node", "project-shared-lab.js"]}},
         )
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
         assert managed_config["mcp"]["shared-lab"]["command"] == ["node", "global-shared-lab.js"]
         assert "hol-guard::shared-lab" in managed_config["mcp"]
@@ -356,7 +355,7 @@ class TestOpenCodeInstall:
     def test_install_does_not_double_prefix_fake_workspace_companion_name(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
-        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        global_config = _target(ctx)
         _write_mcp_config(
             global_config,
             {"chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]}},
@@ -370,17 +369,17 @@ class TestOpenCodeInstall:
                 },
             },
         )
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
         mcp_names = set(managed_config.get("mcp", {}))
         assert "hol-guard::hol-guard::evil" not in mcp_names
 
     def test_install_preserves_explicit_bash_ask_permission(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps({"permission": {"bash": "ask"}}), encoding="utf-8")
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(target.read_text(encoding="utf-8"))
         assert managed_config["permission"]["bash"]["*"] == "ask"
 
@@ -394,7 +393,7 @@ class TestOpenCodeInstall:
             global_config,
             {"chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]}},
         )
-        result = OpenCodeHarnessAdapter().install(ctx)
+        result = harness_support.install("opencode", ctx)
         assert Path(str(result["managed_config_path"])) == global_config
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
         assert managed_config["$schema"] == "https://opencode.ai/config.json"
@@ -404,7 +403,7 @@ class TestOpenCodeInstall:
 
     def test_install_restores_prior_persisted_proxy_wrappers(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         _write_mcp_config(
             target,
@@ -438,7 +437,7 @@ class TestOpenCodeInstall:
                 },
             },
         )
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(target.read_text(encoding="utf-8"))
         assert managed_config["mcp"]["chrome-devtools"]["command"] == [
             "npx",
@@ -450,23 +449,22 @@ class TestOpenCodeInstall:
 class TestOpenCodeUninstall:
     def test_uninstall_restores_original_content(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         original = '{"model": "gpt-4"}'
         target.write_text(original, encoding="utf-8")
-        OpenCodeHarnessAdapter().install(ctx)
-        OpenCodeHarnessAdapter().uninstall(ctx)
+        harness_support.install("opencode", ctx)
+        harness_support.uninstall("opencode", ctx)
         assert target.read_text(encoding="utf-8") == original
 
     def test_fresh_uninstall_removes_artifacts_and_marks_harness_inactive(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        adapter = OpenCodeHarnessAdapter()
-        install_result = adapter.install(ctx)
-        target = adapter._managed_install_config_path(ctx)
+        install_result = harness_support.install("opencode", ctx)
+        target = _target(ctx)
         state_path = Path(install_result["state_path"])
         assert state_path.is_file()
 
-        result = adapter.uninstall(ctx)
+        result = harness_support.uninstall("opencode", ctx)
         assert not target.is_file()
         assert result["active"] is False
         assert result["harness"] == "opencode"
@@ -476,7 +474,7 @@ class TestOpenCodeUninstall:
 class TestOpenCodeLaunchEnvironment:
     def test_launch_environment_empty_when_no_runtime_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        env = harness_ops.launch_environment("opencode", ctx)
         assert env == {}
 
     def test_launch_environment_sets_opencode_config_content(self, tmp_path: Path) -> None:
@@ -487,7 +485,7 @@ class TestOpenCodeLaunchEnvironment:
             json.dumps({"$schema": "https://opencode.ai/config.json", "permission": {"*": "ask"}}),
             encoding="utf-8",
         )
-        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        env = harness_ops.launch_environment("opencode", ctx)
         assert "OPENCODE_CONFIG_CONTENT" in env
         assert json.loads(env["OPENCODE_CONFIG_CONTENT"]) is not None
 
@@ -496,7 +494,7 @@ class TestOpenCodeLaunchEnvironment:
         runtime_path = runtime_config_path(ctx)
         runtime_path.parent.mkdir(parents=True, exist_ok=True)
         runtime_path.write_text("not-json!", encoding="utf-8")
-        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        env = harness_ops.launch_environment("opencode", ctx)
         assert env == {}
 
     def test_launch_environment_merges_over_the_callers_config_in_order(
@@ -507,7 +505,7 @@ class TestOpenCodeLaunchEnvironment:
         runtime_path.parent.mkdir(parents=True, exist_ok=True)
         runtime_path.write_text('{"mcp": {"b": {"enabled": false}}, "permission": "ask"}', encoding="utf-8")
         monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", '{"z": 1.0, "mcp": {"b": {"command": ["x"]}, "a": 2}}')
-        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        env = harness_ops.launch_environment("opencode", ctx)
         assert env == {
             "OPENCODE_CONFIG_CONTENT": (
                 '{"z": 1.0, "mcp": {"b": {"command": ["x"], "enabled": false}, "a": 2}, "permission": "ask"}'
@@ -518,25 +516,25 @@ class TestOpenCodeLaunchEnvironment:
 class TestOpenCodeLaunchCommand:
     def test_launch_command_no_passthrough_args_uses_interactive(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        cmd = OpenCodeHarnessAdapter().launch_command(ctx, [])
+        cmd = harness_ops.launch_command("opencode", ctx, [])
         assert "opencode" in cmd[0]
 
     def test_launch_command_subcommand_is_passed_through(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["mcp", "list"])
+        cmd = harness_ops.launch_command("opencode", ctx, ["mcp", "list"])
         assert "opencode" in cmd[0]
         assert "mcp" in cmd
         assert "list" in cmd
 
     def test_launch_command_non_subcommand_arg_uses_interactive(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["--model", "gpt-4"])
+        cmd = harness_ops.launch_command("opencode", ctx, ["--model", "gpt-4"])
         assert "opencode" in cmd[0]
 
     def test_a_prompt_wider_than_one_native_array_joins_whole(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         words = [f"w{index}" for index in range(5000)]
-        cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["--port", "4096", *words])
+        cmd = harness_ops.launch_command("opencode", ctx, ["--port", "4096", *words])
         assert cmd == ["opencode", str(ctx.workspace_dir), "--port", "4096", "--prompt", " ".join(words)]
 
 
@@ -546,7 +544,7 @@ class TestOpenCodeResiliency:
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text("{invalid json!", encoding="utf-8")
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.artifacts == ()
 
     def test_install_refuses_malformed_existing_config(self, tmp_path: Path) -> None:
@@ -555,11 +553,10 @@ class TestOpenCodeResiliency:
         config.parent.mkdir(parents=True, exist_ok=True)
         original = '{"model": "gpt-4", "mcp": {"lab": {"type": "local", "command": ["node", "lab.js"]}}}'
         config.write_text(original + ",", encoding="utf-8")
-        with pytest.raises(OpenCodeInstallConfigError):
-            OpenCodeHarnessAdapter().install(ctx)
+        with pytest.raises(ValueError):
+            harness_support.install("opencode", ctx)
         assert config.read_text(encoding="utf-8") == original + ","
-        assert not OpenCodeHarnessAdapter._backup_path(ctx).exists()
-        assert not OpenCodeHarnessAdapter._state_path(ctx, config).exists()
+        assert not (ctx.guard_home / "opencode").exists()
 
     def test_install_parses_json_with_comments(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
@@ -580,7 +577,7 @@ class TestOpenCodeResiliency:
             """,
             encoding="utf-8",
         )
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         managed_config = json.loads(config.read_text(encoding="utf-8"))
         assert managed_config["model"] == "gpt-4"
         assert managed_config["mcp"]["lab"]["command"] == ["node", "lab.js"]
@@ -594,9 +591,9 @@ class TestOpenCodeResiliency:
             config,
             {"chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]}},
         )
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         first = json.loads(config.read_text(encoding="utf-8"))
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         second = json.loads(config.read_text(encoding="utf-8"))
         assert set(first["mcp"]) == set(second["mcp"])
         assert list(first["mcp"]).count("chrome-devtools") == 1
@@ -616,11 +613,10 @@ class TestOpenCodeResiliency:
                 }
             },
         )
-        adapter = OpenCodeHarnessAdapter()
 
-        adapter.install(ctx)
+        harness_support.install("opencode", ctx)
         first_overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
-        adapter.install(ctx)
+        harness_support.install("opencode", ctx)
         second_overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
 
         assert second_overlay == first_overlay
@@ -651,10 +647,9 @@ class TestOpenCodeResiliency:
                 },
             },
         )
-        adapter = OpenCodeHarnessAdapter()
 
-        adapter.install(ctx)
-        adapter.install(ctx)
+        harness_support.install("opencode", ctx)
+        harness_support.install("opencode", ctx)
 
         persisted = json.loads(config.read_text(encoding="utf-8"))
         overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
@@ -678,7 +673,7 @@ class TestOpenCodeResiliency:
             },
         )
 
-        result = OpenCodeHarnessAdapter().install(ctx)
+        result = harness_support.install("opencode", ctx)
 
         persisted = json.loads(config.read_text(encoding="utf-8"))
         overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
@@ -687,31 +682,10 @@ class TestOpenCodeResiliency:
         assert "hol-guard::evil" not in overlay.get("mcp", {})
         assert "hol-guard::evil" in result["skipped_servers"]
 
-    def test_snapshot_rejects_companion_copied_from_another_config_path(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path)
-        source_config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
-        copied_config = ctx.home_dir / ".config" / "opencode" / "opencode.jsonc"
-        _write_mcp_config(
-            source_config,
-            {"safe": {"type": "local", "command": ["node", "safe.js"], "enabled": True}},
-        )
-        OpenCodeHarnessAdapter().install(ctx)
-        installed = json.loads(source_config.read_text(encoding="utf-8"))
-        copied_companion = installed["mcp"]["hol-guard::safe"]
-        _write_mcp_config(copied_config, {"hol-guard::safe": copied_companion})
-
-        snapshot = opencode_install_snapshot.load_opencode_install_snapshot(ctx, command_available=False)
-        copied = next(config for config in snapshot.configs if config.path == copied_config)
-        copied_servers = copied.payload["mcp"]
-
-        assert isinstance(copied_servers, dict)
-        assert "safe" not in copied_servers
-        assert copied_servers["hol-guard::safe"]["command"] == ["node", "safe.js"]
-
     def test_workspace_server_shadows_global_in_runtime_overlay(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
-        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        global_config = _target(ctx)
         project_config = ctx.workspace_dir / "opencode.json"
         _write_mcp_config(
             global_config,
@@ -722,7 +696,7 @@ class TestOpenCodeResiliency:
             {"shared-lab": {"type": "local", "command": ["node", "project.js"]}},
         )
 
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
 
         overlay = json.loads(runtime_config_path(ctx).read_text(encoding="utf-8"))
         proxy_command = overlay["mcp"]["shared-lab"]["command"]
@@ -734,56 +708,17 @@ class TestOpenCodeResiliency:
     def test_invalid_workspace_config_aborts_before_global_writes(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
-        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        global_config = _target(ctx)
         original = '{"mcp":{"safe":{"type":"local","command":["node","safe.js"]}}}'
         global_config.parent.mkdir(parents=True, exist_ok=True)
         global_config.write_text(original, encoding="utf-8")
         (ctx.workspace_dir / "opencode.json").write_text("{broken", encoding="utf-8")
 
-        with pytest.raises(OpenCodeInstallConfigError, match="invalid OpenCode config"):
-            OpenCodeHarnessAdapter().install(ctx)
+        with pytest.raises(ValueError, match="invalid OpenCode config"):
+            harness_support.install("opencode", ctx)
 
         assert global_config.read_text(encoding="utf-8") == original
-        assert not OpenCodeHarnessAdapter._backup_path(ctx).exists()
-        assert not OpenCodeHarnessAdapter._state_path(ctx, global_config).exists()
-        assert not runtime_config_path(ctx).exists()
-
-    def test_semantic_readback_failure_restores_config_state_and_overlay(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        ctx = _ctx(tmp_path)
-        config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
-        _write_mcp_config(
-            config,
-            {"lab": {"type": "local", "command": ["node", "lab.js"], "enabled": True}},
-        )
-        adapter = OpenCodeHarnessAdapter()
-        result = adapter.install(ctx)
-        overlay_path = Path(result["runtime_config_path"])
-        state_path = Path(result["state_path"])
-        before = {
-            config: config.read_bytes(),
-            state_path: state_path.read_bytes(),
-            overlay_path: overlay_path.read_bytes(),
-        }
-        original_atomic_write = opencode_install_snapshot._atomic_write_bytes
-        corrupted_once = False
-
-        def corrupt_overlay_once(path: Path, payload: bytes) -> None:
-            nonlocal corrupted_once
-            original_atomic_write(path, payload)
-            if path == overlay_path and not corrupted_once:
-                corrupted_once = True
-                original_atomic_write(path, b"{}\n")
-
-        monkeypatch.setattr(opencode_install_snapshot, "_atomic_write_bytes", corrupt_overlay_once)
-
-        with pytest.raises(OpenCodeInstallConfigError, match="readback did not match"):
-            adapter.install(ctx)
-
-        assert {path: path.read_bytes() for path in before} == before
+        assert not (ctx.guard_home / "opencode").exists()
 
     def test_detect_treats_fake_hol_guard_companion_as_mcp_artifact(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
@@ -797,7 +732,7 @@ class TestOpenCodeResiliency:
                 },
             },
         )
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         artifact_names = {artifact.name for artifact in result.artifacts}
         assert "hol-guard::evil" in artifact_names
 
@@ -814,7 +749,7 @@ class TestOpenCodeResiliency:
                 },
             },
         )
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         artifact_names = {artifact.name for artifact in result.artifacts}
         assert artifact_names == {"chrome-devtools"}
 
@@ -823,19 +758,19 @@ class TestOpenCodeResiliency:
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text("", encoding="utf-8")
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.artifacts == ()
 
     def test_detect_skips_non_dict_mcp_value(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_config(config, {"mcp": "not-a-dict"})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.artifacts == ()
 
     def test_launch_env_tolerates_missing_runtime_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        env = harness_ops.launch_environment("opencode", ctx)
         assert "OPENCODE_CONFIG_CONTENT" not in env
 
     def test_detect_does_not_raise_on_missing_home_dir(self, tmp_path: Path) -> None:
@@ -844,7 +779,7 @@ class TestOpenCodeResiliency:
             workspace_dir=None,
             guard_home=tmp_path / "guard-home",
         )
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         assert result.harness == "opencode"
 
 
@@ -853,8 +788,8 @@ class TestOpenCodeFirstUseAndChangedArtifact:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"tracked-srv": {"type": "local", "command": ["node", "t.js"]}})
-        OpenCodeHarnessAdapter().install(ctx)
-        detection = OpenCodeHarnessAdapter().detect(ctx)
+        harness_support.install("opencode", ctx)
+        detection = harness_ops.detect("opencode", ctx)
         artifact_names = {a.name for a in detection.artifacts}
         assert "tracked-srv" in artifact_names
 
@@ -862,7 +797,7 @@ class TestOpenCodeFirstUseAndChangedArtifact:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"original-srv": {"type": "local", "command": ["node", "o.js"]}})
-        before = OpenCodeHarnessAdapter().detect(ctx)
+        before = harness_ops.detect("opencode", ctx)
         before_ids = {a.artifact_id for a in before.artifacts}
         _write_mcp_config(
             config,
@@ -871,7 +806,7 @@ class TestOpenCodeFirstUseAndChangedArtifact:
                 "new-srv": {"type": "local", "command": ["node", "n.js"]},
             },
         )
-        after = OpenCodeHarnessAdapter().detect(ctx)
+        after = harness_ops.detect("opencode", ctx)
         after_ids = {a.artifact_id for a in after.artifacts}
         assert after_ids - before_ids
 
@@ -879,7 +814,7 @@ class TestOpenCodeFirstUseAndChangedArtifact:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"hash-srv": {"type": "local", "command": ["node", "h.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         srv_artifacts = [a for a in result.artifacts if "hash-srv" in a.artifact_id]
         assert len(srv_artifacts) == 1
         assert srv_artifacts[0].metadata is not None
@@ -888,10 +823,10 @@ class TestOpenCodeFirstUseAndChangedArtifact:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"chg-srv": {"type": "local", "command": ["node", "v1.js"]}})
-        result1 = OpenCodeHarnessAdapter().detect(ctx)
+        result1 = harness_ops.detect("opencode", ctx)
         artifacts1 = {a.artifact_id: a for a in result1.artifacts}
         _write_mcp_config(config, {"chg-srv": {"type": "local", "command": ["node", "v2.js"]}})
-        result2 = OpenCodeHarnessAdapter().detect(ctx)
+        result2 = harness_ops.detect("opencode", ctx)
         artifacts2 = {a.artifact_id: a for a in result2.artifacts}
         chg_id = next(k for k in artifacts1 if "chg-srv" in k)
         assert chg_id in artifacts2
@@ -903,7 +838,7 @@ class TestOpenCodeScopeDetection:
         ctx = _ctx(tmp_path, workspace=True)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(config, {"g-srv": {"type": "local", "command": ["node", "g.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         g_artifacts = [a for a in result.artifacts if "g-srv" in a.artifact_id]
         assert g_artifacts[0].source_scope == "global"
 
@@ -912,73 +847,45 @@ class TestOpenCodeScopeDetection:
         assert ctx.workspace_dir is not None
         config = ctx.workspace_dir / "opencode.json"
         _write_mcp_config(config, {"p-srv": {"type": "local", "command": ["node", "p.js"]}})
-        result = OpenCodeHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("opencode", ctx)
         p_artifacts = [a for a in result.artifacts if "p-srv" in a.artifact_id]
         assert p_artifacts[0].source_scope == "project"
 
-    def test_scope_for_returns_project_for_workspace_relative_path(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path, workspace=True)
-        assert ctx.workspace_dir is not None
-        workspace_file = ctx.workspace_dir / "opencode.json"
-        workspace_file.parent.mkdir(parents=True, exist_ok=True)
-        workspace_file.touch()
-        scope = OpenCodeHarnessAdapter._scope_for(ctx, workspace_file)
-        assert scope == "project"
-
-    def test_scope_for_returns_global_for_home_relative_path(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path, workspace=True)
-        home_file = ctx.home_dir / ".config" / "opencode" / "opencode.json"
-        home_file.parent.mkdir(parents=True, exist_ok=True)
-        home_file.touch()
-        scope = OpenCodeHarnessAdapter._scope_for(ctx, home_file)
-        assert scope == "global"
-
-    def test_scope_for_returns_global_when_workspace_dir_is_none(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path, workspace=False)
-        assert ctx.workspace_dir is None
-        some_file = ctx.home_dir / ".config" / "opencode" / "opencode.json"
-        some_file.parent.mkdir(parents=True, exist_ok=True)
-        some_file.touch()
-        scope = OpenCodeHarnessAdapter._scope_for(ctx, some_file)
-        assert scope == "global"
-
     def test_install_and_uninstall_are_inverse_for_new_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         assert not target.exists()
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         assert target.is_file()
-        OpenCodeHarnessAdapter().uninstall(ctx)
+        harness_support.uninstall("opencode", ctx)
         assert not target.exists()
 
     def test_install_and_uninstall_are_inverse_for_existing_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         target.parent.mkdir(parents=True, exist_ok=True)
         original_text = '{"model": "claude-3"}'
         target.write_text(original_text, encoding="utf-8")
-        OpenCodeHarnessAdapter().install(ctx)
+        harness_support.install("opencode", ctx)
         assert target.read_text(encoding="utf-8") != original_text
-        OpenCodeHarnessAdapter().uninstall(ctx)
+        harness_support.uninstall("opencode", ctx)
         assert target.read_text(encoding="utf-8") == original_text
 
     def test_get_adapter_returns_opencode_instance(self) -> None:
-        from codex_plugin_scanner.guard.adapters import get_adapter
+        from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-        adapter = get_adapter("opencode")
-        assert isinstance(adapter, OpenCodeHarnessAdapter)
+        assert harness_ops.canonical_harness("opencode") == "opencode"
 
     def test_harness_name_round_trips_through_adapter_factory(self) -> None:
-        from codex_plugin_scanner.guard.adapters import get_adapter
+        from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-        adapter = get_adapter("opencode")
-        assert adapter.harness == "opencode"
+        assert harness_ops.canonical_harness("opencode") == "opencode"
 
     def test_managed_install_ignores_opencode_config_env_var(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path, workspace=False)
         custom_config = tmp_path / "my-opencode.json"
         custom_config.parent.mkdir(parents=True, exist_ok=True)
-        custom_config.touch()
+        custom_config.write_text("{}", encoding="utf-8")
         monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config))
-        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target = _target(ctx)
         assert target == ctx.home_dir / ".config" / "opencode" / CONFIG_FILENAMES[0]

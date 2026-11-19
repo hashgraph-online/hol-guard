@@ -51,7 +51,8 @@ pub(crate) fn evaluate_approval_scope_select_request(
     })
 }
 
-#[cfg(test)]
+/// The selection with no owner store: for a request whose offered scopes do
+/// not depend on the owner having verified it.
 pub(crate) fn evaluate(request: &ApprovalScopeSelectRequestV1) -> Value {
     evaluate_with_owner(request, None)
 }

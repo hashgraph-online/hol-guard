@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
+from codex_plugin_scanner.guard import contained_sink_command
 from codex_plugin_scanner.guard.hook_review import hook_worker_native
 from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.native_hook_edge import (
@@ -169,7 +169,7 @@ def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_in_a_workspace(
     assert isinstance(encoded, bytes)
     sink = json.loads(encoded).get("containment_sink")
     if sent:
-        assert sink == {"sink_command": list(zcode_contained_tests.contained_sink_command_prefix())}
+        assert sink == {"sink_command": list(contained_sink_command.contained_sink_command_prefix())}
     else:
         # Without a workspace there is no snapshot to write.
         assert sink is None

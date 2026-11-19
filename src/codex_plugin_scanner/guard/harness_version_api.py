@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 from typing import Protocol, cast
 
-from .adapters.base import HarnessContext
-from .adapters.contracts import contract_for
+from .harness_context import HarnessContext
 from .harness_versions import service
 from .harness_versions.compatibility import PAYLOAD_SCHEMA, STATE_VERSION_UNKNOWN
+from .setup_contracts import contract_for
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -36,7 +36,13 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import cursor_hook_fields, cursor_route_probe, omp_routes_profile, source_ref_payload
+from tests.gauntlet_replay import (
+    cursor_grep_input,
+    cursor_hook_fields,
+    cursor_route_probe,
+    omp_routes_profile,
+    source_ref_payload,
+)
 from tests.native_gate_retry import BUDGET_MISS_REASONS, RetryApprovals, review_with_unavailable_retry
 from tests.outbound_network_guard import outbound_network_attempts
 
@@ -59,8 +65,8 @@ _SHELL_TOOL = {
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
-_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "Grep"}
-_WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write"}
+_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "grep", "cursor": "Grep"}
+_WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write", "cursor": "Write"}
 _FIXED_TOOLS = {
     "eval": "eval",
     "task": "task",
@@ -72,6 +78,16 @@ _FIXED_TOOLS = {
     "ls": "ls",
     # Claude Code's built-in question prompt reaches Guard only after the user answers.
     "ask_user_question": "AskUserQuestion",
+    # A web fetch reaches Guard as its own tool; only the URL decides it.
+    "web_fetch": "WebFetch",
+    # Claude Code starts a subagent with a written brief; the brief is prompt text.
+    "agent": "Agent",
+    # Grok's keyword search over its configured integration (MCP) tools.
+    "search_tool": "search_tool",
+    # Grok's folder listing: a tree of entry names below `target_directory`.
+    "list_dir": "list_dir",
+    # Oh My Pi's hashline edit: one `input` patch plus the `path`/`paths` copies it derives.
+    "edit": "edit",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
@@ -118,6 +134,10 @@ class GateCase:
     # run only inside the workspace sandbox. Kept so the assertion can say so,
     # rather than accepting any quiet allow.
     requires_sandbox: bool = False
+    # A negative control whose harm lands inside the workspace, such as a
+    # switched-off git hook, which the workspace sandbox can still write. A
+    # contained run does not stop it, so only a review or block counts.
+    sandbox_does_not_protect: bool = False
 
 
 def _expand() -> list[GateCase]:
@@ -144,6 +164,7 @@ def _expand() -> list[GateCase]:
                     source_ref=bool(entry.get("source_ref", False)),
                     environment=tuple(sorted(entry.get("environment", {}).items())),
                     requires_sandbox=bool(entry.get("requires_sandbox", False)),
+                    sandbox_does_not_protect=bool(entry.get("sandbox_does_not_protect", False)),
                 )
             )
     return expanded
@@ -176,7 +197,9 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
-    if case.harness in {"claude-code", "zcode"} and case.tool == "write":
+    if case.harness == "cursor" and case.tool == "grep":
+        resolved = cursor_grep_input(resolved)
+    if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
 
@@ -204,11 +227,12 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # NPM_CONFIG_*, NODE_*, PIP_* and CARGO_* are the same shape: a CI runner or
     # a developer shell that exports one makes npm, pip or cargo read a
     # redirected configuration, which keeps their probes on review no matter
-    # what the case says.
+    # what the case says. OPENSSL_* points openssl at another configuration,
+    # module or engine directory, which keeps the digest cases on review.
     for name in list(os.environ):
         upper = name.upper()
         if (
-            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_"))
+            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_", "OPENSSL_"))
             or upper == "RIPGREP_CONFIG_PATH"
         ):
             patch.delenv(name)
@@ -273,13 +297,14 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     with outbound_network_attempts() as attempts:
         result = review_with_unavailable_retry(
             case.case_id,
-            lambda: worker.review_http_payload(
+            lambda deadline: worker.review_http_payload(
                 payload=payload,
                 params={},
                 default_harness=case.harness,
                 home_dir=fixture.home,
                 guard_home=fixture.guard_home,
                 workspace=fixture.cwd(case.cwd),
+                deadline=deadline,
             ),
             on_retry=approvals.mark_retry,
         )
@@ -429,6 +454,8 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         assert _decision(result) != "allow" or approvals > 0 or _contained(result), (
             f"negative control was allowed: {description}"
         )
+        if case.sandbox_does_not_protect:
+            assert not _contained(result), f"negative control was only contained: {description}"
         assert _reason(result) not in BUDGET_MISS_REASONS, f"native review unavailable: {description}"
         return
     if case.expect == "setup":

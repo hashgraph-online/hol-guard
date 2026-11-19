@@ -4,13 +4,20 @@ from dataclasses import replace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.codex_config import dump_toml
-from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
-from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from codex_plugin_scanner.guard import codex_harness_client as adapter
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
+from tests import codex_plan_segments as segments
+from tests.codex_toml_support import dump_toml, parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
+
+
+def _publish(change):
+    payload = {"files": [change.payload()]}
+    RuntimeTransition._compare(payload, "before")
+    RuntimeTransition._write_file(payload["files"][0], "after")
+    RuntimeTransition._compare(payload, "after")
 
 
 def _source(tmp_path, monkeypatch, payload):
@@ -33,7 +40,7 @@ def test_hook_cleanup_is_exact_and_preserves_user_hooks(tmp_path, monkeypatch):
     }
     context, path = _source(tmp_path, monkeypatch, payload)
     before = _tree(tmp_path)
-    change = adapter.prepare_codex_alternate_cleanup(context, config_path=path)
+    change = segments.prepare_codex_alternate_cleanup(context, config_path=path)
     assert _tree(tmp_path) == before
     rendered = parse_toml_object(change.after, path=path, label="fixture")
     assert rendered["hooks"] == {"PreToolUse": [user, lookalike]}
@@ -53,7 +60,7 @@ def test_combined_cleanup_preserves_proxy_and_unselected_mcp(tmp_path, monkeypat
     }
     context, path = _source(tmp_path, monkeypatch, payload)
     before = _tree(tmp_path)
-    change = adapter.prepare_codex_alternate_cleanup(
+    change = segments.prepare_codex_alternate_cleanup(
         context, config_path=path, managed_server_names=("original", "proxy")
     )
     assert _tree(tmp_path) == before
@@ -65,15 +72,15 @@ def test_combined_cleanup_preserves_proxy_and_unselected_mcp(tmp_path, monkeypat
 
 def test_mcp_only_publication_preserves_mode_and_repeated_cleanup_inode(tmp_path, monkeypatch):
     context, path = _source(tmp_path, monkeypatch, {"mcp_servers": {"original": {"command": "node"}}})
-    change = adapter.prepare_codex_alternate_cleanup(
+    change = segments.prepare_codex_alternate_cleanup(
         context, config_path=path, remove_hooks=False, managed_server_names=("original",)
     )
     assert change.after_mode == 0o644
-    adapter._publish_codex_alternate_cleanup(change)
+    _publish(change)
     assert path.read_bytes() == b"" and path.stat().st_mode & 0o777 == 0o644
     before = _tree(tmp_path)
-    adapter._publish_codex_alternate_cleanup(
-        adapter.prepare_codex_alternate_cleanup(
+    _publish(
+        segments.prepare_codex_alternate_cleanup(
             context, config_path=path, remove_hooks=False, managed_server_names=("original",)
         )
     )
@@ -86,7 +93,7 @@ def test_empty_or_malformed_mcp_entries_are_preserved(tmp_path, monkeypatch, pay
     if payload.get("mcp_servers", {}).get("original"):
         payload["mcp_servers"]["original"]["args"] = "malformed"
     context, path = _source(tmp_path, monkeypatch, payload)
-    change = adapter.prepare_codex_alternate_cleanup(
+    change = segments.prepare_codex_alternate_cleanup(
         context, config_path=path, remove_hooks=False, managed_server_names=("original",)
     )
     assert change.before == change.after
@@ -94,16 +101,17 @@ def test_empty_or_malformed_mcp_entries_are_preserved(tmp_path, monkeypatch, pay
 
 def test_foreign_generation_during_render_is_preserved(tmp_path, monkeypatch):
     context, path = _source(tmp_path, monkeypatch, {"features": {"hooks": True}})
-    render = adapter.render_codex_alternate_cleanup
+    native = adapter._codex  # pyright: ignore[reportPrivateUsage]
 
-    def foreign_write(*args, **kwargs):
-        result = render(*args, **kwargs)
-        path.write_text('model = "foreign"\n')
+    def foreign_write(op, *args, **kwargs):
+        result = native(op, *args, **kwargs)
+        if op == "alternate_change":
+            path.write_text('model = "foreign"\n')
         return result
 
-    monkeypatch.setattr(adapter, "render_codex_alternate_cleanup", foreign_write)
+    monkeypatch.setattr(segments, "_codex", foreign_write)
     with pytest.raises(TransitionError, match="generation_changed"):
-        adapter.prepare_codex_alternate_cleanup(context, config_path=path)
+        segments.prepare_codex_alternate_cleanup(context, config_path=path)
     assert path.read_text() == 'model = "foreign"\n'
     assert not context.guard_home.exists()
 
@@ -114,7 +122,7 @@ def test_invalid_config_is_not_replaced(tmp_path, monkeypatch, invalid):
     path.write_bytes(invalid)
     before = _tree(tmp_path)
     with pytest.raises(RuntimeError):
-        adapter.prepare_codex_alternate_cleanup(context, config_path=path)
+        segments.prepare_codex_alternate_cleanup(context, config_path=path)
     assert _tree(tmp_path) == before
 
 
@@ -125,7 +133,7 @@ def test_signed_cleanup_inverse_restores_bytes_and_mode(
 ):
     runtime, plan, _bindings, _pointer = transition
     context, path = _source(tmp_path, monkeypatch, {"features": {"hooks": True, "other": True}})
-    change = adapter.prepare_codex_alternate_cleanup(context, config_path=path)
+    change = segments.prepare_codex_alternate_cleanup(context, config_path=path)
     plan = replace(plan, files=(*plan.files, change))
     begin(runtime, plan)
     runtime.publish(plan.operation_id, "AuthorizedForExactTransition")

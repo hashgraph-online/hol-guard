@@ -80,9 +80,9 @@ fn a_request_with_a_missing_extra_or_mistyped_field_is_refused() {
 fn a_bridge_config_with_a_lone_surrogate_or_bad_json_is_refused() {
     let mut request = cases()[0]["args"].clone();
     let argv = request["native_bridge_argv"].as_array_mut().unwrap();
-    argv[6] = json!(r#"{"guard_home":"\ud800"}"#);
+    argv[2] = json!(r#"{"guard_home":"\ud800"}"#);
     assert_eq!(render(&request).unwrap_err(), ERR_INVALID);
     let argv = request["native_bridge_argv"].as_array_mut().unwrap();
-    argv[6] = json!("{not json");
+    argv[2] = json!("{not json");
     assert_eq!(render(&request).unwrap_err(), ERR_INVALID);
 }

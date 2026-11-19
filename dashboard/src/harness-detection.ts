@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { fetchGuardApi } from "./guard-api";
 import { isGuardDemoMode } from "./guard-demo";
@@ -15,6 +15,7 @@ export type GuardHarnessSetupItem = GuardHarnessSetupContract & {
   command_available: boolean;
   config_paths: string[];
   artifact_count: number;
+  warnings?: string[];
   // Added by newer daemons; normalize before rendering.
   version_compatibility?: unknown;
 };
@@ -24,6 +25,10 @@ export type HarnessDetectionState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardHarnessSetupItem[] };
 
+export type HarnessDetection = HarnessDetectionState & {
+  refresh: () => Promise<boolean>;
+};
+
 async function fetchHarnessSetupItems(): Promise<GuardHarnessSetupItem[]> {
   if (isGuardDemoMode()) return [];
   const response = await fetchGuardApi("/v1/harnesses");
@@ -32,24 +37,23 @@ async function fetchHarnessSetupItems(): Promise<GuardHarnessSetupItem[]> {
   return Array.isArray(payload.items) ? payload.items : [];
 }
 
-export function useHarnessDetection(): HarnessDetectionState {
+export function useHarnessDetection(): HarnessDetection {
   const [state, setState] = useState<HarnessDetectionState>({ kind: "loading" });
-  useEffect(() => {
-    let cancelled = false;
-    void fetchHarnessSetupItems()
-      .then((items) => {
-        if (!cancelled) setState({ kind: "ready", items });
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to detect local AI apps." });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+  const refresh = useCallback(async (): Promise<boolean> => {
+    setState({ kind: "loading" });
+    try {
+      const items = await fetchHarnessSetupItems();
+      setState({ kind: "ready", items });
+      return true;
+    } catch (error: unknown) {
+      setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to detect local AI apps." });
+      return false;
+    }
   }, []);
-  return state;
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  return { ...state, refresh };
 }
 
 export function detectedHarnesses(state: HarnessDetectionState): string[] {
@@ -86,6 +90,21 @@ export function isHarnessDetectedItems(
   return items.some((item) => item.harness === harness && item.status !== "not_found");
 }
 
+/**
+ * Whether an inactive install record still marks its app for repair.
+ *
+ * Disconnecting an app is what leaves its record inactive, and the daemon's setup status already
+ * reconciles that record: a disconnected app comes back as found or not_found. Only those two clear
+ * it. Any other status, or none yet, keeps the inactive record a repair target, so a stale
+ * "protected" can never make a disconnected app look protected.
+ */
+export function inactiveInstallNeedsRepair(
+  install: { active?: boolean },
+  setupStatus: GuardHarnessSetupItem["status"] | undefined,
+): boolean {
+  return install.active !== true && setupStatus !== "found" && setupStatus !== "not_found";
+}
+
 export function resolveDetectedAppStatus(
   install: { active?: boolean } | undefined,
   protectionHealth: GuardProtectionAppHealth,
@@ -96,7 +115,7 @@ export function resolveDetectedAppStatus(
   setupStatus?: GuardHarnessSetupItem["status"],
 ): DetectedAppStatus {
   if (setupStatus === "needs_repair") return "needs_repair";
-  if (install !== undefined) {
+  if (install !== undefined && (install.active === true || inactiveInstallNeedsRepair(install, setupStatus))) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
     if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";

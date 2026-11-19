@@ -17,7 +17,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_install_snapshot as m
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, stable_mcp_server_identifier
+
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, stable_mcp_server_identifier
 
 os.chdir("/")
 HOME = "/opt/hg-test/home"

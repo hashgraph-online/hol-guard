@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.inventory_contract import _agent_type, inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from tests import harness_ops_support as harness_support
 
 from .grok_test_support import _ctx, _fixture
 
@@ -26,7 +27,7 @@ args = ["-y", "@modelcontextprotocol/server-github"]
             + "\n",
             encoding="utf-8",
         )
-        result = GrokHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("grok", ctx)
         mcp = [artifact for artifact in result.artifacts if artifact.artifact_type == "mcp_server"]
         assert any(artifact.name == "github" for artifact in mcp)
 
@@ -52,7 +53,7 @@ Authorization = "Bearer redacted"
             + "\n",
             encoding="utf-8",
         )
-        result = GrokHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("grok", ctx)
         github = next(artifact for artifact in result.artifacts if artifact.name == "github")
         remote = next(artifact for artifact in result.artifacts if artifact.name == "remote")
         assert github.metadata["env_keys"] == ["GITHUB_TOKEN"]
@@ -75,8 +76,7 @@ args = ["-y", "@modelcontextprotocol/server-github"]
             + "\n",
             encoding="utf-8",
         )
-        adapter = GrokHarnessAdapter()
-        baseline = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "github")
+        baseline = next(artifact for artifact in harness_ops.detect("grok", ctx).artifacts if artifact.name == "github")
         config.write_text(
             """
 [mcp_servers.github]
@@ -89,7 +89,7 @@ GITHUB_TOKEN = "redacted"
             + "\n",
             encoding="utf-8",
         )
-        changed = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "github")
+        changed = next(artifact for artifact in harness_ops.detect("grok", ctx).artifacts if artifact.name == "github")
         assert artifact_hash(baseline) != artifact_hash(changed)
         assert changed.metadata["env_keys"] == ["GITHUB_TOKEN"]
 
@@ -107,8 +107,7 @@ url = "https://mcp.example.com/mcp"
             + "\n",
             encoding="utf-8",
         )
-        adapter = GrokHarnessAdapter()
-        baseline = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "remote")
+        baseline = next(artifact for artifact in harness_ops.detect("grok", ctx).artifacts if artifact.name == "remote")
         config.write_text(
             """
 [mcp_servers.remote]
@@ -120,7 +119,7 @@ Authorization = "Bearer redacted"
             + "\n",
             encoding="utf-8",
         )
-        changed = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "remote")
+        changed = next(artifact for artifact in harness_ops.detect("grok", ctx).artifacts if artifact.name == "remote")
         assert artifact_hash(baseline) != artifact_hash(changed)
         assert changed.metadata["headers_keys"] == ["Authorization"]
         assert baseline.metadata["versionInfo"]["contentHash"] != changed.metadata["versionInfo"]["contentHash"]
@@ -143,9 +142,7 @@ GITHUB_TOKEN = "redacted"
             + "\n",
             encoding="utf-8",
         )
-        artifact = next(
-            artifact for artifact in GrokHarnessAdapter().detect(ctx).artifacts if artifact.name == "github"
-        )
+        artifact = next(artifact for artifact in harness_ops.detect("grok", ctx).artifacts if artifact.name == "github")
         signal_ids = {signal.signal_id for signal in artifact_risk_signals_typed(artifact)}
         assert "secret:env-keys" in signal_ids
         assert "secret:env-semantic" in signal_ids
@@ -155,7 +152,7 @@ GITHUB_TOKEN = "redacted"
         config = ctx.home_dir / ".grok" / "config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text('sandbox = "off"\n', encoding="utf-8")
-        result = GrokHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("grok", ctx)
         assert any("degraded" in warning.lower() or "sandbox" in warning.lower() for warning in result.warnings)
 
     def test_install_preserves_user_config(self, tmp_path: Path, monkeypatch) -> None:
@@ -163,7 +160,7 @@ GITHUB_TOKEN = "redacted"
         user_config = ctx.home_dir / ".grok" / "config.toml"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
-        GrokHarnessAdapter().install(ctx)
+        harness_support.install("grok", ctx)
         assert user_config.read_text(encoding="utf-8").startswith("[ui]\nsimple_mode = true\n")
 
 
@@ -287,7 +284,7 @@ class TestGrokInventoryAndResponses:
         (grok_root / "workflows").mkdir(parents=True)
         (grok_root / "agents").mkdir(parents=True)
         (grok_root / "sandbox.toml").write_text('[profiles.project]\nextends = "workspace"\n', encoding="utf-8")
-        result = GrokHarnessAdapter().detect(ctx)
+        result = harness_ops.detect("grok", ctx)
         assert any(path.endswith(".grok/workflows") for path in result.config_paths)
         assert any(path.endswith(".grok/agents") for path in result.config_paths)
         assert any(path.endswith(".grok/sandbox.toml") for path in result.config_paths)

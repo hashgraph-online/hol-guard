@@ -37,8 +37,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 156417,
-   "sha256": "decab5aaf27634d0cd22b1867601d7e56dacfe23619cc0380d05781f8d903b0e"
+   "chars": 170280,
+   "sha256": "7f6ecc2e06b33ecdc22c048fa0422ae5db71d6e1b02c313da913d15aac20a0ab"
   },
   {
    "name": "active_pi_posix",
@@ -76,8 +76,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 148461,
-   "sha256": "a40d4920ec8e378525ce68a1808469c45b9152820c094c81cac5cf6d35db6f42"
+   "chars": 162193,
+   "sha256": "60487c0bb6c11d31cba7a8b9d3a1defdfc6c868cdec3ba07ed4735bc69122037"
   },
   {
    "name": "previous_omp_posix",
@@ -171,8 +171,8 @@
     "contained_sink_command": [],
     "contained_request_root": ""
    },
-   "chars": 156330,
-   "sha256": "4a5f1d38a8261e09448495c1e90993af36d967bf64dc7af2045c339a1d8e6cd9"
+   "chars": 170193,
+   "sha256": "7c42624b8997ed6f695d85659030fc7fd788bb49a93091b834c090e1767bff96"
   },
   {
    "name": "previous_pi_windows",
@@ -236,8 +236,8 @@
     ],
     "contained_request_root": "/guard-vectors/é/r"
    },
-   "chars": 148543,
-   "sha256": "8f6020f3c3bf8b13f6bd30cf2a9ba570f1c9fd50544e525a4bd6278d65408ecd"
+   "chars": 162275,
+   "sha256": "c44943920a3144651ff0f804ab51c44bdd031017a6bae0d109951eab7e3b2370"
   },
   {
    "name": "previous_omp_non_ascii",
@@ -306,8 +306,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 156456,
-   "sha256": "6300f69cd427dd615761fbfc05e86b99f9c183dc692aa39bc6aeb92c278559b6"
+   "chars": 170319,
+   "sha256": "e8c6fa2717117d29b37c4da8a26f28fcfadbb3eba749523c517c57442c4d376c"
   },
   {
    "name": "active_pi_default_home_fixture_name",
@@ -342,8 +342,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 148448,
-   "sha256": "477d722e14affbdd09931109df21802fc1692fbafabcf8644ca984e03f09772a"
+   "chars": 162180,
+   "sha256": "006f126933792204cb45b36dfb733a66b1a916e3d450459f814a39ec44018a12"
   },
   {
    "name": "previous_omp_default_home_large_version",
@@ -375,8 +375,8 @@
     "recovery_accepts_failure_kind": true,
     "taskkill_path": null
    },
-   "chars": 64775,
-   "sha256": "bd73270c80a55038689d621472ba5fa3500c7b6f2420a864f53156cdbfef8f8b"
+   "chars": 64825,
+   "sha256": "643170a175e528d5ecb3daed0f56b61dd8ab68f274d785520d39aee962c4044b"
   }
  ]
 }

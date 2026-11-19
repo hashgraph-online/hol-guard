@@ -142,3 +142,33 @@ fn an_env_argument_carries_its_pattern_only_inside_quotes() {
         assert_eq!(project(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_zone_database_time_zone_is_projected_away() {
+    // `TZ=America/Los_Angeles date` only picks the rules `date` formats with.
+    // The slash kept it out of the plain scalar test, so the whole command
+    // was sent for review as though the setting could change what ran.
+    for (command, expected) in [
+        ("TZ=America/Los_Angeles date", "date"),
+        ("TZ=Etc/GMT+5 date +%H:%M", "date +%H:%M"),
+        ("TZ=America/Argentina/Buenos_Aires date -R", "date -R"),
+        (
+            "date -u +%FT%TZ && TZ=America/New_York date +%H:%M",
+            "date -u +%FT%TZ && date +%H:%M",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+    // A value led by `:` or `/` names a file, and dots could climb out of
+    // the zone directory, so these keep their review.
+    for command in [
+        "TZ=/etc/localtime date",
+        "TZ=:/tmp/zone date",
+        "TZ=America/../../tmp/zone date",
+        "TZ=America//New_York date",
+        "TZ=America/ date",
+        "TZ=America/-x date",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}

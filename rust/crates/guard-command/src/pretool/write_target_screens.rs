@@ -185,6 +185,27 @@ fn regenerated_dot_directory(lowered: &str, in_node_modules: bool) -> bool {
         || (in_node_modules && NODE_MODULES_DOT_DIRECTORIES.contains(&lowered))
 }
 
+/// Whether every hidden name in `names`, a relative path below a directory
+/// called `parent`, is scratch or regenerated build output. Any other part
+/// than a plain name, such as `..`, fails.
+pub(in crate::pretool) fn regenerated_hidden_names(
+    parent: Option<&std::ffi::OsStr>,
+    names: &Path,
+) -> bool {
+    let mut parent = parent.map(std::ffi::OsStr::to_os_string);
+    names.components().all(|part| {
+        let Component::Normal(name) = part else {
+            return false;
+        };
+        let lowered = name.to_string_lossy().to_ascii_lowercase();
+        let in_node_modules = parent
+            .as_deref()
+            .is_some_and(|parent| parent == "node_modules");
+        parent = Some(name.to_os_string());
+        !lowered.starts_with('.') || regenerated_dot_directory(&lowered, in_node_modules)
+    })
+}
+
 /// A write whose hidden components are plain scratch names, such as
 /// `.tmp/check.mjs` or `.write-test` in a sibling checkout. No hidden
 /// component may sit directly in the home directory, where dot names are

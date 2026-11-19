@@ -198,7 +198,7 @@ def test_an_engine_mismatch_with_a_broken_cache_is_still_a_failure(prepared, obs
 def test_an_engine_mismatch_reaches_the_daemon_log_as_info(prepared, tmp_path, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    diagnostics = DaemonDiagnostics(guard_home, start_worker=False, rotate=False)
+    diagnostics = DaemonDiagnostics(guard_home)
     background_diagnostics.install_sink(diagnostics.record_background, notice=diagnostics.record_background_notice)
     try:
         mismatched(monkeypatch, {"id": "40151296356.1"}, "discovery_current_cached_publication_unavailable")

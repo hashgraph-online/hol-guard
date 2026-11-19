@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard import store_secret_policy_integrity
 from codex_plugin_scanner.guard.library_calls import run_library_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -151,10 +154,81 @@ def test_bulk_allow_rejects_a_malformed_body(tmp_path: Path) -> None:
     assert answer["ok"]["status"] == 400  # type: ignore[index]
 
 
-def test_policy_writes_reject_malformed_bodies(tmp_path: Path) -> None:
-    for name in ("route.policy_clear", "route.policy_upsert"):
-        answer = _call(tmp_path, name, {"payload": {}})
-        assert answer["ok"]["status"] == 400, name  # type: ignore[index]
+def test_policy_integrity_calls_reject_malformed_arguments(tmp_path: Path) -> None:
+    for name, args in (
+        ("policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00"}),
+        ("policy.integrity_begin", {"now": 1, "sign": True}),
+        ("policy.integrity_finalize", {"next_control_state": None}),
+    ):
+        answer = _call(tmp_path, name, args)
+        assert answer["error"]["message"] == "invalid_arguments", name  # type: ignore[index]
+
+
+def test_policy_integrity_begin_answers_the_mode_without_signing(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": False})
+    assert set(answer["ok"]) == {"mode"}  # type: ignore[arg-type]
+
+
+class _MemorySecretStore:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+        self.writable = True
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        if not self.writable:
+            raise RuntimeError("credential store unavailable")
+        self.values[secret_id] = value
+
+    def get_secret(self, secret_id: str) -> str | None:
+        return self.values.get(secret_id)
+
+    def delete_secret(self, secret_id: str) -> None:
+        self.values.pop(secret_id, None)
+
+
+def _control_states(secrets: _MemorySecretStore) -> list[object]:
+    states = (json.loads(value) for value in secrets.values.values() if value.startswith("{"))
+    return [state for state in states if isinstance(state, dict) and "pending_generation" in state]
+
+
+@pytest.fixture
+def protected_secrets(monkeypatch: pytest.MonkeyPatch) -> _MemorySecretStore:
+    secrets = _MemorySecretStore()
+    monkeypatch.setattr(
+        store_secret_policy_integrity, "_build_policy_integrity_secret_store_compat", lambda *_a, **_k: secrets
+    )
+    monkeypatch.setattr(GuardStore, "_should_skip_policy_integrity_keychain_access", lambda *_a: False)
+    return secrets
+
+
+def test_policy_integrity_begin_and_finalize_advance_the_generation(
+    tmp_path: Path, protected_secrets: _MemorySecretStore
+) -> None:
+    answer = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": True})
+    result = answer["ok"]
+    assert isinstance(result, dict)
+    assert result["mode"] == "protected"
+    assert set(result) == {"mode", "current_generation", "integrity_key_b64", "integrity_key_id"}
+    current = result["current_generation"]
+    assert isinstance(current, int)
+    assert _control_states(protected_secrets) == [
+        {"cutover_complete": True, "generation": current, "pending_generation": current + 1, "version": 1}
+    ]
+
+    final = {"version": 1, "generation": current + 1, "pending_generation": None, "cutover_complete": True}
+    assert _call(tmp_path, "policy.integrity_finalize", {"next_control_state": final}) == {"ok": {"ok": True}}
+    assert _control_states(protected_secrets) == [final]
+
+
+def test_policy_integrity_finalize_reports_a_state_that_did_not_persist(
+    tmp_path: Path, protected_secrets: _MemorySecretStore
+) -> None:
+    begun = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": True})
+    current = begun["ok"]["current_generation"]  # type: ignore[index]
+    protected_secrets.writable = False
+    final = {"version": 1, "generation": current + 1, "pending_generation": None, "cutover_complete": True}
+    answer = _call(tmp_path, "policy.integrity_finalize", {"next_control_state": final})
+    assert answer["error"]["message"] == "policy_integrity_finalize_failed"  # type: ignore[index]
 
 
 def test_harness_action_rejects_an_unknown_harness(tmp_path: Path) -> None:
@@ -198,9 +272,10 @@ def test_handler_post_records_the_reply_each_handler_writes(tmp_path: Path) -> N
 
 
 def test_handler_post_keeps_the_no_store_header(tmp_path: Path) -> None:
-    answer = _handler_post(tmp_path, "/v1/context-assistance/codex-lean", {"enabled": "yes"})
-    assert answer["ok"]["status"] == 400  # type: ignore[index]
-    assert answer["ok"]["no_store"] is True  # type: ignore[index]
+    for path in ("/v1/context-assistance/codex-lean", "/v1/context-assistance/codex-short-replies"):
+        answer = _handler_post(tmp_path, path, {"enabled": "yes"})
+        assert answer["ok"]["status"] == 400, path  # type: ignore[index]
+        assert answer["ok"]["no_store"] is True, path  # type: ignore[index]
 
 
 def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
@@ -236,6 +311,9 @@ def test_settings_calls_answer_without_a_daemon(tmp_path: Path) -> None:
     assert setup["status"] == 400  # type: ignore[index]
     channel = _call(tmp_path, "route.update_channel", {"payload": {"update_channel": "nightly-unknown"}})["ok"]
     assert channel["status"] == 400 and channel["body"]["error"] == "invalid_update_channel"  # type: ignore[index]
+    # A Guard home outside the home folder never touches the Codex config there.
+    short = _call(tmp_path, "route.codex_short_replies_ensure", {"payload": {}})["ok"]
+    assert short["status"] == 200 and short["body"] == {"state": "skipped"}  # type: ignore[index]
 
 
 def test_policy_sync_refuses_a_request_without_a_bundle(tmp_path: Path) -> None:
@@ -257,21 +335,18 @@ def test_control_library_steps_read_the_daemon_state(tmp_path: Path) -> None:
     assert set(listed) == {"payload"}  # type: ignore[arg-type]
 
 
-def test_worker_passes_answer_ok(tmp_path: Path) -> None:
-    holds = _call(tmp_path, "worker.idle_holds", {})
-    assert holds["ok"] == {"ok": True, "hold": False}
-    maintained = _call(tmp_path, "worker.maintain_activity", {})
-    assert isinstance(maintained["ok"]["ok"], bool)  # type: ignore[index]
-    heartbeat = _call(
-        tmp_path,
+def test_native_daemon_worker_passes_are_not_library_calls(tmp_path: Path) -> None:
+    # The native daemon runs the heartbeat, the idle hold, storage
+    # maintenance, the one-file extraction sweep and the sync-profile lookup
+    # behind the idle hold itself.
+    for name in (
+        "worker.cloud_workspace",
+        "worker.idle_holds",
+        "worker.maintain_activity",
+        "worker.onefile_reclaim",
         "worker.runtime_heartbeat",
-        {"session_id": "s1", "host": "127.0.0.1", "port": 5474, "started_at": "2026-01-01T00:00:00+00:00"},
-    )
-    assert heartbeat["ok"] == {"ok": True}
-
-
-def test_worker_heartbeat_refuses_malformed_arguments(tmp_path: Path) -> None:
-    assert "error" in _call(tmp_path, "worker.runtime_heartbeat", {"port": "x"})
+    ):
+        assert _call(tmp_path, name, {})["error"]["message"] == "unknown_call"  # type: ignore[index]
 
 
 def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> None:
@@ -280,12 +355,11 @@ def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> 
     assert reconciled["ok"]["repaired_harnesses"] == []  # type: ignore[index]
 
 
-def test_worker_aibom_and_onefile_passes_answer(tmp_path: Path) -> None:
+def test_worker_aibom_pass_answers(tmp_path: Path) -> None:
     aibom = _call(tmp_path, "worker.aibom_inventory", {})
     assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]
     payload = GuardStore(tmp_path).get_sync_payload("aibom_inventory_daemon")
     assert isinstance(payload, dict) and payload["status"] == "missing_workspace_context"
-    assert _call(tmp_path, "worker.onefile_reclaim", {})["ok"] == {"ok": True, "skipped": True}
 
 
 def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:

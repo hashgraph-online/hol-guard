@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_continuation_support import WATCH_POSTURE_STUB
+from tests.pi_extension_support import managed_extension_source
 
 FOUND = "HOL Guard CIGAR found code in this project that matches this request."
 
@@ -35,6 +36,7 @@ function inputApprovalResumeBindingIsActive(ctx, binding) {
   return binding.generation === inputApprovalResumeGeneration && binding.cwd === ctx.cwd;
 }
 function approvalBlockedReason(_response, reason) { return reason; }
+function approvalUrlFromResponse(response) { return response.approval_url ?? null; }
 function scheduleApprovalResume() {}
 async function daemonWorkspaceReadiness() {
   await new Promise(resolve => setTimeout(resolve, setupDelayMs));
@@ -43,13 +45,16 @@ async function daemonWorkspaceReadiness() {
 async function runGuard(payload) {
   payloads.push(payload);
   if (payload.prompt === 'protected') return {decision: 'deny', reason: 'protected'};
+  if (payload.prompt === 'needs approval') {
+    return {decision: 'deny', reason: 'held', approval_url: 'https://guard.example/approve/1'};
+  }
   if (payload.prompt === 'no match') {
     return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit'}};
   }
   return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit',
     additionalContext: FOUND + ' ' + payload.prompt}};
 }
-const ctx = {cwd: '/fixture', sessionId: 'session-a', ui: {notify() {}}, isIdle: () => idle};
+const ctx = {cwd: '/fixture', sessionId: 'session-a', hasUI: true, ui: {notify() {}}, isIdle: () => idle};
 const start = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, ctx);
 const turn = async (text, source = 'interactive', expanded = text) => ({
   input: await callbacks.input({text, source}, ctx),
@@ -58,7 +63,29 @@ const turn = async (text, source = 'interactive', expanded = text) => ({
 """
 
 
-def run_handlers(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250) -> dict[str, object]:
+def run_handlers(
+    tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250, exit_code: int = 0
+) -> dict[str, object]:
+    completed = run_node(handler_script(tmp_path, harness, steps, timeout_ms))
+    assert completed.stdout.strip(), completed.stderr
+    # A stopped headless prompt ends the run nonzero and says why on stderr.
+    assert completed.returncode == exit_code, completed.stderr
+    result = json.loads(completed.stdout)
+    result["stderr"] = completed.stderr.splitlines()
+    return result
+
+
+def run_node(script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [shutil.which("node") or "node", "--input-type=module", "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+def handler_script(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250) -> str:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
         home_dir=tmp_path,
@@ -69,20 +96,13 @@ def run_handlers(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 425
     cache_end = source.index("  const approvalContinuationActivity", cache_start)
     input_start = source.index("  async function inputWorkspaceReadiness(")
     input_end = source.index('  pi.on("tool_call",', input_start)
-    script = (
+    return (
         PRELUDE.replace("FOUND_TEXT", json.dumps(FOUND)).replace("TIMEOUT_VALUE", str(timeout_ms))
+        + WATCH_POSTURE_STUB
         + source[cache_start:cache_end]
         + source[input_start:input_end]
         + steps
     )
-    completed = subprocess.run(
-        [shutil.which("node") or "node", "--input-type=module", "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    return json.loads(completed.stdout)
 
 
 def context_message(prompt: str) -> dict[str, object]:
@@ -137,7 +157,6 @@ RESUME_STEPS = """
 setupDelayMs = 80;
 idle = RESUME_IDLE;
 const input = await callbacks.input({text: 'fix the cart total', source: 'interactive'}, ctx);
-const early = await start('fix the cart total');
 for (let waited = 0; resumed.length === 0 && waited < 2000; waited += 10) {
   await new Promise(resolve => setTimeout(resolve, 10));
 }
@@ -145,7 +164,7 @@ idle = true;
 // Pi runs the resumed prompt as a new turn from the extension.
 const resumedTurn = await turn(resumed[0], 'extension');
 const again = await start(resumed[0]);
-console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
+console.log(JSON.stringify({input, resumed, sent, resumedTurn, again, payloads}));
 """
 
 
@@ -154,7 +173,8 @@ console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
 def test_prompt_resumed_after_workspace_setup_keeps_its_context(tmp_path: Path, harness: str) -> None:
     result = run_handlers(tmp_path, harness, RESUME_STEPS.replace("RESUME_IDLE", "true"), timeout_ms=40)
     assert result["input"] == {"action": "handled", "handled": True}
-    assert "early" not in result, "nothing is handed on before the review finishes"
+    reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
+    assert reviewed == ["fix the cart total"], "the resumed turn is not reviewed again"
     assert result["resumed"] == ["fix the cart total"]
     # Starting the turn directly lets Pi expand a skill command or prompt template.
     assert result["sent"] == [{"expandPromptTemplates": True}]
@@ -170,3 +190,104 @@ def test_prompt_resumed_while_the_agent_is_busy_is_queued_without_context(tmp_pa
     # A queued follow-up starts no turn of its own, so its files are not kept.
     assert result["sent"] == [{"deliverAs": "followUp"}]
     assert result["resumedTurn"] == {"input": {"action": "continue"}}
+
+
+HEADLESS_STEPS = """
+const aborted = [], notes = [];
+const headless = {...ctx, hasUI: false, abort: () => aborted.push(true), ui: {notify: (text) => notes.push(text)}};
+// Print mode and the SDK start a turn without an "input" event.
+const begin = (prompt, reason = 'prompt') =>
+  callbacks.before_agent_start({type: 'before_agent_start', reason, prompt}, headless);
+const matched = await begin('fix the cart total');
+const empty = await begin('no match');
+const blocked = await begin('protected');
+const held = await begin('needs approval');
+const stopped = aborted.length;
+const revived = await begin('fix the cart total', 'revive');
+// A typed prompt is reviewed by the input handler, and only its own turn.
+const typed = await turn('fix the theme');
+// An SDK session that emitted "input" can still call prompt() directly.
+const later = await begin('fix the cart total');
+const repeat = await begin('fix the theme');
+// A prompt the input handler held owns no turn, so prompt() reviews it again.
+await callbacks.input({text: 'protected', source: 'interactive'}, ctx);
+const retried = await begin('protected');
+console.log(JSON.stringify({
+  matched, empty, blocked, held, stopped, notes, revived, typed, later, repeat, retried, payloads,
+  aborted: aborted.length,
+}));
+"""
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harness: str) -> None:
+    result = run_handlers(tmp_path, harness, HEADLESS_STEPS, exit_code=1)
+    assert result["matched"] == context_message("fix the cart total")
+    assert "empty" not in result
+    assert "blocked" not in result
+    assert "held" not in result
+    assert result["stopped"] == 2, "a denied headless prompt stops its turn"
+    # A prompt cannot be approved, so the note gives the reason and no approval link.
+    assert result["notes"] == ["protected", "held", "protected"]
+    assert "revived" not in result
+    assert result["typed"] == {"input": {"action": "continue"}, "start": context_message("fix the theme")}
+    assert result["later"] == context_message("fix the cart total")
+    assert "repeat" not in result, "a turn rerunning the typed prompt is not reviewed twice"
+    assert "retried" not in result
+    assert result["aborted"] == 3
+    assert result["stderr"] == ["protected", "held", "protected"]
+    reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
+    assert reviewed == [
+        "fix the cart total",
+        "no match",
+        "protected",
+        "needs approval",
+        "fix the theme",
+        "fix the cart total",
+        "protected",
+        "protected",
+    ]
+    assert all(payload["guard_prompt_context"] is True for payload in result["payloads"])
+    assert all(payload["session_id"] == "session-a" for payload in result["payloads"])
+
+
+PRINT_MODE_STEPS = """
+const printMode = {...ctx, hasUI: HAS_UI, abort() {}, ui: {notify() {}}};
+const begin = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, printMode);
+await begin('protected');
+await begin('needs approval');
+await begin('fix the cart total');
+console.log(JSON.stringify({done: true}));
+HOST_EXIT
+"""
+
+# Print mode ends with the host's own process.exit(0); a run may also just drain.
+HOST_EXITS = pytest.mark.parametrize("host_exit", ["", "process.exit(0);"], ids=["drain", "host-exit"])
+
+
+def print_mode_script(tmp_path: Path, harness: str, has_ui: str, host_exit: str) -> str:
+    steps = PRINT_MODE_STEPS.replace("HAS_UI", has_ui).replace("HOST_EXIT", host_exit)
+    return handler_script(tmp_path, harness, steps)
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@HOST_EXITS
+@node_required
+def test_stopped_print_mode_prompt_says_why_and_exits_nonzero(tmp_path: Path, harness: str, host_exit: str) -> None:
+    # Print and JSON modes have no UI, so a notice alone reaches no one and the
+    # run used to exit 0 as if the prompt had finished.
+    completed = run_node(print_mode_script(tmp_path, harness, "false", host_exit))
+    assert json.loads(completed.stdout) == {"done": True}
+    assert completed.stderr.splitlines() == ["protected", "held"]
+    assert completed.returncode == 1
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@HOST_EXITS
+@node_required
+def test_stopped_prompt_with_a_ui_leaves_the_exit_status_alone(tmp_path: Path, harness: str, host_exit: str) -> None:
+    completed = run_node(print_mode_script(tmp_path, harness, "true", host_exit))
+    assert json.loads(completed.stdout) == {"done": True}
+    assert completed.stderr == ""
+    assert completed.returncode == 0

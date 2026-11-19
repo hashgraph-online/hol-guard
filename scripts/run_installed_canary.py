@@ -196,7 +196,7 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
 
 
 def _no_post_execution_proof_smoke() -> dict[str, object]:
-    from codex_plugin_scanner.guard.adapters.contracts import contract_for
+    from codex_plugin_scanner.guard.setup_contracts import contract_for
     from codex_plugin_scanner.guard.store import GuardStore
 
     harness = "opencode"

@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TypeGuard
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
+from codex_plugin_scanner.guard.contained_sink_command import contained_sink_command_prefix
 from tests.containment_resident import native_containment_sink
 from tests.containment_rewrite_client import native_containment_rewrite
 

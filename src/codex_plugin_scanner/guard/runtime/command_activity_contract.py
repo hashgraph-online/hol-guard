@@ -6,11 +6,12 @@ import re
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
+from functools import lru_cache
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.setup_contract_registry import harness_names
 
 from .effect_contract import EffectKind, UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
@@ -18,7 +19,13 @@ from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 COMMAND_ACTIVITY_SCHEMA_VERSION: Final = "1.0.0"
 _OPAQUE_ID: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}")
 _STABLE_ID: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
-COMMAND_ACTIVITY_HARNESSES: Final = frozenset(contract.harness for contract in HARNESS_CONTRACTS)
+
+
+@lru_cache(maxsize=1)
+def command_activity_harnesses() -> frozenset[str]:
+    """The harness names command activity accepts, read from the runtime on first use."""
+
+    return frozenset(harness_names())
 
 
 class CommandHookPhase(str, Enum):
@@ -341,7 +348,7 @@ def _require_stable_id(value: object, label: str) -> None:
         not isinstance(value, str)
         or len(value) > 128
         or _STABLE_ID.fullmatch(value) is None
-        or (label == "harness" and value not in COMMAND_ACTIVITY_HARNESSES)
+        or (label == "harness" and value not in command_activity_harnesses())
     ):
         raise ValueError(f"{label} must be a stable lowercase identifier")
 

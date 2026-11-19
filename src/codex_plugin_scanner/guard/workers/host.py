@@ -35,6 +35,7 @@ _REFRESH_SECONDS = 10.0
 _ATTENTION_POLL_SECONDS = 1.0
 _REFRESH_POLL_SECONDS = 0.2
 _REFRESH_WAIT_SECONDS = 5.0
+_INSTALLED_AUTHORITY_RETRY_SECONDS = 10.0
 _REFRESH_OPERATION = "guard.review.resolveExact"
 
 
@@ -122,6 +123,7 @@ class WorkerHost:
         self._threads: list[threading.Thread] = []
         self._hook_worker: Any = None
         self._attention: Any = None
+        self._installed_authority_admitted = False
 
     def _record(self, code: str) -> None:
         _LOGGER.warning("Guard worker host error: %s", code)
@@ -181,7 +183,7 @@ class WorkerHost:
         thread.start()
         self._threads.append(thread)
 
-    def start(self) -> None:
+    def start(self, on_phase: Callable[[str], None] | None = None) -> None:
         from ..browser_opener import open_browser_url
         from ..cloud_control.command_queue_worker import start_command_queue_worker
         from ..native_resident_watchdog import start_native_resident_watchdog
@@ -191,7 +193,17 @@ class WorkerHost:
         from ..runtime_health import repair_self_check
         from ..workspace_assessment_worker import start_workspace_assessment_worker
 
+        # Admit the installed release before the first publication, as the
+        # Python daemon did at startup. A snapshot bound to packs an older
+        # engine compiled is refused by the resident, so publishing first
+        # would fail every hook closed until something else migrated it.
+        report = on_phase or (lambda _step: None)
+        self._admit_installed_release(on_phase=report)
+        report("admitted")
         self._start_policy_publication()
+        report("publishing")
+        if not self._installed_authority_admitted:
+            self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
         attention = ApprovalAttentionCoordinator(
             store=self.store,
             runtime=GuardSurfaceRuntime(self.store),
@@ -224,6 +236,19 @@ class WorkerHost:
         if isinstance(assessment, threading.Thread):
             self._threads.append(assessment)
 
+    def _admit_installed_release(self, on_phase: Callable[[str], None] | None = None) -> None:
+        """Migrates the active command packs to the installed engine, once it succeeds.
+
+        Only the first attempt, during start, reports its steps; the retry
+        loop runs after the daemon has stopped reading them.
+        """
+
+        if self._installed_authority_admitted:
+            return
+        from ..extension_control_host import migrate_installed_authority
+
+        self._installed_authority_admitted = migrate_installed_authority(self.store, on_phase=on_phase)
+
     def _start_policy_publication(self) -> None:
         """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
 
@@ -235,7 +260,7 @@ class WorkerHost:
 
         from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
         from ..hook_review.hook_worker import HookWorker
-        from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+        from ..resident_evidence_client import ResidentEvidenceClient
 
         try:
             # Direct answers are bound only while their evidence has a writer,
@@ -243,7 +268,7 @@ class WorkerHost:
             self._hook_worker = HookWorker(
                 store=self.store,
                 home_dir=self.home_dir,
-                activity_writer=NativeHookEvidenceWriter(store=self.store),
+                activity_writer=ResidentEvidenceClient(store=self.store),
                 evidence_dispatch=HookEvidenceDispatch(),
                 capture_writer=None,
                 wait_for_native_policy=False,
@@ -309,26 +334,48 @@ class WorkerHost:
                 _LOGGER.exception("Guard worker host could not stop native policy publication")
 
 
+def _report_phase(step: str) -> None:
+    """Tells the daemon which start step just finished; it journals each one."""
+
+    _ = sys.stdout.write(f"phase {step}\n")
+    sys.stdout.flush()
+
+
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
+    from ..runtime_health.background_diagnostics import install_sink, release_sink
+    from ..runtime_health.diagnostics import BackgroundLogWriter
+
     store = GuardStore(guard_home)
-    host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
-    host.start()
-    host.wait_for_policy_publication()
-    # The daemon announces itself only after this line, so its first hook
-    # finds a published policy, as it did when the daemon's own hook worker
-    # waited for one before the daemon reported ready.
-    sys.stdout.write("ready\n")
-    sys.stdout.flush()
+    # Nothing else in this process opens daemon.log, so without these sinks a
+    # failed migration or publication left no line for support to read.
+    writer = BackgroundLogWriter(store.guard_home)
     try:
-        # The daemon holds the other end; end of file means it has gone.
-        while sys.stdin.buffer.read(4096):
+        install_sink(writer.error, notice=writer.notice)
+        _report_phase("launched")
+        host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
+        host.start(on_phase=_report_phase)
+        _report_phase("started")
+        host.wait_for_policy_publication()
+        # The daemon announces itself only after this line, so its first hook
+        # finds a published policy, as it did when the daemon's own hook worker
+        # waited for one before the daemon reported ready.
+        _ = sys.stdout.write("ready\n")
+        sys.stdout.flush()
+        try:
+            # The daemon holds the other end; end of file means it has gone.
+            while sys.stdin.buffer.read(4096):
+                pass
+        except (OSError, ValueError, KeyboardInterrupt):
             pass
-    except (OSError, ValueError, KeyboardInterrupt):
-        pass
+        finally:
+            host.shutdown()
     finally:
-        host.shutdown()
+        # A start that raises still writes what it queued, such as a failed
+        # migration, before the process exits.
+        release_sink(writer.error)
+        _ = writer.close()
     return 0
 
 

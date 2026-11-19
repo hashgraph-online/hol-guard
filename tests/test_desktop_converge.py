@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import desktop_foreign_installs
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import desktop_converge, update_commands
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import lifecycle_gate_requirement
 from codex_plugin_scanner.guard.cli.commands_parser_desktop import _configure_guard_desktop_parser
@@ -19,6 +18,7 @@ from codex_plugin_scanner.guard.desktop_foreign_installs import (
     DESKTOP_PATH_SHIM_MARKER,
     inventory_foreign_installs,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mdm import runtime_request
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX venv and bin layout")

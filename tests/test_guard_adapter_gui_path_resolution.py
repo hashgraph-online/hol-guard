@@ -8,15 +8,28 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import (
-    _command_available,
-    _resolve_command,
-    _which_from_user_directories,
-)
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="launchd and desktop PATH defaults are POSIX-only")
 
 LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+
+def _which_from_user_directories(command: str, home: Path | None = None, extra: tuple[Path, ...] = ()) -> str | None:
+    answer = native_runner_authority(
+        "user_command_lookup",
+        {
+            "command": command,
+            "home": str(home or Path.home()),
+            "path": os.environ.get("PATH"),
+            "extra": [str(directory) for directory in extra],
+        },
+    )
+    return answer["path"]
+
+
+def _command_available(command: str, home: Path | None = None, extra: tuple[Path, ...] = ()) -> bool:
+    return _which_from_user_directories(command, home, extra) is not None
 
 
 def _install(directory: Path, name: str, *, mode: int = 0o755) -> Path:
@@ -42,13 +55,6 @@ def test_launchd_path_finds_cli_in_user_install_directory(home: Path, monkeypatc
 
     assert _command_available("guardtestcli") is True
     assert _which_from_user_directories("guardtestcli") == str(executable)
-
-
-def test_launchd_path_never_changes_the_launch_executable(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _install(home / ".bun" / "bin", "guardtestcli")
-    monkeypatch.setenv("PATH", LAUNCHD_PATH)
-
-    assert _resolve_command("guardtestcli") is None
 
 
 def test_lookup_uses_the_harness_home_not_the_process_home(

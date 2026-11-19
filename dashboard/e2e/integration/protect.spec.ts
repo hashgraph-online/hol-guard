@@ -9,9 +9,10 @@ type HomeSeed = { activeApps: string[]; inactiveApps: string[] };
 
 const APP_LABELS: Record<string, string> = { "claude-code": "Claude Code", cursor: "Cursor", copilot: "Copilot" };
 
-// The home seed connects two apps and leaves one connected app with inactive
-// hooks, so Protect shows the degraded posture a real machine shows when one
-// app's hooks stop working. Read that world back from the daemon first.
+// The home seed connects two apps and leaves a third with an inactive install
+// record, which is what disconnecting an app leaves behind. Protect shows a
+// degraded posture because the connected apps' hooks fail verification here.
+// Read that world back from the daemon first.
 async function readSeededRuntime(state: Parameters<typeof daemonApi>[0]): Promise<{ runtime: Runtime; home: HomeSeed }> {
   const home = state.seeded.home as unknown as HomeSeed;
   const runtime = await daemonApi<Runtime>(state, "/v1/runtime");
@@ -41,18 +42,20 @@ test("Protect shows degraded posture and every app Guard can watch, with per-app
   await expect(statValue("Watched apps")).toHaveText(/^[1-9]\d*$/);
   await expect(statValue("Runtime")).toHaveText("active");
 
-  // One list: each connected app's Protected or Watch choice sits on its
+  // One list: each connected app's Guard and CIGAR switches sit on its
   // coverage row, with no separate per-app card.
   const coverage = main.getByRole("region", { name: "App coverage" });
   await expect(coverage.getByText("App coverage", { exact: true })).toBeVisible();
   await expect(main.getByText("Protection by app", { exact: true })).toHaveCount(0);
   for (const harness of home.activeApps) {
-    const choice = coverage.getByRole("group", { name: `Protection for ${APP_LABELS[harness]}` });
+    const name = APP_LABELS[harness];
+    const choice = coverage.getByRole("group", { name: `Guard and CIGAR in ${name}` });
     await expect(choice).toBeVisible();
-    await expect(choice.getByRole("radio", { name: "Watch" })).toBeEnabled();
+    await expect(choice.getByRole("switch", { name: `Guard in ${name}` })).toBeEnabled();
+    await expect(choice.getByRole("switch", { name: `CIGAR in ${name}` })).toBeVisible();
   }
   for (const harness of home.inactiveApps) {
-    await expect(coverage.getByRole("group", { name: `Protection for ${APP_LABELS[harness]}` })).toHaveCount(0);
+    await expect(coverage.getByRole("group", { name: `Guard and CIGAR in ${APP_LABELS[harness]}` })).toHaveCount(0);
   }
   for (const app of ["Codex", "Claude Code", "Cursor"]) {
     await expect(coverage.getByRole("button", { name: new RegExp(`^${app}\\b`) })).toBeVisible();
@@ -67,9 +70,10 @@ test("Protect explains what is failing and gates repair behind the approval pass
   // can and says so in the heading and the repair button.
   await expect(recovery.getByRole("heading", { name: /^(Restore local|Repair supported) protection$/ })).toBeVisible();
   await expect(recovery.getByRole("button", { name: /^Repair (supported )?protection$/ })).toBeEnabled();
-  // Each connected app whose hooks are inactive gets its own repair entry.
+  // An app with an inactive install record was disconnected: Home offers to
+  // connect it, so Protect must not offer to repair (reinstall) it.
   for (const harness of home.inactiveApps) {
-    await expect(recovery.getByRole("button", { name: `Open ${APP_LABELS[harness]} repair` })).toBeEnabled();
+    await expect(recovery.getByRole("button", { name: `Open ${APP_LABELS[harness]} repair` })).toHaveCount(0);
   }
   await expect(recovery.getByText("Guard Cloud policy proof", { exact: true })).toBeVisible();
   await expect(recovery.getByRole("button", { name: "Connect Guard Cloud" })).toBeEnabled();

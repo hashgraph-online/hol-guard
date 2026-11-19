@@ -33,7 +33,7 @@ use crate::claude_hook_bridge_render::py_strip;
 #[path = "cline_hook_worker_decision.rs"]
 mod decision;
 
-use decision::{blocked, explicitly_allows, parse_output, reason};
+use decision::{added_context, blocked, emit, explicitly_allows, failure, parse_output, reason};
 
 pub(crate) const WORKER_COMMAND: &str = "cline-hook-worker";
 pub(crate) const WORKER_FEATURE: &str = "cline-hook-worker-v1";
@@ -207,6 +207,7 @@ pub(crate) fn answer(
         vec![value.clone()]
     };
     let mut why: Option<String> = None;
+    let mut context: Option<String> = None;
     for payload in &payloads {
         let Some(stdout) = review(&config.guard, &python_dumps(payload)) else {
             return failure(blocking, EVALUATION_UNAVAILABLE);
@@ -222,6 +223,9 @@ pub(crate) fn answer(
             why = Some(AMBIGUOUS.to_owned());
             break;
         }
+        if config.event == "UserPromptSubmit" {
+            context = added_context(&decision).map(str::to_owned);
+        }
     }
     let outcome = match (blocking, why.is_some()) {
         (true, true) => "blocked",
@@ -231,7 +235,7 @@ pub(crate) fn answer(
     if !canary {
         write_proof(&config.proof, &config.event, outcome);
     }
-    let message = OValue::str(why.unwrap_or_default());
+    let message = OValue::str(why.or(context).unwrap_or_default());
     if blocking {
         let cancel = OValue::Bool(outcome == "blocked");
         emit(&[
@@ -245,26 +249,6 @@ pub(crate) fn answer(
             ("contextModification", message),
         ])
     }
-}
-
-/// `sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")`.
-fn emit(fields: &[(&str, OValue)]) -> String {
-    let mut map = OMap::new();
-    for (key, value) in fields {
-        map.insert(key, value.clone());
-    }
-    OValue::Map(map).compact_json() + "\n"
-}
-
-fn failure(blocking: bool, message: &str) -> String {
-    emit(&[
-        ("cancel", OValue::Bool(blocking)),
-        (
-            "errorMessage",
-            OValue::str(if blocking { message } else { "" }),
-        ),
-        ("contextModification", OValue::str(message)),
-    ])
 }
 
 /// Every value, scalars included, sits at most [`MAX_DEPTH`] deep.

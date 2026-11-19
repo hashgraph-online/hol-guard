@@ -1,5 +1,5 @@
 use super::{edge, post_edge, pre_edge};
-use crate::hook_direct::{post_tool_answer, pre_tool_answer, HookDirectDefer};
+use crate::hook_direct::{budget_bound_review, post_tool_answer, pre_tool_answer, HookDirectDefer};
 use serde_json::{json, Value};
 
 #[test]
@@ -92,4 +92,77 @@ fn every_reviewed_post_tool_use_is_answered() {
         ),
         Err(HookDirectDefer::EdgeFailed)
     );
+}
+
+#[test]
+fn only_a_pre_tool_review_the_short_budget_may_cause_goes_to_the_daemon() {
+    for (reason, defer) in [
+        (
+            "native_git_execution_context_review",
+            HookDirectDefer::GitContextReview,
+        ),
+        (
+            "native_git_helper_context_review",
+            HookDirectDefer::GitContextReview,
+        ),
+        (
+            "native_command_extension_evaluation_timed_out",
+            HookDirectDefer::ExtensionTimedOut,
+        ),
+    ] {
+        let held = json!({
+            "decision": "deny",
+            "minimum_action": "review",
+            "reason_code": reason,
+        });
+        assert_eq!(budget_bound_review(&pre_edge(held.clone())), Some(defer));
+        assert_eq!(budget_bound_review(&post_edge(held)), None, "{reason}");
+    }
+    for reason in [
+        "native_command_destructive",
+        "native_command_extension_evaluation_failed",
+    ] {
+        assert_eq!(
+            budget_bound_review(&pre_edge(json!({
+                "decision": "deny",
+                "minimum_action": "review",
+                "reason_code": reason,
+            }))),
+            None,
+            "{reason}"
+        );
+    }
+    assert_eq!(budget_bound_review(&edge("deny", "review")), None);
+    assert_eq!(budget_bound_review(b"not json"), None);
+}
+
+#[test]
+fn a_git_read_held_on_its_checkout_configuration_goes_to_the_daemon() {
+    let lane = super::lane("git-context-review", json!({}));
+    let git = |arguments: &[&str]| {
+        let status = std::process::Command::new("git")
+            .args(arguments)
+            .current_dir(&lane.workspace)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {arguments:?}");
+    };
+    git(&["init", "-q"]);
+    // A helper the read would run: the resident keeps no review of its own
+    // for it, and leaves the decision to the daemon's longer budget.
+    git(&["config", "core.fsmonitor", "/usr/bin/true"]);
+    let result = super::run_as(
+        &lane,
+        "claude-code",
+        Some(super::HOME),
+        json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": { "command": "git status" },
+            "cwd": lane.workspace,
+        }),
+    );
+    assert_eq!(super::deferred(&result), "direct_hook_git_context_review");
 }

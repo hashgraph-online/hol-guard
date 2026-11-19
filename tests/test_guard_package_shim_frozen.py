@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import shims as guard_shims_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _expose_real_npm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

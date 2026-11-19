@@ -137,6 +137,18 @@ pub(super) fn answer(
         return Err(HookDirectDefer::EventUnsupported);
     }
     let compact = event.replace(['_', '-'], "").to_ascii_lowercase();
+    // A session started again after compaction or `/clear` keeps its id but
+    // no longer holds the code CIGAR showed it, so later notes send it again.
+    if compact == "sessionstart"
+        && matches!(
+            payload.get("source").and_then(Value::as_str),
+            Some("compact" | "clear")
+        )
+    {
+        if let Some(id) = payload.get("session_id").and_then(Value::as_str) {
+            crate::context_assistance_prompt::seen::restarted(harness, id.trim());
+        }
+    }
     let claude_permission =
         harness == CLAUDE_CODE && CLAUDE_PERMISSION_EVENTS.contains(&compact.as_str());
     let passthrough_permission = PASSTHROUGH_PERMISSION_HARNESSES.contains(&harness)
@@ -343,7 +355,7 @@ fn claude_turn_stop_answer(
         .map_err(|_| HookDirectDefer::PermissionNotice)
 }
 
-pub(super) fn utc_now_isoformat() -> Option<String> {
+pub(crate) fn utc_now_isoformat() -> Option<String> {
     let micros = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?

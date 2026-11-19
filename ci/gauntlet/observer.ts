@@ -123,11 +123,18 @@ function recordExchange(exchange: {
   body: JsonRecord;
   status: number;
   elapsedMs: number;
+  startedAtMs: number;
   transport?: string;
 }): void {
   const { request, probe, body } = exchange;
   const nativeObservation = publicNativeObservation(body);
-  const input = JSON.stringify(request.tool_input ?? null);
+  // The extension reviews each prompt before its turn starts. That answer names
+  // no tool, so its input is an empty object and the prompt text stays out of
+  // the evidence. Project context it adds reaches the model hidden, so only the
+  // fields the agent would show count as rendered.
+  const prompt = exchange.event === "UserPromptSubmit";
+  const input = JSON.stringify(prompt ? {} : request.tool_input ?? null);
+  const rendered = renderedFields(body).filter(field => !(prompt && field === "additionalContext"));
   record({
     ...(exchange.transport ? { transport: exchange.transport } : {}),
     event: exchange.event,
@@ -139,11 +146,12 @@ function recordExchange(exchange: {
     decision: body.decision,
     policy_action: body.policy_action,
     reason_code: body.reason_code,
-    rendered_fields: renderedFields(body),
+    rendered_fields: rendered,
     model_output_action: body.model_output_action,
     reviewed_output_sha256: body.reviewed_output_sha256,
     response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
     elapsed_ms: exchange.elapsedMs,
+    started_at_ms: exchange.startedAtMs,
     ...(probe ? { probe_operation_id: probe.operation_id, probe_request_id: probe.request_id } : {}),
     ...(nativeObservation ? { native_observation: nativeObservation } : {}),
   });
@@ -164,6 +172,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
     record({ observer_error: true, observer_error_code: "probe_injection_failed" });
   }
   const started = performance.now();
+  const startedAtMs = Date.now();
   // Capture the event before transport so timeouts retain their event group.
   const event = request?.hook_event_name;
   const elapsed = () => Number((performance.now() - started).toFixed(3));
@@ -176,7 +185,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   }
   try {
     const body = await response.clone().json();
-    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed() });
+    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed(), startedAtMs });
   } catch {
     record({ observer_error: true, event, elapsed_ms: elapsed() });
   }
@@ -198,6 +207,7 @@ type BridgeChild = {
 
 function observeBridge(child: BridgeChild): void {
   const started = performance.now();
+  const startedAtMs = Date.now();
   const elapsed = () => Number((performance.now() - started).toFixed(3));
   let request: JsonRecord = {};
   let probe: Probe | undefined;
@@ -259,6 +269,7 @@ function observeBridge(child: BridgeChild): void {
         body,
         status,
         elapsedMs: elapsed(),
+        startedAtMs,
         transport: "pi-hook-bridge",
       });
     } catch {

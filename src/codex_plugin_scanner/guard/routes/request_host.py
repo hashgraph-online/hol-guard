@@ -120,14 +120,7 @@ def _replay_server_class() -> type:
             self.active_stream_clients = 0
             self.active_stream_clients_lock = threading.Lock()
             self.shutdown_started = threading.Event()
-            self.diagnostics = DaemonDiagnostics(store.guard_home, start_worker=False, rotate=False)
-            self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
-            self.auth_audit_windows = {}
-            self.audit_persistence = daemon_server.AuditPersistence(
-                store,
-                self.diagnostics,
-                attempt_timeout_seconds=daemon_server._AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS,
-            )
+            self.diagnostics = DaemonDiagnostics(store.guard_home)
             from ..workers.host import DurableWorkerRefresh
 
             self.command_queue_lifecycle = DurableWorkerRefresh(store)
@@ -193,12 +186,6 @@ def _replay_server_class() -> type:
         def package_firewall_connect_state(self, value: dict[str, object] | None) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
             self._replay_state.set("package_firewall_connect_state", value)
 
-        @cached_property
-        def network_supervisor(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from ..runtime.network_supervisor import NetworkSupervisor
-
-            return NetworkSupervisor()
-
         # The extension-control service is the resident's, one per Guard home.
         @property
         def extension_control_api(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -238,9 +225,9 @@ def _replay_server_class() -> type:
             from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
             from ..hook_review.hook_direct_counters import bind_hook_counter_sink
             from ..hook_review.hook_worker import HookWorker
-            from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+            from ..resident_evidence_client import ResidentEvidenceClient
 
-            self.runtime_hook_evidence_writer = NativeHookEvidenceWriter(store=self.store)
+            self.runtime_hook_evidence_writer = ResidentEvidenceClient(store=self.store)
             self.runtime_hook_evidence_dispatch = HookEvidenceDispatch()
             worker = HookWorker(
                 store=self.store,

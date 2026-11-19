@@ -6,8 +6,19 @@ import {
   ApprovalProofFieldInputs,
   approvalProofRecentlySatisfied,
   approvalProofRequiresPassword,
+  approvalProofUsesPulse,
   isApprovalProofSubmitDisabled,
 } from "./approval-proof-inline";
+
+/** The "skip the password for a while" checkbox: password gates only, not the authenticator or Pulse. */
+export function approvalProofCooldownOptionShown(gate: GuardApprovalGatePublicConfig): boolean {
+  return (
+    gate.cooldown_seconds > 0 &&
+    !gate.cooldown_active &&
+    gate.totp_enabled !== true &&
+    !approvalProofUsesPulse(gate)
+  );
+}
 
 type WhyThisPausedProps = {
   item: GuardApprovalRequest;
@@ -108,10 +119,18 @@ type ApprovalPasswordModalProps = {
   onCancel: () => void;
   submitLabel: string;
   busy?: boolean;
+  /** Guard refused a decision without a code, so a recent confirmation no longer counts. */
+  requireFreshTotp?: boolean;
 };
 
-function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, needsPassword: boolean): string {
+export function approvalProofModalTitle(
+  locked: boolean,
+  recentlySatisfied: boolean,
+  needsPassword: boolean,
+  usesPulse = false,
+): string {
   if (locked) return "Approval gate temporarily locked";
+  if (usesPulse) return "Approve in the YID app";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
@@ -120,7 +139,8 @@ function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, ne
 export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now);
   const gateLocked = lockRemainingSeconds > 0;
@@ -128,6 +148,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
     props.busy === true,
+    requireFreshTotp,
   );
   useEffect(() => {
     if (!gateLocked) return undefined;
@@ -150,10 +171,8 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
   }
 
-  const showCooldownOption =
-    props.gate.cooldown_seconds > 0 &&
-    !props.gate.cooldown_active &&
-    props.gate.totp_enabled !== true;
+  // Pulse has its own cooldown, chosen at setup; the password cooldown does not apply.
+  const showCooldownOption = approvalProofCooldownOptionShown(props.gate);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -188,7 +207,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
               id="approval-password-modal-title"
               className="text-lg font-semibold tracking-tight text-brand-dark"
             >
-              {approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)}
+              {approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword, approvalProofUsesPulse(props.gate))}
             </h2>
             <p className="text-sm text-brand-dark/70">{modalDescription}</p>
           </div>
@@ -206,6 +225,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
                 approvalPassword={props.approvalPassword}
                 approvalTotpCode={props.approvalTotpCode}
                 passwordRef={passwordRef}
+                requireFreshTotp={requireFreshTotp}
                 onApprovalPasswordChange={props.onApprovalPasswordChange}
                 onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
               />

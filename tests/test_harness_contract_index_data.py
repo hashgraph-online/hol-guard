@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.protection_capabilities import capability_for
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
 
 INDEX = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/data/harness_contract_index.v1.json"
 
 
 def test_the_native_contract_index_matches_the_registry() -> None:
     expected = []
-    for contract in HARNESS_CONTRACTS:
+    for contract in harness_contracts():
         payload: dict[str, object] = {
             "install_aliases": list(contract.install_aliases),
             "event_surfaces": list(contract.event_surfaces),

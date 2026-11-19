@@ -480,13 +480,14 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
         "native_prompt_risk_classes_invalid"
     );
 }
-
 #[path = "policy_enforcement_floor_cause_tests.rs"]
 mod floor_cause;
 #[path = "policy_enforcement_github_tests.rs"]
 mod github_tests;
 #[path = "policy_enforcement_observe_tests.rs"]
 mod observe_tests;
+#[path = "policy_enforcement_omp_eval_commit_output_tests.rs"]
+mod omp_eval_commit_output_tests;
 #[path = "policy_enforcement_omp_eval_output_tests.rs"]
 mod omp_eval_output_tests;
 #[path = "policy_enforcement_omp_github_output_tests.rs"]

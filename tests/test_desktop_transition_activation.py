@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.cli import desktop_runtime_transition as module
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionInstall
 from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
 from codex_plugin_scanner.guard.runtime_transition_prepare import RuntimeTransitionPreparation
@@ -296,7 +296,7 @@ def test_refusal_never_creates_authority_or_overwrites_prior_evidence(transition
     monkeypatch.setattr(runtime.authority, "_policy_integrity_secret_material", original_key)
     runtime.record_approval_refusal(plan, "approval_gate_invalid", deadline_monotonic=time.monotonic() + 10)
     before = runtime._refusal_path(plan.operation_id).read_bytes()
-    with pytest.raises(FileExistsError):
+    with pytest.raises(TransitionError, match="refusal_exists"):
         runtime.record_approval_refusal(plan, "another_reason", deadline_monotonic=time.monotonic() + 10)
     assert runtime._refusal_path(plan.operation_id).read_bytes() == before
     with pytest.raises(TransitionError, match="deadline_exceeded"):

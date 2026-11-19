@@ -12,6 +12,9 @@ import { ActionButton, SectionLabel } from "../approval-center-primitives";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
 import { ApprovalProofModal } from "../approval-proof-modal";
 import { isGuardDemoMode } from "../guard-demo";
+import { LeftoverGuardCleanup } from "./leftover-guard-cleanup";
+import { setupActionLabel, setupNotesFor, setupStepsFor, setupSuccessTitle } from "./harness-setup-panel-helpers";
+import { setupActionErrorMessage } from "../harness-action-errors";
 import {
   fetchSettings,
   fetchGuardApi,
@@ -35,20 +38,32 @@ type HarnessSetupState =
   | { kind: "success"; action: GuardHarnessAction; result: GuardHarnessActionResult }
   | { kind: "error"; action: GuardHarnessAction; message: string; confirmationPhrase?: string; confirmCommand?: string };
 
+type LeftoverStateChange = "removed" | "installed";
+
 export function HarnessSetupPanel(props: {
   harness: string;
   install: GuardManagedInstall | undefined;
   status: "active" | "needs_setup" | "observed" | "unknown";
+  setupWarnings?: string[];
+  onLeftoverRemoved?: (change?: LeftoverStateChange) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
   const [setupState, setSetupState] = useState<HarnessSetupState>({ kind: "idle" });
   const [disconnectArmed, setDisconnectArmed] = useState(false);
+  const [leftoverRemoved, setLeftoverRemoved] = useState(false);
   const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null | undefined>(undefined);
   const [gateLoadFailed, setGateLoadFailed] = useState(false);
   const active = props.install?.active === true;
+  const hasLeftover = !active && !leftoverRemoved && (props.setupWarnings?.length ?? 0) > 0;
   const displayName = harnessDisplayName(props.harness);
   const gateLoaded = approvalGate !== undefined;
   const disconnectRequiresProof = approvalGate?.enabled === true;
+
+  useEffect(() => {
+    if (active) {
+      setLeftoverRemoved(false);
+    }
+  }, [active]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +135,16 @@ export function HarnessSetupPanel(props: {
           setDisconnectArmed(false);
         }
         setSetupState({ kind: "success", action, result });
+        const cleanupIncomplete = result.managed_install?.manifest?.cleanup_incomplete === true;
+        if (action === "uninstall" && options.dryRun !== true && !cleanupIncomplete) {
+          if (!active) {
+            setLeftoverRemoved(true);
+          }
+          props.onLeftoverRemoved?.("removed");
+        }
+        if (action === "install" && options.dryRun !== true) {
+          props.onLeftoverRemoved?.("installed");
+        }
         if (action !== "verify" && options.dryRun !== true) {
           await refreshAfterMutation();
         }
@@ -141,7 +166,7 @@ export function HarnessSetupPanel(props: {
         }
       }
     },
-    [props.harness, refreshAfterMutation]
+    [active, props.harness, props.onLeftoverRemoved, refreshAfterMutation]
   );
 
   const handleConnect = useCallback(() => {
@@ -196,8 +221,17 @@ export function HarnessSetupPanel(props: {
   }
   const steps = setupStepsFor(currentPlan, active);
   const notes = setupNotesFor(currentPlan);
-  const showSimpleConfirm = active && disconnectArmed && gateLoaded && !disconnectRequiresProof && !gateLoadFailed;
-  const showProofModal = active && disconnectArmed && disconnectRequiresProof && approvalGate != null;
+  const showSimpleConfirm = (active || hasLeftover) && disconnectArmed && gateLoaded && !disconnectRequiresProof && !gateLoadFailed;
+  const showProofModal = (active || hasLeftover) && disconnectArmed && disconnectRequiresProof && approvalGate != null;
+  let panelHeading = `Connect ${displayName} from this dashboard`;
+  let panelBody = "Guard will install the local managed hooks through the daemon. No copied shell command required.";
+  if (active) {
+    panelHeading = `${displayName} is managed by Guard`;
+    panelBody = "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard.";
+  } else if (hasLeftover) {
+    panelHeading = `${displayName} needs cleanup`;
+    panelBody = "Guard found leftover configuration for this app. Remove it here before connecting again.";
+  }
 
   return (
     <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
@@ -205,12 +239,10 @@ export function HarnessSetupPanel(props: {
         <div className="min-w-0">
           <SectionLabel>Local harness install</SectionLabel>
           <h3 className="mt-2 text-lg font-semibold text-brand-dark">
-            {active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard`}
+            {panelHeading}
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {active
-              ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard."
-              : "Guard will install the local managed hooks through the daemon. No copied shell command required."}
+            {panelBody}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 max-xl:w-full max-xl:justify-start">
@@ -236,7 +268,7 @@ export function HarnessSetupPanel(props: {
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <SetupMetric label="Install state" value={installStateLabel(active, props.status)} active={active} />
+        <SetupMetric label="Install state" value={installStateLabel(active, props.status, hasLeftover)} active={active} />
         <SetupMetric label="Config source" value={props.install?.workspace ?? "Local machine"} />
         <SetupMetric label="Last changed" value={props.install ? formatRelativeTime(props.install.updated_at) : "Not yet"} />
       </div>
@@ -274,6 +306,10 @@ export function HarnessSetupPanel(props: {
         </div>
       )}
 
+      {hasLeftover && (
+        <LeftoverGuardCleanup warnings={props.setupWarnings ?? []} />
+      )}
+
       {steps.length > 0 && (
         <div className="mt-5 space-y-2">
           {steps.map((step) => (
@@ -303,14 +339,14 @@ export function HarnessSetupPanel(props: {
         >
           Refresh setup
         </button>
-        {active && !disconnectArmed && (
+        {(active || hasLeftover) && !disconnectArmed && (
           <button
             onClick={handleRequestDisconnect}
             disabled={busy}
             className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-attention/20 bg-white px-3 text-sm font-medium text-brand-attention transition-colors hover:bg-brand-attention/[0.04] disabled:opacity-50"
           >
             <HiMiniTrash className="h-4 w-4" aria-hidden="true" />
-            Disconnect
+            {hasLeftover ? "Remove leftover Guard files" : "Disconnect"}
           </button>
         )}
         {showSimpleConfirm && (
@@ -331,7 +367,7 @@ export function HarnessSetupPanel(props: {
             </button>
           </>
         )}
-        {active && disconnectArmed && !showSimpleConfirm && (
+        {(active || hasLeftover) && disconnectArmed && !showSimpleConfirm && (
           <button
             onClick={handleCancelDisconnect}
             disabled={busy}
@@ -341,10 +377,10 @@ export function HarnessSetupPanel(props: {
           </button>
         )}
       </div>
-      {active && disconnectArmed && !gateLoaded && !gateLoadFailed ? (
+      {(active || hasLeftover) && disconnectArmed && !gateLoaded && !gateLoadFailed ? (
         <p className="mt-3 text-sm text-muted-foreground">Checking approval requirements before disconnect.</p>
       ) : null}
-      {active && disconnectArmed && gateLoadFailed ? (
+      {(active || hasLeftover) && disconnectArmed && gateLoadFailed ? (
         <p className="mt-3 text-sm text-brand-attention" role="alert">
           Guard could not load approval settings. Keep the app connected and retry disconnect.
         </p>
@@ -449,51 +485,10 @@ function SetupMetric(props: { label: string; value: string; active?: boolean }) 
 function installStateLabel(
   active: boolean,
   status: "active" | "needs_setup" | "observed" | "unknown",
+  hasLeftover = false,
 ): string {
   if (active) return "Installed";
+  if (hasLeftover) return "Needs repair";
   if (status === "observed") return "Observed";
   return "Not connected";
-}
-
-function setupStepsFor(result: GuardHarnessActionResult | null, active: boolean): GuardHarnessSetupStep[] {
-  if (!result) return [];
-  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
-  if (result.verification?.steps) return result.verification.steps;
-  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
-  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
-  return [];
-}
-function setupNotesFor(result: GuardHarnessActionResult | null): string[] {
-  const manifest = result?.managed_install?.manifest;
-  const notes = manifest?.["notes"];
-  return Array.isArray(notes) ? notes.filter((note): note is string => typeof note === "string") : [];
-}
-
-function setupActionLabel(action: GuardHarnessAction): string {
-  if (action === "install") return "connect";
-  if (action === "verify") return "test";
-  if (action === "repair") return "repair";
-  return "disconnect";
-}
-
-function setupActionErrorMessage(error: GuardHarnessActionError): string {
-  if (error.payload?.error === "confirmation_required") {
-    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
-  }
-  if (error.payload?.error === "approval_gate_totp_required") {
-    return "Enter a fresh authenticator code to disconnect this app.";
-  }
-  if (
-    error.payload?.error === "approval_gate_required"
-    || error.payload?.error === "approval_gate_password_required"
-  ) {
-    return "Enter your approval password to disconnect this app.";
-  }
-  return error.payload?.error ?? error.message;
-}
-function setupSuccessTitle(action: GuardHarnessAction, displayName: string): string {
-  if (action === "install") return `${displayName} connected`;
-  if (action === "verify") return `${displayName} test complete`;
-  if (action === "repair") return `${displayName} repaired`;
-  return `${displayName} disconnected`;
 }

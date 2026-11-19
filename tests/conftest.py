@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from tests.daemon_control_patching import patch_daemon_global
+from tests.durable_fixture_root import durable_tmp_path  # noqa: F401
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 from tests.home_isolation import isolate_user_home
 from tests.outbound_network_guard import outbound_network_attempts
@@ -153,6 +154,20 @@ def _no_fleet_runtime_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _ungated_background_loops(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run background loops as if no runtime ledger answered.
+
+    The ledger outlives a test's process state, so a test that runs a loop
+    twice would otherwise see the second run held back. Its own tests install
+    a ledger of their own.
+    """
+    from codex_plugin_scanner.guard.runtime_health import background_loop_gate
+
+    monkeypatch.setattr(background_loop_gate, "_ask", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(background_loop_gate, "_settled", set())
+
+
+@pytest.fixture(autouse=True)
 def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep reused native answers from crossing tests that stub native replies."""
     from codex_plugin_scanner.guard.catalog_delivery import installed_bundle, object_native
@@ -162,37 +177,59 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install Codex hooks with the Python bridge argv unless a test opts in.
+def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the runtime session upload through the urllib a test fakes.
 
-    Most Codex install and trust tests pin the Python bridge contract. Tests
-    marked ``native_codex_hook_bridge`` keep the native runtime selection.
+    Mark a test ``native_runtime_session`` to post it with the native command.
+    Guard events and pain signals answer as an empty queue unless the test is
+    marked ``native_guard_events``.
     """
 
-    if request.node.get_closest_marker("native_codex_hook_bridge") is not None:
+    native_session = request.node.get_closest_marker("native_runtime_session") is not None
+    native_events = request.node.get_closest_marker("native_guard_events") is not None
+    if native_session and native_events:
         return
-    from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.runtime_session_transport import runtime_session_over_urllib
 
-    # Subprocess installers copy os.environ and do not see this monkeypatch.
-    # The adapter treats this value as the Python bridge pin.
-    monkeypatch.setenv("HOL_GUARD_CODEX_HOOK_BRIDGE", "python")
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_event_sync",
+        runtime_session_over_urllib(
+            cloud_bundle_sync.cloud_event_sync,
+            native_session=native_session,
+            native_events=native_events,
+        ),
+    )
 
 
 @pytest.fixture(autouse=True)
-def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install bounded CLI hooks with the Python bridge argv unless a test opts in.
+def _receipt_upload_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the receipt upload through the urllib a test fakes.
 
-    Copilot, Kimi, Devin, ZCode, OpenClaw and Cursor install tests pin the
-    Python bridge contract. Tests marked ``native_bounded_hook_bridge`` keep the
-    native runtime selection.
+    Mark a test ``native_receipt_upload`` to upload with the native command.
     """
 
-    if request.node.get_closest_marker("native_bounded_hook_bridge") is not None:
+    if request.node.get_closest_marker("native_receipt_upload") is not None:
         return
-    # Subprocess installers copy os.environ and do not see a monkeypatched
-    # function. The launcher treats this value as the Python bridge pin.
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.receipt_upload_transport import receipt_upload_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_receipt_upload",
+        receipt_upload_over_urllib(cloud_bundle_sync.cloud_receipt_upload),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _python_cursor_hook_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install Cursor hooks with the Python bridge argv.
+
+    Subprocess installers copy os.environ and do not see a monkeypatched
+    function, so the launcher reads this value as the Python bridge pin.
+    """
+
     monkeypatch.setenv("HOL_GUARD_CURSOR_HOOK_BRIDGE", "python")
 
 
@@ -216,14 +253,25 @@ def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pyte
     """Install MCP proxies with the Python launcher argv unless a test opts in.
 
     Most install and refresh tests pin the Python proxy entry. Tests marked
-    ``native_mcp_relay`` keep the native relay selection.
+    ``native_mcp_relay`` keep the native relay selection. The native runtime
+    picks the relay from the runtime the caller stamp reports, so the stamp
+    stops advertising the relay feature.
     """
 
     if request.node.get_closest_marker("native_mcp_relay") is not None:
         return
-    from codex_plugin_scanner.guard.adapters import mcp_relay_native
+    from codex_plugin_scanner.guard import native_caller
 
-    monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
+    advertised = native_caller._native_runtime
+
+    def without_relay() -> dict[str, object] | None:
+        runtime = advertised()
+        if runtime is None:
+            return None
+        features = [feature for feature in runtime["features"] if feature != "mcp-stdio-relay-v1"]  # type: ignore[union-attr]
+        return {**runtime, "features": features}
+
+    monkeypatch.setattr(native_caller, "_native_runtime", without_relay)
 
 
 _session_daemon_runtime_fingerprint: list[str] = []

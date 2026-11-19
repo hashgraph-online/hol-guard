@@ -7,7 +7,7 @@ import os
 import sqlite3
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path, PurePath
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -159,22 +159,12 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
     if origin == "environment":
         monkeypatch.setenv("ZCODE_ENV", "production")
     else:
-        from codex_plugin_scanner.guard.runtime import harness_attribution
-
+        # The executable-name table and the parent walk are the native runtime's, covered by its
+        # own tests; this proves the answer reaches the request and the receipt.
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.runtime.package_protect_projection.resolve_parent_process_harness",
-            harness_attribution.resolve_parent_process_harness,
+            lambda: harness,
         )
-        original_run = subprocess.run
-
-        def process_snapshot(command, **kwargs):
-            if command == ["/bin/ps", "-axo", "pid=,ppid=,comm="]:
-                executable = PurePath(origin).name if "/" in origin or "\\" in origin else origin
-                return subprocess.CompletedProcess(command, 0, f"42 41 /bin/sh\n41 1 {executable}\n", "")
-            return original_run(command, **kwargs)
-
-        monkeypatch.setattr(harness_attribution.os, "getppid", lambda: 42)
-        monkeypatch.setattr(harness_attribution.subprocess, "run", process_snapshot)
     _stub_approval_daemon(monkeypatch)
 
     rc = main(

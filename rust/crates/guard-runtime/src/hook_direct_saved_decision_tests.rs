@@ -9,6 +9,7 @@ use guard_policy_snapshot::{DirectLaneEnvironmentV1, DirectLanePolicyIntegritySt
 use rusqlite::params;
 use std::collections::BTreeMap;
 
+#[cfg(unix)]
 pub(crate) use crate::cloud_exception_lift::VALIDATED_BUNDLE;
 
 const VECTORS: &str = include_str!("../tests/fixtures/hook_direct_saved_decision_vectors.json");

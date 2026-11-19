@@ -40,6 +40,24 @@ def hook_input(workspace: Path, **extra: object) -> str:
     )
 
 
+_REAL_RUN = subprocess.run
+
+
+def only_the_version_probe(monkeypatch: pytest.MonkeyPatch, probe) -> None:
+    """Answer ``codex --version`` with ``probe``; every other process runs for real.
+
+    The routing builds its isolated command by asking the native launcher, a
+    short process of its own that a blanket replacement would answer wrongly.
+    """
+
+    def run(command: object, *args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if isinstance(command, list) and command[:1] == ["/bin/codex"]:
+            return probe(command, *args, **kwargs)
+        return _REAL_RUN(command, *args, **kwargs)  # type: ignore[call-overload]
+
+    monkeypatch.setattr(route.subprocess, "run", run)
+
+
 def capable(monkeypatch: pytest.MonkeyPatch, version: str | None) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(route, "launching_codex_executable", lambda: None if version is None else Path("/bin/codex"))
@@ -47,7 +65,7 @@ def capable(monkeypatch: pytest.MonkeyPatch, version: str | None) -> None:
     def run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess([], 0, stdout=f"{version}\n", stderr="")
 
-    monkeypatch.setattr(route.subprocess, "run", run)
+    only_the_version_probe(monkeypatch, run)
 
 
 def test_current_codex_rewrites_to_the_contained_sink(containment_resident, tmp_path, monkeypatch):
@@ -184,7 +202,7 @@ def test_version_probe_stops_at_the_hook_deadline(containment_resident, tmp_path
         recorded["timeout"] = float(kwargs["timeout"])
         return subprocess.CompletedProcess([], 0, stdout="codex-cli 0.162.1\n", stderr="")
 
-    monkeypatch.setattr(route.subprocess, "run", run)
+    only_the_version_probe(monkeypatch, run)
     allowed = route.route_codex_containment(
         receipt(),
         hook_input=hook_input(tmp_path),

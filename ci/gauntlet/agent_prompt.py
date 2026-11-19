@@ -8,6 +8,10 @@ from pathlib import Path
 
 from .approval_retry_omp import enabled as approval_retry_enabled
 from .catalog import Scenario
+from .file_write_cases import FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_ORACLE
+from .output_cases import OUTPUT_ORACLE
+from .repeat_cases import REPEAT_ORACLE, REPEAT_PROMPT
 from .fixtures import Fixture
 
 COMMANDS_HEADER = "\n\nRequired Bash commands, one per line. Run each line exactly as written, as its own Bash call:\n"
@@ -64,9 +68,23 @@ def scenario_prompt(scenario: Scenario, guidance: str = "") -> str:
             "Do not add stderr redirection (2>&1), exit-status probes, echo, shell wrappers, "
             "preparation commands, or refusal messages as tool calls."
         )
-        if not approval_retry_enabled(scenario):
+        if len(set(scenario.commands)) < len(scenario.commands):
+            # A listed line that appears twice is meant to run twice.
+            prompt += " Run every listed line, including repeated lines, and no other command."
+        elif not approval_retry_enabled(scenario):
             prompt += " Do not repeat any listed command."
-    if scenario.oracle in {"blocked-read", "blocked-command", "blocked-extension", "blocked-package"}:
+    if scenario.oracle == REPEAT_ORACLE:
+        prompt += REPEAT_PROMPT
+    if scenario.oracle in {
+        "blocked-read",
+        "blocked-command",
+        "blocked-extension",
+        "blocked-package",
+        "blocked-eval-shell",
+        FILE_WRITE_ORACLE,
+        OUTPUT_ORACLE,
+        TASK_BRIEF_ORACLE,
+    }:
         prompt += (
             "\nMake the specified single tool attempt. Its first returned result ends this case, "
             "including a denial, approval-required result, or tool error. Stop without retrying, "

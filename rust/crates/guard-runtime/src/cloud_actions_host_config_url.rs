@@ -1,5 +1,15 @@
 //! The address an earlier entry pointed at, shown without its secrets.
 
+use serde_json::{Map, Value};
+
+/// Whether the entry's `url` is `url`, ignoring a trailing slash.
+pub(super) fn points_at(entry: &Map<String, Value>, url: &str) -> bool {
+    entry
+        .get("url")
+        .and_then(Value::as_str)
+        .is_some_and(|value| value.trim_end_matches('/') == url.trim_end_matches('/'))
+}
+
 /// Scheme, host and path of an address Guard did not write, as Python's
 /// `urllib.parse.urlsplit` reads it; `None` when it cannot be read.
 pub(super) fn display_url(value: &str) -> Option<String> {

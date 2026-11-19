@@ -52,6 +52,8 @@ fn line_range_reads_of_a_copy_are_allowed_in_every_spelling() {
         // A region named by a pattern reads like one named by line numbers.
         "sed -n '/Example/,37p' src/example.py",
         "sed -n '/Example/p' src/example.py",
+        // Printing every line but the matching ones reads the same file.
+        "sed -n '/Example/!p' src/example.py",
         "sed -n '0,/Example/p' src/example.py",
         "sed -n '/Example/,/^}/p' src/example.py",
         "sed -n '/Example/,/^};/p' src/example.py",
@@ -96,7 +98,6 @@ fn line_range_read_spellings_do_not_admit_writes_or_other_files() {
         // delimiter the reading never resolved.
         "sed -n '/Example/w out.txt' src/example.py",
         "sed -n '/Example/,/^}/w outp' src/example.py",
-        "sed -n '/Example/!p' src/example.py",
         "sed -n '//p' src/example.py",
         r"sed -n '\%Example%p' src/example.py",
         "sed -n '/Example;p' src/example.py",

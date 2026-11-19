@@ -97,11 +97,12 @@ const WRAPPED_LINES: usize = 3;
 /// quoted text anywhere, each with the lines that hold them: those holding
 /// quoted text first, then the most lines. A function needs two such lines
 /// or quoted text, or, for a rename, one line naming it as code. Also the
-/// words found, rarest first. `None` once `until` passes.
+/// words found, rarest first. `None` once `until` passes. With `lone`,
+/// nothing else in the note or prompt points at code.
 pub(super) fn uses<'a>(
     files: &[File],
     rare: &[&'a Sought],
-    everywhere: bool,
+    (everywhere, lone): (bool, bool),
     until: Instant,
 ) -> Option<(Vec<&'a str>, Vec<String>)> {
     struct Use {
@@ -159,8 +160,11 @@ pub(super) fn uses<'a>(
         // too: a call to `_import_common` is where it has to change.
         .filter(|item| item.phrase || (everywhere && item.named) || item.lines.len() >= 2)
         .collect();
+    // With `lone`, a use holding two prompt words outranks many uses of
+    // one, so the cut below cannot drop the only match that places the list.
     kept.sort_by(|a, b| {
         (b.phrase.cmp(&a.phrase))
+            .then((lone && b.words.len() > 1).cmp(&(lone && a.words.len() > 1)))
             .then(b.lines.len().cmp(&a.lines.len()))
             .then(b.words.len().cmp(&a.words.len()))
     });
@@ -168,10 +172,15 @@ pub(super) fn uses<'a>(
     let mut words: Vec<usize> = kept.iter().flat_map(|item| item.words.clone()).collect();
     words.sort_by(|a, b| rare[*b].rarity.total_cmp(&rare[*a].rarity).then(a.cmp(b)));
     words.dedup();
-    let used = words
+    let used: Vec<&str> = words
         .into_iter()
         .map(|word| rare[word].text.as_str())
         .collect();
+    // Then one plain word's uses are a guess: "what did you change in the
+    // last step?" is not about `ProgressBar.make_step`.
+    if lone && used.len() < 2 && kept.iter().all(|item| !item.phrase && !item.named) {
+        return Some((Vec::new(), Vec::new()));
+    }
     let listed = kept
         .iter()
         .map(|item| {

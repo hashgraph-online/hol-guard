@@ -106,6 +106,7 @@ pub(super) fn is_nested_command_executor(executable: &str, arguments: &[String])
     basename == "find"
         && !is_contained_compile_check_arguments(arguments)
         && crate::read_only_fanout::find_exec(arguments).is_none()
+        && find_exec_sed(arguments).is_none()
         && arguments
             .iter()
             .any(|argument| matches!(argument.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))
@@ -188,4 +189,125 @@ pub(super) fn is_contained_compile_check_arguments(arguments: &[String]) -> bool
             .iter()
             .zip(EXPECTED)
             .all(|(actual, expected)| actual == expected)
+}
+
+/// `find SHAPE -type f -exec sed|gsed ARGS {} +` (or `... {} \;`): one `sed`
+/// run over the regular files a name, type and depth walk found. Agents use it
+/// to apply one rename across a test tree, the same edit `sed -i ... tests/*.py`
+/// makes over a glob. Answers the `sed` words, program name first, so the
+/// caller can run the `sed` script screen over them.
+///
+/// This only recognizes the shape, so the parser can model the command
+/// exactly instead of treating `find` as running an unknown program. It admits
+/// nothing: the walk must be the flat shape read-only fan-out accepts, limited
+/// to regular files, with `{}` as the last word before the terminator and no
+/// other `{}`, `;` or `+` inside the body that could end it early and start a
+/// second action. Workspace containment still screens the `sed` script for
+/// execution and every operand for reach before the edit runs in the sandbox.
+pub(crate) fn find_exec_sed(arguments: &[String]) -> Option<&[String]> {
+    let at = arguments.iter().position(|argument| argument == "-exec")?;
+    let shape = crate::read_only_fanout::find_shape(&arguments[..at])?;
+    if shape.print0 || !shape.regular_files_only {
+        return None;
+    }
+    let (terminator, body) = arguments[at + 1..].split_last()?;
+    let (marker, child) = body.split_last()?;
+    let name = child.first()?;
+    if !matches!(terminator.as_str(), "+" | ";")
+        || marker != "{}"
+        || !matches!(name.as_str(), "sed" | "gsed")
+        || child
+            .iter()
+            .any(|argument| argument.contains("{}") || matches!(argument.as_str(), ";" | "+"))
+        || !sed_exec_only_found_files(child)
+    {
+        return None;
+    }
+    Some(child)
+}
+
+/// `find -exec sed ... {} +` must not smuggle additional file operands into
+/// the edit. The wipe screen checks the walk's paths, not any extra paths
+/// named inside sed's argv. Keep the admitted spelling to options, one or
+/// more literal scripts, and the substituted `{}` files only.
+fn sed_exec_only_found_files(child: &[String]) -> bool {
+    let mut index = 1; // the sed/gsed executable
+    let mut named_script = false;
+    let mut positional_script = false;
+    // GNU sed treats the empty word after -i as a script and any following
+    // positional word as a file; BSD sed treats it as a backup suffix. Under
+    // GNU the empty script rewrites each file unchanged unless -n silences
+    // it, so a positional script after `-i ''` is admitted only without -n
+    // and without a glob the shell could expand into further operands.
+    let mut detached_suffix = false;
+    let mut quiet = false;
+    while let Some(argument) = child.get(index) {
+        match argument.as_str() {
+            "-i" => {
+                // BSD sed accepts an empty backup suffix after -i. GNU sed
+                // reads that word as the script instead, so every later word
+                // is a file and the empty script prints nothing under -n.
+                if child.get(index + 1).is_some_and(String::is_empty) {
+                    detached_suffix = true;
+                    index += 1;
+                }
+            }
+            "-n" => quiet = true,
+            "-E" | "-r" | "-s" | "-u" | "-z" => {}
+            "-e" | "--expression" => {
+                // GNU sed may permute a later -e option ahead of an earlier
+                // positional word, turning that earlier word into a file.
+                if positional_script {
+                    return false;
+                }
+                index += 1;
+                if child.get(index).is_none() {
+                    return false;
+                }
+                named_script = true;
+            }
+            "--" => {
+                if detached_suffix {
+                    return false;
+                }
+                let trailing = &child[index + 1..];
+                return if named_script || positional_script {
+                    trailing.is_empty()
+                } else {
+                    trailing.len() == 1
+                };
+            }
+            word if word.starts_with("--expression=") && word.len() > "--expression=".len() => {
+                if positional_script {
+                    return false;
+                }
+                named_script = true;
+            }
+            word if word.starts_with("-e") && word.len() > 2 => {
+                if positional_script {
+                    return false;
+                }
+                named_script = true;
+            }
+            word if word.starts_with("-i") && word.len() > 2 => {}
+            word if word.starts_with('-') => return false,
+            word => {
+                // Unquoted, `*` alone could expand to a file named `d`, which
+                // BSD sed would run as the script over every other match.
+                // Brace expansion can likewise add a second file operand,
+                // e.g. {d,README.md}; do not trust tokenizer word count.
+                if detached_suffix && word.contains(['*', '?', '[', '{', '}']) {
+                    return false;
+                }
+                // Any second positional operand is a file beyond those find
+                // supplies; never omit it from the broad-wipe screen.
+                if named_script || positional_script {
+                    return false;
+                }
+                positional_script = true;
+            }
+        }
+        index += 1;
+    }
+    !(detached_suffix && positional_script && quiet) && (named_script || positional_script)
 }

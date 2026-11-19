@@ -16,6 +16,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 mod file_mutation_output;
+mod output_instructions;
 mod source_slice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -487,6 +488,7 @@ fn sensitive_reason(family: &str) -> &'static str {
         "SSH client config" => "Guard treats SSH config as sensitive because it may reveal or shape host credentials.",
         "GnuPG key material" => "Guard treats GnuPG key material as sensitive because it can unlock encrypted assets.",
         "Terraform variable secrets" => "Guard treats Terraform variable files as sensitive because they often contain secrets.",
+        "Wrangler local secrets file" => "Guard treats .dev.vars as sensitive because Wrangler keeps a worker's local secrets there.",
         _ => "Guard treats wallet and private-key files as sensitive because they can authorize account control.",
     }
 }
@@ -605,6 +607,9 @@ fn review_source(
         // Hosts may add line anchors or headers. Scan the entire presentation
         // independently, but never promote a partial excerpt to original output.
         return review_presented_output(request, source);
+    }
+    if let Some(response) = output_instructions::injected_instructions(request, text) {
+        return response;
     }
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());
@@ -771,6 +776,13 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
         if scan.budget_exhausted || !scan.matches.is_empty() {
             return HookReviewResponseV1::deny("output_too_large", "HOL Guard blocked this output because it could not be fully scanned within local limits.");
         }
+        // The excerpt joins parts without separators, so an instruction split
+        // across two parts reaches the agent whole there; read both forms.
+        if let Some(response) = output_instructions::injected_instructions(request, &excerpt)
+            .or_else(|| output_instructions::injected_instructions(request, &scanned))
+        {
+            return response;
+        }
         return HookReviewResponseV1::reviewed_excerpt("output_too_large", "HOL Guard returned a reviewed excerpt because the output was too large to scan in full within local limits.", excerpt);
     }
     let scan = scan_text(
@@ -791,6 +803,13 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "output_secret_match",
             "HOL Guard blocked this output because it contains sensitive content.",
         );
+    }
+    // Each part is screened on its own line too, so an instruction that
+    // opens a part is not glued to the end of the part before it.
+    if let Some(response) = output_instructions::injected_instructions(request, &extracted.text)
+        .or_else(|| output_instructions::injected_instructions(request, &extracted.boundary_text))
+    {
+        return response;
     }
     allow_inline_output("output_scan_allow", &extracted.text)
 }
@@ -967,6 +986,18 @@ mod tests {
         assert_eq!(response.reason_code, "output_too_large");
         assert_eq!(response.reviewed_output_sha256, None);
         assert!(!response.observe_mode);
+    }
+
+    #[test]
+    fn a_test_runner_traceback_with_stand_in_credentials_stays_readable() {
+        let field = ["new_", "password"].concat();
+        let value = ["correct-", "password"].concat();
+        let traceback =
+            format!("tests/test_login.py:742: AssertionError\nkwargs = {{'{field}': '{value}'}}\n");
+
+        let response = review_post_tool(&request(json!({"stdout": traceback, "stderr": ""})));
+
+        assert_eq!(response.decision, "allow");
     }
 
     #[test]

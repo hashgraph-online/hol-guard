@@ -1,7 +1,10 @@
-//! The `harness_mcp_discovery` `select` and `server_id` ops:
+//! The `harness_mcp_discovery` `select`, `server_id` and `launch_env` ops
+//! (and, through `proxy_args` and `remote`, the proxy launch and remote
+//! server ops):
 //! `managed_stdio_servers`, `observable_stdio_servers_with_proxy` and
 //! `stable_mcp_server_identifier`, which `guard/adapters/mcp_servers.py`
-//! computed per server before they moved here.
+//! computed per server before they moved here, and the env choice of
+//! `extra_env_for_mcp_launch` in `guard/adapters/harness_mcp_discovery.py`.
 //!
 //! One `select` request carries every artifact a detection found and answers,
 //! in order, the local stdio server Guard can run behind its proxy, or null.
@@ -37,6 +40,7 @@ const ARTIFACT_KEYS: [&str; 12] = [
     "saved_guard_home",
 ];
 const SERVER_ID_KEYS: [&str; 2] = ["op", "servers"];
+const LAUNCH_ENV_KEYS: [&str; 3] = ["op", "configured", "present"];
 const SERVER_KEYS: [&str; 6] = [
     "harness",
     "name",
@@ -68,7 +72,22 @@ struct Artifact<'a> {
     saved_guard_home: Option<&'a str>,
 }
 
-pub(super) fn select(map: &Map<String, Value>) -> KindResult {
+/// The ops this module answers.
+pub(super) fn dispatch(op: &str, map: &Map<String, Value>) -> KindResult {
+    match op {
+        "select" => select(map),
+        "server_id" => server_ids(map),
+        "launch_env" => launch_env(map),
+        "proxy_args" => proxy_args::proxy_args(map),
+        "proxy_env" => proxy_args::proxy_env(map),
+        "remote" => remote::remote(map),
+        "remote_rank" => remote::remote_rank(map),
+        "remote_scan" => scan::remote_scan(map),
+        _ => Err(ERR_INVALID),
+    }
+}
+
+fn select(map: &Map<String, Value>) -> KindResult {
     exact_keys(map, &SELECT_KEYS)?;
     let include_proxy = flag(map, "include_proxy")?;
     let artifacts = bounded_list(map.get("artifacts").ok_or(ERR_INVALID)?)?
@@ -82,7 +101,7 @@ pub(super) fn select(map: &Map<String, Value>) -> KindResult {
     Ok(json!({ "servers": servers }))
 }
 
-pub(super) fn server_ids(map: &Map<String, Value>) -> KindResult {
+fn server_ids(map: &Map<String, Value>) -> KindResult {
     exact_keys(map, &SERVER_ID_KEYS)?;
     let ids = bounded_list(map.get("servers").ok_or(ERR_INVALID)?)?
         .iter()
@@ -102,6 +121,34 @@ pub(super) fn server_ids(map: &Map<String, Value>) -> KindResult {
         })
         .collect::<Result<Vec<Value>, &'static str>>()?;
     Ok(json!({ "ids": ids }))
+}
+
+/// Which of a matched server's env keys a listing probe takes from Guard's own
+/// environment. `configured` is the env the harness config gives the server and
+/// `present` the server's env keys that Guard's environment sets, in order; a
+/// key is taken when the config leaves it unset or as an unexpanded `${NAME}`
+/// placeholder. Python keeps the process values, so none crosses the wire.
+fn launch_env(map: &Map<String, Value>) -> KindResult {
+    exact_keys(map, &LAUNCH_ENV_KEYS)?;
+    let configured: BTreeMap<String, String> = env_pairs(&map["configured"])?
+        .ok_or(ERR_INVALID)?
+        .into_iter()
+        .collect();
+    let from_process: Vec<String> = string_list(map, "present")?
+        .into_iter()
+        .filter(|key| {
+            configured
+                .get(key)
+                .is_none_or(|value| looks_unresolved(value))
+        })
+        .collect();
+    Ok(json!({ "from_process": from_process }))
+}
+
+/// `_looks_unresolved`: a `${NAME}` placeholder the harness never expanded.
+fn looks_unresolved(value: &str) -> bool {
+    let stripped = python_strip(value);
+    stripped.chars().count() >= 4 && stripped.starts_with("${") && stripped.ends_with('}')
 }
 
 /// `_managed_stdio_server`.
@@ -307,6 +354,13 @@ fn string_list(map: &Map<String, Value>, key: &str) -> Result<Vec<String>, &'sta
 fn borrowed(values: &[String]) -> Vec<&str> {
     values.iter().map(String::as_str).collect()
 }
+
+#[path = "harness_mcp_proxy_args.rs"]
+mod proxy_args;
+#[path = "harness_mcp_remote.rs"]
+mod remote;
+#[path = "harness_mcp_scan.rs"]
+mod scan;
 
 #[cfg(test)]
 #[path = "harness_mcp_select_tests.rs"]

@@ -9,7 +9,8 @@
 //! it is visible, names a benign dotfile such as `.gitkeep`, or is a wildcard
 //! that passes the screen `-g` include globs get; any other component counts
 //! only if it matches a hidden name the walk finds, so `!.env.example` in a
-//! repository without that file does not hold every search.
+//! repository without that file does not hold every search, and neither does
+//! a re-included file `rg` would search by name (`rg_whitelist_file`).
 //!
 //! The walk reads only ignore files and names, never other contents. It
 //! skips links and hidden directories other than benign ones, which `rg`
@@ -152,9 +153,10 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
     if !root.is_dir() {
         return true;
     }
-    // The memo key's marker keeps this walk apart from the recursive-read
-    // walks that share the same per-evaluation memo.
-    super::walk_memo::memoized(&root, &[".rg-whitelist"], &[], false, false, false, || {
+    // The marker keeps this walk apart from the recursive-read walks sharing
+    // the per-evaluation memo, and names the working directory it screened.
+    let marker = super::rg_whitelist_file::memo_marker(context);
+    super::walk_memo::memoized(&root, &[marker.as_str()], &[], false, false, false, || {
         let mut negations = Negations::default();
         let Some((repository, rules)) = outer_sources_safe(&root, context, &mut negations) else {
             return false;
@@ -173,10 +175,12 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
             })
         };
         !matches(&negations.all, &pruned)
-            && !negations
-                .risky
-                .iter()
-                .any(|risk| hidden.iter().any(|path| risk.re_includes(path)))
+            && !negations.risky.iter().any(|risk| {
+                hidden.iter().any(|path| {
+                    risk.re_includes(path)
+                        && !super::rg_whitelist_file::searchable_file(path, context)
+                })
+            })
     })
 }
 

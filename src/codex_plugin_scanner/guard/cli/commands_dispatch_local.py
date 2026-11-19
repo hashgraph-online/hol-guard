@@ -260,8 +260,6 @@ def _run_guard_command_inspection_command(
 
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
-    from ..native_daemon_client import GuardDaemonRequestError
-    from ..runtime.command_inspection import unavailable_command_inspection
     from .extension_controls_commands import _client
 
     command_command = str(getattr(args, "command_command", ""))
@@ -286,28 +284,22 @@ def _run_guard_command_inspection_command(
         if command_command not in {"test", "explain"}:
             print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
+        if command_command == "explain" and getattr(args, "cloud", False):
+            from .cloud_pack_explain_command import run_cloud_explain
+
+            return run_cloud_explain(args, output=output_stream)
         command_text = str(getattr(args, "command_text", "")).strip()
         if not command_text:
             raise ValueError("Command text cannot be empty")
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         workspace, home = Path.cwd(), Path.home()
-        try:
-            from ..native_daemon_manage import ensure_guard_daemon
+        from ..native_daemon_manage import ensure_guard_daemon
+        from .command_inspection_client import inspect_through_daemon
 
-            try:
-                payload = _client(guard_home).inspect_command({
-                    "command": command_text, "cwd": str(workspace), "home_dir": str(home),
-                })
-            except GuardDaemonRequestError:
-                try:
-                    ensure_guard_daemon(guard_home, home_dir=home)
-                except RuntimeError as error:
-                    raise GuardDaemonRequestError(str(error)) from error
-                payload = _client(guard_home).inspect_command({
-                    "command": command_text, "cwd": str(workspace), "home_dir": str(home),
-                })
-        except GuardDaemonRequestError:
-            payload = unavailable_command_inspection(command_text, cwd=workspace, home_dir=home)
+        payload = inspect_through_daemon(
+            command_text, guard_home=guard_home, workspace=workspace, home=home,
+            client_for=_client, ensure_daemon=ensure_guard_daemon,
+        )
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
@@ -690,10 +682,7 @@ def _run_guard_dashboard_command(
         "dashboard",
         {
             "generated_at": _now(),
-            "approval_center_url": result.approval_center_url,
-            "browser_url": result.browser_url,
-            "opened": result.opened,
-            "reason": result.reason,
+            **{key: value for key, value in result.to_payload().items() if key != "error"},
             **({"error": result.error} if result.error else {}),
         },
         getattr(args, "json", False),
@@ -817,9 +806,12 @@ def _run_guard_install_command(
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair
     if not bool(getattr(args, "dry_run", False)):
-        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+        from ..mcp_discovery_client import observe_configured_mcp_servers
 
         observe_configured_mcp_servers(store, context=context, seen_at=_now())
+        from .install_daemon_prewarm import prewarm_after_install
+
+        prewarm_after_install(context.guard_home, home_dir=context.home_dir)
     _emit("install", payload, getattr(args, "json", False))
     return 0
 

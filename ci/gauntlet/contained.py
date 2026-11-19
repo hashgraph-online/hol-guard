@@ -9,7 +9,6 @@ import re
 import shlex
 import shutil
 import stat
-import subprocess
 import threading
 import time
 from datetime import datetime, timezone
@@ -32,6 +31,7 @@ from .contained_judge import (
 from .evidence import public_events, read_events
 from .fixtures import create_fixture, create_run_root, digest_file
 from .host_process import clean_environment, run_process
+from .host_shims import omp_version
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .native_routes import await_native_routes
 from .observed_extension import generate_observed_extension
@@ -149,7 +149,7 @@ def run_contained_profile(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    version = subprocess.check_output([executable, "--version"], text=True, timeout=15).strip()
+    version = omp_version(executable)
     package = json.loads((REPO / "ci/pi-exact-continuation/package.json").read_text())
     expected_version = package["dependencies"]["@oh-my-pi/pi-coding-agent"]
     if version != "omp/" + expected_version:
@@ -230,7 +230,7 @@ def run_contained_profile(
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
-                GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
+                GUARD_GAUNTLET_DAEMON_PORT=str(daemon.port),
                 TMPDIR=str(request_tmp),
             )
             returncodes: list[int] = []

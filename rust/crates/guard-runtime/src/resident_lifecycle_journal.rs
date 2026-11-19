@@ -10,7 +10,8 @@
 //!
 //! This journal answers that and nothing more. It holds the last day's counts
 //! of starts, the three ways a run ends, and starts the restart budget refused,
-//! plus a fixed code naming the last event and when it happened. The day really
+//! plus a fixed code naming the last event and when it happened, and how long
+//! cold starts took to answer, in three fixed bands. The day really
 //! does roll: the counts live in hourly buckets and a bucket leaves the journal
 //! only once it is itself a day old, so a failure recorded minutes ago is never
 //! dropped because an older event happened to open the window.
@@ -33,6 +34,10 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[path = "resident_lifecycle_cold_start.rs"]
+mod cold_start;
+pub(super) use cold_start::record_ready_in_background;
 
 #[cfg(windows)]
 use super::private_file::recover_interrupted_replace;
@@ -104,6 +109,13 @@ struct HourCounts {
     failed_exits: u32,
     premature_exits: u32,
     refused_starts: u32,
+    // Zero in a journal written before the bands existed.
+    #[serde(default)]
+    cold_starts_within_1s: u32,
+    #[serde(default)]
+    cold_starts_within_5s: u32,
+    #[serde(default)]
+    cold_starts_slower: u32,
 }
 
 impl HourCounts {
@@ -126,6 +138,7 @@ impl HourCounts {
         self.failed_exits = self.failed_exits.saturating_add(other.failed_exits);
         self.premature_exits = self.premature_exits.saturating_add(other.premature_exits);
         self.refused_starts = self.refused_starts.saturating_add(other.refused_starts);
+        self.absorb_cold_starts(other);
     }
 }
 
@@ -146,6 +159,9 @@ struct Totals {
     failed_exits: u32,
     premature_exits: u32,
     refused_starts: u32,
+    cold_starts_within_1s: u32,
+    cold_starts_within_5s: u32,
+    cold_starts_slower: u32,
 }
 
 const fn hour_of(ms: u64) -> u64 {
@@ -187,22 +203,23 @@ impl Journal {
         }
     }
 
-    fn apply(&mut self, event: Event, now: u64) {
+    fn hour(&mut self, now: u64) -> &mut HourCounts {
         let current = hour_of(now);
-        let bucket = match self.hours.iter_mut().find(|bucket| bucket.hour == current) {
-            Some(bucket) => bucket,
-            None => {
-                self.hours.push(HourCounts {
-                    hour: current,
-                    ..HourCounts::default()
-                });
-                self.hours.last_mut().expect("bucket just pushed")
-            }
-        };
+        if let Some(index) = self.hours.iter().position(|bucket| bucket.hour == current) {
+            return &mut self.hours[index];
+        }
+        self.hours.push(HourCounts {
+            hour: current,
+            ..HourCounts::default()
+        });
+        self.hours.last_mut().expect("bucket just pushed")
+    }
+
+    fn apply(&mut self, event: Event, now: u64) {
         // An install that somehow reaches four billion of anything inside an
         // hour is already past the point where one more matters; it must not be
         // the thing that panics a supervisor on its way out.
-        let counter = bucket.counter(event);
+        let counter = self.hour(now).counter(event);
         *counter = counter.saturating_add(1);
         self.last_event = Some(event);
         self.last_event_ms = now;
@@ -218,6 +235,7 @@ impl Journal {
                 .premature_exits
                 .saturating_add(bucket.premature_exits);
             totals.refused_starts = totals.refused_starts.saturating_add(bucket.refused_starts);
+            totals.add_cold_starts(bucket);
         }
         totals
     }
@@ -233,6 +251,12 @@ pub(crate) struct LifecycleHealth {
     pub failed_exits: u32,
     pub premature_exits: u32,
     pub refused_starts: u32,
+    /// Cold starts that answered their first request within one second.
+    pub cold_starts_within_1s: u32,
+    /// Cold starts that took more than one second and at most five.
+    pub cold_starts_within_5s: u32,
+    /// Cold starts that took more than five seconds.
+    pub cold_starts_slower: u32,
     /// The fixed code of the most recent event, empty on a journal whose last
     /// event has itself aged out (and then `last_event_age_seconds` is 0). Typed as a fixed string so no text a file
     /// carried can reach a reader through this field.
@@ -385,6 +409,17 @@ fn record_at(
     at_ms: Option<u64>,
     wait_for_lock: bool,
 ) -> Result<(), String> {
+    update_at(scope, at_ms, wait_for_lock, |journal, now| {
+        journal.apply(event, now);
+    })
+}
+
+fn update_at(
+    scope: &Path,
+    at_ms: Option<u64>,
+    wait_for_lock: bool,
+    change: impl FnOnce(&mut Journal, u64),
+) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
     let _lock = if wait_for_lock {
         acquire_journal_lock_waiting(scope, &private_root)?
@@ -399,7 +434,7 @@ fn record_at(
         None => now_ms()?,
     };
     let mut journal = load_for_window(&path, &private_root, now);
-    journal.apply(event, now);
+    change(&mut journal, now);
     let encoded = serde_json::to_vec(&journal)
         .map_err(|_| "native_resident_lifecycle_journal_encode_failed".to_owned())?;
     write_private(&path, &encoded, &private_root)
@@ -429,6 +464,9 @@ pub(super) fn health(scope: &Path) -> Result<Option<LifecycleHealth>, String> {
         failed_exits: totals.failed_exits,
         premature_exits: totals.premature_exits,
         refused_starts: totals.refused_starts,
+        cold_starts_within_1s: totals.cold_starts_within_1s,
+        cold_starts_within_5s: totals.cold_starts_within_5s,
+        cold_starts_slower: totals.cold_starts_slower,
         last_event: journal.last_event.map_or("", Event::code),
         // A journal with no event left to name has no age to report either,
         // rather than the age of the epoch.

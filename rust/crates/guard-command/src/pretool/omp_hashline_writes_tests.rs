@@ -34,6 +34,22 @@ fn plain_hashline_patches_report_each_file_once() {
         targets("*** Begin Patch\n[ src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[  src/b.ts ]\nPUT >$:\n+y\n[src/a.ts]\nPUT 2.=2:\n+z\n*** End Patch\n"),
         Some(vec!["src/a.ts".to_owned(), "src/b.ts".to_owned()])
     );
+    // Oh My Pi trims the whole header body before it cuts the tag, so a
+    // space before the closing bracket still leaves a plain tagged header.
+    assert_eq!(
+        hashline_targets(
+            "[ /home/u/other-project/notes.md#FB48 ]\nPUT 1.=1:\n+Verified settings change.\n"
+        ),
+        Some(vec![("/home/u/other-project/notes.md".to_owned(), true)])
+    );
+    assert_eq!(
+        super::header_paths("[ src/a.ts #0AC4 ]\nPUT 1.=1:\n+x\n[src/b.ts\t]\nPUT 1.=1:\n+y\n"),
+        None
+    );
+    assert_eq!(
+        super::header_paths("[ src/a.ts #0AC4 ]\nPUT 1.=1:\n+x\n"),
+        Some(vec!["src/a.ts"])
+    );
     // Oh My Pi opens a leading `~/` under the home folder, padded or not.
     assert_eq!(
         targets("*** Begin Patch\n[~/project/src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[ ~/src/b.ts]\nPUT >$:\n+y\n*** End Patch\n"),
@@ -72,7 +88,6 @@ fn deletes_moves_and_rewritten_paths_stay_unproven() {
         "*** Begin Patch\n[src/a.ts#0AC4]\nREM\n*** End Patch\n",
         "*** Begin Patch\n[src/a.ts#0AC4]\nMV src/b.ts\n*** End Patch\n",
         "*** Begin Patch\n[\"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
-        "*** Begin Patch\n[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\n[local:/notes.md#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "[C:notes.md#0AC4]\nPUT 1.=1:\n+x\n",
         "[C:\\x\\a.md:stream#0AC4]\nPUT 1.=1:\n+x\n",
@@ -95,8 +110,47 @@ fn deletes_moves_and_rewritten_paths_stay_unproven() {
         "*** Begin Patch\n[src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n[src/b.ts]\n",
         "*** Begin Patch\n*** Update File: src/a.ts\n@@\n-x\n+y\n*** End Patch\n",
         "*** Begin Patch\n*** End Patch\n",
+        // Oh My Pi unquotes before it strips the noise, so the quotes stay.
+        "*** Begin Patch\n[*** Update File: \"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
+        "*** Begin Patch\n[*** Update File: local:/notes.md#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
+        "*** Begin Patch\n[*** Update File:#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
+        "*** Begin Patch\n[*******src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
+        // A bracketed marker on its own row after a header is not a header.
+        "*** Begin Patch\n[src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[*** End Patch]\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[*** Begin Patch]\n[src/b.ts#0AC4]\nPUT 1.=1:\n+y\n",
     ] {
         assert_eq!(targets(input), None, "{input:?}");
+    }
+}
+
+/// Oh My Pi 18.8 and later unwrap bracketed patch markers and delete
+/// `***`/`Update File:` noise from a header path before opening the file,
+/// so the proof reports the file Oh My Pi edits. The first two are headers
+/// Oh My Pi models sent in benchmark sessions.
+#[test]
+fn decorated_headers_report_the_file_oh_my_pi_opens() {
+    for (input, want) in [
+        (
+            "*** Begin Patch\n[*** Update File: src/cachetools/__init__.py#BC69]\nPUT 76.=82:\n+        if key in self.__data:\n*** End Patch\n",
+            "src/cachetools/__init__.py",
+        ),
+        (
+            "*** Begin Patch\n[*** Begin Patch [src/tomli/_parser.py#8B5B]\nPUT 287.=287:\n+            if access_lists:\n*** End Patch\n",
+            "src/tomli/_parser.py",
+        ),
+        ("[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n", "src/a.ts"),
+        ("[*** Begin Patch]\n[src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n", "src/a.ts"),
+        ("[ *** Begin Patch [ *** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n", "src/a.ts"),
+        ("[update file: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n", "src/a.ts"),
+        ("[** Add File: src/a.ts]\nPUT >$:\n+x\n", "src/a.ts"),
+        ("[Move to: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n", "src/a.ts"),
+        ("[*** src/a.ts#0AC4]\nPUT 1.=1:\n+x\n", "src/a.ts"),
+        // The `*** Abort` marker is unwrapped too, so the header names the
+        // file after it, which the write proof then judges on its own.
+        ("[*** Abort [.git/hooks/pre-commit#0AC4]\nPUT 1.=1:\n+x\n", ".git/hooks/pre-commit"),
+    ] {
+        assert_eq!(targets(input), Some(vec![want.to_owned()]), "{input:?}");
+        assert_eq!(super::header_paths(input).unwrap_or_default().first().copied(), Some(want), "{input:?}");
     }
 }
 

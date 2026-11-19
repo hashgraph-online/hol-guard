@@ -39,6 +39,16 @@ fn an_absolute_path_gives_no_search_words() {
         assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
     }
     assert!(found.contains(&"outputfile".to_owned()), "{found:?}");
+    // A path inside a tag, as a harness writes a background task's output
+    // file, is still a path; the words around the tags stay.
+    let found = terms(
+        "<task-notification><output-file>/private/tmp/claude-501/-Users-alice-work/tasks/b5k.output\
+         </output-file><summary>Watch render CI</summary></task-notification>",
+    );
+    for word in ["private", "tmp", "claude", "user", "alice", "work", "b5k"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"render".to_owned()), "{found:?}");
 }
 
 /// Only the path is left out: a name written right after it stays, a path
@@ -111,6 +121,18 @@ fn task_words_name_nothing_unless_written_as_code() {
     for word in ["last", "edit", "first"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
+    // "out" here found `SortedList._pos`, which has a local named `out`, and
+    // the agent read that method before looking at what was pushed.
+    let found = terms(
+        "tests are red on main since the last push, can you sort it out? don't touch the tests",
+    );
+    for word in ["red", "main", "since", "out", "touch"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    let found = terms("make `out` and `main()` stop going green when red");
+    for word in ["out", "main"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
 }
 
 /// A name written as a call is code even outside backticks, as are
@@ -174,4 +196,35 @@ fn a_long_quote_is_searched_by_its_first_words() {
     );
     assert_eq!(pasted, found);
     assert_eq!(quoted(&docstring.to_lowercase(), &pasted), [true]);
+}
+
+/// A question that says not to change anything asks where code is, so its
+/// note lists tests instead of showing them; a fix that keeps the tests
+/// unchanged is not one.
+#[test]
+fn a_prompt_that_asks_for_no_change_is_told_apart() {
+    for prompt in [
+        "Question, no code changes: which function does this?",
+        "quick question, don\u{2019}t change anything: where is the parser?",
+        "Explain how retries work without changing anything.",
+        "Do not edit files, just tell me where the cache is cleared.",
+        "Don't change anything at all. Where is the cache cleared?",
+    ] {
+        assert!(asks_no_change(prompt), "{prompt}");
+    }
+    for prompt in [
+        "Find every root cause and fix them all without changing the tests.",
+        "Rename `a` to `b` everywhere. Behavior must not change.",
+        "Implement it again so the existing tests pass.",
+        // A prohibition on part of the project limits a fix.
+        "Fix the bug in the library code; don't edit the tests.",
+        "Fix the parser but don't change anything else.",
+        "Make no changes to the public API, just fix the off-by-one.",
+        "Don't edit files in tests/, fix the parser.",
+        "Change anything needed to fix this.",
+        "Tune the piano changes in score.py.",
+        "Fix `parse` so it returns \"no changes\" for empty input.",
+    ] {
+        assert!(!asks_no_change(prompt), "{prompt}");
+    }
 }

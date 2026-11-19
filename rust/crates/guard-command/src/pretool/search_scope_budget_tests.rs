@@ -1,8 +1,9 @@
 //! The include walk's budget is the evaluation's, not each walk's.
 
 use super::{
-    begin_include_scope_budget, charge_include_scope, clear_include_scope_budget,
-    include_scope_deadline, include_scope_remaining, INCLUDE_SCOPE_BUDGET, INCLUDE_SCOPE_CEILING,
+    advice_walk_deadline, begin_include_scope_budget, charge_include_scope,
+    clear_include_scope_budget, include_scope_deadline, include_scope_remaining, ADVICE_GRACE,
+    INCLUDE_SCOPE_BUDGET, INCLUDE_SCOPE_CEILING,
 };
 use std::time::{Duration, Instant};
 
@@ -121,4 +122,19 @@ fn a_projection_joins_the_budget_its_submission_opened() {
         INCLUDE_SCOPE_BUDGET,
         "the next submission inherited the budget the one before it spent"
     );
+}
+
+/// The walk that words a decided review stops a little past the include
+/// ceiling inside an evaluation, and has no clock outside one.
+#[test]
+fn the_advice_walk_stops_soon_after_the_include_ceiling() {
+    clear_include_scope_budget();
+    assert_eq!(advice_walk_deadline(), None);
+    let opened = Instant::now();
+    let budget = begin_include_scope_budget();
+    let deadline = advice_walk_deadline().expect("an open evaluation sets the advice clock");
+    assert!(deadline >= opened + INCLUDE_SCOPE_CEILING + ADVICE_GRACE);
+    assert!(deadline <= Instant::now() + INCLUDE_SCOPE_CEILING + ADVICE_GRACE);
+    drop(budget);
+    assert_eq!(advice_walk_deadline(), None);
 }
