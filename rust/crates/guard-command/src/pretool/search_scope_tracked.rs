@@ -10,6 +10,15 @@ use std::path::{Path, PathBuf};
 const MAX_FILE_BYTES: u64 = 256 * 1024;
 /// Content one walk may read and scan across all of its fixtures.
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024;
+/// Content one walk may read and scan across all of its committed images.
+/// A screenshot is not a text fixture: one full-window retina capture runs
+/// past the whole document budget on its own, so an ordinary `docs/` tree
+/// with a single `auth-*.png` in it could never prove its scope and every
+/// recursive search over that tree was reviewed. Images are counted apart
+/// from documents so that one of them neither exhausts the document budget
+/// nor is refused for being the size screenshots are.
+const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_INDEX_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ANCESTORS: usize = 64;
 const STORE_DIRECTORIES: &[&str] = &[
@@ -57,6 +66,7 @@ pub(super) enum Tracked {
 pub(super) struct TrackedFiles {
     indexes: HashMap<PathBuf, Option<HashSet<Vec<u8>>>>,
     spent: u64,
+    image_spent: u64,
 }
 
 impl TrackedFiles {
@@ -99,8 +109,10 @@ impl TrackedFiles {
     /// `IDAT`, a palette, an `sPLT` name. So the chunk layout must be one the
     /// format defines, with nothing after `IEND`, and then every byte of the
     /// file is scanned the way a fixture is. The whole file counts against
-    /// the walk's budget, which is checked before it is read. Text the walk
-    /// cannot read, a compressed `zTXt` or `iTXt`, keeps the review.
+    /// the walk's image budget, which is checked before it is read, and which
+    /// is kept apart from the document budget because a screenshot is orders
+    /// of magnitude larger than a text fixture. Text the walk cannot read, a
+    /// compressed `zTXt` or `iTXt`, keeps the review.
     pub(super) fn tracked_image(&mut self, path: &Path) -> bool {
         let png = path
             .extension()
@@ -109,11 +121,13 @@ impl TrackedFiles {
         if !png {
             return false;
         }
-        let remaining = MAX_TOTAL_BYTES.saturating_sub(self.spent);
+        let remaining = MAX_TOTAL_IMAGE_BYTES
+            .saturating_sub(self.image_spent)
+            .min(MAX_IMAGE_BYTES);
         let Some((length, rendered)) = self.tracked(path, remaining) else {
             return false;
         };
-        self.spent += length;
+        self.image_spent += length;
         let Ok(bytes) = std::fs::read(path) else {
             return false;
         };
