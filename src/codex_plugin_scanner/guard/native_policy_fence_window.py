@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from .native_execution import _resident_request
@@ -23,8 +23,8 @@ def record_policy_fence_window(
     waited_ms: int | None = None,
     request_id: str | None = None,
     deadline: float | None = None,
-) -> Mapping[str, object] | None:
-    """Update resident fence-window state and return a completed event, if any."""
+) -> Mapping[str, object] | Sequence[Mapping[str, object]] | None:
+    """Update resident fence-window state and return completed events, if any."""
 
     if action not in {"enter", "leave", "absorb_direct"}:
         return None
@@ -63,32 +63,41 @@ def record_policy_fence_window(
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
-    if (
-        not isinstance(result, Mapping)
-        or set(result) != {"request_id", "window_event"}
-        or result.get("request_id") != request["request_id"]
-    ):
+    if not isinstance(result, Mapping) or result.get("request_id") != request["request_id"]:
         return None
-    event = result.get("window_event")
-    if event is None:
+    if set(result) == {"request_id", "window_event"}:
+        events = [] if result.get("window_event") is None else [result["window_event"]]
+    elif set(result) == {"request_id", "window_event", "window_events"}:
+        raw_events = result.get("window_events")
+        if not isinstance(raw_events, list):
+            return None
+        events = raw_events
+        if events and events[0] != result.get("window_event"):
+            return None
+    else:
+        return None
+    if not events:
         return {}
-    if not isinstance(event, Mapping) or set(event) != {"event_name", "payload", "occurred_at"}:
-        return None
-    payload = event.get("payload")
-    if (
-        event.get("event_name") != "policy_source_fence_window"
-        or not isinstance(event.get("occurred_at"), str)
-        or not isinstance(payload, Mapping)
-        or set(payload) != {"started_at", "ended_at", "absorbed_calls", "exhausted_calls"}
-        or not isinstance(payload.get("started_at"), str)
-        or not isinstance(payload.get("ended_at"), str)
-        or not isinstance(payload.get("absorbed_calls"), int)
-        or isinstance(payload.get("absorbed_calls"), bool)
-        or not isinstance(payload.get("exhausted_calls"), int)
-        or isinstance(payload.get("exhausted_calls"), bool)
-    ):
-        return None
-    return dict(event)
+    checked: list[Mapping[str, object]] = []
+    for event in events:
+        if not isinstance(event, Mapping) or set(event) != {"event_name", "payload", "occurred_at"}:
+            return None
+        payload = event.get("payload")
+        if (
+            event.get("event_name") != "policy_source_fence_window"
+            or not isinstance(event.get("occurred_at"), str)
+            or not isinstance(payload, Mapping)
+            or set(payload) != {"started_at", "ended_at", "absorbed_calls", "exhausted_calls"}
+            or not isinstance(payload.get("started_at"), str)
+            or not isinstance(payload.get("ended_at"), str)
+            or not isinstance(payload.get("absorbed_calls"), int)
+            or isinstance(payload.get("absorbed_calls"), bool)
+            or not isinstance(payload.get("exhausted_calls"), int)
+            or isinstance(payload.get("exhausted_calls"), bool)
+        ):
+            return None
+        checked.append(dict(event))
+    return checked[0] if len(checked) == 1 else checked
 
 
 __all__ = ["record_policy_fence_window"]

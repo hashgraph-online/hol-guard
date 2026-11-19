@@ -123,18 +123,51 @@ fn a_sweep_and_direct_wait_queue_both_events() {
         first["result"]["window_event"]["payload"]["absorbed_calls"],
         0
     );
+    assert_eq!(
+        first["result"]["window_events"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(
+        first["result"]["window_events"][1]["payload"]["absorbed_calls"],
+        1
+    );
 
     let mut next = request(home, "enter");
     next.request_id = "fence-queued-next".to_owned();
     let queued: Value =
         serde_json::from_slice(&evaluate(&next).expect("queued event")).expect("response");
-    assert_eq!(queued["result"]["window_event"]["event_name"], EVENT_NAME);
+    assert!(queued["result"]["window_event"].is_null());
+}
+
+#[test]
+fn an_admitted_leave_wins_over_expiry_for_its_waiter() {
+    let home = "/synthetic/admitted-late-fence";
+    let mut enter = request(home, "enter");
+    enter.request_id = "fence-admitted-late".to_owned();
+    let _: Value = serde_json::from_slice(&evaluate(&enter).expect("enter")).expect("response");
+    let windows = WINDOWS.get().expect("window state");
+    let mut windows = windows.lock().expect("window lock");
+    let stale = windows
+        .get_mut(home)
+        .expect("synthetic window")
+        .waiters
+        .get_mut("fence-admitted-late")
+        .expect("stale waiter");
+    *stale -= MAX_WINDOW_AGE_MICROS + 1;
+    drop(windows);
+
+    let mut leave = request(home, "leave");
+    leave.request_id = "fence-admitted-late".to_owned();
+    leave.admitted = Some(true);
+    let result: Value =
+        serde_json::from_slice(&evaluate(&leave).expect("late leave")).expect("response");
+    assert_eq!(result["result"]["window_event"]["event_name"], EVENT_NAME);
     assert_eq!(
-        queued["result"]["window_event"]["payload"]["absorbed_calls"],
+        result["result"]["window_event"]["payload"]["absorbed_calls"],
         1
     );
     assert_eq!(
-        queued["result"]["window_event"]["payload"]["exhausted_calls"],
+        result["result"]["window_event"]["payload"]["exhausted_calls"],
         0
     );
 }

@@ -98,6 +98,10 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
     let mut completed = state.pending_events.pop_front();
     let mut live = HashMap::new();
     for (request_id, started) in state.waiters.drain() {
+        if request.action == "leave" && request_id == request.request_id {
+            live.insert(request_id, started);
+            continue;
+        }
         if now.saturating_sub(started) > MAX_WINDOW_AGE_MICROS {
             state.exhausted = state.exhausted.saturating_add(1);
         } else {
@@ -172,11 +176,22 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         }
         _ => unreachable!(),
     };
+    let mut window_events = Vec::new();
+    if let Some(event) = completed {
+        window_events.push(event);
+    }
+    while window_events.len() < MAX_PENDING_EVENTS {
+        let Some(event) = state.pending_events.pop_front() else {
+            break;
+        };
+        window_events.push(event);
+    }
     encode_response(&json!({
         "schema": RESULT_SCHEMA,
         "result": {
             "request_id": request.request_id,
-            "window_event": completed,
+            "window_event": window_events.first(),
+            "window_events": window_events,
         },
     }))
 }

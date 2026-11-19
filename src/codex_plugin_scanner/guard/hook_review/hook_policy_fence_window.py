@@ -56,6 +56,10 @@ def _guard_home(store: object) -> Path | None:
 
 
 def _record_event(store: object, event: object) -> None:
+    if isinstance(event, list):
+        for item in event:
+            _record_event(store, item)
+        return
     if not isinstance(event, dict):
         return
     add_event = getattr(store, "add_event", None)
@@ -85,7 +89,6 @@ class PolicySourceFenceWait:
         self._sleep = sleep or time.sleep
         self._until: float | None = None
         self._exhausted = False
-        self._entered = False
         self._request_id = f"policy-fence-wait-{uuid.uuid4().hex}"
 
     def pause(self) -> bool:
@@ -101,7 +104,6 @@ class PolicySourceFenceWait:
                     request_id=self._request_id,
                     deadline=self._deadline,
                 )
-                self._entered = result is not None
                 if isinstance(result, dict) and result.get("event_name"):
                     _record_event(self._store, result)
         if now + POLL_SECONDS > self._until:
@@ -125,7 +127,7 @@ class PolicySourceFenceWait:
         if self._until is None:
             return
         self._until = None
-        if self._guard_home is None or not self._entered:
+        if self._guard_home is None:
             return
         event = record_policy_fence_window(
             self._guard_home,
