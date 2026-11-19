@@ -261,7 +261,10 @@ fn only_turning_cigar_on_can_ask_codex_for_short_replies() {
 }
 
 #[test]
-fn turning_cigar_on_is_saved_by_the_edge() {
+fn turning_cigar_on_is_answered_by_the_edge() {
+    // The edge runs the save itself; it never relays it (a relay has no daemon
+    // behind it and answers 404). A test home has no enrolled CIGAR runtime,
+    // so the edge's own check refuses it and nothing is written.
     let edge = edge("cigar-on", "");
     let answer = post(
         &edge,
@@ -269,8 +272,13 @@ fn turning_cigar_on_is_saved_by_the_edge() {
         "invalid_settings",
     );
     let (status, body) = answer.expect("the edge answers the save itself");
-    assert_eq!(status, 200, "{body}");
-    let saved = std::fs::read_to_string(edge.home.join("config.toml")).unwrap();
-    assert!(saved.contains("[context_assistance]"), "{saved}");
-    assert!(saved.contains("enabled = true"), "{saved}");
+    assert_eq!(status, 400, "{body}");
+    assert_eq!(body["error"], "invalid_settings");
+    assert!(
+        body["message"]
+            .as_str()
+            .is_some_and(|text| text.contains("CPython")),
+        "{body}"
+    );
+    assert!(!edge.home.join("config.toml").exists());
 }
