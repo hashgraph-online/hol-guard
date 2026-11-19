@@ -69,7 +69,7 @@ def fetch_cloud_machine_view(store: GuardStore) -> dict[str, object]:
     status the caller prints as a plain message.
     """
 
-    from ..runtime import runner
+    from ..runtime import cloud_bundle_sync, runner
 
     try:
         auth_context = runner._resolve_guard_sync_auth_context(store)
@@ -81,9 +81,10 @@ def fetch_cloud_machine_view(store: GuardStore) -> dict[str, object]:
             "detail": type(error).__name__,
         }
     try:
-        request = runner._guard_sync_request(auth_context, request_url=request_url, method="GET")
-        machine = runner._urlopen_json_with_timeout_retry(
-            request=request,
+        machine = cloud_bundle_sync.cloud_json_request(
+            auth_context,
+            url=request_url,
+            body=None,
             timeout_seconds=_SELF_TIMEOUT_SECONDS,
             retry_timeout_seconds=_SELF_TIMEOUT_SECONDS,
         )

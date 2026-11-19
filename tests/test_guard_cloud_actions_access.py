@@ -254,7 +254,7 @@ def test_revoke_ends_one_ai_tools_access_through_the_pairing(
 ) -> None:
     sent: list[urllib.request.Request] = []
 
-    def request(_context: object, *, request_url: str, method: str, data: bytes) -> urllib.request.Request:
+    def request(_context: object, *, request_url: str, method: str, data: bytes, **_: object) -> urllib.request.Request:
         return urllib.request.Request(request_url, data=data, method=method)
 
     def urlopen(*, request: urllib.request.Request, **_: object) -> dict[str, object]:
