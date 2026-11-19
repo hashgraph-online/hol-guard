@@ -44,8 +44,7 @@ mod lex;
 #[path = "generic_omp_eval_browser_page.rs"]
 mod page;
 use lex::{
-    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS,
-    OPTION_KEYS,
+    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS, OPTION_KEYS,
 };
 
 #[derive(Default)]
