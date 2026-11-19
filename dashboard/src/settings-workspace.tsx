@@ -763,7 +763,15 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
     applyDraftPosture(posture);
   }, [applyDraftPosture]);
 
-  const handleTurnProtectionOn = useCallback(() => {
+  // The banner has already saved the change (with approval proof when the gate
+  // is on). Record the saved settings and end Watch in the draft too, keeping
+  // any other unsaved edits on the page.
+  const handleProtectionTurnedOn = useCallback((payload: GuardSettingsPayload | null) => {
+    if (payload !== null) {
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      savedSettingsRef.current = normalizedPayload.settings;
+    }
     setDraft((value) => {
       if (value === null) return value;
       const cleared = clearHarnessWatchOverrides(value);
@@ -1611,7 +1619,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
         description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
       {watchBanner !== null ? (
-        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
+        <WatchProtectionBanner model={watchBanner} onTurnedOn={handleProtectionTurnedOn} />
       ) : null}
 
       <div className="relative">
