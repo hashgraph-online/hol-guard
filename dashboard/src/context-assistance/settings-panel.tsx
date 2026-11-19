@@ -8,6 +8,7 @@ import { CigarWorkspace } from "./workspace";
 import { CigarVersionsPanel } from "./versions-panel";
 import { CigarSetupProof } from "./one-click-setup";
 import { CodexLeanSessions } from "./codex-lean";
+import { CodexShortReplies } from "./codex-short-replies";
 import { useCigarOneClick } from "./use-one-click";
 import { CigarAllowFilesProof, useCigarAllowFiles } from "./allow-files";
 import { commitDashboardLocation } from "../dashboard-location";
@@ -190,7 +191,10 @@ export function ContextAssistanceSettings(props: Props) {
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
     headerControls={workspace}
-    lean={workspace ? <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} /> : undefined}
+    lean={workspace ? <>
+      <CodexShortReplies gate={props.gate ?? null} disabled={props.disabled} cigarOn={props.savedValue?.enabled === true} />
+      <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} />
+    </> : undefined}
     onChange={props.onChange} onRefresh={() => void refresh()}
     onChooseRuntime={() => void perform("installations")} onControl={(action) => void perform(action)}
     onManageVersions={workspace ? () => {

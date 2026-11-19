@@ -272,9 +272,10 @@ def test_handler_post_records_the_reply_each_handler_writes(tmp_path: Path) -> N
 
 
 def test_handler_post_keeps_the_no_store_header(tmp_path: Path) -> None:
-    answer = _handler_post(tmp_path, "/v1/context-assistance/codex-lean", {"enabled": "yes"})
-    assert answer["ok"]["status"] == 400  # type: ignore[index]
-    assert answer["ok"]["no_store"] is True  # type: ignore[index]
+    for path in ("/v1/context-assistance/codex-lean", "/v1/context-assistance/codex-short-replies"):
+        answer = _handler_post(tmp_path, path, {"enabled": "yes"})
+        assert answer["ok"]["status"] == 400, path  # type: ignore[index]
+        assert answer["ok"]["no_store"] is True, path  # type: ignore[index]
 
 
 def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
@@ -310,6 +311,9 @@ def test_settings_calls_answer_without_a_daemon(tmp_path: Path) -> None:
     assert setup["status"] == 400  # type: ignore[index]
     channel = _call(tmp_path, "route.update_channel", {"payload": {"update_channel": "nightly-unknown"}})["ok"]
     assert channel["status"] == 400 and channel["body"]["error"] == "invalid_update_channel"  # type: ignore[index]
+    # A Guard home outside the home folder never touches the Codex config there.
+    short = _call(tmp_path, "route.codex_short_replies_ensure", {"payload": {}})["ok"]
+    assert short["status"] == 200 and short["body"] == {"state": "skipped"}  # type: ignore[index]
 
 
 def test_policy_sync_refuses_a_request_without_a_bundle(tmp_path: Path) -> None:

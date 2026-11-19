@@ -51,6 +51,8 @@ pub(super) fn apply(
         return Some((400, json!({"error": missing_error})));
     };
     let hand_off = hands_off_to_context_assistance(settings);
+    let guard_home = Path::new(&config.guard_home);
+    let ask_codex = short_replies::ask_due(settings, guard_home);
     let gate_payload = json_payload
         .get("settings")
         .and_then(|settings| settings.get("approval_gate"))
@@ -58,7 +60,6 @@ pub(super) fn apply(
     // The answer reads the gate under the daemon's session; without one the
     // daemon answers before anything is written.
     config.session_signals.as_ref()?;
-    let guard_home = Path::new(&config.guard_home);
     let previous = Loaded::read(guard_home)?;
     let presentation_only = !settings.is_empty()
         && settings
@@ -104,13 +105,11 @@ pub(super) fn apply(
                 return Some((status, Value::Object(body)));
             }
         }
-        return Some(after_write(
-            config,
-            reads,
-            &previous,
-            Some(&written),
-            hand_off,
-        ));
+        let answer = after_write(config, reads, &previous, Some(&written), hand_off);
+        if ask_codex {
+            short_replies::ask(config);
+        }
+        return Some(answer);
     }
     let written = match write_settings(config, settings.clone()) {
         Ok(written) => written,
@@ -190,12 +189,11 @@ pub(super) fn reset(
     // The answer reads the gate under the daemon's session; without one the
     // daemon answers before anything is written.
     config.session_signals.as_ref()?;
-    let guard_home = Path::new(&config.guard_home);
-    let previous = Loaded::read(guard_home)?;
+    let previous = Loaded::read(Path::new(&config.guard_home))?;
     if let Some(refused) = settings_gate(json_payload, config)? {
         return Some(refused);
     }
-    if update(guard_home, "reset", &PyVal::Null, false).is_err() {
+    if update(Path::new(&config.guard_home), "reset", &PyVal::Null, false).is_err() {
         return Some((DROPPED, Value::Null));
     }
     Some(after_write(config, reads, &previous, None, true))
@@ -482,6 +480,8 @@ fn now_seconds() -> Option<String> {
 
 #[path = "daemon_edge_settings_save_gate.rs"]
 mod save_gate;
+#[path = "daemon_edge_settings_short_replies.rs"]
+mod short_replies;
 use save_gate::{save_change, save_gate_input};
 
 #[cfg(all(test, unix))]

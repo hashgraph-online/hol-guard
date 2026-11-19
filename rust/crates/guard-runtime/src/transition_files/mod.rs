@@ -60,6 +60,7 @@ mod publication_repair_request;
 mod publication_request;
 mod publication_request_policy;
 mod publication_runtime_compare;
+mod publication_short_replies;
 mod publication_target;
 mod python_equal;
 mod repair_claims;
@@ -108,6 +109,7 @@ pub(crate) use output::{managed_write, remove_no_follow, write_no_follow};
 pub(crate) use owned::{with_owned, Owner, Spec as OwnedSpec};
 pub(crate) use owned_locks::Failure as OwnedFailure;
 pub(crate) use owned_ops::with_registered;
+pub(crate) use publication_short_replies::first_ask_due as short_replies_first_ask_due;
 
 /// The plan sizes `_record_files` accepts, with room for an install that
 /// publishes beside them.
