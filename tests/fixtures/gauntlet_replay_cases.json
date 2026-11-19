@@ -1423,6 +1423,22 @@
       },
       "cwd": "worktree",
       "expect": "block"
+    },
+    {
+      "id": "session-neg-comment-apostrophe-live-backticks",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf ok # it's documentation\ncp `printf synthetic-secret.txt` /tmp/copied-synthetic-secret.txt\n# '"
+      },
+      "cwd": "worktree",
+      "expect": "block"
     }
   ]
 }
