@@ -179,7 +179,7 @@ jobs:
         run: |
           # Libraries keep their existing optimization and dependency fingerprints.
           # The workspace wrapper lowers optimization only for --test compilations.
-          echo "CARGO_PROFILE_TEST_OPT_LEVEL=0" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
           # Line tables keep panic backtraces readable while cutting link time

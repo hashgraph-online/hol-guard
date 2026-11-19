@@ -122,7 +122,7 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
         timeout=5,
     )
     configured = dict(line.split("=", 1) for line in environment_file.read_text().splitlines())
-    assert configured["CARGO_PROFILE_TEST_OPT_LEVEL"] == "0"
+    assert configured["CARGO_PROFILE_TEST_OPT_LEVEL"] == "1"
     assert configured["CARGO_PROFILE_TEST_DEBUG_ASSERTIONS"] == "true"
     assert configured["CARGO_PROFILE_TEST_OVERFLOW_CHECKS"] == "true"
     assert configured["CARGO_PROFILE_TEST_DEBUG"] == "line-tables-only"
@@ -183,7 +183,7 @@ def test_rust_shards_preserve_full_target_selection(
             "CARGO_CHECK": check,
             "FAKE_BIN": str(bindir),
             "CAPTURE": str(capture),
-            "CARGO_PROFILE_TEST_OPT_LEVEL": "0",
+            "CARGO_PROFILE_TEST_OPT_LEVEL": "1",
             "RUNTIME_ARCHIVE_HIT": str(archive_hit).lower(),
             "RUNNER_TEMP": str(tmp_path),
             "GITHUB_WORKSPACE": str(workspace),
@@ -195,7 +195,7 @@ def test_rust_shards_preserve_full_target_selection(
         timeout=5,
     )
     invocation = json.loads(capture.read_text())
-    assert invocation["opt"] == "0"
+    assert invocation["opt"] == "1"
     assert (workspace / "rust/target").is_dir() is archive_hit
     if archive_hit:
         build_args = [
