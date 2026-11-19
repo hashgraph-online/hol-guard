@@ -282,50 +282,54 @@ def _review_native_edge_once(
                 workspace=workspace,
             )
         deferred_receipt = deferred_receipts[0] if deferred_receipts else None
-        if claimed_saved_allow_hash is not None and claim_saved_approval:
+        if deferred_receipt is not None:
             submit = getattr(worker.activity_writer, "submit_native_decision_receipt", None)
-            if deferred_receipt is not None and callable(submit):
+            if callable(submit):
                 with suppress(Exception):
                     run_resident_evidence(worker, lambda receipt=deferred_receipt: submit(receipt=receipt))
-            accepted = response.get("approval_reuse_status") == "accepted"
-            if not accepted:
-                from .hook_worker_native import _record_native_pre_activity
+        if claimed_saved_allow_hash is not None:
+            from .hook_worker_native import _record_native_pre_activity
 
+            if not claim_saved_approval:
+                # Live-decision revalidation must record the fresh native
+                # answer, but it is never allowed to spend the saved approval.
                 response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
             else:
-                facts = native_hook_facts(payload, guard_home, deadline=deadline)
-                spent = None
-                if facts is not None:
-                    spent = native_review_settle(
-                        worker.store,
-                        harness=harness,
-                        tool_name=facts.tool_name,
-                        artifact_id=_native_review_artifact_id(harness, facts.tool_name),
-                        launch_target=facts.launch_target,
-                        workspace=workspace,
-                        identity=claimed_saved_allow_hash,
-                        spend=True,
-                        claimed_saved_allow_hash=claimed_saved_allow_hash,
-                        claimed_approval_request_id=claimed_approval_request_id,
-                    )
-                if spent != "allowed":
-                    return worker._apply_structured_unavailable_overlay(
-                        _record_unavailable_native(
-                            worker,
-                            payload,
+                accepted = response.get("approval_reuse_status") == "accepted"
+                if not accepted:
+                    response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
+                else:
+                    facts = native_hook_facts(payload, guard_home, deadline=deadline)
+                    spent = None
+                    if facts is not None:
+                        spent = native_review_settle(
+                            worker.store,
+                            harness=harness,
+                            tool_name=facts.tool_name,
+                            artifact_id=_native_review_artifact_id(harness, facts.tool_name),
+                            launch_target=facts.launch_target,
+                            workspace=workspace,
+                            identity=claimed_saved_allow_hash,
+                            spend=True,
+                            claimed_saved_allow_hash=claimed_saved_allow_hash,
+                            claimed_approval_request_id=claimed_approval_request_id,
+                        )
+                    if spent != "allowed":
+                        return worker._apply_structured_unavailable_overlay(
+                            _record_unavailable_native(
+                                worker,
+                                payload,
+                                harness=harness,
+                                event_name=event_name,
+                                reason_code="native_saved_approval_unavailable",
+                                guard_home=guard_home,
+                            ),
                             harness=harness,
                             event_name=event_name,
-                            reason_code="native_saved_approval_unavailable",
                             guard_home=guard_home,
-                        ),
-                        harness=harness,
-                        event_name=event_name,
-                        guard_home=guard_home,
-                        workspace=workspace,
-                    )
-                from .hook_worker_native import _record_native_pre_activity
-
-                response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
+                            workspace=workspace,
+                        )
+                    response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
         if capture_receipts and worker.capture_writer is not None:
             with suppress(Exception):
                 _ = worker.capture_writer.submit_native_capture(

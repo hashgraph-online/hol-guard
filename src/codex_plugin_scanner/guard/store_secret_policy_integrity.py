@@ -4,6 +4,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 
@@ -286,21 +290,76 @@ class StoreSecretPolicyIntegrityMixin:
             )
         return self._get_secret_from_store(store, secret_id)
 
+    @staticmethod
+    def _get_secret_from_system_keyring_strict(store: SystemKeyringSecretStore, secret_id: str) -> str | None:
+        """Read the primary keyring behind a process timeout for strict state reads.
+
+        A strict read runs while the integrity generation lock is held. The
+        normal keyring helper is intentionally compatible with test backends,
+        but can call a platform keyring synchronously outside macOS. The
+        disposable process gives every production backend the same bounded
+        outcome. A timeout or crashed child raises so callers never interpret
+        an unavailable keyring as an absent control state.
+        """
+
+        if store._test_keyring_module() is not None:
+            return store.get_secret(secret_id)
+        worker = (
+            "import json,sys\n"
+            "from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore\n"
+            "try:\n"
+            "    value=SystemKeyringSecretStore(service_name=sys.argv[1]).get_secret(sys.argv[2])\n"
+            "    print(json.dumps({'status':'found','value':value} if value is not None else "
+            "{'status':'missing'},separators=(',',':')))\n"
+            "except Exception:\n"
+            "    print(json.dumps({'status':'unavailable'},separators=(',',':')))\n"
+            "    sys.exit(2)"
+        )
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key in {"HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "TMPDIR", "USER"} or key.startswith("LC_")
+        }
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", worker, store.service_name, secret_id],
+                check=False,
+                capture_output=True,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                timeout=max(_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS, 0.1),
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("policy_integrity_secret_read_timeout") from error
+        except OSError as error:
+            raise RuntimeError("policy_integrity_secret_read_unavailable") from error
+        try:
+            payload = json.loads(completed.stdout.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("policy_integrity_secret_read_unavailable") from error
+        if not isinstance(payload, dict):
+            raise RuntimeError("policy_integrity_secret_read_unavailable")
+        status = payload.get("status")
+        if status == "missing":
+            return None
+        if status == "found" and isinstance(payload.get("value"), str) and payload["value"]:
+            return payload["value"]
+        raise RuntimeError("policy_integrity_secret_read_unavailable")
+
     def _get_policy_integrity_secret_from_store(self, secret_id: str, *, strict: bool = False) -> str | None:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
         if strict:
             if isinstance(secret_store, FallbackSecretStore):
-                fallback_value = secret_store.fallback.get_secret(secret_id)
+                fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
                 if fallback_value is not None:
                     return fallback_value
+                if isinstance(secret_store.primary, SystemKeyringSecretStore):
+                    return self._get_secret_from_system_keyring_strict(secret_store.primary, secret_id)
                 return secret_store.primary.get_secret(secret_id)
             if isinstance(secret_store, SystemKeyringSecretStore):
-                return secret_store.get_secret_with_timeout(
-                    secret_id,
-                    timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
-                )
+                return self._get_secret_from_system_keyring_strict(secret_store, secret_id)
             return secret_store.get_secret(secret_id)
         if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
             return secret_store.get_secret(secret_id)
@@ -604,6 +663,13 @@ class StoreSecretPolicyIntegrityMixin:
         return True
 
     def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> bool:
+        """Adopt a native generation, or leave its pending marker for recovery.
+
+        Callers must stop reporting success when this returns ``False``. The
+        next store refresh reconciles a still-pending generation against the
+        committed rows before allowing another protected write.
+        """
+
         normalized = self._normalize_policy_integrity_control_state(payload)
         if normalized is None:
             return False
