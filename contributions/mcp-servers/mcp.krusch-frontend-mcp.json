@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-frontend-mcp",
+  "version": "1.1.1",
+  "name": "Krusch Frontend MCP",
+  "description": "Local stdio MCP server providing canonical HTML/SVG/Lego UI templates, WCAG contrast color palettes, CSS-to-Tailwind conversion, responsive breakpoint specs, and design-rule RAG. Pure in-memory helpers inherit Guard policy; analyze_layout_structure and generate_component_styles call the configured Ollama model and require review. Figma token ingestion (SQLite write + Ollama embedding) and semantic design-rule search (Ollama embedding) require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-frontend-mcp"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/lego-system-for-code.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-frontend-mcp"
+  },
+  "riskClasses": [
+    "local-sqlite-write",
+    "external-embedding-request",
+    "external-model-request"
+  ],
+  "tools": [
+    {
+      "name": "generate_color_palette",
+      "state": "inherit"
+    },
+    {
+      "name": "css_to_tailwind",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_css_variables_from_figma",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_layout_structure",
+      "state": "review"
+    },
+    {
+      "name": "generate_component_styles",
+      "state": "review"
+    },
+    {
+      "name": "generate_responsive_breakpoints",
+      "state": "inherit"
+    },
+    {
+      "name": "frontend_get_provenance",
+      "state": "inherit"
+    },
+    {
+      "name": "frontend_traverse_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "get_canonical_template",
+      "state": "inherit"
+    },
+    {
+      "name": "list_canonical_templates",
+      "state": "inherit"
+    },
+    {
+      "name": "query_design_rules",
+      "state": "review"
+    },
+    {
+      "name": "ingest_figma_tokens",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-frontend-mcp",
+    "https://github.com/kruschdev/krusch-frontend-mcp/blob/main/src/index.js",
+    "https://github.com/kruschdev/krusch-frontend-mcp/blob/main/README.md",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/krusch-frontend-mcp"
+  ],
+  "saferAlternatives": [
+    "Use get_canonical_template, list_canonical_templates, generate_color_palette, css_to_tailwind, and generate_css_variables_from_figma for deterministic zero-network UI generation.",
+    "Keep ingest_figma_tokens and query_design_rules on Review: both call the configured Ollama embedding endpoint, and ingest_figma_tokens writes vectors to the local SQLite store."
+  ]
+}

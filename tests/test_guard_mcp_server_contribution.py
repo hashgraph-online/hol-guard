@@ -8,16 +8,24 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution
+from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import _normalized_tool_name, validate_mcp_contribution
 from tests import mcp_contribution_loader as mcp_loader
 from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from .mcp_contribution_client import mcp_tool_state
+from .mcp_extension_driver import apply_contributed_mcp_decision
+from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
+_NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
+_NJC_CHAIN_READS_URL = "https://njc-tx-explain.departmentofjazz.workers.dev/mcp"
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -35,6 +43,18 @@ def _tether_payload() -> dict[str, object]:
 
 def _dev_mcp_payload() -> dict[str, object]:
     payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _njc_chain_reads_payload() -> dict[str, object]:
+    payload = json.loads(_NJC_CHAIN_READS.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _krusch_skylight_payload() -> dict[str, object]:
+    payload = json.loads(_KRUSCH_SKYLIGHT.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -195,6 +215,90 @@ def test_dev_mcp_unlisted_tools_default_to_review() -> None:
     declared = {item["name"]: item["state"] for item in tools}
     assert declared["other"] == "review"
     assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
+
+
+def test_njc_chain_reads_contribution_is_external_opt_in_remote() -> None:
+    """Keep the hosted chain-reads server external, opt-in and bound to its HTTPS endpoint."""
+    payload = _njc_chain_reads_payload()
+    validate_mcp_contribution(payload, filename=_NJC_CHAIN_READS.name)
+    assert payload["id"] == "mcp.njc-chain-reads"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "remote-http",
+        "url": "https://njc-tx-explain.departmentofjazz.workers.dev/mcp",
+        "serverNames": ["njc-chain-reads", "rh-tx-explain"],
+    }
+
+
+def test_krusch_skylight_local_writes_require_review() -> None:
+    """Keep tools that can write local state review-gated even when they look like reads."""
+    payload = _krusch_skylight_payload()
+    validate_mcp_contribution(payload, filename=_KRUSCH_SKYLIGHT.name)
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert payload["launch"] == {"kind": "direct-command", "command": "krusch-skylight-mcp"}
+    for tool_name in ("skylight_status", "skylight_list_events", "skylight_pull_chores", "skylight_list_meals"):
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_njc_chain_reads_paid_tools_require_review() -> None:
+    """Paid reads settle an attached x402 payment from the caller's wallet, so they stay review-gated."""
+    payload = _njc_chain_reads_payload()
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    free = {"explain_transaction", "who_controls_agent", "jobs_board"}
+    paid = {
+        "money_trail",
+        "line_read",
+        "transfer_read",
+        "sol_trail",
+        "base_trail",
+        "halt_check",
+        "usdg_ledger",
+        "wallet_handover",
+        "poison_check",
+        "income_read",
+    }
+    assert "allow" not in declared.values()
+    for tool_name in free:
+        assert declared[tool_name] == "inherit"
+        assert mcp_tool_state(payload, tool_name) == "inherit"
+    for tool_name in paid:
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_njc_chain_reads_unlisted_tools_default_to_review() -> None:
+    """Keep future chain-read tools on the conservative review fallback."""
+    payload = _njc_chain_reads_payload()
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert declared["other"] == "review"
+    normalized_declared = {_normalized_tool_name(name) for name in declared}
+    assert _normalized_tool_name("unlisted_future_tool") not in normalized_declared
+    assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
+
+
+def test_njc_chain_reads_stays_inert_until_local_admin_enable() -> None:
+    """Keep the paid remote tool inert until the external catalog entry is enabled locally."""
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json", command=_NJC_CHAIN_READS_URL, args=(), transport="http"
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="njc-chain-reads",
+        tool_name="money_trail",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="http",
+        server_identity=identity,
+    )
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    enabled = _AuthorityStore(
+        (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-njc-chain-reads", ControlState.ENABLED),)
+    )
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:

@@ -385,6 +385,16 @@ fn install_target_names_the_user_file_and_never_a_project_file() {
 }
 
 #[test]
+fn install_target_names_the_session_modes_guard_does_not_cover() {
+    let home = Home::new();
+    let answer = target(&home, None, json!({"PATH": ""}));
+    let text = answer["text"].as_str().unwrap();
+    for mode in ["--bare", "leave out `user`", "claude --bg", "not qualified"] {
+        assert!(text.contains(mode), "install output omits {mode}");
+    }
+}
+
+#[test]
 fn install_target_reports_hooks_turned_off_by_a_project_file() {
     let home = Home::new();
     let workspace = home.root.join("project");

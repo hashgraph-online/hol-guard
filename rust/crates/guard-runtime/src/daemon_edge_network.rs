@@ -68,7 +68,7 @@ fn default_profiles() -> Value {
     ])
 }
 
-/// `project_network_supervisor_health(NetworkSupervisor().health(...))`.
+/// The supervisor's health: no backend advertisement, so the unavailable phase.
 pub(in crate::daemon_edge) fn supervisor_health() -> Value {
     json!({
         "phase": "unavailable",

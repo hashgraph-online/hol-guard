@@ -32,7 +32,7 @@ mod parser;
 mod pure;
 #[path = "generic_omp_eval_tokens.rs"]
 mod tokens;
-use parser::{parse_program, parse_python, Call, Lit};
+use parser::{parse_program, parse_python, uses_earlier_cell_draft, Call, Lit};
 
 /// The command an Oh My Pi `commit` draft stands for. The prelude reads the
 /// worktree and writes objects, an index of its own and the branch ref, so it
@@ -156,6 +156,21 @@ pub(super) fn evaluate_browser(
         "The Rust authority read this eval program and found only isolated-browser reads and interactions on loopback pages and GET requests to loopback URLs, with page functions that run inside the page: no files, processes, modules or other hosts.",
     ))
 }
+
+/// The review reason for a JavaScript cell that calls draft methods on a name
+/// an earlier cell bound. Each cell is judged alone, so the review stays; the
+/// reason names the one-cell form Guard can check. `None` for anything else,
+/// which keeps the ordinary eval review reason.
+pub(super) fn earlier_cell_draft_reason(payload: &Value) -> Option<&'static str> {
+    let input = strict_tool_input(payload)?;
+    let code = input.get("code")?.as_str()?;
+    (input.get("language")?.as_str()? == "js"
+        && parse_program(code).is_none()
+        && uses_earlier_cell_draft(code))
+    .then_some(EARLIER_CELL_DRAFT_REASON)
+}
+
+const EARLIER_CELL_DRAFT_REASON: &str = "HOL Guard requires review because this eval cell uses a commit draft made in an earlier cell, and Guard checks each cell on its own, so it cannot confirm the name still holds that draft. Make the draft and use it in the same cell instead, for example: const d = await commit.draft(); await d.take('path/to/file'); await d.commit('subject', ['body line']). Guard checks that cell as one local git commit.";
 
 pub(super) fn evaluate(
     payload: &Value,

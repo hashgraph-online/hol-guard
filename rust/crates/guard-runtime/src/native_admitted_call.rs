@@ -36,11 +36,12 @@ const BUSY_TIMEOUT_MS: u64 = 250;
 const PRUNE_BATCH: i64 = 64;
 
 /// The top-level call id each harness sends unchanged on both `PreToolUse`
-/// and `PostToolUse` (`hook_evidence_correlation::PROVEN_REQUEST_ID_FIELDS`).
+/// and `PostToolUse`, as `edge_identity` reads it. Codex stamps
+/// `tool_use_id`, like Claude Code; it sends no `tool_call_id`.
 /// Cursor is absent: its post-execution events are not `PostToolUse`.
 const CALL_ID_FIELDS: [(&str, &str); 6] = [
     ("claude-code", "tool_use_id"),
-    ("codex", "tool_call_id"),
+    ("codex", "tool_use_id"),
     ("grok", "toolUseId"),
     ("zcode", "tool_use_id"),
     ("pi", "tool_call_id"),

@@ -11,6 +11,14 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_store::context_assistance_registry::run_enroll_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == cloud_bundle_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_bundle_command::run_command(&bytes))
+        }
+        [command, flag] if command == cloud_event_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_event_command::run_command(&bytes))
+        }
         [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&pack_lifecycle::run(&bytes)?)
@@ -675,6 +683,14 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if command == guard_plugin_kit::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&guard_plugin_kit::run_request(&bytes))
+        }
+        [command, flag] if command == crate::local_cli_discover::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&crate::local_cli_discover::run_command(&bytes))
+        }
+        [command, flag] if command == plugin_telemetry_host::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&plugin_telemetry_host::run_command(&bytes))
         }
         [command, flag] if command == guard_plugin_telemetry::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;

@@ -65,6 +65,10 @@ const SYNC_GATEWAY_MAX_WAIT_SECONDS: u64 = 8;
 /// default body limit, so the cap is unchanged from the direct transport.
 const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
+#[path = "guard_sync_transport_detailed.rs"]
+mod detailed;
+pub use detailed::{urlopen_detailed, urlopen_json_detailed, SyncFetchError, SyncHttpFailure};
+
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
 }
@@ -771,6 +775,7 @@ pub fn urlopen_with_sync_retries(
         nonce_fast_path,
         None,
     )
+    .map_err(SyncFetchError::into_eval_error)
 }
 
 /// The retry machine, optionally held to a [`SyncBudget`]: each attempt gets at
@@ -783,7 +788,7 @@ fn sync_retries(
     parse_json_response: bool,
     nonce_fast_path: bool,
     budget: Option<&SyncBudget>,
-) -> Result<Option<Value>, EvalError> {
+) -> Result<Option<Value>, SyncFetchError> {
     let mut current_request = request.clone();
     let mut current_timeout = timeout_seconds;
     let mut retried_timeout = false;
@@ -798,7 +803,8 @@ fn sync_retries(
                 if budget.remaining() < SYNC_BUDGET_MIN_ATTEMPT_SECONDS {
                     return Err(EvalError::Internal(
                         "timeout: Guard Cloud ran out of time.".to_owned(),
-                    ));
+                    )
+                    .into());
                 }
                 let attempt = current_timeout.min(budget.remaining());
                 budget.spend(attempt);
@@ -815,6 +821,7 @@ fn sync_retries(
                             EvalError::Internal(
                                 "Guard Cloud sync returned an invalid response payload.".to_owned(),
                             )
+                            .into()
                         });
                 }
                 return Ok(None);
@@ -880,7 +887,11 @@ fn sync_retries(
                 }
                 // `raise` (:5079) — the HTTPError propagates; the caller reads
                 // `error.code` for the 401/4xx fail-closed branch.
-                return Err(sync_http_eval_error(status, &headers, &body));
+                return Err(SyncFetchError::Http(SyncHttpFailure {
+                    status,
+                    headers,
+                    body,
+                }));
             }
             Err(SyncHttpError::Timeout(msg)) => {
                 if !retried_timeout {
@@ -891,9 +902,9 @@ fn sync_retries(
                     }
                     continue;
                 }
-                return Err(EvalError::Internal(format!("timeout: {msg}")));
+                return Err(EvalError::Internal(format!("timeout: {msg}")).into());
             }
-            Err(SyncHttpError::Other(msg)) => return Err(EvalError::Internal(msg)),
+            Err(SyncHttpError::Other(msg)) => return Err(EvalError::Internal(msg).into()),
         }
     }
 }
@@ -926,7 +937,8 @@ pub fn urlopen_json_within_budget(
         true,
         false,
         Some(budget),
-    )?
+    )
+    .map_err(SyncFetchError::into_eval_error)?
     .ok_or_else(|| {
         EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
     })
@@ -942,6 +954,9 @@ fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &
 /// Start of the reason reported when Cloudflare in front of Guard Cloud blocked
 /// or challenged a request. Callers match it so an edge block is not reported as
 /// an expired sign-in.
+/// Starts the reason of a sign-in refresh that could not reach Guard Cloud.
+pub const OAUTH_REFRESH_UNREACHABLE: &str =
+    "Guard Cloud could not be reached to refresh the sign-in.";
 pub const CLOUD_EDGE_BLOCK_REASON_PREFIX: &str = "Guard Cloud is unreachable from this network";
 
 /// The edge-block text inside `reason`, which a caller may have prefixed with
@@ -1154,8 +1169,41 @@ pub enum OAuthRefreshOutcome {
     /// `invalid_grant` / consumed-or-revoked — the grant is dead; caller must
     /// record the dead-grant breaker and demand reauthorization.
     DeadGrant,
+    /// Guard Cloud could not be reached (a connection failure, a timeout or a
+    /// 502/503/504): an outage that clears up on its own, not a sign-in that
+    /// needs reconnecting.
+    Unreachable(String),
     /// Any other transport or payload failure — reauthorizable.
     Failed(String),
+}
+
+/// I/O failures that clear up on their own (`_is_network_outage_error`). TLS
+/// failures are not among them.
+const OUTAGE_IO_KINDS: [std::io::ErrorKind; 8] = [
+    std::io::ErrorKind::ConnectionRefused,
+    std::io::ErrorKind::ConnectionReset,
+    std::io::ErrorKind::ConnectionAborted,
+    std::io::ErrorKind::HostUnreachable,
+    std::io::ErrorKind::NetworkUnreachable,
+    std::io::ErrorKind::NetworkDown,
+    std::io::ErrorKind::TimedOut,
+    std::io::ErrorKind::NotConnected,
+];
+
+/// Whether a transport failure reason names a network outage rather than a
+/// failure that will not clear up on its own. The egress broker reports an
+/// I/O failure as `io: ` and the kind's display text (`connection refused`);
+/// the variant name (`ConnectionRefused`) is accepted as well.
+pub fn is_network_outage_reason(reason: &str) -> bool {
+    if reason.starts_with("timeout:") || reason == "host not found" {
+        return true;
+    }
+    let Some(kind) = reason.strip_prefix("io: ").map(str::trim) else {
+        return false;
+    };
+    OUTAGE_IO_KINDS
+        .iter()
+        .any(|known| kind == known.to_string() || kind == format!("{known:?}"))
 }
 
 /// `urllib.parse.urlencode` parity — percent-encode every byte outside the
@@ -1360,10 +1408,17 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                     status, &headers, &body,
                 ));
             }
-            OAuthRefreshOutcome::Failed(http_error_reason_message(status, &headers, &body))
+            let message = http_error_reason_message(status, &headers, &body);
+            if matches!(status, 502..=504) {
+                return OAuthRefreshOutcome::Unreachable(message);
+            }
+            OAuthRefreshOutcome::Failed(message)
         }
         Err(SyncHttpError::Timeout(_)) => {
-            OAuthRefreshOutcome::Failed("Guard Cloud token refresh timed out.".to_owned())
+            OAuthRefreshOutcome::Unreachable("Guard Cloud token refresh timed out.".to_owned())
+        }
+        Err(SyncHttpError::Other(reason)) if is_network_outage_reason(&reason) => {
+            OAuthRefreshOutcome::Unreachable(reason)
         }
         Err(SyncHttpError::Other(reason)) => OAuthRefreshOutcome::Failed(reason),
     }

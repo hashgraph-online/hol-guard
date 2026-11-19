@@ -102,6 +102,9 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::runtime_identity_launch::FEATURE.into(),
         guard_plugin_kit::FEATURE.into(),
         guard_plugin_telemetry::FEATURE.into(),
+        crate::cloud_bundle_command::FEATURE.into(),
+        crate::cloud_event_command::FEATURE.into(),
+        crate::plugin_telemetry_host::FEATURE.into(),
         crate::workspace_snapshot::FEATURE.into(),
         crate::workspace_snapshot::SECRETS_FEATURE.into(),
         crate::workspace_snapshot::SKILLS_FEATURE.into(),
@@ -114,6 +117,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::workspace_fix::FEATURE.into(),
         crate::workspace_mcp_config::FEATURE.into(),
         guard_plugin_telemetry::UPDATES_FEATURE.into(),
+        crate::local_cli_discover::FEATURE.into(),
     ];
     features.extend(
         crate::resident_op_features::RESIDENT_OP_FEATURES

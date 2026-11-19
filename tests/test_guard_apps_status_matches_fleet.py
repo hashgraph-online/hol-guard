@@ -60,6 +60,20 @@ def test_installed_app_whose_setup_check_failed_needs_repair(tmp_path: Path) -> 
     assert codex["status"] == "needs_repair"
     assert codex["installed"] is False
     assert "hol-guard repair" in str(codex["observed_copy"])
+    assert codex["warnings"] == []
+
+
+def test_unmanaged_leftover_config_exposes_cleanup_guidance(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = datetime.now(timezone.utc)
+    _record_fleet_check(store, now - timedelta(minutes=5), grok="broken")
+
+    grok = _items_by_harness(context, store)["grok"]
+
+    assert grok["status"] == "needs_repair"
+    assert grok["installed"] is False
+    assert grok["warnings"] == ["Guard-managed configuration remains, but this app is not connected to Guard."]
 
 
 def test_install_change_after_the_last_setup_check_wins(tmp_path: Path) -> None:

@@ -487,8 +487,7 @@ integers wider than the resident's number type. Each travels as a token drawn
 from a per-request random prefix that is verified to match no string in the
 payload, with its meaning in a separate map, so a config file cannot spell a
 token itself and nothing it contains can pass as a substituted scalar.
-`native_codex_hook_identity.py` ships the entries across and fails closed;
-no Python copy of the identity rules remains.
+No Python copy of the identity rules remains.
 
 Whether the authenticated Codex hook manifest still describes the live
 installation is decided in the native runtime. The `verify_manifest` Codex
@@ -518,9 +517,15 @@ indented line is a command row rather than a wrapped description, which tokens
 are commands and which are option spellings, and how a row's description is
 recovered from the columns after it. That grammar decides which commands an
 operator is offered a grant over, so a second copy of it would be a second
-answer to the same question. Python now only probes - it runs the CLI, collects
-the help text each subcommand prints, and sends the text; the resident returns
-the commands it names and their descriptions.
+answer to the same question. Discovery as a whole is the native
+`local-cli-discover` command (`local-cli-discover-v1`, in
+`local_cli_discover.rs`): it reads a script's source first, runs `--help` only
+as far as that source allows (`local_cli_help_probe.rs`, in a private folder
+with a fixed `PATH` and its own process group), parses what each run prints and
+merges the nested commands. Python matches the command to the CLI the operator
+approved, sends the verified `--help` argv, and stores the commands it gets
+back; setting the discovery job's cancel stops the command and every run it
+started.
 
 The options a CLI takes are read there too (`local-cli-help-variations-v1`, in
 `local_cli_help_options.rs`): the option rows and usage line of a help that
@@ -528,8 +533,8 @@ names no subcommands, and, for a script whose `--help` names nothing, the
 script's own source. A source is read only from its comments and heredoc text,
 plus the `case` arms, parser calls and `getopts` strings that compare its own
 arguments, so an option the script passes to another program never becomes
-one of its own. Python reads the verified script file, bounded, and sends it
-with `script_source`; it never runs anything to get it. The grant answer
+one of its own. The discover command reads the verified script file, bounded, and
+never runs anything to get it. The grant answer
 (`local_cli_grant_op.rs`) then decides a call by the options it passes: a
 blocked option blocks the call, and a call with options and no subcommand is
 allowed only when every option it passes is allowed.

@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from codex_plugin_scanner.guard.native_codex_hook_identity import (
-    CODEX_HOOK_INVENTORY_FEATURE,
-    native_codex_hook_identity,
-)
 from tests.python_oracles.codex_hook_identity import (
     CodexHookDefinitionTooDeepError,
     CodexHookIdentityUnavailableError,
+)
+from tests.python_oracles.native_codex_hook_identity import (
+    CODEX_HOOK_INVENTORY_FEATURE,
+    native_codex_hook_identity,
 )
 
 CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE = "codex_hook_inventory_unmanaged_executable"

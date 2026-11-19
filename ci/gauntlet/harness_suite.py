@@ -41,7 +41,8 @@ def lane_catalog(harness: str) -> tuple[Scenario, ...]:
     A ``native-tools`` case names the tools the model must use, in Oh My Pi's
     vocabulary. The lane runs it when the harness has its own tool for every one
     of them: Claude Code and Cursor read, write and edit with structured tools,
-    Codex does that work through its shell. The rest (glob, grep, eval, task,
+    Codex does that work through its shell. A pinned write case also runs where
+    the harness writes through a patch tool (Codex's ``apply_patch``). The rest (glob, grep, eval, task,
     wait) are Oh My Pi's alone. The memory-note cases drive its learn tool and
     the eval shell cases its eval ``sh`` helper, which no other lane has at all.
 
@@ -50,12 +51,15 @@ def lane_catalog(harness: str) -> tuple[Scenario, ...]:
     request from the shell spelling of the same read, and only a lane that drives
     the structured tool exercises it.
     """
-    tools = adapter(harness).native_tools
+    lane = adapter(harness)
+    tools = lane.native_tools
+    write_tools = tools | lane.patch_tools
     return tuple(
         s
         for s in load_catalog()
         if s.oracle not in OMP_TOOL_ORACLES
-        and (s.oracle not in {"native-tools", FILE_WRITE_ORACLE} or set(s.required_tools) <= tools)
+        and (s.oracle != "native-tools" or set(s.required_tools) <= tools)
+        and (s.oracle != FILE_WRITE_ORACLE or set(s.required_tools) <= write_tools)
     )
 
 

@@ -177,6 +177,33 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the runtime session upload through the urllib a test fakes.
+
+    Mark a test ``native_runtime_session`` to post it with the native command.
+    Guard events and pain signals answer as an empty queue unless the test is
+    marked ``native_guard_events``.
+    """
+
+    native_session = request.node.get_closest_marker("native_runtime_session") is not None
+    native_events = request.node.get_closest_marker("native_guard_events") is not None
+    if native_session and native_events:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.runtime_session_transport import runtime_session_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_event_sync",
+        runtime_session_over_urllib(
+            cloud_bundle_sync.cloud_event_sync,
+            native_session=native_session,
+            native_events=native_events,
+        ),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _python_cursor_hook_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     """Install Cursor hooks with the Python bridge argv.
 
