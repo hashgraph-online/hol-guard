@@ -1002,7 +1002,7 @@ fn interpreter_free(text: &str) -> bool {
     !INTERPRETERS
         .iter()
         .chain(substitution::LAUNCHERS)
-        .chain(&["trap", "."])
+        .chain(&["trap", ".", "alias"])
         .any(|name| commanded.contains(*name))
 }
 
