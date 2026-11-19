@@ -146,6 +146,7 @@ def _resident_request(
         "containment_health_probe": "guard-containment-health-probe-result.v1",
         "contained_execute": "guard-contained-execute-result.v1",
         "hook_payload_facts": "guard-hook-payload-facts-result.v1",
+        "hook_connector_facts": "guard-hook-connector-facts-result.v1",
     }.get(operation)
     if operation == "cloud_catalog":
         # Producer/completion replies use a strict payload/error union, with

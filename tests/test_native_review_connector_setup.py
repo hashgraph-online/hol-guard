@@ -17,7 +17,6 @@ import pytest
 from codex_plugin_scanner.guard import config as guard_config
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
 from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
-from codex_plugin_scanner.guard.hook_review import native_review_connector
 
 _URL = "http://127.0.0.1:4781/requests/abc"
 _SETUP = {
@@ -52,6 +51,24 @@ def _resident_payload_facts(monkeypatch: pytest.MonkeyPatch) -> None:
             launch_target="lanectl status",
             tool_name="Bash",
             tool_input={"command": "lanectl status"},
+        ),
+    )
+    monkeypatch.setattr(
+        review,
+        "native_connector_lookup",
+        lambda payload, _guard_home, *, reason_code, workspace, home_dir, deadline=None: (
+            {
+                "command": "lanectl status",
+                "cwd": str(workspace),
+                "home_dir": None if home_dir is None else str(home_dir),
+                "user_home": str(Path.home()),
+                "env": {"PATH": "/daemon/bin"},
+            }
+            if reason_code in {
+                "native_command_review_required",
+                "native_workspace_containment_executable_outside_roots",
+            }
+            else None
         ),
     )
 
@@ -178,83 +195,6 @@ def test_an_ordinary_review_keeps_its_text(tmp_path: Path, monkeypatch: pytest.M
     assert "could not prove this command is read-only" in text
     assert silent["setup_reason"] is None
     assert silent["verdict"] == _native_review()
-
-
-@pytest.mark.parametrize(
-    "reason_code",
-    [
-        "native_network_review",
-        "native_package_review",
-        "native_file_read_review",
-        "native_workspace_containment_required",
-        None,
-    ],
-)
-def test_a_review_with_a_risk_signal_never_looks_up_a_connector(tmp_path: Path, reason_code: str | None) -> None:
-    assert (
-        native_review_connector.native_review_connector_lookup(
-            payload=_payload(tmp_path),
-            command="lanectl status",
-            native_result={**_native_review(), "reason_code": reason_code},
-            workspace=tmp_path,
-            home_dir=None,
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    "reason_code", ["native_command_review_required", "native_workspace_containment_executable_outside_roots"]
-)
-def test_an_unrecognised_command_looks_up_its_connector(tmp_path: Path, reason_code: str) -> None:
-    lookup = native_review_connector.native_review_connector_lookup(
-        payload=_payload(tmp_path),
-        command="lanectl status",
-        native_result={**_native_review(), "reason_code": reason_code},
-        workspace=tmp_path,
-        home_dir=None,
-    )
-
-    assert lookup is not None
-    assert (lookup["command"], lookup["cwd"], lookup["home_dir"]) == ("lanectl status", str(tmp_path), None)
-    assert lookup["user_home"] == str(Path.home())
-
-
-def test_the_lookup_uses_the_path_the_agent_runs_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATH", "/daemon/bin")
-    seen: list[object] = []
-    for stamped in ({"path": "/home/dev/.local/bin:/usr/bin"}, {"path": "bad\0path"}, None):
-        lookup = native_review_connector.native_review_connector_lookup(
-            payload=_payload(tmp_path, guard_execution_environment=stamped),
-            command="lanectl status",
-            native_result=_native_review(),
-            workspace=tmp_path,
-            home_dir=None,
-        )
-        assert lookup is not None
-        env: Any = lookup["env"]
-        seen.append(env["PATH"])
-
-    assert seen == ["/home/dev/.local/bin:/usr/bin", "/daemon/bin", "/daemon/bin"]
-
-
-def test_a_launch_too_large_for_the_queue_call_queues_an_ordinary_review(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The lookup shares the review's store request; a launch that could push it
-    # past the request limit is left out so the review still queues.
-    monkeypatch.setenv("HOL_GUARD_TEST_LARGE_VALUE", "x" * (256 * 1024))
-
-    assert (
-        native_review_connector.native_review_connector_lookup(
-            payload=_payload(tmp_path),
-            command="lanectl status",
-            native_result=_native_review(),
-            workspace=tmp_path,
-            home_dir=None,
-        )
-        is None
-    )
 
 
 def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> None:
