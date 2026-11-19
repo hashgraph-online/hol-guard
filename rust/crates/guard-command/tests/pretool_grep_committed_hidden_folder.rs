@@ -97,6 +97,18 @@ fn allowed(home: &Path, command: &str) -> bool {
     })
 }
 
+/// Every harness refuses `command`.
+fn refused(home: &Path, command: &str) -> bool {
+    ["zcode", "codex", "claude-code"].iter().all(|harness| {
+        let result = action(home, harness, command);
+        let refused = !result.starts_with("allow ");
+        if !refused {
+            eprintln!("{harness}: {command} => {result}");
+        }
+        refused
+    })
+}
+
 #[test]
 fn a_committed_hidden_document_folder_does_not_stop_a_search() {
     let home = home(&[], &[]);
@@ -155,7 +167,7 @@ fn a_hidden_entry_that_is_not_a_clean_committed_document_keeps_its_review() {
         let home = home(&extra, &untracked);
         assert!(allowed(&home, "grep -rn palette src"), "{label}: src");
         assert!(
-            !allowed(&home, "grep -rn palette docs"),
+            refused(&home, "grep -rn palette docs"),
             "{label}: grep -rn palette docs"
         );
     }
@@ -166,9 +178,21 @@ fn a_link_inside_a_hidden_folder_keeps_its_review() {
     let home = home(&[], &[]);
     let folder = home.join("project/docs/design/.designtool");
     std::os::unix::fs::symlink(home.join("project/src"), folder.join("source")).unwrap();
-    assert!(!allowed(&home, "grep -rn palette docs"));
+    assert!(refused(&home, "grep -rn palette docs"));
     let linked = home.join("project/docs/.linked");
     std::os::unix::fs::symlink(&folder, linked).unwrap();
     std::fs::remove_file(folder.join("source")).unwrap();
-    assert!(!allowed(&home, "grep -rn palette docs"));
+    assert!(refused(&home, "grep -rn palette docs"));
+}
+
+#[test]
+fn a_hidden_folder_with_too_many_entries_keeps_its_review() {
+    // Empty folders hold no file, so only a limit that counts folders too
+    // stops the walk before it visits all of them.
+    let home = home(&[], &[]);
+    let folder = home.join("project/docs/design/.designtool");
+    for index in 0..40 {
+        std::fs::create_dir(folder.join(format!("empty-{index}"))).unwrap();
+    }
+    assert!(refused(&home, "grep -rn palette docs"));
 }

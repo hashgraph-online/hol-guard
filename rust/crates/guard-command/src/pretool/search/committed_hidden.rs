@@ -17,8 +17,9 @@ use guard_secure_fs::credential_store_names::{
 };
 use std::path::Path;
 
-/// Files a hidden folder may hold before the proof gives up.
-const MAX_FILES: usize = 32;
+/// Entries, files and folders alike, a hidden folder may hold before the
+/// proof gives up.
+const MAX_ENTRIES: usize = 32;
 /// Folder levels the proof descends below the hidden folder.
 const MAX_DEPTH: usize = 3;
 
@@ -41,8 +42,15 @@ pub(super) fn committed_hidden(path: &Path, is_file: bool) -> bool {
     if is_file {
         return metadata.is_file() && committed(path);
     }
-    let mut files = 0;
-    metadata.is_dir() && documents_only(path, 0, &mut files) && files > 0
+    let mut walk = Walk::default();
+    metadata.is_dir() && documents_only(path, 0, &mut walk) && walk.files > 0
+}
+
+/// What the proof has visited so far, shared across every level.
+#[derive(Default)]
+struct Walk {
+    entries: usize,
+    files: usize,
 }
 
 /// A name that is neither `.git`, a harness directory, a credential store nor
@@ -57,7 +65,7 @@ fn committed(path: &Path) -> bool {
     crate::pretool::search_scope_tracked::names::committed_document(path)
 }
 
-fn documents_only(directory: &Path, depth: usize, files: &mut usize) -> bool {
+fn documents_only(directory: &Path, depth: usize, walk: &mut Walk) -> bool {
     let Ok(entries) = std::fs::read_dir(directory) else {
         return false;
     };
@@ -70,15 +78,18 @@ fn documents_only(directory: &Path, depth: usize, files: &mut usize) -> bool {
         let Ok(kind) = entry.file_type() else {
             return false;
         };
-        if !screened(&entry.file_name().to_string_lossy().to_ascii_lowercase()) {
+        walk.entries += 1;
+        if walk.entries > MAX_ENTRIES
+            || !screened(&entry.file_name().to_string_lossy().to_ascii_lowercase())
+        {
             return false;
         }
         let path = entry.path();
         let proven = if kind.is_dir() {
-            depth + 1 < MAX_DEPTH && documents_only(&path, depth + 1, files)
+            depth + 1 < MAX_DEPTH && documents_only(&path, depth + 1, walk)
         } else if kind.is_file() {
-            *files += 1;
-            *files <= MAX_FILES && committed(&path)
+            walk.files += 1;
+            committed(&path)
         } else {
             false
         };
