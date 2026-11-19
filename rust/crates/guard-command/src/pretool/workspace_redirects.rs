@@ -243,7 +243,7 @@ pub(super) fn contained(
     // single command, or a chain whose only write is its first step's,
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
-    let (stripped, _, _, entered) = project_scan(command)?;
+    let (stripped, _, names_files, entered) = project_scan(command)?;
     if entered && !cd::enters_cwd(&stripped, context) {
         return None;
     }
@@ -291,9 +291,15 @@ pub(super) fn contained(
     let single = direct.is_none();
     let runs_directly = direct
         .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
+    // A redirect that opens no file -- `2>&1`, `2>/dev/null`, `>/dev/null` --
+    // confines nothing, so the sandbox adds nothing to a command the same
+    // text without it is allowed to run directly. Routing it here cost the
+    // user's own extension Allow: `git checkout -q main 2>/dev/null` asked
+    // for the sandbox while `git checkout -q main` ran.
     let allowed = projected.minimum_action == "allow"
         && !projected.action.sensitive_target
         && !runs_directly
+        && names_files
         && stays_offline(&projected_text, single);
     // macOS claims package, Node tool and pytest commands with narrower
     // profiles before the workspace route runs. The redirect disqualifies

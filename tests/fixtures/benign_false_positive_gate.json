@@ -32669,6 +32669,86 @@
     {"id": "git-stage-all-then-commit", "fix_area": "git", "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"], "tool": "shell", "tool_input": {"command": "git stage -A && git commit -m 'chore: update'"}, "cwd": "org_app", "expect": "allow"},
     {"id": "git-status-then-stage-all", "fix_area": "git", "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"], "tool": "shell", "tool_input": {"command": "git status --short && git stage -A"}, "cwd": "org_app", "expect": "allow"},
     {
+      "id": "git-add-all-quiet-redirect-then-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add -A 2>/dev/null; git log -1 --oneline"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-prune-quiet-redirect-then-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree prune 2>/dev/null && git worktree list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-switch-create-quiet-redirect",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -c fix/report-notes 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-add-file-descriptor-copy",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add README.md 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-commit-message-discarded-output",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m 'fix: handle retry' >/dev/null"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "search-file-excluding-home-path-text",
       "fix_area": "shell",
       "harnesses": [

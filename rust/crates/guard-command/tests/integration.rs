@@ -103,6 +103,7 @@ pub mod pretool_extension_allow_git_order;
 pub mod pretool_extension_allow_github_compound;
 pub mod pretool_extension_allow_guard_named_checkout;
 pub mod pretool_extension_allow_merge;
+pub mod pretool_extension_allow_quiet_redirect;
 pub mod pretool_extension_allow_relative_hooks_path;
 pub mod pretool_extension_allow_unmodelled_git;
 pub mod pretool_extension_allow_worktree_entry;
