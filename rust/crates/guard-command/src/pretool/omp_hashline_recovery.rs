@@ -155,7 +155,9 @@ fn normalize(path: &str) -> String {
     strip_noise(unquoted).to_owned()
 }
 
-fn strip_noise(text: &str) -> &str {
+/// Deletes the `***` and `Update File:` noise Oh My Pi drops from a header
+/// path before it opens the file.
+pub(super) fn strip_noise(text: &str) -> &str {
     PATH_NOISE
         .find(text)
         .map_or(text, |noise| &text[noise.end()..])

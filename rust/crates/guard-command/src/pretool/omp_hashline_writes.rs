@@ -24,9 +24,8 @@
 //! the edit unproven.
 
 use std::path::Path;
-use std::sync::LazyLock;
 
-use regex::Regex;
+use super::omp_hashline_recovery::strip_noise;
 
 const MAX_PATCH_TARGETS: usize = 64;
 const BEGIN_PATCH: &str = "*** Begin Patch";
@@ -35,16 +34,6 @@ const TAG_LENGTH: usize = 4;
 /// Oh My Pi's `ENVELOPE_MARKERS`: the markers it unwraps when a model writes
 /// them inside a header's brackets.
 const ENVELOPE_MARKERS: [&str; 3] = [BEGIN_PATCH, END_PATCH, "*** Abort"];
-
-/// Oh My Pi's `APPLY_PATCH_PATH_NOISE_RE`, unchanged from 18.8 onward. Oh My
-/// Pi deletes this prefix from every header path before it opens the file,
-/// so `[*** Update File: src/a.py#1A2B]` edits `src/a.py`.
-static PATH_NOISE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)^\*{0,3}\s*(?:(?:update|add|delete|move)[^A-Za-z0-9]*(?:file|to)?[^A-Za-z0-9]*:)?\s*\*{0,3}\s*",
-    )
-    .expect("static hashline path noise pattern")
-});
 
 /// Oh My Pi's `unbracket_envelope_markers`: drops leading bracketed patch
 /// markers from a row, so `[*** Begin Patch [src/a.ts#1A2B]` and
@@ -207,7 +196,7 @@ fn header_path(line: &str) -> Option<(&str, bool)> {
     // file it opens is the trimmed name, less the same `***` and
     // `Update File:` noise Oh My Pi deletes.
     let path = path.trim();
-    let path = &path[PATH_NOISE.find(path).map_or(0, |noise| noise.end())..];
+    let path = strip_noise(path);
     // Oh My Pi unquotes paths before opening them, and a scheme names another
     // location, so only a path it would open as written is reported. It
     // opens a leading `~/` under the home folder, and shows paths that way,
