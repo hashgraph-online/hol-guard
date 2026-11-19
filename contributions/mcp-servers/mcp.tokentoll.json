@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.tokentoll",
+  "version": "1.0.0",
+  "name": "tokentoll",
+  "description": "Reviews tokentoll's two read-only analysis tools: scan estimates the monthly cost of LLM API calls found in a codebase, and diff compares those costs between two git refs. Neither tool writes files or changes state, so both keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.jwrede",
+    "displayName": "Jwrede",
+    "url": "https://github.com/Jwrede/tokentoll"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/Jwrede/tokentoll",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "tokentoll-mcp"
+  },
+  "riskClasses": [
+    "local-source-read"
+  ],
+  "tools": [
+    {
+      "name": "scan",
+      "state": "inherit"
+    },
+    {
+      "name": "diff",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Jwrede/tokentoll"
+  ],
+  "saferAlternatives": [
+    "Both tools only read the checkout they are pointed at; run scan against the repository you intend to review."
+  ]
+}
