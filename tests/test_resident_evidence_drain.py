@@ -113,20 +113,20 @@ def test_resident_drain_counts_fallback_exceptions_as_retryable(tmp_path: Path) 
     assert drain.failures == 1
 
 
-def test_mcp_fallback_retries_a_failed_write_once() -> None:
+def test_mcp_fallback_keeps_transient_write_pending() -> None:
     calls: list[object] = []
 
-    def failed_write() -> bool:
+    def failed_write() -> McpEvidenceWriteResult:
         calls.append("write")
-        return False
+        return McpEvidenceWriteResult(False, False)
 
     record = {"kind": "mcp_tool_call", "identity": "identity"}
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
-    assert _record_mcp_with_one_retry(record, failed_write) == "drop"
-    assert calls == ["write", "write", "write", "write"]
+    assert _record_mcp_with_one_retry(record, failed_write) == "retry"
+    assert calls == ["write", "write", "write", "write", "write"]
 
 
 def test_mcp_fallback_drops_after_a_committed_followup_failure() -> None:

@@ -225,6 +225,7 @@ def _review_native_edge_once(
         ) as fenced:
             if fenced is None:
                 unleased_binding = published_binding_token(worker.policy_snapshot_publisher, deadline=deadline)
+            claim_for_review = claim_saved_approval and not (fenced is None and unleased_binding is None)
             response, native_used = worker._review_native_edge_with_snapshot(
                 payload=payload,
                 harness=harness,
@@ -236,7 +237,7 @@ def _review_native_edge_once(
                 deadline=deadline,
                 policy_snapshot=policy_snapshot,
                 recording_only=recording_only,
-                claim_saved_approval=claim_saved_approval,
+                claim_saved_approval=claim_for_review,
                 claimed_saved_allow_hash=claimed_saved_allow_hash,
                 claimed_approval_request_id=claimed_approval_request_id,
                 capture_receipts=capture_receipts,

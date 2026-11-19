@@ -318,8 +318,7 @@ impl Env<'_> {
     pub(super) fn store_index(&self, family: &Family, owner: &str, keys: &[String]) -> bool {
         let index_key = format!("{}{owner}", family.index_prefix);
         if keys.is_empty() {
-            self.delete(&index_key);
-            return true;
+            return self.delete(&index_key);
         }
         let mut payload = Object::new();
         payload.insert(family.owner_field.to_owned(), json!(owner));

@@ -32,6 +32,15 @@ def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | Non
     streak = streak_reader() if callable(streak_reader) else 0
     worker = getattr(daemon_server, "hook_worker", None)
     guard_home = getattr(worker, "guard_home", None)
+    resident_down = (
+        isinstance(last_error, str)
+        and is_resident_class_error(last_error.strip())
+        and isinstance(streak, int)
+        and not isinstance(streak, bool)
+        and streak >= RESIDENT_FAIL_FAST_STREAK
+    )
+    if resident_down:
+        return _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
     if isinstance(guard_home, Path):
         reason = native_policy_not_ready_reason(last_error, streak, guard_home, deadline=deadline)
         if reason is not None:
@@ -41,14 +50,6 @@ def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | Non
     # A resident that is already down cannot answer the Rust posture query.
     # Keep this fixed transport-outage response local so repeated failures do
     # not send the hook back into an unproductive retry loop.
-    if (
-        isinstance(last_error, str)
-        and is_resident_class_error(last_error.strip())
-        and isinstance(streak, int)
-        and not isinstance(streak, bool)
-        and streak >= RESIDENT_FAIL_FAST_STREAK
-    ):
-        return _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
     if last_error == "native_command_program_binding_mismatch":
         return _NATIVE_POLICY_INSTALL_REPAIR_FALLBACK
     return _NATIVE_POLICY_NOT_READY_FALLBACK

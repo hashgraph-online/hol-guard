@@ -30,6 +30,71 @@ const SOURCE: &str = "claude-ask-user-question";
 static NULL: Value = Value::Null;
 const UNSEEN_EVENT: &str = "approval.pending_prompt_unseen";
 
+fn validated_plan(value: &Value) -> Result<NativePermissionPersistPlanV1, &'static str> {
+    let object = value.as_object().ok_or(ERROR_INVALID)?;
+    let required = [
+        "stored_artifact_hash",
+        "policy_action",
+        "events",
+        "inventory_approved",
+    ];
+    if object.keys().any(|key| !required.contains(&key.as_str())) {
+        return Err(ERROR_INVALID);
+    }
+    let plan: NativePermissionPersistPlanV1 =
+        serde_json::from_value(value.clone()).map_err(|_| ERROR_INVALID)?;
+    if (plan.stored_artifact_hash.is_some()) != (plan.policy_action.is_some())
+        || plan
+            .policy_action
+            .as_deref()
+            .is_some_and(|action| !matches!(action, "allow" | "block"))
+    {
+        return Err(ERROR_INVALID);
+    }
+    let names: Vec<&str> = object
+        .get("events")
+        .and_then(Value::as_array)
+        .ok_or(ERROR_INVALID)?
+        .iter()
+        .map(|event| {
+            let event = event.as_object().ok_or(ERROR_INVALID)?;
+            if event
+                .keys()
+                .any(|key| !matches!(key.as_str(), "name" | "payload" | "before_policy"))
+                || !event.get("payload").is_some_and(Value::is_object)
+            {
+                return Err(ERROR_INVALID);
+            }
+            let name = event
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or(ERROR_INVALID)?;
+            let before = event
+                .get("before_policy")
+                .and_then(Value::as_bool)
+                .ok_or(ERROR_INVALID)?;
+            let expected = match name {
+                "claude/native_permission_exact_key_missing" => true,
+                "claude/native_permission_saved"
+                | "claude/native_permission_current_policy_retained" => false,
+                _ => return Err(ERROR_INVALID),
+            };
+            (before == expected).then_some(name).ok_or(ERROR_INVALID)
+        })
+        .collect::<Result<_, _>>()?;
+    let valid = if plan.stored_artifact_hash.is_some() {
+        names.as_slice() == ["claude/native_permission_saved"]
+            || names.as_slice()
+                == [
+                    "claude/native_permission_exact_key_missing",
+                    "claude/native_permission_saved",
+                ]
+    } else {
+        names.as_slice() == ["claude/native_permission_current_policy_retained"]
+    };
+    valid.then_some(plan).ok_or(ERROR_INVALID)
+}
+
 fn outcome(name: &str) -> Value {
     json!({ "outcome": name })
 }
@@ -53,9 +118,10 @@ impl Env<'_> {
         let artifact_id = opt_str(payload, "artifact_id").ok_or(ERROR_INVALID)?;
         let reason = opt_str(payload, "reason").ok_or(ERROR_INVALID)?;
         let source = opt_str(payload, "source").ok_or(ERROR_INVALID)?;
-        let plan: NativePermissionPersistPlanV1 =
-            serde_json::from_value(payload.get("plan").cloned().ok_or(ERROR_INVALID)?)
-                .map_err(|_| ERROR_INVALID)?;
+        if guard_policy_snapshot::policy_integrity::is_remote_policy_source(Some(&source)) {
+            return Err(ERROR_INVALID);
+        }
+        let plan = validated_plan(payload.get("plan").ok_or(ERROR_INVALID)?)?;
         let (Some(stored_artifact_hash), Some(policy_action)) = (
             plan.stored_artifact_hash.as_deref(),
             plan.policy_action.as_deref(),
@@ -117,7 +183,15 @@ impl Env<'_> {
             }
         }
         let pending_key = claude_pending_key(session_id, &artifact_id);
-        self.claude_remove_pending(session_id, &pending_key);
+        let same_pending = match self.read(&pending_key) {
+            Stored::Object(pending) => {
+                opt_str(&pending, "artifact_hash").as_deref() == Some(stored_artifact_hash)
+            }
+            _ => false,
+        };
+        if same_pending && !self.claude_remove_pending(session_id, &pending_key) {
+            return Err(ERROR_STORE);
+        }
         Ok(json!({
             "valid": true,
             "saved": true,

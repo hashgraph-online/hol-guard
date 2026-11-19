@@ -76,11 +76,11 @@ def native_hook_facts(
         "request_id": f"hook-payload-facts-{uuid.uuid4().hex}",
         "payload": event_payload,
     }
-    timeout_seconds = 1.0 if deadline is None else min(1.0, deadline - time.monotonic())
-    if timeout_seconds <= 0:
-        return None
     try:
-        status = native_runtime_status()
+        status = native_runtime_status(deadline_monotonic=deadline)
+        timeout_seconds = 1.0 if deadline is None else min(1.0, deadline - time.monotonic())
+        if timeout_seconds <= 0:
+            return None
         response = _resident_request(
             operation="hook_payload_facts",
             request=wire,
@@ -170,14 +170,6 @@ def native_connector_lookup(
         )
         if key in payload
     }
-    timeout_seconds = _CONNECTOR_LOOKUP_MAX_SECONDS
-    if deadline is not None:
-        timeout_seconds = min(
-            timeout_seconds,
-            deadline - time.monotonic() - _CONNECTOR_QUEUE_RESERVE_SECONDS,
-        )
-    if timeout_seconds <= 0:
-        return None
     wire = {
         "schema": _CONNECTOR_REQUEST_SCHEMA,
         "request_id": f"hook-connector-facts-{uuid.uuid4().hex}",
@@ -189,7 +181,13 @@ def native_connector_lookup(
         "env": dict(os.environ),
     }
     try:
-        status = native_runtime_status()
+        lookup_deadline = None if deadline is None else deadline - _CONNECTOR_QUEUE_RESERVE_SECONDS
+        status = native_runtime_status(deadline_monotonic=lookup_deadline)
+        timeout_seconds = _CONNECTOR_LOOKUP_MAX_SECONDS
+        if lookup_deadline is not None:
+            timeout_seconds = min(timeout_seconds, lookup_deadline - time.monotonic())
+        if timeout_seconds <= 0:
+            return None
         response = _resident_request(
             operation="hook_connector_facts",
             request=wire,

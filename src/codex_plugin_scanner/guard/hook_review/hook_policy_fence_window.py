@@ -106,6 +106,7 @@ class PolicySourceFenceWait:
                 )
                 if result:
                     _record_event(self._store, result)
+                now = self._monotonic()
         if now + POLL_SECONDS > self._until:
             self._exhausted = True
             return False

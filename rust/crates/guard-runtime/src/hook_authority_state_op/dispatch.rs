@@ -89,7 +89,7 @@ impl Env<'_> {
             "claude_remove_pending" => {
                 let session_id = required(&request.session_id)?;
                 let (pending_key, _) = claude_pending_target(session_id, request)?;
-                self.claude_remove_pending(session_id, &pending_key);
+                let _ = self.claude_remove_pending(session_id, &pending_key);
                 Ok(json!({}))
             }
             "claude_question_settle" => self.claude_question_settle(

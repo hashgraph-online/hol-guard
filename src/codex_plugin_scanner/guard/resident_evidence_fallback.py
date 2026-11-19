@@ -32,6 +32,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Literal, Protocol
 
+from .evidence_drains.mcp_write_result import McpEvidenceWriteResult
 from .hook_review.hook_policy_fence_window import record_direct_fence_wait
 
 _DIRECT_HARNESSES = frozenset(
@@ -257,20 +258,23 @@ def _raise_fallback_connector_setup_notice(store: object, notice: object) -> Non
 
 
 def _record_mcp_with_one_retry(record: object, write: Callable[[], object]) -> FallbackResult:
-    """Retry one failed MCP write before dropping the bounded record."""
+    """Retry transient MCP writes without acknowledging uncommitted evidence."""
 
     try:
         key = json.dumps(record, sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError):
         return "drop"
-    attempt = _MCP_RETRY_ATTEMPTS.get(key, 0) + 1
-    if attempt > 4:
-        _MCP_RETRY_ATTEMPTS.pop(key, None)
-        return "drop"
+    attempt = min(_MCP_RETRY_ATTEMPTS.get(key, 0) + 1, 4)
     try:
         result = write()
     except Exception:
-        result = False
+        result = McpEvidenceWriteResult(False, False)
+    if isinstance(result, bool):
+        if result:
+            _MCP_RETRY_ATTEMPTS.pop(key, None)
+            return "handled"
+        _MCP_RETRY_ATTEMPTS.pop(key, None)
+        return "drop"
     committed = getattr(result, "committed", False) is True
     if bool(result):
         _MCP_RETRY_ATTEMPTS.pop(key, None)

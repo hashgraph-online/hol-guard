@@ -43,7 +43,7 @@ impl Env<'_> {
             return;
         }
         if !self.store_signed(&notice_key, payload, &CLAUDE_NOTICE) {
-            self.claude_remove_pending(session_id, &pending_key);
+            let _ = self.claude_remove_pending(session_id, &pending_key);
         }
     }
 
@@ -181,14 +181,16 @@ impl Env<'_> {
         items.pop()
     }
 
-    pub(super) fn claude_remove_pending(&self, session_id: &str, pending_key: &str) {
-        self.delete(pending_key);
+    pub(super) fn claude_remove_pending(&self, session_id: &str, pending_key: &str) -> bool {
+        if !self.delete(pending_key) {
+            return false;
+        }
         let remaining: Vec<String> = self
             .load_index(&CLAUDE_FAMILY, session_id)
             .into_iter()
             .filter(|key| key != pending_key)
             .collect();
-        self.store_index(&CLAUDE_FAMILY, session_id, &remaining);
+        self.store_index(&CLAUDE_FAMILY, session_id, &remaining)
     }
 
     /// `_discard_claude_pending_permissions`: drops every indexed pending

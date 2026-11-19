@@ -8,6 +8,8 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
+from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 _FEATURE = "hook-review-binding-v1"
 _REQUEST_SCHEMA = "guard-hook-review-binding-request.v1"
@@ -28,6 +30,9 @@ def native_hook_review_binding(
     timeout_seconds = 0.25 if deadline is None else min(0.25, deadline - time.monotonic())
     if timeout_seconds <= 0:
         return None
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if status.identity is None:
+        return None
     request = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"hook-review-binding-{uuid.uuid4().hex}",
@@ -43,8 +48,12 @@ def native_hook_review_binding(
             timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
+            record_success=False,
+            status=status,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    if response is None:
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
     token = result.get("token") if isinstance(result, Mapping) else None
@@ -57,11 +66,14 @@ def native_hook_review_binding(
         or token[6] != business_identity.hex()
         or token[7] != revision
     ):
+        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_hook_review_binding_result")
         return None
     try:
         identity = bytes.fromhex(token[6])
     except (TypeError, ValueError):
+        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_hook_review_binding_result")
         return None
+    native_record_resident_success(status.identity.sha256, guard_home)
     return (*token[:6], identity, token[7])
 
 

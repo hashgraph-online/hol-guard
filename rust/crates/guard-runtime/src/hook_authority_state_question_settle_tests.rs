@@ -253,3 +253,71 @@ fn question_save_persists_the_plan_and_consumes_pending_state() {
     drop(connection);
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn question_save_rejects_a_plan_without_its_required_event_sequence() {
+    let (path, connection) = fresh_store("question-save-invalid-plan");
+    connection
+        .execute_batch(
+            "create table policy_decisions (
+                decision_id integer primary key autoincrement,
+                harness text not null, scope text not null, artifact_id text,
+                artifact_hash text, workspace text, publisher text, action text not null,
+                reason text, owner text, source text not null, expires_at text,
+                updated_at text, integrity_version integer, integrity_generation integer,
+                payload_hash text, payload_mac text, integrity_key_id text, signed_at text
+            )",
+        )
+        .expect("policy schema");
+    let payload = json!({
+        "artifact_id": "artifact",
+        "reason": "reason",
+        "source": "claude-ask-user-question",
+        "plan": {
+            "stored_artifact_hash": "sha256:artifact",
+            "policy_action": "allow",
+            "events": [],
+            "inventory_approved": false
+        }
+    });
+    assert_eq!(
+        env(&connection).claude_question_save(SESSION, payload.as_object().unwrap()),
+        Err(super::ERROR_INVALID)
+    );
+    assert_eq!(
+        connection
+            .query_row("select count(*) from policy_decisions", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap(),
+        0
+    );
+    drop(connection);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn question_save_rejects_a_remote_policy_source() {
+    let (path, connection) = fresh_store("question-save-remote-source");
+    let payload = json!({
+        "artifact_id": "artifact",
+        "reason": "reason",
+        "source": "cloud-sync",
+        "plan": {
+            "stored_artifact_hash": "sha256:artifact",
+            "policy_action": "allow",
+            "events": [{
+                "name": "claude/native_permission_saved",
+                "payload": {},
+                "before_policy": false
+            }],
+            "inventory_approved": false
+        }
+    });
+    assert_eq!(
+        env(&connection).claude_question_save(SESSION, payload.as_object().unwrap()),
+        Err(super::ERROR_INVALID)
+    );
+    drop(connection);
+    let _ = std::fs::remove_file(path);
+}
