@@ -830,6 +830,7 @@ mod swarm_op;
 // hook_evidence_writer_op; the readers also have their own tests.
 mod codex_hook_identity_op;
 mod command_pack_record_op;
+mod hook_connector_facts_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
 #[allow(dead_code)]
@@ -849,6 +850,7 @@ mod hook_launch_cli;
 mod hook_path_rules;
 mod hook_payload_facts_op;
 mod hook_policy_config;
+mod hook_policy_fence_window_op;
 mod hook_process_spawn;
 mod hook_render_op;
 mod hook_render_posture;
