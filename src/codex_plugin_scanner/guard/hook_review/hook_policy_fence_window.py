@@ -104,7 +104,7 @@ class PolicySourceFenceWait:
                     request_id=self._request_id,
                     deadline=self._deadline,
                 )
-                if isinstance(result, dict) and result.get("event_name"):
+                if result:
                     _record_event(self._store, result)
         if now + POLL_SECONDS > self._until:
             self._exhausted = True
