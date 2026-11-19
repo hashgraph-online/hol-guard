@@ -56,7 +56,7 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
         payload_kind,
         response,
         delivery,
-        || false,
+        PostAdmission::default,
         recording_only,
     )
 }
@@ -76,15 +76,20 @@ pub(crate) fn apply_post_tool_policy_for_hook(
     // Guard's own approval wait on this hook's Guard home passed `PreToolUse`
     // on the same proof, so its result is not held either.
     let admitted_call = || {
-        origin_store.is_some_and(|store| store.require_guard_home(&request.guard_home).is_ok())
-            && (own_approval_wait(request)
-                || request.payload.as_object().is_some_and(|payload| {
-                    crate::native_admitted_call::admitted_for_post(
-                        &request.guard_home,
-                        &request.harness,
-                        payload,
-                    )
-                }))
+        if !origin_store.is_some_and(|store| store.require_guard_home(&request.guard_home).is_ok())
+        {
+            return PostAdmission::default();
+        }
+        PostAdmission {
+            approved: request.payload.as_object().is_some_and(|payload| {
+                crate::native_admitted_call::admitted_for_post(
+                    &request.guard_home,
+                    &request.harness,
+                    payload,
+                )
+            }),
+            inspection: own_approval_wait(request),
+        }
     };
     apply_post_tool_policy_with_witness(
         snapshot,
@@ -95,6 +100,23 @@ pub(crate) fn apply_post_tool_policy_for_hook(
         admitted_call,
         recording_only,
     )
+}
+
+/// What let this call run. `approved` is the user's Allow once or Always
+/// allow on this exact call; `inspection` is Guard's own approval wait on
+/// this hook's Guard home. Both may hold at once, and an approval waives
+/// more floors than the inspection proof does, so they are kept apart.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PostAdmission {
+    pub(crate) approved: bool,
+    pub(crate) inspection: bool,
+}
+
+impl PostAdmission {
+    /// Whether anything at all admitted the call.
+    fn admitted(self) -> bool {
+        self.approved || self.inspection
+    }
 }
 
 /// Whether this output is Guard's own approval wait on the hook's Guard
@@ -118,7 +140,7 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     payload_kind: GuardHookPayloadKindV2,
     mut response: HookReviewResponseV1,
     delivery: Option<&VerifiedBashDelivery>,
-    admitted_call: impl FnOnce() -> bool,
+    admitted_call: impl FnOnce() -> PostAdmission,
     recording_only: bool,
 ) -> Result<HookReviewResponseV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
@@ -219,15 +241,15 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     // to review may not withhold its clean output; only the execution floors
     // `delivery_floor` lowers are lifted, so a secret, a network or a risk
     // floor on the output still holds.
-    if !verified_delivery
-        && full_scan
-        && action_rank(&floor) > action_rank(&intrinsic)
-        && admitted_call()
-    {
-        // The supplied inspection command is not itself an approved call.
-        // Preserve artifact, publisher and changed-hash reviews for it.
-        let inspection = own_approval_wait(request);
-        (floor, floor_cause) = floor_for(!inspection, inspection)?;
+    if !verified_delivery && full_scan && action_rank(&floor) > action_rank(&intrinsic) {
+        // Guard's own inspection command is not itself an approved call, so
+        // on that proof alone the artifact, publisher and changed-hash
+        // reviews stand. When the user approved this exact call as well, it
+        // is an approved call and clears the floors any approval clears.
+        let admission = admitted_call();
+        if admission.admitted() {
+            (floor, floor_cause) = floor_for(admission.approved, admission.inspection)?;
+        }
     }
     let effective = join_action(&intrinsic, &floor)?;
     response.policy_action = Some(effective.clone());
