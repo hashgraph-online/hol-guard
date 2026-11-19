@@ -29,6 +29,9 @@ from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
+# Keep focused regressions separate from the pre-existing legacy corpus.
+OMP_BROWSER_REPLAY = json.loads((FIXTURES / "gauntlet_replay_omp_browser.json").read_text(encoding="utf-8"))
+REPLAY_DOCUMENT["cases"].extend(OMP_BROWSER_REPLAY["cases"])
 GATE_DOCUMENT = json.loads((FIXTURES / "benign_false_positive_gate.json").read_text(encoding="utf-8"))
 
 # Tool names each harness really sends, by the case's abstract tool family. Pi names its built-ins
