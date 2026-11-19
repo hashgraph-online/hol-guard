@@ -36,6 +36,10 @@ struct WindowState {
     waiting: u64,
     absorbed: u64,
     exhausted: u64,
+    orphaned_started_micros: i64,
+    orphaned_waiting: u64,
+    orphaned_absorbed: u64,
+    orphaned_exhausted: u64,
 }
 
 static WINDOWS: OnceLock<Mutex<HashMap<String, WindowState>>> = OnceLock::new();
@@ -88,6 +92,15 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
     if state.waiting > 0 && now.saturating_sub(state.started_micros) > MAX_WINDOW_AGE_MICROS {
+        // A lost leave must not erase counts for waiters that are still
+        // active. Move the old window aside so late leaves can settle it while
+        // a new window is free to start.
+        if state.orphaned_waiting == 0 {
+            state.orphaned_started_micros = state.started_micros;
+        }
+        state.orphaned_waiting = state.orphaned_waiting.saturating_add(state.waiting);
+        state.orphaned_absorbed = state.orphaned_absorbed.saturating_add(state.absorbed);
+        state.orphaned_exhausted = state.orphaned_exhausted.saturating_add(state.exhausted);
         state.started_micros = 0;
         state.waiting = 0;
         state.absorbed = 0;
@@ -104,9 +117,7 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
             None
         }
         "leave" => {
-            if state.waiting == 0 {
-                None
-            } else {
+            if state.waiting > 0 {
                 state.waiting -= 1;
                 if request.admitted == Some(true) {
                     state.absorbed = state.absorbed.saturating_add(1);
@@ -122,6 +133,29 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                 } else {
                     None
                 }
+            } else if state.orphaned_waiting > 0 {
+                state.orphaned_waiting -= 1;
+                if request.admitted == Some(true) {
+                    state.orphaned_absorbed = state.orphaned_absorbed.saturating_add(1);
+                } else {
+                    state.orphaned_exhausted = state.orphaned_exhausted.saturating_add(1);
+                }
+                if state.orphaned_waiting == 0 {
+                    let value = event(
+                        state.orphaned_started_micros,
+                        now,
+                        state.orphaned_absorbed,
+                        state.orphaned_exhausted,
+                    )?;
+                    state.orphaned_started_micros = 0;
+                    state.orphaned_absorbed = 0;
+                    state.orphaned_exhausted = 0;
+                    Some(value)
+                } else {
+                    None
+                }
+            } else {
+                None
             }
         }
         "absorb_direct" => {

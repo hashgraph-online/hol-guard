@@ -1,35 +1,12 @@
 #!/usr/bin/env python3
-"""Record hook pipeline route vectors from the Python dispatch ladder.
+"""Record vectors for the resident-owned hook route oracle.
 
-After the hook payload was prepared, ``run_native_hook_pipeline`` walked a
-ladder in Python to decide which handler answered the hook and in what order:
-the Claude guard question, the native edge decision, the edge outage, the
-containment route, Copilot's pre-tool and permission request flows, the
-runtime artifact, the Claude permission request, permission prompt and turn
-stop handlers, then the artifact or generic flow. Devin and Zcode permission
-requests were answered with no decision before any of it. The resident decides
-that order now (``hook_route`` in ``hook_decision_hook_route.rs``) and returns
-it as a plan of handler names.
-
-The ladder below (``_recorded_ladder``) is that Python code as it stood at
-3b8ac2e848, kept here so the oracle never calls the code it checks. Every
-effect is a stub that appends a tagged entry to a trace, so a vector records
-exactly which effects the old ladder ran, in order, in each of a set of
-effect worlds (what the stubbed effects report):
-
-    PYTHONPATH=src:. .venv/bin/python scripts/ci/record_hook_route_vectors.py
-
-A vector holds the resident's inputs (``facts``), the route the traces exhibit
-(the plan and the event name outage responses carry) and, per world, the trace
-and return code. The Rust ``hook_decision_hook_route_tests`` replays the route.
-The plan is read off the traces: the base world (no optional handler fires)
-shows every handler reached before a terminal one answered, and the
-``edge_missing`` world shows whether the edge outage check applied.
-
-Two deliberate differences from the old ladder: the passthrough fact is
-decided after the payload is prepared (it was decided before the config load),
-and the Claude predicates and the Copilot pre-tool guard each handler used to
-apply to itself are plan membership now, so the stubs do not model them.
+The stubs model the retired Python dispatch ladder without calling production
+hook code. The resulting facts, handler plan, outage event, traces, and return
+codes are replayed by the Rust ``hook_decision_hook_route_tests`` suite.
+The resident now decides handler order through ``hook_route``. This recorder
+keeps the old ladder as a differential oracle and intentionally models only
+the effects needed to compare those plans.
 """
 
 from __future__ import annotations

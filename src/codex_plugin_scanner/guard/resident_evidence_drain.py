@@ -198,6 +198,9 @@ class ResidentEvidenceDrain:
             self.failures += 1
         elif pending_ack is not None and self._ack == pending_ack:
             self._ack = None
+            # The resident accepted the cursor, so records from that page can
+            # no longer be replayed. Keep only the current page's keys.
+            self._handled_records.clear()
         return page
 
     def _recover_writer_store(self) -> None:

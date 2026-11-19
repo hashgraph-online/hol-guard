@@ -18,6 +18,7 @@ from .native_execution import _resident_request
 _FEATURE = "hook-payload-facts-v1"
 _REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
+_PAYLOAD_FACTS_MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _CONNECTOR_FEATURE = "hook-connector-facts-v1"
 _CONNECTOR_REQUEST_SCHEMA = "guard-hook-connector-facts-request.v1"
 _CONNECTOR_RESULT_SCHEMA = "guard-hook-connector-facts-result.v1"
@@ -84,6 +85,7 @@ def native_hook_facts(
             timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
+            max_request_bytes=_PAYLOAD_FACTS_MAX_REQUEST_BYTES,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         return None

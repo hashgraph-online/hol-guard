@@ -85,12 +85,13 @@ def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     server = _server(store, args)
     workspace = _text(args.get("workspace"))
     worker = server.hook_worker
-    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=_deadline(args))
+    deadline = _deadline(args)
+    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=deadline)
     if prepared is None:
         worker.metrics.record_route("native_fail_safe")
         return {
             "fail_safe": {
-                "reason": _native_policy_not_ready_reason(server),
+                "reason": _native_policy_not_ready_reason(server, deadline=deadline),
                 "reason_code": "native_policy_not_ready",
             }
         }

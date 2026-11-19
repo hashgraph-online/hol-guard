@@ -54,3 +54,38 @@ fn a_direct_wait_without_daemon_window_is_one_event() {
         0
     );
 }
+
+#[test]
+fn an_expired_window_preserves_counts_for_late_leaves() {
+    let home = "/synthetic/stale-fence-window";
+    let _: Value = serde_json::from_slice(&evaluate(&request(home, "enter")).expect("enter"))
+        .expect("response");
+    let _: Value = serde_json::from_slice(&evaluate(&request(home, "enter")).expect("enter"))
+        .expect("response");
+    let windows = WINDOWS.get().expect("window state");
+    let mut windows = windows.lock().expect("window lock");
+    windows
+        .get_mut(home)
+        .expect("synthetic window")
+        .started_micros -= MAX_WINDOW_AGE_MICROS + 1;
+    drop(windows);
+
+    let mut leave = request(home, "leave");
+    leave.admitted = Some(true);
+    let first: Value =
+        serde_json::from_slice(&evaluate(&leave).expect("late leave")).expect("response");
+    assert!(first["result"]["window_event"].is_null());
+    leave.request_id = "fence-late-second".to_owned();
+    leave.admitted = Some(false);
+    let last: Value =
+        serde_json::from_slice(&evaluate(&leave).expect("late leave")).expect("response");
+    assert_eq!(last["result"]["window_event"]["event_name"], EVENT_NAME);
+    assert_eq!(
+        last["result"]["window_event"]["payload"]["absorbed_calls"],
+        1
+    );
+    assert_eq!(
+        last["result"]["window_event"]["payload"]["exhausted_calls"],
+        1
+    );
+}

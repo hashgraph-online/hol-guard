@@ -20,7 +20,7 @@ _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK = (
 )
 
 
-def _native_policy_not_ready_reason(daemon_server: Any) -> str:
+def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | None = None) -> str:
     publisher = getattr(getattr(daemon_server, "hook_worker", None), "policy_snapshot_publisher", None)
     last_error = getattr(publisher, "last_error", None)
     streak_reader = getattr(publisher, "resident_failure_streak", None)
@@ -28,7 +28,7 @@ def _native_policy_not_ready_reason(daemon_server: Any) -> str:
     worker = getattr(daemon_server, "hook_worker", None)
     guard_home = getattr(worker, "guard_home", None)
     if isinstance(guard_home, Path):
-        reason = native_policy_not_ready_reason(last_error, streak, guard_home)
+        reason = native_policy_not_ready_reason(last_error, streak, guard_home, deadline=deadline)
         if reason is not None:
             return reason
     # A resident that is already down cannot answer the Rust posture query.
@@ -73,7 +73,7 @@ def prepare_native_hook_policy(
             payload,
             params,
             default_harness=default_harness,
-            reason=_native_policy_not_ready_reason(daemon_server),
+            reason=_native_policy_not_ready_reason(daemon_server, deadline=deadline),
             reason_code="native_policy_not_ready",
         )
     )
