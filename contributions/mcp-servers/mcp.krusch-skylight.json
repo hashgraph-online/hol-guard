@@ -3,7 +3,7 @@
   "id": "mcp.krusch-skylight",
   "version": "1.0.0",
   "name": "Krusch Skylight Calendar MCP",
-  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) launched as `krusch-skylight mcp`, with opt-in dry-run staging via dryRun: true (writes are live otherwise) and local twin cache support. Status, event listing, chore pulls, and meal listing can create or update local state, so they require review. Event creation, chore assignment, list pushes, meal planning, Sidekick Magic Import, task sync, and unified skylight_calendar calls also require review. Off until you turn it on.",
+  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) launched as `krusch-skylight mcp`, with opt-in dry-run staging via dryRun: true (writes are live otherwise) and local twin cache. Status, event listing, chore pulls, and meal listing can create or update local state, so they require review. Event creation, chore assignment, list pushes, meal planning, Sidekick Magic Import, task sync, and unified skylight_calendar calls also require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
