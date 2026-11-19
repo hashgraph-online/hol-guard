@@ -356,6 +356,7 @@
     "src/codex_plugin_scanner/guard/runtime/runner_native_authority.py",
     "src/codex_plugin_scanner/guard/native_approval_proof.py",
     "src/codex_plugin_scanner/guard/native_hook_authority_state.py",
+    "src/codex_plugin_scanner/guard/native_hook_review_binding.py",
     "src/codex_plugin_scanner/guard/native_store_policy.py",
     "src/codex_plugin_scanner/guard/native_policy_integrity_rows.py",
     "src/codex_plugin_scanner/guard/native_approval_resolution.py",
