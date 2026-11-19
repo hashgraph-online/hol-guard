@@ -534,6 +534,19 @@ class StoreSecretPolicyIntegrityMixin:
         now = time.monotonic()
         if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
             return dict(cached[2])
+        payload = self._read_policy_integrity_control_state_uncached()
+        if payload is not None:
+            self._cached_policy_integrity_control_state = (marker, now, dict(payload))
+        if payload is not None or not create:
+            return payload
+        payload = self._default_policy_integrity_control_state()
+        if not self._store_policy_integrity_control_state(payload):
+            return None
+        return self._load_policy_integrity_control_state(create=False)
+
+    def _read_policy_integrity_control_state_uncached(self) -> dict[str, object] | None:
+        """Read the secret-backed generation without consulting the cache."""
+
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
@@ -546,14 +559,7 @@ class StoreSecretPolicyIntegrityMixin:
                 payload = self._normalize_policy_integrity_control_state(json.loads(payload_json))
             except json.JSONDecodeError:
                 payload = None
-        if payload is not None:
-            self._cached_policy_integrity_control_state = (marker, now, dict(payload))
-        if payload is not None or not create:
-            return payload
-        payload = self._default_policy_integrity_control_state()
-        if not self._store_policy_integrity_control_state(payload):
-            return None
-        return self._load_policy_integrity_control_state(create=False)
+        return payload
 
     def _store_policy_integrity_control_state(self, payload: Mapping[str, object]) -> bool:
         secret_store = self._policy_integrity_secret_store
@@ -582,7 +588,7 @@ class StoreSecretPolicyIntegrityMixin:
         if normalized is None:
             return False
         with self.hold_policy_integrity_generation_lock():
-            current = self._load_policy_integrity_control_state(create=False)
+            current = self._read_policy_integrity_control_state_uncached()
             if current is not None and normalized["generation"] < current["generation"]:
                 return False
             return self._store_policy_integrity_control_state(normalized)

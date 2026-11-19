@@ -247,11 +247,22 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
         }
         if isinstance(integrity.get("current_generation"), int):
             payload["current_generation"] = integrity["current_generation"]
+        integrity_fields: dict[str, object] = (
+            {
+                "integrity_key_b64": integrity["integrity_key_b64"],
+                "integrity_key_id": integrity["integrity_key_id"],
+            }
+            if isinstance(integrity.get("current_generation"), int)
+            and isinstance(integrity.get("integrity_key_b64"), str)
+            and isinstance(integrity.get("integrity_key_id"), str)
+            else {}
+        )
         reply = hook_authority_state(
             store,
             "claude_question_save",
             now=_now(),
             required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+            integrity=integrity_fields,
             session_id=session_id,
             payload=payload,
         )

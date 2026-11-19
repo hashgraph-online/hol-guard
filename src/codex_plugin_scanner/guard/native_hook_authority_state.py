@@ -12,6 +12,7 @@ yields ``None`` and every caller fails closed (no state is trusted).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -52,6 +53,7 @@ def hook_authority_state(
     now: str,
     create_key: bool = False,
     required_feature: str = HOOK_AUTHORITY_STATE_FEATURE,
+    integrity: Mapping[str, object] | None = None,
     **fields: object,
 ) -> dict[str, object] | None:
     """The resident's ``ok`` payload for ``op``, or ``None`` when it cannot answer.
@@ -76,7 +78,17 @@ def hook_authority_state(
         "op": op,
         "now": now,
     }
-    if key is not None and key_id is not None:
+    if integrity is not None:
+        encoded = integrity.get("integrity_key_b64")
+        supplied_id = integrity.get("integrity_key_id")
+        if encoded is None and supplied_id is None:
+            pass
+        elif not isinstance(encoded, str) or not isinstance(supplied_id, str):
+            return None
+        else:
+            wire["integrity_key_b64"] = encoded
+            wire["integrity_key_id"] = supplied_id
+    elif key is not None and key_id is not None:
         wire["integrity_key_b64"] = encode_key(key)
         wire["integrity_key_id"] = key_id
     wire.update({name: value for name, value in fields.items() if value is not None})
