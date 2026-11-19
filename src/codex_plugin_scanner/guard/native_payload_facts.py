@@ -22,6 +22,14 @@ _CONNECTOR_FEATURE = "hook-connector-facts-v1"
 _CONNECTOR_REQUEST_SCHEMA = "guard-hook-connector-facts-request.v1"
 _CONNECTOR_RESULT_SCHEMA = "guard-hook-connector-facts-result.v1"
 _CONNECTOR_MAX_REQUEST_BYTES = 2 * 1024 * 1024
+_CONNECTOR_LOOKUP_REASON_CODES = frozenset(
+    {
+        "native_command_review_required",
+        "native_workspace_containment_executable_outside_roots",
+    }
+)
+_CONNECTOR_LOOKUP_MAX_SECONDS = 0.25
+_CONNECTOR_QUEUE_RESERVE_SECONDS = 0.35
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +127,7 @@ def native_connector_lookup(
 ) -> dict[str, object] | None:
     """Return the Rust-owned launch lookup for a connector setup review."""
 
-    if not isinstance(reason_code, str) or not reason_code:
+    if not isinstance(reason_code, str) or reason_code not in _CONNECTOR_LOOKUP_REASON_CODES:
         return None
     event_payload = {
         key: payload[key]
@@ -136,7 +144,12 @@ def native_connector_lookup(
         )
         if key in payload
     }
-    timeout_seconds = 1.0 if deadline is None else min(1.0, deadline - time.monotonic())
+    timeout_seconds = _CONNECTOR_LOOKUP_MAX_SECONDS
+    if deadline is not None:
+        timeout_seconds = min(
+            timeout_seconds,
+            deadline - time.monotonic() - _CONNECTOR_QUEUE_RESERVE_SECONDS,
+        )
     if timeout_seconds <= 0:
         return None
     wire = {

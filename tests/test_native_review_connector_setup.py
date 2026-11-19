@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import config as guard_config
+from codex_plugin_scanner.guard import native_payload_facts
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
 from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
@@ -209,6 +210,53 @@ def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> 
     assert "approve" not in mcp.lower()
     assert "one-time decision" in mcp_ask
     assert SAFE_ALTERNATIVE_GUIDANCE not in mcp_ask
+
+
+def test_connector_facts_bridge_rejects_malformed_resident_reply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        native_payload_facts,
+        "_resident_request",
+        lambda **_kwargs: {
+            "schema": "guard-hook-connector-facts-result.v1",
+            "result": {"connector_lookup": {"command": "lanectl status"}},
+        },
+    )
+
+
+def test_connector_facts_bridge_skips_risk_reviews_without_resident_round_trip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called = False
+
+    def request(**_kwargs: object) -> None:
+        nonlocal called
+        called = True
+        return None
+
+    monkeypatch.setattr(native_payload_facts, "_resident_request", request)
+    assert (
+        native_payload_facts.native_connector_lookup(
+            _payload(tmp_path),
+            tmp_path / "guard",
+            reason_code="native_network_review",
+            workspace=tmp_path,
+            home_dir=None,
+        )
+        is None
+    )
+    assert called is False
+    assert (
+        native_payload_facts.native_connector_lookup(
+            _payload(tmp_path),
+            tmp_path / "guard",
+            reason_code="native_command_review_required",
+            workspace=tmp_path,
+            home_dir=None,
+        )
+        is None
+    )
 
 
 def test_the_queue_call_renders_the_silent_block_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

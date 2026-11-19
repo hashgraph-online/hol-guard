@@ -31,11 +31,10 @@ fn launch_cwd(payload: &Map<String, Value>, workspace: Option<&str>) -> Option<S
     let payload_cwd = payload
         .get("cwd")
         .and_then(Value::as_str)
-        .map(crate::claude_hook_bridge_render::py_strip)
-        .filter(|value| !value.is_empty());
-    let candidate = payload_cwd
-        .or_else(|| workspace.map(str::trim))
-        .filter(|value| !value.is_empty())?;
+        .filter(|value| !crate::claude_hook_bridge_render::py_strip(value).is_empty());
+    let candidate = payload_cwd.or_else(|| {
+        workspace.filter(|value| !crate::claude_hook_bridge_render::py_strip(value).is_empty())
+    })?;
     let path = Path::new(candidate);
     if !path.is_absolute() {
         return None;
