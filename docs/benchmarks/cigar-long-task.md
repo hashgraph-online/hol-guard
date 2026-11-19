@@ -453,6 +453,8 @@ Wrong-note rate: 48 of 86 notes that carry code (55.8%). Only 11 of 56 prompts t
 
 Results for the 3.60.0a121 preview, the short-reply instruction test and the two hold fixes measured on it are in [cigar-a121-preview.md](cigar-a121-preview.md).
 
+Results for the 3.61.0a1 and 3.61.0a2 previews, including the Oh My Pi edit-header fix, are in [cigar-3-61-preview.md](cigar-3-61-preview.md).
+
 ## General-savings measurements (2026-11-16)
 
 Step-by-step workflow anatomy, harness coverage, used and wrong notes, note build time under load,
