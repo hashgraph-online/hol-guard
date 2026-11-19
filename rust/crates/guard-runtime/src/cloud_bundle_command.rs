@@ -63,9 +63,10 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
 }
 
 /// The class the CLI raises and whether the next attempt may succeed.
-fn failure(error: &SyncError) -> Value {
+pub(crate) fn failure(error: &SyncError) -> Value {
     let (outcome, retryable) = match error {
         SyncError::NotConfigured(_) => ("not_configured", false),
+        SyncError::EndpointUntrusted(_) => ("endpoint_untrusted", false),
         SyncError::AuthExpired(_) => ("auth_expired", false),
         SyncError::NotAvailable { retryable, .. } => ("not_available", *retryable),
         SyncError::Failed(_) | SyncError::Pending => ("failed", false),

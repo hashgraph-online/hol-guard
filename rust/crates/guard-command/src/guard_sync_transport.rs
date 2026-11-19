@@ -962,6 +962,25 @@ pub fn urlopen_json_detailed(
     })
 }
 
+/// [`urlopen_json_detailed`] for an endpoint whose answer is not read
+/// (`_urlopen_with_timeout_retry`).
+pub fn urlopen_detailed(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    budget: &SyncBudget,
+) -> Result<(), SyncFetchError> {
+    sync_retries(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        false,
+        false,
+        Some(budget),
+    )
+    .map(|_| ())
+}
+
 /// An HTTP error response that survived the retry machine.
 #[derive(Debug)]
 pub struct SyncHttpFailure {

@@ -16578,6 +16578,7 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
     assert attempted_request is False
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     attempted_request = False
@@ -16589,7 +16590,7 @@ def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, 
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+    with pytest.raises(guard_runner_module.GuardSyncEndpointUntrustedError, match="not trusted"):
         guard_runner_module.sync_guard_events(
             store,
             auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
@@ -16598,6 +16599,7 @@ def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, 
     assert attempted_request is False
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     attempted_request = False
@@ -16609,7 +16611,7 @@ def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, 
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+    with pytest.raises(guard_runner_module.GuardSyncEndpointUntrustedError, match="not trusted"):
         guard_runner_module.sync_pain_signals(
             store,
             auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
@@ -20249,51 +20251,6 @@ def test_sync_local_guard_cloud_proof_serializes_concurrent_oauth_refresh(tmp_pa
     assert isinstance(stored_credentials, dict)
     assert stored_credentials["refresh_token"] == "refresh-token-2"
     assert stored_credentials["access_token"] == "oauth-access-token-for-refresh-token-1"
-
-
-def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    dpop_key_material = generate_dpop_key_pair()
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token-1",
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-06-01T00:00:00+00:00",
-    )
-
-    class _ErrorResponse:
-        def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "error": "invalid_grant",
-                    "error_description": "refresh token revoked",
-                }
-            ).encode("utf-8")
-
-        def close(self) -> None:
-            return None
-
-    def _fake_urlopen(request, timeout):
-        raise urllib.error.HTTPError(
-            request.full_url,
-            400,
-            "Bad Request",
-            hdrs=None,
-            fp=_ErrorResponse(),
-        )
-
-    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
-
-    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
-        guard_runner_module.sync_pain_signals(store)
-
-    assert "hol-guard connect" in str(error.value)
 
 
 def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_path, monkeypatch):

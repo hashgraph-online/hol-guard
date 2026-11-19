@@ -48,6 +48,9 @@ const OUTAGE_IO_KINDS: [&str; 8] = [
 pub(crate) enum SyncError {
     /// `GuardSyncNotConfiguredError`: no workspace or no sign-in.
     NotConfigured(String),
+    /// `GuardSyncEndpointUntrustedError`: the saved sync host is not one
+    /// Guard trusts.
+    EndpointUntrusted(String),
     /// `GuardSyncAuthorizationExpiredError`.
     AuthExpired(String),
     /// `GuardSyncNotAvailableError`: a plan restriction or an outage.
@@ -62,6 +65,7 @@ impl SyncError {
     pub(crate) fn message(&self) -> String {
         match self {
             Self::NotConfigured(message)
+            | Self::EndpointUntrusted(message)
             | Self::AuthExpired(message)
             | Self::NotAvailable { message, .. }
             | Self::Failed(message) => message.clone(),
@@ -166,8 +170,9 @@ pub(crate) fn fetch_bundle(auth: &Map<String, Value>, url: &str) -> Result<Value
     })
 }
 
-/// Classify a refusal the way `_fetch_supply_chain_bundle_payload` does.
-fn http_failure(failure: &SyncHttpFailure) -> FetchError {
+/// `_cloud_http_error` for a refusal: its messages, whether it is retryable,
+/// a plan restriction or an edge block.
+pub(crate) fn http_answer(failure: &SyncHttpFailure) -> Option<Value> {
     let headers: Map<String, Value> = failure
         .headers
         .iter()
@@ -179,7 +184,12 @@ fn http_failure(failure: &SyncHttpFailure) -> FetchError {
         "headers": headers,
         "body": String::from_utf8_lossy(&failure.body),
     });
-    let Ok(answer) = crate::runner_cloud_http_error::cloud_http_error(&args) else {
+    crate::runner_cloud_http_error::cloud_http_error(&args).ok()
+}
+
+/// Classify a refusal the way `_fetch_supply_chain_bundle_payload` does.
+fn http_failure(failure: &SyncHttpFailure) -> FetchError {
+    let Some(answer) = http_answer(failure) else {
         return FetchError::Sync(SyncError::Failed(failure.reason()));
     };
     let text = |key: &str| {
@@ -226,12 +236,17 @@ fn transport_failure(error: &EvalError) -> SyncError {
             retryable: true,
         };
     }
-    let reason = text.trim();
-    SyncError::Failed(if reason.is_empty() {
+    SyncError::Failed(unreachable_message(text))
+}
+
+/// `_sync_url_error_message`: a failure with no HTTP answer.
+pub(crate) fn unreachable_message(reason: &str) -> String {
+    let reason = reason.trim();
+    if reason.is_empty() {
         "Guard sync failed because the remote endpoint could not be reached.".to_owned()
     } else {
         format!("Guard sync failed: {reason}")
-    })
+    }
 }
 
 fn is_outage(text: &str) -> bool {

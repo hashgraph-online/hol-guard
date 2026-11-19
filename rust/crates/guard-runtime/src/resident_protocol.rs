@@ -103,6 +103,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_plugin_kit::FEATURE.into(),
         guard_plugin_telemetry::FEATURE.into(),
         crate::cloud_bundle_command::FEATURE.into(),
+        crate::cloud_event_command::FEATURE.into(),
         crate::workspace_snapshot::FEATURE.into(),
         crate::workspace_snapshot::SECRETS_FEATURE.into(),
         crate::workspace_snapshot::SKILLS_FEATURE.into(),
