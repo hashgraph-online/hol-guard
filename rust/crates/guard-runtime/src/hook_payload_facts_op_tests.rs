@@ -13,6 +13,17 @@ fn event_aliases_are_normalized_by_the_resident() {
 }
 
 #[test]
+fn copilot_permission_alias_uses_the_permission_passthrough_event() {
+    let request = HookPayloadFactsRequestV1 {
+        schema: "guard-hook-payload-facts-request.v1".to_owned(),
+        request_id: "facts-copilot-permission".to_owned(),
+        payload: json!({"event": "copilotPermissionRequest"}),
+    };
+    let output: Value = serde_json::from_slice(&evaluate(&request).expect("facts")).expect("json");
+    assert_eq!(output["result"]["event_name"], "PermissionRequest");
+}
+
+#[test]
 fn python_control_strip_is_preserved() {
     let request = HookPayloadFactsRequestV1 {
         schema: "guard-hook-payload-facts-request.v1".to_owned(),

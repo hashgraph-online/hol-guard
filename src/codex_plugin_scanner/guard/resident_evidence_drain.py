@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -20,6 +21,12 @@ _DRAIN_SCHEMA = "guard-hook-direct-evidence.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
 _DRAIN_TIMEOUT_SECONDS = 2.0
 _MAX_PAGES_PER_WAKE = 8
+
+
+@dataclass(frozen=True, slots=True)
+class _PageRecord:
+    value: object
+    key: str | None
 
 
 class _DrainHost(Protocol):
@@ -42,7 +49,7 @@ def _decode_page(
     output: bytes | None,
     counters: object | None = None,
     on_store_fatal: Callable[[], object] | None = None,
-) -> tuple[list[object], int, tuple[str, int] | None] | None:
+) -> tuple[list[_PageRecord], int, tuple[str, int] | None] | None:
     """Decode only the bounded page metadata needed to advance the cursor."""
 
     if not output:
@@ -54,11 +61,24 @@ def _decode_page(
     if not isinstance(page, dict) or page.get("schema") != _DRAIN_SCHEMA:
         return None
     records = page.get("records")
+    sequences = page.get("sequences")
     remaining = page.get("remaining")
     through = page.get("through")
     epoch = page.get("epoch")
     if not isinstance(records, list) or isinstance(remaining, bool) or not isinstance(remaining, int):
         return None
+    if sequences is not None and (
+        not isinstance(sequences, list)
+        or len(sequences) != len(records)
+        or not isinstance(epoch, str)
+        or not epoch
+        or any(isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1 for sequence in sequences)
+    ):
+        return None
+    page_records = [
+        _PageRecord(value, f"{epoch}:{sequence}" if sequences is not None else None)
+        for value, sequence in zip(records, sequences or [None] * len(records), strict=True)
+    ]
     if counters is not None and "counters" in page:
         observe = getattr(counters, "observe_page", None)
         if callable(observe):
@@ -67,12 +87,12 @@ def _decode_page(
         with suppress(Exception):
             on_store_fatal()
     if through is None:
-        return records, remaining, None
+        return page_records, remaining, None
     if isinstance(through, bool) or not isinstance(through, int) or through < 1:
         return None
     if not isinstance(epoch, str) or not epoch:
         return None
-    return records, remaining, (epoch, through)
+    return page_records, remaining, (epoch, through)
 
 
 class ResidentEvidenceDrain:
@@ -99,6 +119,8 @@ class ResidentEvidenceDrain:
         self._counters = getattr(host, "hook_counters", None)
         self._handled_epoch: str | None = None
         self._handled_records: set[str] = set()
+        self._last_page_keys: set[str] = set()
+        self._acknowledged_page = False
 
     def start(self) -> None:
         if self._thread is not None:
@@ -142,9 +164,15 @@ class ResidentEvidenceDrain:
             if through is not None and through[0] != self._handled_epoch:
                 self._handled_epoch = through[0]
                 self._handled_records.clear()
-            if records and not self._record_page(records):
+                self._last_page_keys.clear()
+            handled, current_keys = self._record_page(records)
+            if not handled:
                 self.failures += 1
                 return False
+            if self._acknowledged_page:
+                self._handled_records.difference_update(self._last_page_keys - current_keys)
+                self._acknowledged_page = False
+            self._last_page_keys = current_keys
             if through is not None:
                 self._ack = through
             if remaining == 0 or through is None:
@@ -158,7 +186,7 @@ class ResidentEvidenceDrain:
 
     def _fetch_page(
         self, *, deadline_monotonic: float | None = None
-    ) -> tuple[list[object], int, tuple[str, int] | None] | None:
+    ) -> tuple[list[_PageRecord], int, tuple[str, int] | None] | None:
         from .native_runtime import _isolated_environment
 
         transport = self._transport()
@@ -198,9 +226,7 @@ class ResidentEvidenceDrain:
             self.failures += 1
         elif pending_ack is not None and self._ack == pending_ack:
             self._ack = None
-            # The resident accepted the cursor, so records from that page can
-            # no longer be replayed. Keep only the current page's keys.
-            self._handled_records.clear()
+            self._acknowledged_page = True
         return page
 
     def _recover_writer_store(self) -> None:
@@ -213,23 +239,29 @@ class ResidentEvidenceDrain:
 
         return record_resident_evidence_fallback(self._host, record)
 
-    def _record_page(self, records: list[object]) -> bool:
-        for record in records:
-            try:
-                key = json.dumps(record, sort_keys=True, separators=(",", ":"))
-            except (TypeError, ValueError):
-                key = repr(record)
+    def _record_page(self, records: list[_PageRecord]) -> tuple[bool, set[str]]:
+        current_keys: set[str] = set()
+        for item in records:
+            record = item.value
+            if item.key is not None:
+                key = item.key
+            else:
+                try:
+                    key = json.dumps(record, sort_keys=True, separators=(",", ":"))
+                except (TypeError, ValueError):
+                    key = repr(record)
+            current_keys.add(key)
             if key in self._handled_records:
                 continue
             try:
                 outcome = self._record_handler(record)
             except Exception:
-                return False
+                return False, current_keys
             if outcome is True or outcome in {"handled", "drop"}:
                 self._handled_records.add(key)
                 continue
-            return False
-        return True
+            return False, current_keys
+        return True, current_keys
 
     def _publisher_transport(self) -> tuple[Path, Callable[..., bytes | None]] | None:
         transport = getattr(self._host.policy_snapshot_publisher, "direct_evidence_transport", None)

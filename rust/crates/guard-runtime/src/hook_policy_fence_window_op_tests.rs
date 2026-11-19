@@ -21,11 +21,11 @@ fn a_window_closes_once_the_last_waiter_leaves() {
     second.request_id = "fence-second".to_owned();
     let _: Value = serde_json::from_slice(&evaluate(&second).expect("enter")).expect("response");
     let mut leave = request(home, "leave");
-    leave.request_id = "fence-leave-one".to_owned();
+    leave.request_id = "fence-enter".to_owned();
     leave.admitted = Some(true);
     let first: Value = serde_json::from_slice(&evaluate(&leave).expect("leave")).expect("response");
     assert!(first["result"]["window_event"].is_null());
-    leave.request_id = "fence-leave-two".to_owned();
+    leave.request_id = "fence-second".to_owned();
     leave.admitted = Some(false);
     let last: Value = serde_json::from_slice(&evaluate(&leave).expect("leave")).expect("response");
     assert_eq!(last["result"]["window_event"]["event_name"], EVENT_NAME);
@@ -58,34 +58,37 @@ fn a_direct_wait_without_daemon_window_is_one_event() {
 #[test]
 fn an_expired_window_preserves_counts_for_late_leaves() {
     let home = "/synthetic/stale-fence-window";
-    let _: Value = serde_json::from_slice(&evaluate(&request(home, "enter")).expect("enter"))
-        .expect("response");
-    let _: Value = serde_json::from_slice(&evaluate(&request(home, "enter")).expect("enter"))
-        .expect("response");
+    let mut first_enter = request(home, "enter");
+    first_enter.request_id = "fence-stale-first".to_owned();
+    let _: Value =
+        serde_json::from_slice(&evaluate(&first_enter).expect("enter")).expect("response");
+    let mut second_enter = request(home, "enter");
+    second_enter.request_id = "fence-stale-second".to_owned();
+    let _: Value =
+        serde_json::from_slice(&evaluate(&second_enter).expect("enter")).expect("response");
     let windows = WINDOWS.get().expect("window state");
     let mut windows = windows.lock().expect("window lock");
-    windows
+    let stale = windows
         .get_mut(home)
         .expect("synthetic window")
-        .started_micros -= MAX_WINDOW_AGE_MICROS + 1;
+        .waiters
+        .get_mut("fence-stale-first")
+        .expect("stale waiter");
+    *stale -= MAX_WINDOW_AGE_MICROS + 1;
     drop(windows);
 
     let mut leave = request(home, "leave");
+    leave.request_id = "fence-stale-second".to_owned();
     leave.admitted = Some(true);
     let first: Value =
         serde_json::from_slice(&evaluate(&leave).expect("late leave")).expect("response");
-    assert!(first["result"]["window_event"].is_null());
-    leave.request_id = "fence-late-second".to_owned();
-    leave.admitted = Some(false);
-    let last: Value =
-        serde_json::from_slice(&evaluate(&leave).expect("late leave")).expect("response");
-    assert_eq!(last["result"]["window_event"]["event_name"], EVENT_NAME);
+    assert_eq!(first["result"]["window_event"]["event_name"], EVENT_NAME);
     assert_eq!(
-        last["result"]["window_event"]["payload"]["absorbed_calls"],
+        first["result"]["window_event"]["payload"]["absorbed_calls"],
         1
     );
     assert_eq!(
-        last["result"]["window_event"]["payload"]["exhausted_calls"],
+        first["result"]["window_event"]["payload"]["exhausted_calls"],
         1
     );
 }

@@ -53,7 +53,9 @@ pub(crate) fn runtime_event(payload: &Map<String, Value>) -> String {
             | "afterreadfile"
             | "afterwritefile"
             | "aftermcpexecution" => "PostToolUse",
-            "permissionrequest" | "permissionrequestv2" => "PermissionRequest",
+            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest" => {
+                "PermissionRequest"
+            }
             "prompt" | "userpromptsubmit" | "userpromptsubmitted" => "UserPromptSubmit",
             _ => raw,
         }

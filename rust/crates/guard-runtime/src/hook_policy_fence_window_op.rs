@@ -33,13 +33,10 @@ pub(crate) struct HookPolicyFenceWindowRequestV1 {
 #[derive(Default)]
 struct WindowState {
     started_micros: i64,
-    waiting: u64,
+    waiters: HashMap<String, i64>,
     absorbed: u64,
     exhausted: u64,
-    orphaned_started_micros: i64,
-    orphaned_waiting: u64,
-    orphaned_absorbed: u64,
-    orphaned_exhausted: u64,
+    pending_event: Option<Value>,
 }
 
 static WINDOWS: OnceLock<Mutex<HashMap<String, WindowState>>> = OnceLock::new();
@@ -91,84 +88,80 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         .lock()
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
-    if state.waiting > 0 && now.saturating_sub(state.started_micros) > MAX_WINDOW_AGE_MICROS {
-        // A lost leave must not erase counts for waiters that are still
-        // active. Move the old window aside so late leaves can settle it while
-        // a new window is free to start.
-        if state.orphaned_waiting == 0 {
-            state.orphaned_started_micros = state.started_micros;
+    let mut completed = state.pending_event.take();
+    let stale: Vec<String> = state
+        .waiters
+        .iter()
+        .filter(|(_, started)| now.saturating_sub(**started) > MAX_WINDOW_AGE_MICROS)
+        .map(|(request_id, _)| request_id.clone())
+        .collect();
+    for request_id in stale {
+        state.waiters.remove(&request_id);
+        state.exhausted = state.exhausted.saturating_add(1);
+    }
+    if state.waiters.is_empty() && state.started_micros != 0 && state.exhausted > 0 {
+        let value = event(state.started_micros, now, state.absorbed, state.exhausted)?;
+        if completed.is_none() {
+            completed = Some(value);
+        } else {
+            state.pending_event = Some(value);
         }
-        state.orphaned_waiting = state.orphaned_waiting.saturating_add(state.waiting);
-        state.orphaned_absorbed = state.orphaned_absorbed.saturating_add(state.absorbed);
-        state.orphaned_exhausted = state.orphaned_exhausted.saturating_add(state.exhausted);
         state.started_micros = 0;
-        state.waiting = 0;
         state.absorbed = 0;
         state.exhausted = 0;
     }
     let completed = match request.action.as_str() {
         "enter" => {
-            if state.waiting == 0 {
+            if state.waiters.is_empty() {
                 state.started_micros = now;
                 state.absorbed = 0;
                 state.exhausted = 0;
             }
-            state.waiting = state.waiting.saturating_add(1);
-            None
+            state.waiters.insert(request.request_id.clone(), now);
+            completed
         }
         "leave" => {
-            if state.waiting > 0 {
-                state.waiting -= 1;
+            if state.waiters.remove(&request.request_id).is_some() {
                 if request.admitted == Some(true) {
                     state.absorbed = state.absorbed.saturating_add(1);
                 } else {
                     state.exhausted = state.exhausted.saturating_add(1);
                 }
-                if state.waiting == 0 {
+                if state.waiters.is_empty() {
                     let value = event(state.started_micros, now, state.absorbed, state.exhausted)?;
                     state.started_micros = 0;
                     state.absorbed = 0;
                     state.exhausted = 0;
-                    Some(value)
+                    if completed.is_none() {
+                        Some(value)
+                    } else {
+                        state.pending_event = Some(value);
+                        completed
+                    }
                 } else {
-                    None
-                }
-            } else if state.orphaned_waiting > 0 {
-                state.orphaned_waiting -= 1;
-                if request.admitted == Some(true) {
-                    state.orphaned_absorbed = state.orphaned_absorbed.saturating_add(1);
-                } else {
-                    state.orphaned_exhausted = state.orphaned_exhausted.saturating_add(1);
-                }
-                if state.orphaned_waiting == 0 {
-                    let value = event(
-                        state.orphaned_started_micros,
-                        now,
-                        state.orphaned_absorbed,
-                        state.orphaned_exhausted,
-                    )?;
-                    state.orphaned_started_micros = 0;
-                    state.orphaned_absorbed = 0;
-                    state.orphaned_exhausted = 0;
-                    Some(value)
-                } else {
-                    None
+                    completed
                 }
             } else {
-                None
+                completed
             }
         }
         "absorb_direct" => {
             let waited = request.waited_ms.unwrap_or(0).min(MAX_WAIT_MS);
-            if state.waiting > 0 {
+            if !state.waiters.is_empty() {
                 state.absorbed = state.absorbed.saturating_add(1);
-                None
+                completed
             } else {
                 let waited_micros = i64::try_from(waited)
                     .unwrap_or(i64::MAX)
                     .saturating_mul(1_000);
                 let started = now.saturating_sub(waited_micros);
-                Some(event(started, now, 1, 0)?)
+                let value = event(started, now, 1, 0)?;
+                if completed.is_none() {
+                    Some(value)
+                } else {
+                    state.pending_event = Some(value);
+                    completed
+                }
             }
         }
         _ => unreachable!(),

@@ -456,11 +456,13 @@ pub(crate) fn drain(
         None => None,
     };
     drop(recording);
+    let sequences: Vec<u64> = paged.iter().map(|paged| paged.seq).collect();
     let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
     let mut page = json!({
         "schema": DRAIN_RESULT_SCHEMA,
         "epoch": queue.epoch,
         "records": records,
+        "sequences": sequences,
         "remaining": peeked.remaining,
         "through": peeked.through,
         "counters": queue.counters.snapshot(),

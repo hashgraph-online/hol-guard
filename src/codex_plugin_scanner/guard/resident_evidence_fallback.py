@@ -87,7 +87,6 @@ def record_resident_evidence_fallback(host: _DrainHost, record: object) -> Fallb
         record_mcp_relay_package_evidence,
     )
     from .hook_review.hook_managed_install_state import _hook_harness_is_unmanaged
-    from .hook_review.hook_worker_native import _record_native_pre_activity
 
     if is_mcp_relay_evidence(record):
         # A relayed MCP tool call, recorded as the proxy records it.
@@ -153,20 +152,47 @@ def record_resident_evidence_fallback(host: _DrainHost, record: object) -> Fallb
     # A current resident queues a tool call's activity behind the receipt itself.
     recorded = record.get("activity_recorded") is True
     if event == _POST_TOOL_USE:
-        if not recorded:
-            host._record_post_tool_activity(  # pyright: ignore[reportPrivateUsage]
-                harness=harness,
-                payload=payload,
-                succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
-            )
+        if not recorded and not _submit_fallback_activity(
+            host,
+            harness=harness,
+            event=_POST_TOOL_USE,
+            payload=payload,
+            succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
+        ):
+            return "retry"
         return "handled"
-    if not recorded:
-        _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
+    if not recorded and not _submit_fallback_activity(
+        host,
+        harness=harness,
+        event=_PRE_TOOL_USE,
+        payload=payload,
+        succeeded=True,
+    ):
+        return "retry"
     if record.get("connector_notice_raised") is not True:
         # A current resident raises the notice as the page leaves.
         with suppress(Exception):
             _raise_fallback_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))
     return "handled"
+
+
+def _submit_fallback_activity(
+    host: _DrainHost,
+    *,
+    harness: str,
+    event: str,
+    payload: Mapping[str, object],
+    succeeded: bool,
+) -> bool:
+    """Submit fallback activity synchronously on the drain thread."""
+
+    submit = getattr(host.activity_writer, "submit_command_activity", None)
+    if not callable(submit):
+        return True
+    try:
+        return submit(harness=harness, event=event, payload=payload, succeeded=succeeded) is not False
+    except Exception:
+        return False
 
 
 def _raise_fallback_connector_setup_notice(store: object, notice: object) -> None:
@@ -194,7 +220,7 @@ def _raise_fallback_connector_setup_notice(store: object, notice: object) -> Non
 
 
 def _record_mcp_with_one_retry(record: object, write: Callable[[], bool]) -> FallbackResult:
-    """Avoid replaying a receipt forever after a later best-effort write fails."""
+    """Retry one failed MCP write before dropping the bounded record."""
 
     try:
         key = json.dumps(record, sort_keys=True, separators=(",", ":"))
@@ -202,7 +228,10 @@ def _record_mcp_with_one_retry(record: object, write: Callable[[], bool]) -> Fal
         return "drop"
     if key in _MCP_RETRY_KEYS:
         _MCP_RETRY_KEYS.discard(key)
-        return "drop"
+        try:
+            return "handled" if write() else "drop"
+        except Exception:
+            return "drop"
     try:
         written = write()
     except Exception:

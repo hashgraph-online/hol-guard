@@ -57,6 +57,8 @@ def test_wait_delegates_window_state_to_the_resident(monkeypatch, tmp_path: Path
     assert wait.pause() is True
     wait.finish()
     assert [call["action"] for call in calls] == ["enter", "leave"]
+    assert calls[0]["deadline"] == 12.0
+    assert calls[1]["deadline"] == 12.0
     assert store.events[0][0] == "policy_source_fence_window"
 
 
@@ -73,7 +75,10 @@ def test_wait_exhaustion_is_reported_as_not_admitted(monkeypatch, tmp_path: Path
     )
     assert wait.pause() is False
     wait.finish()
-    assert calls == [{"action": "enter"}, {"action": "leave", "admitted": False}]
+    assert calls == [
+        {"action": "enter", "deadline": 10.0},
+        {"action": "leave", "admitted": False, "deadline": 10.0},
+    ]
 
 
 def test_direct_wait_rejects_invalid_values(monkeypatch, tmp_path: Path) -> None:

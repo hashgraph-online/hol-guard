@@ -318,11 +318,19 @@ class HookWorker(HookWorkerNativeMixin):
         if event_name is None:
             # The resident owns event identity. This label only selects the
             # fixed outage response and never enters semantic routing.
-            return availability_harness_response(
+            fallback_event = canonical_hook_event_name(payload)
+            response = availability_harness_response(
                 harness=harness,
-                event_name=canonical_hook_event_name(payload),
+                event_name=fallback_event,
                 reason_code="native_hook_event_unavailable",
                 reason="HOL Guard could not identify this hook event safely.",
+            )
+            return self._apply_structured_unavailable_overlay(
+                response,
+                harness=harness,
+                event_name=fallback_event,
+                guard_home=guard_home,
+                workspace=workspace,
             )
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)

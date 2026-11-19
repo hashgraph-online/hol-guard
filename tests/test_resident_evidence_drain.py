@@ -112,7 +112,7 @@ def test_resident_drain_counts_fallback_exceptions_as_retryable(tmp_path: Path) 
     assert drain.failures == 1
 
 
-def test_mcp_fallback_does_not_replay_a_receipt_after_one_failed_followup() -> None:
+def test_mcp_fallback_retries_a_failed_write_once() -> None:
     calls: list[object] = []
 
     def failed_write() -> bool:
@@ -122,7 +122,7 @@ def test_mcp_fallback_does_not_replay_a_receipt_after_one_failed_followup() -> N
     record = {"kind": "mcp_tool_call", "identity": "identity"}
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "drop"
-    assert calls == ["write"]
+    assert calls == ["write", "write"]
 
 
 def test_resident_drain_keeps_completion_keys_while_a_page_retries(tmp_path: Path) -> None:

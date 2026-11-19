@@ -42,8 +42,11 @@ def record_policy_fence_window(
     if waited_ms is not None:
         request["waited_ms"] = waited_ms
     try:
+        # Leave is cleanup for a successful enter. Keep its short transport
+        # budget even when the hook's decision deadline has elapsed so the
+        # resident registration cannot be stranded.
         timeout_seconds = _TIMEOUT_SECONDS
-        if deadline is not None:
+        if action != "leave" and deadline is not None:
             timeout_seconds = min(timeout_seconds, deadline - time.monotonic())
         if timeout_seconds <= 0:
             return None
@@ -59,7 +62,11 @@ def record_policy_fence_window(
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
-    if not isinstance(result, Mapping) or "window_event" not in result:
+    if (
+        not isinstance(result, Mapping)
+        or set(result) != {"request_id", "window_event"}
+        or result.get("request_id") != request["request_id"]
+    ):
         return None
     event = result.get("window_event")
     if event is None:
