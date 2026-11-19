@@ -15,10 +15,16 @@ and ``tests/test_cloud_event_sync_shim.py``; mark a test
 
 from __future__ import annotations
 
+import copy
 import json
 import urllib.error
 from collections.abc import Callable, Mapping
 from pathlib import Path
+
+_EMPTY_ANSWERS: dict[str, object] = {
+    "guard_events": {"synced_at": None, "events": 0, "accepted": 0},
+    "pain_signals": 0,
+}
 
 _SKIP_REASONS = {
     404: "runtime_session_endpoint_unavailable",
@@ -26,8 +32,19 @@ _SKIP_REASONS = {
 }
 
 
-def runtime_session_over_urllib(original: Callable[..., object]) -> Callable[..., object]:
-    """Wrap ``cloud_event_sync`` so only ``runtime_session`` takes the Python route."""
+def runtime_session_over_urllib(
+    original: Callable[..., object],
+    *,
+    native_session: bool = False,
+    native_events: bool = False,
+) -> Callable[..., object]:
+    """Wrap ``cloud_event_sync`` for tests that fake ``urllib``.
+
+    ``runtime_session`` takes the Python route. ``guard_events`` and
+    ``pain_signals`` answer as an empty queue: the native command signs in
+    from the store and would never reach the faked transport. Their uploads
+    are tested in ``tests/test_guard_events.py`` and the Rust sync modules.
+    """
 
     def cloud_event_sync(
         guard_home: Path,
@@ -36,7 +53,9 @@ def runtime_session_over_urllib(original: Callable[..., object]) -> Callable[...
         auth_context: Mapping[str, object] | None = None,
         session: Mapping[str, object] | None = None,
     ) -> object:
-        if action != "runtime_session" or session is None or auth_context is None:
+        if action in _EMPTY_ANSWERS and not native_events:
+            return copy.deepcopy(_EMPTY_ANSWERS[action])
+        if native_session or action != "runtime_session" or session is None or auth_context is None:
             return original(guard_home, action, auth_context=auth_context, session=session)
         return _post_runtime_session(Path(guard_home), dict(auth_context), dict(session))
 

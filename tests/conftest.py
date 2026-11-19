@@ -181,9 +181,13 @@ def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: py
     """Send the runtime session upload through the urllib a test fakes.
 
     Mark a test ``native_runtime_session`` to post it with the native command.
+    Guard events and pain signals answer as an empty queue unless the test is
+    marked ``native_guard_events``.
     """
 
-    if request.node.get_closest_marker("native_runtime_session") is not None:
+    native_session = request.node.get_closest_marker("native_runtime_session") is not None
+    native_events = request.node.get_closest_marker("native_guard_events") is not None
+    if native_session and native_events:
         return
     from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
     from tests.support.runtime_session_transport import runtime_session_over_urllib
@@ -191,7 +195,11 @@ def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: py
     monkeypatch.setattr(
         cloud_bundle_sync,
         "cloud_event_sync",
-        runtime_session_over_urllib(cloud_bundle_sync.cloud_event_sync),
+        runtime_session_over_urllib(
+            cloud_bundle_sync.cloud_event_sync,
+            native_session=native_session,
+            native_events=native_events,
+        ),
     )
 
 

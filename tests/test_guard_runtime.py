@@ -16578,6 +16578,7 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
     assert attempted_request is False
 
 
+@pytest.mark.native_guard_events
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
@@ -16599,6 +16600,7 @@ def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, 
     assert attempted_request is False
 
 
+@pytest.mark.native_guard_events
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")

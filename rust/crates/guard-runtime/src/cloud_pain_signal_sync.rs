@@ -7,7 +7,9 @@ use rusqlite::{params_from_iter, OpenFlags};
 use serde_json::{json, Value};
 
 use crate::cloud_bundle_fetch::{resolve_auth, unreachable_message, SyncError};
-use crate::cloud_event_sync::{answer_text, post, route_url, trusted_base, EventStore, Refusal};
+use crate::cloud_event_sync::{
+    answer_text, post, route_url, screen_supplied, trusted_base, EventStore, Refusal,
+};
 
 pub(crate) const PAIN_SIGNAL_CURSOR_KEY: &str = "pain_signal_cursor";
 const PAIN_SIGNAL_BATCH: usize = 500;
@@ -81,6 +83,7 @@ fn pain_signal_candidates(store: &EventStore<'_>, after: i64) -> Result<Vec<Valu
 /// `sync_pain_signals`: the number of signals uploaded.
 pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncError> {
     let supplied = store.bundle.auth.as_ref().filter(|auth| !auth.is_empty());
+    screen_supplied(supplied)?;
     let auth = match resolve_auth(&store.bundle.resident, false, supplied) {
         Err(SyncError::NotConfigured(_)) => return Ok(json!(0)),
         other => other?,
@@ -94,7 +97,8 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
         .and_then(|cursor| cursor.get("event_id").and_then(Value::as_i64))
         .filter(|id| *id > 0)
         .unwrap_or(0);
-    let mut uploaded = 0usize;
+    // Batches an earlier broker round uploaded moved the cursor past them.
+    let mut uploaded = store.progress.borrow().pain_signals;
     let mut warn_counts = json!([]);
     loop {
         let candidates = pain_signal_candidates(store, current)?;
@@ -145,6 +149,7 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
             &json!({"event_id": current}),
             &utc_now_iso(),
         )?;
+        store.progress.borrow_mut().pain_signals = uploaded;
         if candidates.len() < PAIN_SIGNAL_BATCH {
             break;
         }

@@ -17,6 +17,10 @@ from codex_plugin_scanner.guard.runtime.cloud_bundle_sync import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+# These tests answer the native command themselves, so they never take the
+# conftest's empty-queue double for Guard events.
+pytestmark = pytest.mark.native_guard_events
+
 
 def _status(tmp_path: Path, features: tuple[str, ...]) -> SimpleNamespace:
     return SimpleNamespace(
@@ -43,6 +47,9 @@ def _answer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, response: object) -
         )
 
     monkeypatch.setattr(codex_hook_launch_runtime, "run_isolated_hook_process", run)
+    # The session payload also reads package shim coverage from the runtime;
+    # that read has its own tests and would hit this stub.
+    monkeypatch.setattr(runner, "_cloud_package_manager_coverage", lambda *_args, **_kwargs: {})
     return sent
 
 

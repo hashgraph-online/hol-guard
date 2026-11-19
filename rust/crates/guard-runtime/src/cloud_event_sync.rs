@@ -55,6 +55,20 @@ const RECONNECT_MESSAGE: &str =
 pub(crate) struct EventStore<'a> {
     pub(crate) home: PathBuf,
     pub(crate) bundle: &'a BundleStore,
+    /// Uploads already committed by an earlier broker round. A round that
+    /// left a need behind is run again from the start, but the batches it
+    /// uploaded and marked before that need stay uploaded, so the totals the
+    /// sync reports carry over instead of counting only the last round.
+    pub(crate) progress: std::cell::RefCell<Progress>,
+}
+
+/// What earlier broker rounds of one sync already uploaded.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Progress {
+    pub(crate) events: usize,
+    pub(crate) accepted: i64,
+    pub(crate) synced_at: Option<String>,
+    pub(crate) pain_signals: usize,
 }
 
 impl EventStore<'_> {
@@ -97,6 +111,17 @@ pub(crate) fn trusted_base(auth: &Map<String, Value>) -> Result<String, SyncErro
         .map_err(|_| SyncError::Failed("Guard sync URL is unavailable.".to_owned()))?;
     gst::validate_guard_sync_endpoint(&base, None)
         .map_err(|reason| SyncError::EndpointUntrusted(format!("{RECONNECT_MESSAGE} {reason}")))
+}
+
+/// A sync URL a caller supplied is checked before sign-in resolution, which
+/// would otherwise report the same refusal as an expired sign-in.
+pub(crate) fn screen_supplied(supplied: Option<&Map<String, Value>>) -> Result<(), SyncError> {
+    match supplied {
+        Some(auth) if auth.get("sync_url").is_some_and(Value::is_string) => {
+            trusted_base(auth).map(|_| ())
+        }
+        _ => Ok(()),
+    }
 }
 
 pub(crate) fn route_url(route: &str, base: &str) -> Result<String, SyncError> {
@@ -323,14 +348,16 @@ fn batch_within_body_limit(pending: &[Value]) -> Vec<Value> {
 
 /// `sync_guard_events`: push the pending GuardEventV1 envelopes.
 pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncError> {
+    screen_supplied(store.bundle.auth.as_ref())?;
     let auth = resolve_auth(&store.bundle.resident, false, store.bundle.auth.as_ref())?;
     let url = route_url("guard_events", &trusted_base(&auth)?)?;
     let previous = store.payload(GUARD_EVENTS_SUMMARY_KEY);
+    let carried = store.progress.borrow().clone();
     let mut totals = Totals {
-        events: 0,
-        accepted: 0,
+        events: carried.events,
+        accepted: carried.accepted,
     };
-    let mut last_synced_at = utc_now_iso();
+    let mut last_synced_at = carried.synced_at.unwrap_or_else(utc_now_iso);
     loop {
         let pending = store.call(
             "list_guard_events_v1",
@@ -370,6 +397,12 @@ pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncErr
         let uploaded = uploaded.as_i64().unwrap_or(0);
         totals.events += pending.len();
         totals.accepted += uploaded;
+        {
+            let mut progress = store.progress.borrow_mut();
+            progress.events = totals.events;
+            progress.accepted = totals.accepted;
+            progress.synced_at = Some(last_synced_at.clone());
+        }
         if uploaded == 0 || (listed < GUARD_EVENTS_BATCH && pending.len() == listed) {
             break;
         }
@@ -385,6 +418,7 @@ pub(crate) fn event_store<'a>(guard_home: &Path, bundle: &'a BundleStore) -> Eve
     EventStore {
         home: guard_home.to_path_buf(),
         bundle,
+        progress: std::cell::RefCell::new(Progress::default()),
     }
 }
 
