@@ -378,7 +378,7 @@ pub(crate) fn stopped(mut result: PreToolResultV1, stop: &Stop) -> PreToolResult
         Stop::Loop => (
             LOOP_STOP,
             "Guard stopped this command: the exact same command already ran five times in a row in the \
-             last 30 seconds with nothing else in between, which looks like a stuck loop. Read the \
+             last two minutes with nothing else in between, which looks like a stuck loop. Read the \
              earlier results before trying again. If the repeat is intended, run the command again \
              and it runs.",
         ),
