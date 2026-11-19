@@ -47,7 +47,11 @@ def fence_wait_until(started: float, deadline: float | None) -> float:
 
 def _guard_home(store: object) -> Path | None:
     value = getattr(store, "guard_home", None)
-    return value if isinstance(value, Path) else (Path(value) if isinstance(value, str) and value else None)
+    if isinstance(value, Path):
+        return value
+    if isinstance(value, str) and value:
+        return Path(value)
+    return None
 
 
 def _record_event(store: object, event: object) -> None:
@@ -80,6 +84,7 @@ class PolicySourceFenceWait:
         self._sleep = sleep or time.sleep
         self._until: float | None = None
         self._exhausted = False
+        self._entered = False
 
     def pause(self) -> bool:
         """Sleep one poll interval; False once the bounded wait is spent."""
@@ -88,7 +93,14 @@ class PolicySourceFenceWait:
         if self._until is None:
             self._until = fence_wait_until(now, self._deadline)
             if self._guard_home is not None:
-                record_policy_fence_window(self._guard_home, action="enter")
+                self._entered = (
+                    record_policy_fence_window(
+                        self._guard_home,
+                        action="enter",
+                        deadline=self._deadline,
+                    )
+                    is not None
+                )
         if now + POLL_SECONDS > self._until:
             self._exhausted = True
             return False
@@ -110,14 +122,16 @@ class PolicySourceFenceWait:
         if self._until is None:
             return
         self._until = None
-        if self._guard_home is None:
+        if self._guard_home is None or not self._entered:
             return
         event = record_policy_fence_window(
             self._guard_home,
             action="leave",
             admitted=not self._exhausted,
+            deadline=self._deadline,
         )
-        _record_event(self._store, event)
+        if event:
+            _record_event(self._store, event)
 
 
 def record_direct_fence_wait(store: object, waited_ms: object) -> None:
@@ -129,7 +143,8 @@ def record_direct_fence_wait(store: object, waited_ms: object) -> None:
     if guard_home is None:
         return
     event = record_policy_fence_window(guard_home, action="absorb_direct", waited_ms=waited_ms)
-    _record_event(store, event)
+    if event:
+        _record_event(store, event)
 
 
 __all__ = [

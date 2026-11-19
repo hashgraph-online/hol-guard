@@ -15,6 +15,7 @@ const REQUEST_SCHEMA: &str = "guard-hook-policy-fence-window-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-policy-fence-window-result.v1";
 const EVENT_NAME: &str = "policy_source_fence_window";
 const MAX_WAIT_MS: u64 = 8_000;
+const MAX_WINDOW_AGE_MICROS: i64 = 9_000_000;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -86,6 +87,12 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         .lock()
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
+    if state.waiting > 0 && now.saturating_sub(state.started_micros) > MAX_WINDOW_AGE_MICROS {
+        state.started_micros = 0;
+        state.waiting = 0;
+        state.absorbed = 0;
+        state.exhausted = 0;
+    }
     let completed = match request.action.as_str() {
         "enter" => {
             if state.waiting == 0 {

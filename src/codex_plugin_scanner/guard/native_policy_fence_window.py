@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -20,15 +21,20 @@ def record_policy_fence_window(
     action: str,
     admitted: bool | None = None,
     waited_ms: int | None = None,
+    deadline: float | None = None,
 ) -> Mapping[str, object] | None:
     """Update resident fence-window state and return a completed event, if any."""
 
     if action not in {"enter", "leave", "absorb_direct"}:
         return None
+    try:
+        canonical_home = guard_home.resolve(strict=False)
+    except (OSError, RuntimeError):
+        canonical_home = guard_home
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"policy-fence-window-{uuid.uuid4().hex}",
-        "guard_home": str(guard_home),
+        "guard_home": str(canonical_home),
         "action": action,
     }
     if admitted is not None:
@@ -36,20 +42,28 @@ def record_policy_fence_window(
     if waited_ms is not None:
         request["waited_ms"] = waited_ms
     try:
+        timeout_seconds = _TIMEOUT_SECONDS
+        if deadline is not None:
+            timeout_seconds = min(timeout_seconds, deadline - time.monotonic())
+        if timeout_seconds <= 0:
+            return None
         response = _resident_request(
             operation="hook_policy_fence_window",
             request=request,
-            guard_home=guard_home,
-            timeout_seconds=_TIMEOUT_SECONDS,
+            guard_home=canonical_home,
+            timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
+            record_resilience=False,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
-    event = result.get("window_event") if isinstance(result, Mapping) else None
-    if event is None:
+    if not isinstance(result, Mapping) or "window_event" not in result:
         return None
+    event = result.get("window_event")
+    if event is None:
+        return {}
     if not isinstance(event, Mapping) or set(event) != {"event_name", "payload", "occurred_at"}:
         return None
     payload = event.get("payload")
