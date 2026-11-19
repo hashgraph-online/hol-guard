@@ -33,6 +33,7 @@ def test_linux_cache_skips_only_compilation_and_always_verifies_current_sources(
         "runner.arch",
         "outputs.image",
         "outputs.compiler-env",
+        "CARGO_PROFILE_RELEASE_OPT_LEVEL",
         "CARGO_PROFILE_RELEASE_LTO",
         "CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
         "'rust/**'",
@@ -109,6 +110,7 @@ def test_platform_cache_tracks_compiler_inputs_not_unrelated_workflow_edits(plat
     key = restore["with"]["key"]
     assert "outputs.compiler-env" in key
     for required in (
+        "CARGO_PROFILE_RELEASE_OPT_LEVEL",
         "CARGO_PROFILE_RELEASE_LTO",
         "CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
         "'.cargo/**'",
@@ -170,6 +172,7 @@ def test_native_offline_previous_caches_pinned_artifacts_and_verifies_executable
         "runner.arch",
         "steps.previous-platform.outputs.image",
         "steps.previous-platform.outputs.compiler-env",
+        "env.CARGO_PROFILE_RELEASE_OPT_LEVEL",
         "env.CARGO_PROFILE_RELEASE_LTO",
         "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
         "env.NATIVE_OFFLINE_PREVIOUS_SHA",

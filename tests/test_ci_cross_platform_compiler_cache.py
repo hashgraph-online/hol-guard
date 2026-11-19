@@ -26,7 +26,9 @@ def test_only_main_pushes_write_the_cross_platform_compiler_cache() -> None:
 
 def test_runtime_cache_preserves_the_optimized_profile_and_cold_build_allowance() -> None:
     workflow = load_ci_workflow()
-    assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["env"]
+    assert workflow["env"]["CARGO_PROFILE_RELEASE_OPT_LEVEL"] == (
+        "${{ github.event_name == 'pull_request' && '0' || 's' }}"
+    )
     # Cold crate-graph builds on this stack measure ~19 min on macOS (PRs read
     # the compiler cache read-only until main seeds new crates), so the macOS
     # allowance is 25 on macOS and 30 on Windows for cold native builds.
@@ -35,7 +37,6 @@ def test_runtime_cache_preserves_the_optimized_profile_and_cold_build_allowance(
         job = workflow["jobs"][name]
         assert job["timeout-minutes"] == allowance
         assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in job.get("env", {})
-    assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["jobs"]["native-command-evaluators"].get("env", {})
     assert "macos-native-runtime" in workflow["jobs"]["required"]["needs"]
     assert "windows-native-runtime" in workflow["jobs"]["required"]["needs"]
 
@@ -51,20 +52,30 @@ def test_macos_runtime_cache_requires_all_inputs_and_only_main_can_save() -> Non
     assert "scripts.ci.native_cache_environment" in platform["run"]
     assert "restore-keys" not in restore["with"]
     for token in (
-        "runner.arch", "steps.runtime-platform.outputs.image", "steps.runtime-platform.outputs.compiler-env",
-        "env.CARGO_PROFILE_RELEASE_LTO", "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
-        "'rust/**'", "'contributions/**'", "'contracts/**'", "'spec/**'",
+        "runner.arch",
+        "steps.runtime-platform.outputs.image",
+        "steps.runtime-platform.outputs.compiler-env",
+        "env.CARGO_PROFILE_RELEASE_OPT_LEVEL",
+        "env.CARGO_PROFILE_RELEASE_LTO",
+        "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
+        "'rust/**'",
+        "'contributions/**'",
+        "'contracts/**'",
+        "'spec/**'",
         "'src/codex_plugin_scanner/guard/contracts/**'",
         "'.github/actions/setup-rust/action.yml'",
-        "'.github/actions/ci-job-macos-native-runtime/action.yml'", "'.cargo/**'",
-        "'scripts/ci/native_cache_environment.py'", "'scripts/refresh_extension_artifacts.py'",
+        "'.github/actions/ci-job-macos-native-runtime/action.yml'",
+        "'.cargo/**'",
+        "'scripts/ci/native_cache_environment.py'",
+        "'scripts/refresh_extension_artifacts.py'",
     ):
         assert token in restore["with"]["key"]
     assert "'.github/workflows/ci.yml'" not in restore["with"]["key"]
     miss = "steps.runtime-cache.outputs.cache-hit != 'true'"
     assert setup["if"] == miss
     for name in (
-        "Install content-addressed compiler cache", "Route the runtime build through the compiler cache",
+        "Install content-addressed compiler cache",
+        "Route the runtime build through the compiler cache",
         "Build the macOS native runtime",
     ):
         assert next(step for step in steps if step.get("name") == name)["if"] == miss
