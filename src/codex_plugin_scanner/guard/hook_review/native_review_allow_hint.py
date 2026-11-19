@@ -229,7 +229,7 @@ def _live_reviewed_command(approval: Mapping[str, object], guard_home: Path) -> 
     raw_payload = envelope.get("raw_payload_redacted") if isinstance(envelope, Mapping) else None
     if isinstance(raw_payload, Mapping) and any(key in raw_payload for key in ("tool_input", "toolInput")):
         facts = native_hook_facts(raw_payload, guard_home, deadline=time.monotonic() + _LIVE_BUDGET_SECONDS)
-        if facts is None or not _command_only_payload(facts.tool_input):
+        if facts is None or not facts.command_only:
             return None
         cwd = _stored_launch_cwd(raw_payload, workspace_path)
         if cwd is None and _names_launch_directory(raw_payload):

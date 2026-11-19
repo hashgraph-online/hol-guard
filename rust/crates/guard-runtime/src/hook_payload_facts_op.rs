@@ -9,6 +9,22 @@ use crate::resident_protocol::encode_response;
 pub(crate) const HOOK_PAYLOAD_FACTS_FEATURE: &str = "hook-payload-facts-v1";
 const REQUEST_SCHEMA: &str = "guard-hook-payload-facts-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-payload-facts-result.v1";
+const COMMAND_ONLY_KEYS: [&str; 14] = [
+    "command",
+    "cmd",
+    "shell_command",
+    "shellCommand",
+    "description",
+    "timeout",
+    "timeout_ms",
+    "timeoutMs",
+    "run_in_background",
+    "runInBackground",
+    "workdir",
+    "cwd",
+    "working_directory",
+    "workingDirectory",
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -53,9 +69,7 @@ pub(crate) fn runtime_event(payload: &Map<String, Value>) -> String {
             | "afterreadfile"
             | "afterwritefile"
             | "aftermcpexecution" => "PostToolUse",
-            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest" => {
-                "PermissionRequest"
-            }
+            "permissionrequest" | "permissionrequestv2" => "PermissionRequest",
             "prompt" | "userpromptsubmit" | "userpromptsubmitted" => "UserPromptSubmit",
             _ => raw,
         }
@@ -142,12 +156,17 @@ pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, S
     let input = tool_input(payload);
     let command = command(payload, input.as_ref());
     let tool_name = tool_name(payload);
+    let command_only = input.as_ref().is_some_and(|value| {
+        value
+            .keys()
+            .all(|key| COMMAND_ONLY_KEYS.contains(&key.as_str()))
+    });
     let response = json!({
         "schema": RESULT_SCHEMA,
         "result": {
             "request_id": request.request_id,
             "event_name": runtime_event(payload),
-            "tool_input": input.as_ref().map(|value| Value::Object(value.clone())),
+            "command_only": command_only,
             "command": command,
             "tool_name": tool_name.clone(),
             "launch_target": launch_target(input.as_ref(), command.as_deref(), &tool_name),

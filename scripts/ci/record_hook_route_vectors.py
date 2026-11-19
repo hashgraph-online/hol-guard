@@ -33,6 +33,28 @@ OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/hook_route_vectors.json.
 HARNESSES = ("codex", "claude-code", "claude", "copilot", "cursor", "devin", "zcode", "grok", "unknown-harness")
 _EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
 _PASSTHROUGH_HARNESSES = frozenset({"devin", "zcode"})
+_PRE_EVENTS = frozenset(
+    {
+        "pretool",
+        "pretooluse",
+        "pretoolcall",
+        "beforeshellexecution",
+        "beforereadfile",
+        "beforewritefile",
+        "beforemcpexecution",
+    }
+)
+_POST_EVENTS = frozenset(
+    {
+        "posttool",
+        "posttooluse",
+        "posttoolcall",
+        "aftershellexecution",
+        "afterreadfile",
+        "afterwritefile",
+        "aftermcpexecution",
+    }
+)
 SESSION = "session-1"
 _PERMISSION_PROMPT = {"hook_event_name": "Notification", "notification_type": "permission_prompt"}
 
@@ -46,11 +68,11 @@ def fixture_event_name(payload: Mapping[str, object]) -> str:
             continue
         raw = value.strip()
         compact = raw.lower().replace("_", "").replace("-", "")
-        if compact.startswith("pretool") or compact.startswith("before"):
+        if compact in _PRE_EVENTS:
             return "PreToolUse"
-        if compact.startswith("posttool") or compact.startswith("after"):
+        if compact in _POST_EVENTS:
             return "PostToolUse"
-        if compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}:
+        if compact in {"permissionrequest", "permissionrequestv2"}:
             return "PermissionRequest"
         if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
             return "UserPromptSubmit"
