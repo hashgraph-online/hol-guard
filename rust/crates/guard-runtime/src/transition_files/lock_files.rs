@@ -249,11 +249,18 @@ pub(super) fn lifecycle_lock(directory: &Path) -> Result<(fs::File, PathBuf), Re
     lifecycle_lock_in(&base, directory)
 }
 
+/// The lock file of one configuration directory's identity under `base`.
+fn lock_path_in(base: &Path, identity: &str) -> PathBuf {
+    base.join(format!("{}.lock", sha256_hex(identity.as_bytes())))
+}
+
+/// Where the lifecycle lock of the directory with this identity lives.
+pub(super) fn lifecycle_lock_path(identity: &str) -> std::io::Result<PathBuf> {
+    Ok(lock_path_in(&lifecycle_base()?, identity))
+}
+
 fn lifecycle_lock_in(base: &Path, directory: &Path) -> Result<(fs::File, PathBuf), Refusal> {
-    let path = base.join(format!(
-        "{}.lock",
-        sha256_hex(configuration_identity(directory).as_bytes())
-    ));
+    let path = lock_path_in(base, &configuration_identity(directory));
     #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]

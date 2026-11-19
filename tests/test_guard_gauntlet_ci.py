@@ -14,7 +14,7 @@ from ci.gauntlet.source_identity import validate_identity
     "path",
     [
         "rust/crates/guard-command/src/pretool/mod.rs",
-        "src/codex_plugin_scanner/guard/harness/extension_runtime.py",
+        "src/codex_plugin_scanner/guard/extension_runtime.py",
         "contracts/guard-hooks.json",
         "ci/gauntlet/evidence.py",
         ".github/workflows/guard-gauntlet-evidence.yml",

@@ -13,9 +13,63 @@
 //! including `amend`, keep the whole program reviewed, as does a draft method
 //! on anything but a name bound to an awaited draft.
 
-use super::super::tokens::Token;
+use super::super::tokens::{tokenize_lines, Token};
 use super::{Call, Lit, Parser, MAX_CALLS, MAX_DEPTH};
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
+
+const DRAFT_METHODS: &[&str] = &["take", "drop", "only", "show", "diff", "commit"];
+
+/// Whether the program would parse if the names it calls draft methods on
+/// without binding them held drafts: a cell that reuses a draft an earlier
+/// cell made. Guard reads each cell alone and cannot prove such a name still
+/// holds that draft, so the cell stays reviewed; this only lets the review
+/// name the one-cell form Guard can check.
+pub(in super::super) fn uses_earlier_cell_draft(code: &str) -> bool {
+    if code.len() > super::MAX_CODE_BYTES {
+        return false;
+    }
+    let Some(lexed) = tokenize_lines(code) else {
+        return false;
+    };
+    let tokens = &lexed.tokens;
+    let ident = |index: usize| match tokens.get(index) {
+        Some(Token::Ident(word)) => Some(word.as_str()),
+        _ => None,
+    };
+    let bound: HashSet<&str> = (1..tokens.len())
+        .filter(|&index| {
+            matches!(
+                ident(index - 1),
+                Some("const" | "let" | "var" | "function" | "class")
+            )
+        })
+        .filter_map(ident)
+        .collect();
+    let carried: HashSet<String> = (0..tokens.len())
+        .filter(|&index| {
+            (index == 0 || tokens[index - 1] != Token::Punct('.'))
+                && tokens.get(index + 1) == Some(&Token::Punct('.'))
+                && ident(index + 2).is_some_and(|method| DRAFT_METHODS.contains(&method))
+        })
+        .filter_map(ident)
+        .filter(|name| !bound.contains(name) && *name != "commit")
+        .map(str::to_owned)
+        .collect();
+    if carried.is_empty() {
+        return false;
+    }
+    let mut parser = Parser {
+        tokens: lexed.tokens,
+        breaks: lexed.breaks,
+        raw_templates: lexed.raw_templates,
+        pos: 0,
+        declared: carried.clone(),
+        drafts: carried,
+        calls: Vec::new(),
+    };
+    parser.program().is_some()
+}
 
 impl Parser {
     /// Whether `await commit.draft` starts at the cursor.
@@ -61,14 +115,18 @@ impl Parser {
         Some(())
     }
 
-    /// A name bound to a draft: shown as is, or one of its methods called
-    /// with literal arguments. The draft's repository is already recorded.
+    /// A name bound to a draft: shown as is, one of its fields, one of its
+    /// methods called with literal arguments, or a method itself, uncalled or
+    /// shown with `toString()`. The draft's repository is already recorded.
     pub(super) fn draft_use(&mut self) -> Option<()> {
         if !self.at('.') {
             return Some(());
         }
         self.pos += 1;
         let method = self.ident()?;
+        if !self.at('(') {
+            return self.draft_member(&method);
+        }
         let args = self.literal_args()?;
         let silent = |value: &Value| object_keys(value, &["silent"]);
         let selection = |value: &Value| object_keys(value, &["units", "grep", "silent"]);
@@ -81,8 +139,8 @@ impl Parser {
             ("only", [globs]) => strings(globs),
             ("only", [globs, options]) => strings(globs) && silent(options),
             ("show", []) => true,
-            ("show", [path]) => strings(path),
-            ("show", [path, options]) => (strings(path) || path.is_null()) && silent(options),
+            ("show", [path]) => plain_paths(path),
+            ("show", [path, options]) => (plain_paths(path) || path.is_null()) && silent(options),
             ("diff", []) => true,
             ("diff", [options]) => silent(options),
             ("commit", [Value::String(subject)]) => !subject.trim().is_empty(),
@@ -93,6 +151,44 @@ impl Parser {
             _ => false,
         };
         valid.then_some(())
+    }
+
+    /// `draft.id`, `draft.details` and `draft.text` are plain fields the
+    /// prelude sets. A method named without a call is taken only as its
+    /// source text through `toString()`, never as a value: placed under
+    /// `then` or `toJSON`, the host would call it with arguments no literal
+    /// check saw. `typeof draft.method` is read before this.
+    fn draft_member(&mut self, name: &str) -> Option<()> {
+        match name {
+            "id" | "details" | "text" => Some(()),
+            name if DRAFT_METHODS.contains(&name) => {
+                self.eat('.')?;
+                self.eat_ident("toString")?;
+                self.eat('(')?;
+                self.eat(')')
+            }
+            _ => None,
+        }
+    }
+
+    /// `typeof draft.method`, which names the method without reading it as
+    /// a value anything could call.
+    pub(super) fn typeof_draft_method(&mut self) -> bool {
+        let ident = |offset: usize| match self.tokens.get(self.pos + offset) {
+            Some(Token::Ident(ident)) => Some(ident.as_str()),
+            _ => None,
+        };
+        let found = ident(0).is_some_and(|name| self.drafts.contains(name))
+            && self.tokens.get(self.pos + 1) == Some(&Token::Punct('.'))
+            && ident(2).is_some_and(|name| DRAFT_METHODS.contains(&name))
+            && !matches!(
+                self.tokens.get(self.pos + 3),
+                Some(Token::Punct('(' | '.' | '['))
+            );
+        if found {
+            self.pos += 3;
+        }
+        found
     }
 
     /// `(literal, ...)`: strings, numbers, booleans, `null`, and arrays and
@@ -164,6 +260,27 @@ impl Parser {
     }
 }
 
+/// A `show` path, or an array of them, that names no file Guard keeps out of
+/// a plain read. `show(path)` prints the draft's hunks for exactly that path,
+/// the read `git diff HEAD -- <path>` performs, and Guard reviews that command
+/// when the path names a secret. The prelude's own route follows it, so the
+/// same spelling cannot answer through `eval` what it is refused through
+/// `bash`. `take`, `drop` and `only` select what the commit carries rather
+/// than printing a file, and `show()` with no path is the draft's own summary,
+/// so neither is read through this check.
+fn plain_paths(value: &Value) -> bool {
+    strings(value) && !names_sensitive(value)
+}
+
+/// Whether `value` names a sensitive read target, directly or in an array.
+fn names_sensitive(value: &Value) -> bool {
+    match value {
+        Value::String(path) => crate::pretool::sensitive_read_path_argument(path),
+        Value::Array(items) => items.iter().any(names_sensitive),
+        _ => false,
+    }
+}
+
 /// A string, or an array of strings.
 fn strings(value: &Value) -> bool {
     match value {
@@ -211,11 +328,12 @@ fn subject_in_options(options: &Map<String, Value>) -> bool {
 }
 
 /// `commit(subject, options)`: a body as a string or lines, `fixes`,
-/// `noVerify` (which only skips hooks) and `silent`. An array in the options
-/// place carries no option at all. `amend` rewrites an earlier commit and
-/// keeps its review.
+/// `noVerify` (which only skips hooks) and `silent`. A string or an array in
+/// the options place carries no option at all: the prelude throws on it
+/// before Git runs. `amend` rewrites an earlier commit and keeps its review.
 fn commit_options(value: &Value) -> bool {
     match value {
+        Value::String(_) => true,
         Value::Array(lines) => lines.iter().all(Value::is_string),
         Value::Object(options) => options.iter().all(|(key, value)| match key.as_str() {
             "body" => strings(value),

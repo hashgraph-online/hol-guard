@@ -17,6 +17,7 @@ import pytest
 from codex_plugin_scanner.guard import config as guard_config
 from codex_plugin_scanner.guard import native_payload_facts
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
+from codex_plugin_scanner.guard.hook_review import hook_native_package_review as package_review
 from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
 _URL = "http://127.0.0.1:4781/requests/abc"
@@ -109,7 +110,7 @@ def _pause(
         "native_saved_decision_response": lambda *_a, **_k: None,
         "native_exact_command_block_response": lambda *_a, **_k: None,
         "native_review_settle": lambda *_a, **_k: None,
-        "native_package_review_response": lambda *_a, **_k: None,
+        "native_package_review_response": lambda *_a, **_k: package_review.PackageReviewOutcome(None),
         "native_review_approval_center_url": lambda _store: "http://127.0.0.1:4781",
         "queue_native_pre_tool_review": queue,
         # Rendering is native; the harness shape is tested with the renderers.

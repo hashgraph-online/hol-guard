@@ -57,10 +57,10 @@ mod find_exec;
 mod functions;
 #[path = "native_command_unmodeled_heredoc.rs"]
 mod heredoc;
+#[path = "native_command_unmodeled_heredoc_lead.rs"]
+mod heredoc_lead;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
-#[path = "native_command_unmodeled_loop.rs"]
-mod loops;
 #[path = "native_command_unmodeled_operands.rs"]
 mod operands;
 #[path = "native_command_unmodeled_redirections.rs"]
@@ -227,7 +227,14 @@ impl CompiledNativeCommandControls {
         }
         // A lookup such as `command -v doctl` only prints a path: it never
         // runs the program it names, so it owns nothing.
-        let looked = without_lookups(&command.normalized_text);
+        //
+        // An escaped backtick is a literal one. The word reader below ends a
+        // command at every backtick, so leaving them in made `grep -F "| \`$f\`
+        // |"` read its own operand as a command position holding a parameter,
+        // and the markdown row an ordinary release note greps for blocked
+        // outright with no approval left to give it.
+        let looked =
+            substitution::without_escaped_backticks(&without_lookups(&command.normalized_text));
         let text = &looked;
         let heredocs = data_heredocs(text);
         let shell = match &heredocs {
@@ -847,11 +854,12 @@ fn reviewable_structure(
         // Any other substitution is read as the words it prints when every
         // command it runs is named in its text (see `substitution`).
         Some("command_substitution_not_yet_supported") => {
-            let looked = without_lookups(&command.normalized_text);
+            let looked =
+                substitution::without_escaped_backticks(&without_lookups(&command.normalized_text));
             bounded_substitutions(&looked)
                 .or_else(|| {
                     reviewable_substitutions(&looked).filter(|bounded| {
-                        plain_sequence(&bounded.text) || loops::launcher_free_loop(&bounded.text)
+                        plain_sequence(&bounded.text) || interpreter_free(&bounded.text)
                     })
                 })
                 .is_some_and(|bounded| {
@@ -991,6 +999,26 @@ fn plain_sequence(text: &str) -> bool {
         )
     });
     !construct
+}
+
+/// A loop or conditional, read with each substitution as the word it prints,
+/// that puts no interpreter or launcher in a command position. Its body runs
+/// only programs the text names, so the owners below bound it the way they
+/// bound the same loop with no substitution, which reaches review. Until this
+/// was read, `for e in a b; do sum=$(shasum -a 256 "$e"); test "$sum" = x;
+/// done` blocked with no approval left to give, while the same loop holding
+/// a plain value reviewed. An interpreter in the body still keeps the
+/// evaluation failure: the value a substitution keeps may become the text it
+/// runs.
+fn interpreter_free(text: &str) -> bool {
+    let bare = without_plain_awk(&without_redirections(&shell_text(text)));
+    let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
+    // `trap` and `.` run text they are handed, as the interpreters do.
+    !INTERPRETERS
+        .iter()
+        .chain(substitution::LAUNCHERS)
+        .chain(&["trap", ".", "alias"])
+        .any(|name| commanded.contains(*name))
 }
 
 /// Every word the shell could read as a program name or keyword token, with
@@ -1583,6 +1611,10 @@ mod sourced_tests;
 mod bounded_tests;
 
 #[cfg(test)]
+#[path = "native_command_unmodeled_heredoc_lead_tests.rs"]
+mod heredoc_lead_tests;
+
+#[cfg(test)]
 #[path = "native_command_unmodeled_fd_exec_tests.rs"]
 mod fd_exec_tests;
 
@@ -1619,3 +1651,7 @@ mod quoted_angle_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_substitution_tests.rs"]
 mod substitution_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_substitution_loop_tests.rs"]
+mod substitution_loop_tests;

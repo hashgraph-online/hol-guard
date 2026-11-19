@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from tests import harness_ops_support as harness_support
 from tests.opencode_test_support import pretool_plugin_source
 from tests.test_opencode_pretool import _bun_executable, _ctx
 
@@ -31,7 +31,7 @@ def _stale_companion(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    get_adapter("opencode").install(ctx)
+    harness_support.install("opencode", ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     argv = companion["command"]
@@ -180,7 +180,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
         ),
         encoding="utf-8",
     )
-    get_adapter("opencode").install(ctx)
+    harness_support.install("opencode", ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     proxy_index = companion["command"].index("opencode-mcp-proxy")
@@ -194,11 +194,11 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     before = json.loads(config.read_text(encoding="utf-8"))
 
     if frozen_runtime:
-        from codex_plugin_scanner.guard.harness import native_harness
+        from codex_plugin_scanner.guard import native_harness_client as harness_client
 
-        stamp = native_harness.caller_identity()
+        stamp = harness_client.caller_identity()
         monkeypatch.setattr(
-            native_harness,
+            harness_client,
             "caller_identity",
             lambda: {**stamp, "frozen": True, "executable_resolved": "/durable/current-hol-guard"},
         )

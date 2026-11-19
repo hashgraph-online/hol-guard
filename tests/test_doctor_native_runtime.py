@@ -11,7 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.cli import doctor_native_runtime
 from codex_plugin_scanner.guard.cli.doctor_native_runtime import NativeAvailabilityResult, doctor_native_availability
-from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
+from codex_plugin_scanner.guard.command_probes import without_command_probes
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, NativeRuntimeStatus
 
 
@@ -149,7 +149,7 @@ def test_the_default_doctor_explains_a_busy_owner_without_running_the_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from codex_plugin_scanner.guard.cli import doctor_native_runtime
-    from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
+    from codex_plugin_scanner.guard.command_probes import without_command_probes
 
     def _must_not_run() -> NativeRuntimeStatus:
         raise AssertionError("the runtime must not run while command probes are off")

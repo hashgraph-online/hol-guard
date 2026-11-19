@@ -37,15 +37,27 @@ fn unmatched_glob(value: &str, context: ReadContext<'_>) -> bool {
 pub(super) fn recursive_targets_proven(
     targets: &[&str],
     proven: impl Fn(&str) -> bool,
-    absent: Option<ReadContext<'_>>,
+    context: ReadContext<'_>,
+    absent: bool,
 ) -> bool {
+    let absent = absent.then_some(context);
     let mut kept = false;
     for &target in targets {
         if proven(target) || absent.is_some_and(|context| super::absent_target(target, context)) {
-            kept = true;
+            kept |= !dropped_by_nullglob(target, context);
         } else if !absent.is_some_and(|context| unmatched_glob(target, context)) {
             return false;
         }
     }
     kept || (!targets.is_empty() && proven("."))
+}
+
+/// A bracket class that matches nothing is searched as the literal path it
+/// spells, as in `grep -rn x app/[slug]`, but `nullglob` removes the word
+/// instead. Unless the quote map shows the word quoted, it keeps no root, and
+/// the working directory a bare `grep -r` would walk has to be proven too.
+fn dropped_by_nullglob(target: &str, context: ReadContext<'_>) -> bool {
+    target.contains('[')
+        && !context.literal_words.iter().any(|word| word == target)
+        && tree::inert_bracket_class(target, context)
 }

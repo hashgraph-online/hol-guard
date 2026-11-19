@@ -348,14 +348,19 @@ fn sets_a_variable(word: &str) -> bool {
 }
 
 /// Whether every `$` in the text opens a parameter, inside double quotes,
-/// that roots a path: `"$HOME/Downloads/x"` or `"${ROOT}/src"`.
+/// that stands as a segment of a path: `"$HOME/Downloads/x"`,
+/// `"${ROOT}/src"` or `"$HOME/Downloads/$name"`.
 ///
 /// `find "$HOME/Downloads/widgets" -type f -exec basename {} \;` searches a
 /// directory under the home the shell already knows. The quotes keep the
-/// value one word and the `/` after it keeps that word a path, so nothing the
-/// value holds can become a find action, an operator or a program. Refusing
-/// every `$` left that listing blocked outright, while the same search under
-/// a relative root reached review.
+/// value one word and the slashes around it keep that word a path, so nothing
+/// the value holds can become a find action, an operator or a program.
+/// Refusing every `$` left that listing blocked outright, while the same
+/// search under a relative root reached review. Requiring a `/` only after
+/// the parameter refused the leaf of a path the loop variable names, so
+/// `artifact_path="$HOME/Downloads/w/$file"` inside a `for` body blocked with
+/// no approval left to give, while the same path with a literal last segment
+/// reviewed.
 pub(super) fn parameters_only_root_paths(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
     let (mut single, mut double, mut escaped) = (false, false, false);
@@ -375,9 +380,7 @@ pub(super) fn parameters_only_root_paths(text: &str) -> bool {
             '\'' if !double => single = true,
             '"' => double = !double,
             '$' => {
-                let Some(after) = double
-                    .then(|| rooted_parameter_end(&chars, index))
-                    .flatten()
+                let Some(after) = double.then(|| path_parameter_end(&chars, index)).flatten()
                 else {
                     return false;
                 };
@@ -389,8 +392,9 @@ pub(super) fn parameters_only_root_paths(text: &str) -> bool {
     !single && !double
 }
 
-/// The index past `NAME` or `{NAME}` at `start`, when a `/` follows it.
-fn rooted_parameter_end(chars: &[char], start: usize) -> Option<usize> {
+/// The index past `NAME` or `{NAME}` at `start`, when the parameter stands
+/// as a segment of a path: a `/` follows it, or one precedes its `$`.
+fn path_parameter_end(chars: &[char], start: usize) -> Option<usize> {
     let braced = chars.get(start) == Some(&'{');
     let name = start + usize::from(braced);
     let length = chars[name.min(chars.len())..]
@@ -405,7 +409,11 @@ fn rooted_parameter_end(chars: &[char], start: usize) -> Option<usize> {
         (chars.get(end) == Some(&'}')).then_some(())?;
         end += 1;
     }
-    (chars.get(end) == Some(&'/')).then_some(end)
+    let rooted = chars.get(end) == Some(&'/');
+    // `start` stands one past the `$`, so the character before the parameter
+    // is two back from it.
+    let segment = start >= 2 && chars[start - 2] == '/';
+    (rooted || segment).then_some(end)
 }
 
 /// `nodepath="$HOME/.nvm/..."`: a plain shell variable the text sets for its

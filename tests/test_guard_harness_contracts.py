@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.contract_registry import harness_contracts
-from codex_plugin_scanner.guard.harness.contracts import HarnessProtectionContract, contract_for
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
+from codex_plugin_scanner.guard.setup_contracts import HarnessProtectionContract, contract_for
 
 
 class TestHarnessProtectionContract:
@@ -154,16 +154,16 @@ class TestInstallAliases:
 
 
 class TestContractAliasesMatchAdapter:
-    """All install_aliases in every contract must be accepted by get_adapter()."""
+    """All install_aliases in every contract must be accepted by the native harness ops."""
 
     def test_all_install_aliases_are_resolvable(self) -> None:
-        from codex_plugin_scanner.guard.harness.registry import get_adapter
+        from codex_plugin_scanner.guard.native_harness_ops import canonical_harness
 
         for contract in harness_contracts():
             for alias in contract.install_aliases:
                 try:
-                    get_adapter(alias)
+                    canonical_harness(alias)
                 except ValueError:
                     pytest.fail(
-                        f"Contract '{contract.harness}' lists alias '{alias}' but get_adapter() does not recognize it"
+                        f"Contract '{contract.harness}' lists alias '{alias}' but the native harness ops do not recognize it"
                     )

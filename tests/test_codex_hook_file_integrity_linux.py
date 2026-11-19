@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, validate_regular_file
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_private_group_support import group_is_private_to_owner
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and permission semantics are required")
@@ -42,7 +42,7 @@ def test_codex_install_accepts_private_group_config_and_rewrites_owner_only(tmp_
     config.chmod(0o664)
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
 
-    installed = CodexHarnessAdapter().install(context)
+    installed = harness_support.install("codex", context)
 
     assert installed["active"] is True
     assert stat.S_IMODE(config.stat().st_mode) == 0o600

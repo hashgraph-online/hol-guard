@@ -1,8 +1,9 @@
 //! The background passes the daemon runs itself rather than as Guard
 //! library calls: the runtime heartbeat, the idle-shutdown hold and storage
 //! maintenance, which also rotates `daemon.log` and retires leftover Guard
-//! processes (`orphaned_worker_reap`). Each answers what its
-//! `workers/ticks.py` call did.
+//! processes (`orphaned_worker_reap`), and the hourly sweep of leaked
+//! one-file extraction folders. Each answers what its `workers/ticks.py`
+//! call did.
 
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -28,6 +29,13 @@ const REAP_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 /// every few seconds while storage work is unfinished, and each retry must
 /// not list every process again.
 const REAP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+/// One-file sweep limits, as `onefile_extraction.py` sets them: a marked
+/// folder must be ten minutes old, an unmarked one two hours, and one pass
+/// deletes at most 250 unmarked folders in two minutes.
+const ONEFILE_MIN_AGE_SECONDS: f64 = 600.0;
+const ONEFILE_UNMARKED_MIN_AGE_SECONDS: f64 = 7_200.0;
+const ONEFILE_MAX_UNMARKED_RECLAIMS: u64 = 250;
+const ONEFILE_UNMARKED_BUDGET_SECONDS: f64 = 120.0;
 /// When this daemon last retired leftovers.
 static LAST_REAP: Mutex<Option<Instant>> = Mutex::new(None);
 
@@ -51,6 +59,36 @@ fn reap_when_due() {
     let _ = crate::orphaned_worker_reap::reap_from_daemon(std::process::id(), REAP_BUDGET);
 }
 
+/// Reclaims the `_MEI*` folders hard-killed one-file Guard launches left in
+/// the temp folder. Folders still in use, the library process's own among
+/// them, keep a live owner or show up in the open-files scan and stay.
+fn onefile_reclaim() -> Value {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0.0, |elapsed| elapsed.as_secs_f64());
+    let swept = sweep_onefile(&std::env::temp_dir(), now);
+    json!({"ok": swept.is_ok()})
+}
+
+/// One sweep of `temp_root` at `now` (Unix seconds); the sweep's report.
+fn sweep_onefile(temp_root: &std::path::Path, now: f64) -> Result<Value, String> {
+    let request = json!({
+        "schema": "onefile-extraction-reclaim.v1",
+        "temp_root": temp_root.to_string_lossy(),
+        "current_meipass": Value::Null,
+        "now": now,
+        "min_age_seconds": ONEFILE_MIN_AGE_SECONDS,
+        "unmarked_min_age_seconds": ONEFILE_UNMARKED_MIN_AGE_SECONDS,
+        "max_unmarked_reclaims": ONEFILE_MAX_UNMARKED_RECLAIMS,
+        "unmarked_time_budget_seconds": ONEFILE_UNMARKED_BUDGET_SECONDS,
+        "scan_open_paths": true,
+        "dry_run": false,
+    });
+    let answer = crate::onefile_extraction_reclaim::run_command(request.to_string().as_bytes())?;
+    serde_json::from_slice(&answer)
+        .map_err(|_| "onefile_extraction_reclaim_answer_invalid".to_owned())
+}
+
 /// Runs `call` natively when the daemon owns it: `None` for a call that
 /// still goes to the Guard library, otherwise the pass's answer.
 pub(super) fn native(
@@ -63,6 +101,7 @@ pub(super) fn native(
         "worker.runtime_heartbeat" => heartbeat(reads, config, args),
         "worker.idle_holds" => Some(json!({"ok": true, "hold": idle_holds(reads, config)})),
         "worker.maintain_activity" => Some(json!({"ok": maintain(reads, config)})),
+        "worker.onefile_reclaim" => Some(onefile_reclaim()),
         _ => return None,
     };
     Some(answer)
@@ -254,5 +293,49 @@ mod reap_gate_tests {
             start + REAP_INTERVAL - std::time::Duration::from_secs(1)
         ));
         assert!(reap_due(Some(start), start + REAP_INTERVAL));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod onefile_tests {
+    use super::sweep_onefile;
+
+    /// The pid of a child that has already exited.
+    fn dead_pid() -> u32 {
+        let mut child = std::process::Command::new("true").spawn().expect("spawn");
+        let pid = child.id();
+        child.wait().expect("wait");
+        pid
+    }
+
+    #[test]
+    fn the_daemon_sweep_removes_a_dead_launch_and_keeps_the_rest() {
+        let root = tempfile::tempdir().expect("temp root");
+        let temp_root = std::fs::canonicalize(root.path()).expect("canonical");
+        let leaked = temp_root.join("_MEIdead01");
+        std::fs::create_dir_all(leaked.join("codex_plugin_scanner")).expect("leaked");
+        let pid = dead_pid();
+        std::fs::write(
+            leaked.join(".hol-guard-extraction-owner.json"),
+            serde_json::json!({
+                "schema": "guard.onefile-extraction-owner.v1",
+                "pid": pid,
+                "parent_pid": pid,
+            })
+            .to_string(),
+        )
+        .expect("marker");
+        let other = temp_root.join("not-an-extraction");
+        std::fs::create_dir_all(&other).expect("other");
+        // Far enough ahead that every folder is past both age floors.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_secs_f64()
+            + 86_400.0;
+        let report = sweep_onefile(&temp_root, now).expect("sweep");
+        assert_eq!(report["reclaimed_count"], 1);
+        assert!(!leaked.exists());
+        assert!(other.exists());
     }
 }

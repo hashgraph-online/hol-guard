@@ -160,7 +160,7 @@ fn fingerprint(path: &Path) -> Option<Vec<u64>> {
 /// must still describe it after them, so a file replaced while it was judged
 /// is `codex_hook_{role}_hash_mismatch`, and one that vanished
 /// `codex_hook_{role}_missing`.
-fn validate(
+pub(crate) fn validate(
     path: &Path,
     role: &str,
     executable_required: bool,

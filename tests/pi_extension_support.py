@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_extension import extension_source
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_extension import extension_source
 
 
 def _render(variant: str, *, guard_home: Path, home_dir: Path, settings_path: Path, harness: str) -> str:

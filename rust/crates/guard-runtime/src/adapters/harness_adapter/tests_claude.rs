@@ -7,6 +7,8 @@ use serde_json::{json, Map, Value};
 
 use super::{after, dispatch, shim, Home};
 
+#[path = "tests_claude_render.rs"]
+mod render;
 #[path = "tests_claude_round_trip.rs"]
 mod round_trip;
 
@@ -380,6 +382,16 @@ fn install_target_names_the_user_file_and_never_a_project_file() {
     );
     assert_eq!(answer["hook_overrides"], json!([]));
     assert!(!workspace.exists());
+}
+
+#[test]
+fn install_target_names_the_session_modes_guard_does_not_cover() {
+    let home = Home::new();
+    let answer = target(&home, None, json!({"PATH": ""}));
+    let text = answer["text"].as_str().unwrap();
+    for mode in ["--bare", "leave out `user`", "claude --bg", "not qualified"] {
+        assert!(text.contains(mode), "install output omits {mode}");
+    }
 }
 
 #[test]

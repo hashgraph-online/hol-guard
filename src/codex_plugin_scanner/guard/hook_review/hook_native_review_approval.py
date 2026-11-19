@@ -149,7 +149,7 @@ def pause_native_pre_tool_for_approval(
         allowed["policy_action"] = "allow"
         accepted = render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
         return admit_accepted_call(store, harness=harness, payload=payload, response=accepted)
-    settled = native_package_review_response(
+    package_review = native_package_review_response(
         store,
         harness=harness,
         payload=payload,
@@ -159,8 +159,11 @@ def pause_native_pre_tool_for_approval(
         home_dir=home_dir,
         deadline=deadline,
     )
-    if settled is not None:
-        return admit_accepted_call(store, harness=harness, payload=payload, response=settled)
+    if package_review.response is not None:
+        return admit_accepted_call(store, harness=harness, payload=payload, response=package_review.response)
+    # An Always allow on the queued review is saved under the install's package
+    # key too, so the identical install in a linked worktree reuses it.
+    package_approval = package_review.package_approval
     from ..blocked_request_mode import asks_for_approval
     from ..config import load_guard_config
 
@@ -202,6 +205,7 @@ def pause_native_pre_tool_for_approval(
             approval_center_url=approval_center_url,
             review_binding=identity,
             connector_lookup=connector_lookup,
+            package_approval=package_approval,
             policy_binding_verified=True,
             # A block that links its approval holds the Codex bridge's wait;
             # the resident links that wait only for such a block, so approving
@@ -247,6 +251,7 @@ def pause_native_pre_tool_for_approval(
         approval_center_url=approval_center_url,
         review_binding=identity,
         connector_lookup=connector_lookup,
+        package_approval=package_approval,
         policy_binding_verified=True,
         claude_notice=canonical_harness(harness) == "claude-code",
         codex_live_wait=canonical_harness(harness) == "codex",
@@ -294,6 +299,7 @@ def queue_native_pre_tool_review(
     approval_center_url: str | None = None,
     connector_lookup: dict[str, object] | None = None,
     bound_bash: Mapping[str, object] | None = None,
+    package_approval: Mapping[str, str] | None = None,
     claude_notice: bool = False,
     policy_binding_verified: bool = False,
     codex_live_wait: bool = False,
@@ -326,6 +332,8 @@ def queue_native_pre_tool_review(
         # The resident queues a prepared Bash review only as the reply the
         # native Bash owner prepared, with the receipt's policy binding.
         "bound_bash": None if bound_bash is None else dict(bound_bash),
+        # The package key an Always allow on this review is also saved under.
+        "package_approval": None if package_approval is None or exact_token is None else dict(package_approval),
     }
     try:
         query = native_review_query(harness, payload, review, workspace=workspace, home_dir=home_dir)

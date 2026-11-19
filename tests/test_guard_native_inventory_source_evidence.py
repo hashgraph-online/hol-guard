@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import inventory_contract
 from codex_plugin_scanner.guard import native_inventory_source_evidence as bridge
-from codex_plugin_scanner.guard.harness.base import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
 def _entries(count: int) -> list[dict[str, object]]:

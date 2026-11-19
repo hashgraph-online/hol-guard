@@ -5,8 +5,8 @@
 //! `_socket_is_live` and the tracked-process handling in
 //! `_start_direct_app_server` before they moved here).
 //!
-//! `prepare` (in `codex_remote_prepare`) runs the launch sequence; the
-//! client starts the processes it names. The resident reads the pid back,
+//! `prepare` (in `codex_remote_prepare`) decides the launch sequence and `run`
+//! (in `codex_remote_run`) starts the processes it names. The resident reads the pid back,
 //! checks the process is the server listening on the socket and stops a stale
 //! one. The resident runs as the launching user, so its uid is the one the
 //! socket must belong to and the one allowed to signal the server.
@@ -66,6 +66,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("wait") if map.len() == 3 => wait(map),
         Some("reclaim") if map.len() == 3 => reclaim(map),
         Some("prepare") => super::codex_remote_prepare::prepare(map),
+        Some("run") => super::codex_remote_run::run(map),
         _ => Err(ERR_INVALID),
     }
 }
@@ -83,7 +84,7 @@ fn plan(map: &Map<String, Value>) -> KindResult {
     Ok(json!({ "tails": tails(&args, socket) }))
 }
 
-fn string_list(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
+pub(super) fn string_list(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
     value
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?
@@ -130,7 +131,7 @@ fn control_socket(home: &str) -> String {
 /// the arguments allow the remote TUI, whether the client should run
 /// `prepare` at all (it should exactly when there is a remote command), and
 /// every command preparation may select, remote first.
-fn launch(map: &Map<String, Value>) -> KindResult {
+pub(super) fn launch(map: &Map<String, Value>) -> KindResult {
     let mut chosen: Vec<Vec<&str>> = Vec::new();
     for prefix in map
         .get("prefixes")

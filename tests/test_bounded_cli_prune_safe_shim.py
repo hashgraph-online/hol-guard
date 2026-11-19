@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.stable_guard_cli import prune_safe_cli_executable
 
 from .native_bounded_runtime import durable_copy, use_bounded_runtime

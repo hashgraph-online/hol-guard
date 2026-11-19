@@ -1,10 +1,12 @@
 use super::*;
 
 #[test]
-fn only_quoted_parameters_that_root_a_path_pass() {
+fn only_quoted_parameters_that_are_path_segments_pass() {
     for text in [
         "find \"$HOME/Downloads/x\" -type f -exec basename {} \\;",
         "find \"${HOME}/src\" -exec basename {} \\; && shasum \"$HOME/x\"/*",
+        "find \"$HOME/Downloads/$name\" -exec basename {} \\;",
+        "find \"$HOME/w/${name}\" -exec basename {} \\;",
         "find src -name '$x' -exec basename {} \\;",
         "find src -exec basename {} \\;",
     ] {
@@ -25,7 +27,12 @@ fn only_quoted_parameters_that_root_a_path_pass() {
 
 #[test]
 fn only_plain_lowercase_shell_variables_are_set_aside() {
-    for word in ["nodepath=/x", "dir=\"$HOME/x\"", "widgets_dir=a"] {
+    for word in [
+        "nodepath=/x",
+        "dir=\"$HOME/x\"",
+        "widgets_dir=a",
+        "artifact_path=\"$HOME/Downloads/w/$file\"",
+    ] {
         assert!(binds_a_shell_variable(word), "{word}");
     }
     for word in [
@@ -179,4 +186,6 @@ fn a_shell_variable_may_expand_only_a_quoted_path_root() {
         assert!(!binds_a_shell_variable(word), "{word}");
     }
     assert!(binds_a_shell_variable("x=\"${HOME}/a\""));
+    // The leaf of a path a loop variable names is a segment too.
+    assert!(binds_a_shell_variable("x=\"${HOME}/a/$leaf\""));
 }

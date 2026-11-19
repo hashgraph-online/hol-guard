@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.hook_review import hook_managed_install_state as state
-from codex_plugin_scanner.guard.managed_install_revision import bump_managed_install_revision
 
 
 class _Store:
@@ -16,6 +15,10 @@ class _Store:
         self.path = "/tmp/guard-test-store"
         self.installs = installs
         self.reads = 0
+        self.revision = 0
+
+    def managed_install_revision(self) -> int:
+        return self.revision
 
     @contextmanager
     def connection_scope(self) -> Iterator[None]:
@@ -58,7 +61,7 @@ def test_local_managed_install_write_drops_remembered_answer() -> None:
     server = _server(store)
     assert state._hook_harness_is_unmanaged(server, "pi") is False
     store.installs["pi"] = False
-    bump_managed_install_revision()
+    store.revision += 1
     assert state._hook_harness_is_unmanaged(server, "pi") is True
 
 

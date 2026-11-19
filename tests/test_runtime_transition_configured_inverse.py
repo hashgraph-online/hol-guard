@@ -21,9 +21,9 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, require_high_risk, update_settings
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_daemon_manage import _guard_daemon_pid_is_proven_dead
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
@@ -41,6 +41,7 @@ from codex_plugin_scanner.guard.runtime_transition_native_capture import (
     _process_snapshot,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 from tests.guard_daemon_state_signing import load_authenticated_daemon_state
 
 from .test_runtime_transition import transition  # noqa: F401 -- isolated owner/authority fixture
@@ -177,8 +178,7 @@ def test_configured_native_inverse_restores_binding_store_and_selection(
     workspace.mkdir()
     context = HarnessContext(home, None, fixture_runtime.home, home_override_explicit=True)
     store = GuardStore(context.guard_home)
-    adapter = CodexHarnessAdapter()
-    manifest = adapter.install(context)
+    manifest = harness_support.install("codex", context)
     store.set_managed_install("codex", True, None, manifest, "isolated-native-inverse")
     identity = native_runtime_status().identity
     assert identity is not None
@@ -245,7 +245,7 @@ def test_configured_native_inverse_restores_binding_store_and_selection(
             lifecycle.start(time.monotonic() + 20)
         # Startup may refresh launchers; capture the actual running generation.
         before_row = store.list_managed_installs()[0]
-        prepared = adapter.prepare_install(context)
+        prepared = harness_install_ops.prepare_install("codex", context)
         assert any(change.before != change.after for change in prepared.files), "exercise actual binding publication"
         before_files = {change.path: change.before for change in prepared.files if change.expected_digest is None}
         after_row = {**before_row, "manifest": prepared.manifest, "updated_at": "candidate-fixture"}

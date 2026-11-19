@@ -186,12 +186,6 @@ def _replay_server_class() -> type:
         def package_firewall_connect_state(self, value: dict[str, object] | None) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
             self._replay_state.set("package_firewall_connect_state", value)
 
-        @cached_property
-        def network_supervisor(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from ..runtime.network_supervisor import NetworkSupervisor
-
-            return NetworkSupervisor()
-
         # The extension-control service is the resident's, one per Guard home.
         @property
         def extension_control_api(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]

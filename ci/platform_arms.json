@@ -771,6 +771,14 @@
    "body": "138b229d2cb2"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Only the Unix arm of `codex_remote_run::spawn` is ever asked to start a detached app-server: `codex_remote_prepare::direct` answers the ordinary launch on Windows before it names a `spawn` step, because Windows has no Unix control socket for the server. The arm therefore fails closed with `Unsupported`, which `spawn` turns into the ordinary launch. `codex_remote_prepare_tests` pins that Windows answer.",
+   "file": "rust/crates/guard-contained-process/src/detached.rs",
+   "item": "pub fn spawn_detached( _program: &Path, _args: &[OsString], _env: &[(OsString, OsString)], ) -> io::Result<u32>",
+   "cfg": "not(unix)",
+   "body": "80d6235dedfa"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows has a handle-bound process kernel in its own arm; elsewhere `Unsupported` fails closed rather than running a child unbounded.",
    "file": "rust/crates/guard-contained-process/src/lib.rs",
@@ -1028,11 +1036,11 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/aibom_skills.rs",
-   "item": "mod native",
-   "verdict": "windows-unsupported",
-   "note": "Skill discovery returns `native_runner_authority_aibom_skills_unsupported` off Unix; directory identity walks natively on every platform.",
+   "item": "fn path_from_bytes -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Discovery records a relative skill path as the UTF-8 spelling of the Windows name joined with `/`, so the Windows arm decodes those bytes into a `PathBuf` where Unix rebuilds the raw `OsString`; a document whose name is not valid UTF-8 is reported as an invalid-path-encoding issue before this arm runs, and an issue path with such a name only loses its unpaired surrogate to a replacement character in the reported path. `aibom_skills_tests.rs` runs the native walk on the Windows CI jobs.",
    "cfg": "not(unix)",
-   "body": "11a0b78bed08"
+   "body": "64bcd9c10c5c"
   },
   {
    "file": "rust/crates/guard-runtime/src/approval_enrollment.rs",
@@ -1689,6 +1697,14 @@
    "note": "A global push hook is never trusted off Unix.",
    "cfg": "not(unix)",
    "body": "0a75f43e436a"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/git_rules_git.rs",
+   "item": "fn runnable -- non-Unix block",
+   "verdict": "posix-primitive",
+   "note": "Windows has no execute mode bit, and Git for Windows runs any hook file that exists. An existing regular file is therefore the Windows answer for a hook git would run, the same reading as `package_intent_parser::local_files::is_executable`. Counting more hooks as runnable only keeps the opt-in `--no-verify` rule asking, never lets one through.",
+   "cfg": "not(unix)",
+   "body": "4244f2d41d96"
   },
   {
    "file": "rust/crates/guard-runtime/src/github_workflow_context_io.rs",
@@ -2889,6 +2905,22 @@
    "item": "fn sync_directory(_directory: &Path) -> std::io::Result<()>",
    "cfg": "not(unix)",
    "body": "1fba077ff521"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Owner uid and mode bits do not exist on Windows, so the bundled runtime's manifest is trusted by where it was read from, as the Python check it replaced did off POSIX; the install directory's ACL is what keeps that manifest private to the user.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_inspect_runtime.rs",
+   "item": "fn trusted(_metadata: &fs::Metadata, _path: &Path, _checker: Option<&Path>) -> bool",
+   "cfg": "not(unix)",
+   "body": "56c09a52a558"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no `O_NOFOLLOW` or `O_NONBLOCK` and no FIFOs, so this arm refuses a link at the leaf with `symlink_metadata` before it opens the file, as the Python read did, and then opens it normally. The manifest checks that follow run on the opened handle in both arms, so an entry swapped in after the link check is still the file whose type, size and ownership are checked and read.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_inspect_runtime.rs",
+   "item": "fn open_manifest(path: &Path) -> std::io::Result<fs::File>",
+   "cfg": "not(unix)",
+   "body": "1ccec5e032fc"
   },
   {
    "verdict": "windows-permissive",

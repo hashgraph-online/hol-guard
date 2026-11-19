@@ -17,7 +17,7 @@ from .commands_parser_hooks import configure_guard_hooks_parser as configure_gua
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 HOOKS_REMOVE_ACTION = "hooks.remove"

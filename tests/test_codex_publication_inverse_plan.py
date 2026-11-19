@@ -39,8 +39,8 @@ import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard import codex_harness_client as codex
-from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
 original = native_transition_files.publication
@@ -55,12 +55,13 @@ def exit_after_signed_conflict(op, *args, **kwargs):
         original(op, *args, **kwargs)
     finally:
         os._exit(17)
+from tests import codex_install_flow_support as flow
 from tests import codex_publication_steps
-codex._publish_hooks = codex_publication_steps.stepwise_publish_hooks
-codex_lifecycle.CodexHarnessAdapter._install_owned = codex_publication_steps.stepwise_install_owned
+flow.publish_hooks = codex_publication_steps.stepwise_publish_hooks
+codex_publication_steps.install_stepwise_codex()
 codex_publication_steps.readback = conflict_after_publication
 native_transition_files.publication = exit_after_signed_conflict
-codex_lifecycle.CodexHarnessAdapter().install(context)
+harness_support.install("codex", context)
 raise RuntimeError('signed conflict boundary was not reached')
 """
         child = subprocess.run(

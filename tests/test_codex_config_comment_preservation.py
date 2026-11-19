@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
+from tests import harness_ops_support as harness_support
 from tests.codex_toml_support import dump_toml, read_toml_payload
 
 from .test_codex_publication_preparation import _context
@@ -61,19 +62,18 @@ def test_a_file_guard_cannot_parse_falls_back_to_the_plain_renderer() -> None:
 
 def test_install_and_uninstall_leave_a_hand_written_config_recognizable(tmp_path: Path, monkeypatch) -> None:
     context = _context(tmp_path, monkeypatch)
-    harness = adapter_lifecycle.CodexHarnessAdapter()
-    config_path = harness._target_config_path(context)
+    config_path = codex_paths(context).config
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_HAND_WRITTEN, encoding="utf-8")
 
-    harness.install(context)
+    harness_support.install("codex", context)
     installed = config_path.read_text(encoding="utf-8")
     assert "# Which model Codex talks to. Keep this at the top." in installed
     assert "# Everything below is mine." in installed
     assert "model_reasoning_effort = 'medium'   # single quotes on purpose" in installed
     assert read_toml_payload(config_path)["hooks"]
 
-    harness.uninstall(context)
+    harness_support.uninstall("codex", context)
     removed = config_path.read_text(encoding="utf-8")
     assert "# Which model Codex talks to. Keep this at the top." in removed
     assert "# Everything below is mine." in removed
@@ -163,18 +163,17 @@ def test_a_user_owned_hook_group_keeps_its_comments_through_install_and_uninstal
     """
 
     context = _context(tmp_path, monkeypatch)
-    harness = adapter_lifecycle.CodexHarnessAdapter()
-    config_path = harness._target_config_path(context)
+    config_path = codex_paths(context).config
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(_WITH_USER_HOOKS, encoding="utf-8")
 
-    harness.install(context)
+    harness_support.install("codex", context)
     installed = config_path.read_text(encoding="utf-8")
     assert "# My own hook. Hands off." in installed
     assert 'command = "echo mine"   # keep this spelling' in installed
     assert read_toml_payload(config_path)["features"]["hooks"] is True
 
-    harness.uninstall(context)
+    harness_support.uninstall("codex", context)
     removed = config_path.read_text(encoding="utf-8")
     assert "# My own hook. Hands off." in removed
     assert 'command = "echo mine"   # keep this spelling' in removed

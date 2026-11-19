@@ -269,7 +269,7 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     let shim = files::shim_manifest(fields)?;
     let (artifacts, found_paths) = detect(ctx, &snapshot)?;
     let source_paths = match &ctx.workspace {
-        Some(_) => workspace_paths(ctx, fields, &artifacts, found_paths)?,
+        Some(_) => workspace_paths(ctx, &artifacts, found_paths)?,
         None => found_paths,
     };
     let selection = opencode_servers::select(&artifacts)?;
