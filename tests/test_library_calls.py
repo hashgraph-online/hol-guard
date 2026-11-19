@@ -333,8 +333,10 @@ def test_control_library_steps_read_the_daemon_state(tmp_path: Path) -> None:
 
 def test_native_daemon_worker_passes_are_not_library_calls(tmp_path: Path) -> None:
     # The native daemon runs the heartbeat, the idle hold, storage
-    # maintenance and the one-file extraction sweep itself.
+    # maintenance, the one-file extraction sweep and the sync-profile lookup
+    # behind the idle hold itself.
     for name in (
+        "worker.cloud_workspace",
         "worker.idle_holds",
         "worker.maintain_activity",
         "worker.onefile_reclaim",
@@ -354,7 +356,6 @@ def test_worker_aibom_pass_answers(tmp_path: Path) -> None:
     assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]
     payload = GuardStore(tmp_path).get_sync_payload("aibom_inventory_daemon")
     assert isinstance(payload, dict) and payload["status"] == "missing_workspace_context"
-    assert _call(tmp_path, "worker.cloud_workspace", {})["ok"] == {"ok": True, "workspace_id": None}
 
 
 def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:
