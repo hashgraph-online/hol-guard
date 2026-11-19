@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 _BARE_OUTCOMES = frozenset({"none", "unseen", "unanswered"})
-_SAVE_FIELDS = frozenset({"outcome", "artifact_id", "pending_id", "reason", "source", "plan"})
+_SAVE_FIELDS = frozenset({"outcome", "artifact_id", "pending_artifact_hash", "pending_id", "reason", "source", "plan"})
 
 
 def claude_guard_question_request(payload: Mapping[str, object], *, event: str | None) -> dict[str, object] | None:
@@ -95,6 +95,9 @@ def settle_claude_guard_question(
         return None
     pending_id = reply.get("pending_id")
     if pending_id is not None and (not isinstance(pending_id, str) or not pending_id):
+        return None
+    pending_artifact_hash = reply.get("pending_artifact_hash")
+    if pending_artifact_hash is not None and (not isinstance(pending_artifact_hash, str) or not pending_artifact_hash):
         return None
     try:
         plan = validated_permission_persist_plan(reply["plan"])
