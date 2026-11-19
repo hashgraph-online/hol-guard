@@ -771,6 +771,7 @@ pub fn urlopen_with_sync_retries(
         nonce_fast_path,
         None,
     )
+    .map_err(SyncFetchError::into_eval_error)
 }
 
 /// The retry machine, optionally held to a [`SyncBudget`]: each attempt gets at
@@ -783,7 +784,7 @@ fn sync_retries(
     parse_json_response: bool,
     nonce_fast_path: bool,
     budget: Option<&SyncBudget>,
-) -> Result<Option<Value>, EvalError> {
+) -> Result<Option<Value>, SyncFetchError> {
     let mut current_request = request.clone();
     let mut current_timeout = timeout_seconds;
     let mut retried_timeout = false;
@@ -798,7 +799,8 @@ fn sync_retries(
                 if budget.remaining() < SYNC_BUDGET_MIN_ATTEMPT_SECONDS {
                     return Err(EvalError::Internal(
                         "timeout: Guard Cloud ran out of time.".to_owned(),
-                    ));
+                    )
+                    .into());
                 }
                 let attempt = current_timeout.min(budget.remaining());
                 budget.spend(attempt);
@@ -815,6 +817,7 @@ fn sync_retries(
                             EvalError::Internal(
                                 "Guard Cloud sync returned an invalid response payload.".to_owned(),
                             )
+                            .into()
                         });
                 }
                 return Ok(None);
@@ -880,7 +883,11 @@ fn sync_retries(
                 }
                 // `raise` (:5079) — the HTTPError propagates; the caller reads
                 // `error.code` for the 401/4xx fail-closed branch.
-                return Err(sync_http_eval_error(status, &headers, &body));
+                return Err(SyncFetchError::Http(SyncHttpFailure {
+                    status,
+                    headers,
+                    body,
+                }));
             }
             Err(SyncHttpError::Timeout(msg)) => {
                 if !retried_timeout {
@@ -891,9 +898,9 @@ fn sync_retries(
                     }
                     continue;
                 }
-                return Err(EvalError::Internal(format!("timeout: {msg}")));
+                return Err(EvalError::Internal(format!("timeout: {msg}")).into());
             }
-            Err(SyncHttpError::Other(msg)) => return Err(EvalError::Internal(msg)),
+            Err(SyncHttpError::Other(msg)) => return Err(EvalError::Internal(msg).into()),
         }
     }
 }
@@ -926,10 +933,74 @@ pub fn urlopen_json_within_budget(
         true,
         false,
         Some(budget),
-    )?
+    )
+    .map_err(SyncFetchError::into_eval_error)?
     .ok_or_else(|| {
         EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
     })
+}
+
+/// [`urlopen_json_within_budget`] that keeps an HTTP refusal's headers and body,
+/// for callers whose handling depends on the fields of Guard Cloud's error body.
+pub fn urlopen_json_detailed(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    budget: &SyncBudget,
+) -> Result<Value, SyncFetchError> {
+    sync_retries(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        true,
+        false,
+        Some(budget),
+    )?
+    .ok_or_else(|| {
+        EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
+            .into()
+    })
+}
+
+/// An HTTP error response that survived the retry machine.
+#[derive(Debug)]
+pub struct SyncHttpFailure {
+    pub status: u16,
+    pub headers: BTreeMap<String, String>,
+    pub body: Vec<u8>,
+}
+
+impl SyncHttpFailure {
+    /// The reason [`EvalError::HttpStatus`] would carry for this response.
+    pub fn reason(&self) -> String {
+        http_error_reason_message(self.status, &self.headers, &self.body)
+    }
+}
+
+/// Why a Guard Cloud exchange failed: an HTTP refusal with its full response,
+/// or any other failure.
+#[derive(Debug)]
+pub enum SyncFetchError {
+    Http(SyncHttpFailure),
+    Other(EvalError),
+}
+
+impl From<EvalError> for SyncFetchError {
+    fn from(error: EvalError) -> Self {
+        Self::Other(error)
+    }
+}
+
+impl SyncFetchError {
+    /// The [`EvalError`] the plain transport functions report.
+    pub fn into_eval_error(self) -> EvalError {
+        match self {
+            Self::Http(failure) => {
+                sync_http_eval_error(failure.status, &failure.headers, &failure.body)
+            }
+            Self::Other(error) => error,
+        }
+    }
 }
 
 /// `urllib.error.HTTPError` → `EvalError::HttpStatus` — carry the code so the

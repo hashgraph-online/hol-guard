@@ -839,6 +839,10 @@ mod runtime_output_directory;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod cloud_bundle_command;
+mod cloud_bundle_fetch;
+mod cloud_bundle_network;
+mod cloud_bundle_sync;
 mod codex_hook_identity_op;
 mod command_pack_record_op;
 #[allow(dead_code)]

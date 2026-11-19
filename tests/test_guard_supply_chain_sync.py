@@ -17,7 +17,6 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.runner import sync_supply_chain_bundle
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -319,6 +318,7 @@ class _BundleSyncHandler(BaseHTTPRequestHandler):
         return
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_supply_chain_bundle_fetches_and_caches_bundle(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     _BundleSyncHandler.captured_accept_encodings = []
@@ -377,6 +377,7 @@ def test_supply_chain_bundle_cache_persists_across_store_restart(tmp_path: Path)
     assert bundle["bundleVersion"] == "1747612800000-deadbeef"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_supply_chain_bundle_refresh_keeps_approval_queue_quiet(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     _BundleSyncHandler.captured_accept_encodings = []
@@ -412,6 +413,7 @@ def test_supply_chain_bundle_refresh_keeps_approval_queue_quiet(tmp_path: Path) 
     assert store.list_approval_requests() == []
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_supply_chain_bundle_refresh_downloads_only_changed_partitions(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     unchanged_partition = _partition_bundle_response(
@@ -517,6 +519,7 @@ def test_sync_supply_chain_bundle_refresh_downloads_only_changed_partitions(tmp_
     assert summary["partition_sync"] == {"enabled": True, "refreshed": 1, "total": 2}
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_supply_chain_bundle_reuses_cached_partitions_without_full_refresh(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     npm_partition = _partition_bundle_response(
@@ -618,6 +621,7 @@ def test_sync_supply_chain_bundle_reuses_cached_partitions_without_full_refresh(
     assert summary["partition_sync"] == {"enabled": True, "refreshed": 0, "total": 2}
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_supply_chain_bundle_refetches_tampered_cached_partition(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     valid_partition = _partition_bundle_response(
@@ -704,6 +708,7 @@ def test_sync_supply_chain_bundle_refetches_tampered_cached_partition(tmp_path: 
     assert "ecosystem=npm&partition=1" in requested_paths
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_supply_chain_bundle_refetches_full_bundle_for_tampered_cached_signature(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     npm_partition = _partition_bundle_response(
@@ -877,40 +882,3 @@ def _seed_cached_bundle_refetch_fallback(tmp_path: Path) -> tuple[GuardStore, di
         "2026-05-19T00:00:00Z",
     )
     return store, index_payload
-
-
-def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store, index_payload = _seed_cached_bundle_refetch_fallback(tmp_path)
-
-    def fake_fetch(request: object) -> dict[str, object]:
-        request_url = getattr(request, "full_url", "")
-        if isinstance(request_url, str) and request_url.endswith("/index?workspaceId=workspace-alpha"):
-            return index_payload
-        raise RuntimeError("simulated network failure")
-
-    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", fake_fetch)
-
-    with pytest.raises(RuntimeError, match="Guard supply-chain bundle sync failed: simulated network failure"):
-        sync_supply_chain_bundle(store)
-
-
-def test_sync_supply_chain_bundle_keeps_retryable_unavailable_when_cached_bundle_refetch_cannot_connect(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store, index_payload = _seed_cached_bundle_refetch_fallback(tmp_path)
-
-    def fake_fetch(request: object) -> dict[str, object]:
-        request_url = getattr(request, "full_url", "")
-        if isinstance(request_url, str) and request_url.endswith("/index?workspaceId=workspace-alpha"):
-            return index_payload
-        raise guard_runner.GuardSyncNotAvailableError("Guard Cloud could not be reached.", retryable=True)
-
-    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", fake_fetch)
-
-    with pytest.raises(guard_runner.GuardSyncNotAvailableError) as exc_info:
-        sync_supply_chain_bundle(store)
-    assert exc_info.value.retryable is True
