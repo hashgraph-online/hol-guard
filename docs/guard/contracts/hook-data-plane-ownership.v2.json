@@ -417,7 +417,6 @@
     "src/codex_plugin_scanner/guard/native_inventory_scan_findings.py",
     "src/codex_plugin_scanner/guard/native_inventory_scan_targets.py",
     "src/codex_plugin_scanner/guard/native_inventory_snapshot_digest.py",
-    "src/codex_plugin_scanner/guard/native_network_protection_bundle.py",
     "src/codex_plugin_scanner/guard/native_package_authority.py",
     "src/codex_plugin_scanner/guard/native_package_workspace_scope.py",
     "src/codex_plugin_scanner/guard/native_supply_chain_bundle.py",
