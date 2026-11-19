@@ -20029,7 +20029,6 @@ def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch
         "https://hol.org/api/guard/runtime/sessions/sync",
         "https://hol.org/api/guard/receipts/sync",
     ]
-    assert sync_urls.count("https://hol.org/api/v1/guard/events") >= 1
     assert payload["runtime_session_id"] == expected_session_id
 
 

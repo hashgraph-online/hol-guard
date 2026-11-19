@@ -114,6 +114,9 @@ def test_runtime_session_posts_through_the_native_command(tmp_path: Path, monkey
     response = {"syncedAt": "2026-11-19T00:00:05+00:00", "items": [{"sessionId": "session-live"}]}
     sent = _answer(monkeypatch, tmp_path, {"ok": True, "result": {"status": "synced", "response": response}})
     store = GuardStore(tmp_path / "guard-home")
+    # Queueing the session event writes through the native store, which this
+    # stubbed runtime does not offer; the queue has its own tests.
+    monkeypatch.setattr(store, "add_guard_event_v1", lambda *_args, **_kwargs: None)
 
     summary = runner.sync_runtime_session(store, session=dict(_SESSION), auth_context=dict(_AUTH))
 

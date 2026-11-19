@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.runtime.runner import sync_guard_events, sync_re
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.native_guard_events
+
 
 def build_receipt_event(
     receipt: GuardReceipt,

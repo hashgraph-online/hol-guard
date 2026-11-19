@@ -363,6 +363,7 @@ def test_guard_cloud_event_queue_backpressures_without_dropping_pending_events(
     }
 
 
+@pytest.mark.native_guard_events
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_records_failed_backoff_without_dropping_pending_events(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -430,6 +431,7 @@ def test_guard_cloud_event_queue_backpressures_large_backlog_without_sqlite_limi
     }
 
 
+@pytest.mark.native_guard_events
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavailable(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
@@ -456,6 +458,7 @@ def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavaila
     assert store.count_guard_events_v1(uploaded=True) == 0
 
 
+@pytest.mark.native_guard_events
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -1425,6 +1428,7 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
     assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
 
 
+@pytest.mark.native_guard_events
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_preserves_pending_events_when_rate_limited(tmp_path: Path) -> None:
     """On HTTP 429, events must remain pending and the summary must report rate-limited state."""
