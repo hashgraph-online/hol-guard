@@ -361,6 +361,35 @@ def test_sync_supply_chain_bundle_fetches_and_caches_bundle(tmp_path: Path) -> N
     assert store.list_approval_requests() == []
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_a_bundle_signed_for_another_workspace_is_not_saved(tmp_path: Path) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    _BundleSyncHandler.captured_paths = []
+    _BundleSyncHandler.index_payload = None
+    _BundleSyncHandler.partition_payloads = {}
+    _BundleSyncHandler.response_payload = _bundle_response(private_key_pem, public_key_pem)
+    server = HTTPServer(("127.0.0.1", 0), _BundleSyncHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    other_workspace = "other-workspace"
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        _seed_guard_cloud(
+            store,
+            workspace_id=other_workspace,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+        )
+
+        with pytest.raises(RuntimeError, match="another workspace"):
+            sync_supply_chain_bundle(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert store.get_cached_supply_chain_bundle(other_workspace) is None
+    assert store.get_sync_payload("supply_chain_bundle_keyring") is None
+
+
 def test_supply_chain_bundle_cache_persists_across_store_restart(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     response_payload = _bundle_response(private_key_pem, public_key_pem)

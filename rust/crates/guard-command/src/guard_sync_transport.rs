@@ -65,6 +65,10 @@ const SYNC_GATEWAY_MAX_WAIT_SECONDS: u64 = 8;
 /// default body limit, so the cap is unchanged from the direct transport.
 const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
+#[path = "guard_sync_transport_detailed.rs"]
+mod detailed;
+pub use detailed::{urlopen_detailed, urlopen_json_detailed, SyncFetchError, SyncHttpFailure};
+
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
 }
@@ -940,69 +944,6 @@ pub fn urlopen_json_within_budget(
     })
 }
 
-/// [`urlopen_json_within_budget`] that keeps an HTTP refusal's headers and body,
-/// for callers whose handling depends on the fields of Guard Cloud's error body.
-pub fn urlopen_json_detailed(
-    request: &GuardSyncRequest,
-    timeout_seconds: f64,
-    retry_timeout_seconds: f64,
-    budget: &SyncBudget,
-) -> Result<Value, SyncFetchError> {
-    sync_retries(
-        request,
-        timeout_seconds,
-        retry_timeout_seconds,
-        true,
-        false,
-        Some(budget),
-    )?
-    .ok_or_else(|| {
-        EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
-            .into()
-    })
-}
-
-/// An HTTP error response that survived the retry machine.
-#[derive(Debug)]
-pub struct SyncHttpFailure {
-    pub status: u16,
-    pub headers: BTreeMap<String, String>,
-    pub body: Vec<u8>,
-}
-
-impl SyncHttpFailure {
-    /// The reason [`EvalError::HttpStatus`] would carry for this response.
-    pub fn reason(&self) -> String {
-        http_error_reason_message(self.status, &self.headers, &self.body)
-    }
-}
-
-/// Why a Guard Cloud exchange failed: an HTTP refusal with its full response,
-/// or any other failure.
-#[derive(Debug)]
-pub enum SyncFetchError {
-    Http(SyncHttpFailure),
-    Other(EvalError),
-}
-
-impl From<EvalError> for SyncFetchError {
-    fn from(error: EvalError) -> Self {
-        Self::Other(error)
-    }
-}
-
-impl SyncFetchError {
-    /// The [`EvalError`] the plain transport functions report.
-    pub fn into_eval_error(self) -> EvalError {
-        match self {
-            Self::Http(failure) => {
-                sync_http_eval_error(failure.status, &failure.headers, &failure.body)
-            }
-            Self::Other(error) => error,
-        }
-    }
-}
-
 /// `urllib.error.HTTPError` → `EvalError::HttpStatus` — carry the code so the
 /// `_evaluate_with_cloud` 401-refresh branch can read `http_status()`.
 fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &[u8]) -> EvalError {
@@ -1238,26 +1179,31 @@ pub enum OAuthRefreshOutcome {
 
 /// I/O failures that clear up on their own (`_is_network_outage_error`). TLS
 /// failures are not among them.
-const OUTAGE_IO_KINDS: [&str; 8] = [
-    "ConnectionRefused",
-    "ConnectionReset",
-    "ConnectionAborted",
-    "HostUnreachable",
-    "NetworkUnreachable",
-    "NetworkDown",
-    "TimedOut",
-    "NotConnected",
+const OUTAGE_IO_KINDS: [std::io::ErrorKind; 8] = [
+    std::io::ErrorKind::ConnectionRefused,
+    std::io::ErrorKind::ConnectionReset,
+    std::io::ErrorKind::ConnectionAborted,
+    std::io::ErrorKind::HostUnreachable,
+    std::io::ErrorKind::NetworkUnreachable,
+    std::io::ErrorKind::NetworkDown,
+    std::io::ErrorKind::TimedOut,
+    std::io::ErrorKind::NotConnected,
 ];
 
 /// Whether a transport failure reason names a network outage rather than a
-/// failure that will not clear up on its own.
+/// failure that will not clear up on its own. The egress broker reports an
+/// I/O failure as `io: ` and the kind's display text (`connection refused`);
+/// the variant name (`ConnectionRefused`) is accepted as well.
 pub fn is_network_outage_reason(reason: &str) -> bool {
     if reason.starts_with("timeout:") || reason == "host not found" {
         return true;
     }
-    reason
-        .strip_prefix("io: ")
-        .is_some_and(|kind| OUTAGE_IO_KINDS.contains(&kind.trim()))
+    let Some(kind) = reason.strip_prefix("io: ").map(str::trim) else {
+        return false;
+    };
+    OUTAGE_IO_KINDS
+        .iter()
+        .any(|known| kind == known.to_string() || kind == format!("{known:?}"))
 }
 
 /// `urllib.parse.urlencode` parity — percent-encode every byte outside the

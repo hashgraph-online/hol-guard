@@ -271,3 +271,5 @@ a3d54c9b6298f3905bfb176744259c771d72364c:rust/crates/guard-runtime/src/daemon_ed
 6fcf7e37361c9e0da39fecde6c13e0473a3a0580:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
 # Hook key variable in the Codex hook repair request, renamed in a follow-up commit; not a credential.
 812a4ae4cfb328a2044b47ad03630cbb51e30e20:src/codex_plugin_scanner/guard/codex_hook_repair_request.py:generic-api-key:213
+# Synthetic test value in a redaction test, replaced in a later commit.
+476446b7a103dba46e2378de5ae361286614e5f5:rust/crates/guard-runtime/src/cloud_event_sync_tests.rs:generic-api-key:78

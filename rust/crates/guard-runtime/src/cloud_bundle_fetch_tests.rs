@@ -13,11 +13,14 @@ fn refusal(status: u16, body: &str) -> FetchError {
 #[test]
 fn outages_are_retryable_and_other_transport_failures_are_not() {
     for text in [
-        "io: ConnectionRefused",
-        "io: TimedOut",
-        "host not found",
-        "timeout: 20s",
+        format!("io: {}", std::io::ErrorKind::ConnectionRefused),
+        format!("io: {}", std::io::ErrorKind::ConnectionReset),
+        format!("io: {}", std::io::ErrorKind::TimedOut),
+        "io: ConnectionRefused".to_owned(),
+        "host not found".to_owned(),
+        "timeout: 20s".to_owned(),
     ] {
+        let text = text.as_str();
         assert!(
             guard_command::guard_sync_transport::is_network_outage_reason(text),
             "{text}"
@@ -32,6 +35,7 @@ fn outages_are_retryable_and_other_transport_failures_are_not() {
     }
     for text in [
         "tls",
+        "io: permission denied",
         "io: PermissionDenied",
         "transport",
         "response too large",
@@ -100,8 +104,9 @@ fn an_unauthorized_fetch_fails_once_it_reaches_the_caller() {
 #[test]
 fn a_refresh_that_cannot_reach_guard_cloud_is_a_retryable_outage() {
     let unreachable = EvalError::Internal(format!(
-        "{} io: ConnectionRefused",
-        gst::OAUTH_REFRESH_UNREACHABLE
+        "{} io: {}",
+        gst::OAUTH_REFRESH_UNREACHABLE,
+        std::io::ErrorKind::ConnectionRefused
     ));
     assert_eq!(
         auth_error(unreachable),
