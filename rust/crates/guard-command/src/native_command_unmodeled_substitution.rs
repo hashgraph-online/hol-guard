@@ -669,12 +669,22 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // text with no nested substitution: `awk -vX="$(gh pr list)"` would
     // otherwise lose the program its option value starts.
     let nested = inner.contains("$(") || inner.contains(['`', '<', '>']);
+    let named = named_words(inner);
+    // The filter still runs, so an extension that owns it still judges it.
+    let mut filters: Vec<String> = Vec::new();
     let inner = if !nested
-        && named_words(inner)
+        && named
             .iter()
             .any(|name| matches!(name.as_str(), "awk" | "gawk" | "mawk" | "nawk"))
     {
         unawked = super::without_plain_awk(inner);
+        if unawked.as_str() != inner {
+            filters = ["awk", "gawk", "mawk", "nawk"]
+                .into_iter()
+                .filter(|name| named.contains(*name))
+                .map(str::to_owned)
+                .collect();
+        }
         unawked.as_str()
     } else {
         inner
@@ -685,27 +695,6 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     {
         return None;
     }
-    // An `awk` that only filters and prints starts no program, so it reads as
-    // `true` here exactly as it does outside a substitution. Its program text
-    // is the only place `{`, `}` and `$1` appear in the ordinary
-    // `$(shasum -a 256 f | awk '{print $1}')`, which otherwise blocked with no
-    // approval left to give while the same pipeline outside the substitution
-    // ran. The redirect and substitution checks above already read the
-    // original text, so a program that writes a file or runs one stays
-    // refused.
-    let stripped = super::without_plain_awk(inner);
-    // The filter still runs, so an extension that owns it still judges it.
-    let filters: Vec<String> = if stripped == inner {
-        Vec::new()
-    } else {
-        let named = named_words(inner);
-        ["awk", "gawk", "mawk", "nawk"]
-            .into_iter()
-            .filter(|name| named.contains(*name))
-            .map(str::to_owned)
-            .collect()
-    };
-    let inner = stripped.as_str();
     let mut programs = Vec::new();
     let mut plain = inner.to_owned();
     // An `-exec` action runs a program only this reader names, whatever

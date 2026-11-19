@@ -35,6 +35,11 @@ fn an_awk_that_could_run_or_write_anything_stays_refused_in_a_substitution() {
         r#"echo $(awk $P f)"#,
         r#"echo $(awk "{print $1}" f)"#,
         r#"echo $(awk \-f payload.awk)"#,
+        // Quoting an option does not hide it: the shell removes the quotes
+        // before awk reads `-f`, and so does this check.
+        r#"echo $(awk '-f' payload.awk)"#,
+        r#"echo $(awk "-f" payload.awk)"#,
+        r#"echo $(awk -'f' payload.awk)"#,
         // Bash joins split-quoted words before awk sees its program:
         // sys""tem and get''line remain executable awk primitives.
         r#"echo $(awk 'BEGIN{'sys""tem'("printf awk_probe_ok")}' )"#,

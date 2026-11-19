@@ -61,8 +61,6 @@ mod heredoc;
 mod heredoc_lead;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
-#[path = "native_command_unmodeled_loop.rs"]
-mod loops;
 #[path = "native_command_unmodeled_operands.rs"]
 mod operands;
 #[path = "native_command_unmodeled_redirections.rs"]
@@ -229,7 +227,14 @@ impl CompiledNativeCommandControls {
         }
         // A lookup such as `command -v doctl` only prints a path: it never
         // runs the program it names, so it owns nothing.
-        let looked = without_lookups(&command.normalized_text);
+        //
+        // An escaped backtick is a literal one. The word reader below ends a
+        // command at every backtick, so leaving them in made `grep -F "| \`$f\`
+        // |"` read its own operand as a command position holding a parameter,
+        // and the markdown row an ordinary release note greps for blocked
+        // outright with no approval left to give it.
+        let looked =
+            substitution::without_escaped_backticks(&without_lookups(&command.normalized_text));
         let text = &looked;
         let heredocs = data_heredocs(text);
         let shell = match &heredocs {
@@ -854,9 +859,7 @@ fn reviewable_structure(
             bounded_substitutions(&looked)
                 .or_else(|| {
                     reviewable_substitutions(&looked).filter(|bounded| {
-                        plain_sequence(&bounded.text)
-                            || interpreter_free(&bounded.text)
-                            || loops::launcher_free_loop(&bounded.text)
+                        plain_sequence(&bounded.text) || interpreter_free(&bounded.text)
                     })
                 })
                 .is_some_and(|bounded| {
