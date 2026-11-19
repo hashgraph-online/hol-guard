@@ -81,7 +81,9 @@ pub(crate) fn brokered<T>(mut sync: impl FnMut() -> Result<T, SyncError>) -> Res
     let policy = CallerEgressFulfilment::resolve_policy(&ManagedPolicySource::native())
         .map_err(|reason| SyncError::Failed(format!("Guard sync failed: {reason}")))?;
     let mut caller = CallerEgressFulfilment::new(&policy);
-    for _ in 0..MAX_ROUNDS {
+    // One more run than fulfilments, so the run after the last fulfilment
+    // still reads its answer.
+    for round in 0..=MAX_ROUNDS {
         let spool_dir = caller.spool_dir().to_str().map(str::to_owned);
         let spool_dir = spool_dir.filter(|dir| !dir.is_empty());
         let scope = EgressScope::enter(caller.supplied(), spool_dir.as_deref())
@@ -93,6 +95,9 @@ pub(crate) fn brokered<T>(mut sync: impl FnMut() -> Result<T, SyncError>) -> Res
                 Err(SyncError::Pending) => Err(SyncError::Failed(SyncError::Pending.message())),
                 other => other,
             };
+        }
+        if round == MAX_ROUNDS {
+            break;
         }
         caller
             .fulfil(&needs)
