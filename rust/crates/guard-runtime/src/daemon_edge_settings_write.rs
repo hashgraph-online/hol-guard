@@ -196,11 +196,11 @@ pub(super) fn reset(
     // The answer reads the gate under the daemon's session; without one the
     // daemon answers before anything is written.
     config.session_signals.as_ref()?;
-    let previous = Loaded::read(guard_home)?;
+    let previous = Loaded::read(Path::new(&config.guard_home))?;
     if let Some(refused) = settings_gate(json_payload, config)? {
         return Some(refused);
     }
-    if update(guard_home, "reset", &PyVal::Null, false).is_err() {
+    if update(Path::new(&config.guard_home), "reset", &PyVal::Null, false).is_err() {
         return Some((DROPPED, Value::Null));
     }
     Some(after_write(config, reads, &previous, None, true))
