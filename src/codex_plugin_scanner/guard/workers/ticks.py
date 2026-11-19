@@ -32,33 +32,6 @@ def cloud_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     return {"ok": status == "synced", "status": status}
 
 
-def bundle_refresh(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Refreshes the supply-chain bundle, then the network-protection bundle."""
-
-    del args
-    from ..runtime.runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-        sync_network_protection_bundle_best_effort,
-        sync_supply_chain_bundle,
-    )
-
-    refreshed_at = _now()
-    payload: dict[str, object]
-    try:
-        payload = {**sync_supply_chain_bundle(store), "status": "synced"}
-    except GuardSyncAuthorizationExpiredError as error:
-        payload = {"status": "auth_expired", "refreshed_at": refreshed_at, "message": str(error)}
-    except GuardSyncNotConfiguredError:
-        payload = {"status": "not_configured", "refreshed_at": refreshed_at}
-    except Exception as error:
-        payload = {"error": str(error), "refreshed_at": refreshed_at, "status": "error"}
-    store.set_sync_payload("supply_chain_bundle_daemon", payload, refreshed_at)
-    # Separate endpoint: refresh it whether or not the supply-chain bundle synced.
-    sync_network_protection_bundle_best_effort(store)
-    return {"ok": payload["status"] == "synced", "status": payload["status"]}
-
-
 def extension_catalog(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Observes active command-pack security, requests discovery, cleans the pack cache."""
 
@@ -212,7 +185,6 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
 
 WORKER_CALLS = {
     "worker.cloud_sync": cloud_sync,
-    "worker.bundle_refresh": bundle_refresh,
     "worker.extension_catalog": extension_catalog,
     "worker.reconcile_artifacts": reconcile_artifacts,
     "worker.aibom_inventory": aibom_inventory,

@@ -119,6 +119,13 @@ pub(super) fn native(
         "worker.maintain_activity" => Some(json!({"ok": maintain(reads, config)})),
         "worker.plugin_telemetry" => Some(plugin_telemetry(config)),
         "worker.onefile_reclaim" => Some(onefile_reclaim()),
+        "worker.bundle_refresh" => Some(crate::cloud_bundle_sync::bundle_refresh(
+            &crate::cloud_bundle_sync::BundleStore::new(
+                config.guard_home(),
+                config.store_path(),
+                None,
+            ),
+        )),
         _ => return None,
     };
     Some(answer)

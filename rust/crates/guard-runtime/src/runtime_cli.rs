@@ -11,6 +11,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_store::context_assistance_registry::run_enroll_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == cloud_bundle_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&cloud_bundle_command::run_command(&bytes))
+        }
         [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&pack_lifecycle::run(&bytes)?)
