@@ -298,8 +298,19 @@ pub fn prompt(harness: &str, response: &Object) -> Object {
         if !signals.is_empty() && canonical != "copilot" {
             output.insert("risk_signals".into(), json!(signals));
         }
-        if let Some(notice) = notice.filter(|_| canonical == "claude-code") {
-            output.insert("systemMessage".into(), json!(notice));
+        match (notice, canonical.as_str()) {
+            (Some(notice), "claude-code") => {
+                output.insert("systemMessage".into(), json!(notice));
+            }
+            // Muse shows a prompt hook's additional context and has no
+            // system message.
+            (Some(notice), "muse") => {
+                output.insert(
+                    "hookSpecificOutput".into(),
+                    json!({"hookEventName": "UserPromptSubmit", "additionalContext": notice}),
+                );
+            }
+            _ => {}
         }
         return output;
     }
