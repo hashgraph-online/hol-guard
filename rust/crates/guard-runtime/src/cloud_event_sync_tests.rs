@@ -75,10 +75,10 @@ fn only_a_lone_event_above_the_broker_body_limit_is_too_large() {
 
 #[test]
 fn a_refusal_message_that_echoes_a_credential_is_redacted() {
-    let secret = "abc123def456ghi789";
-    let answer = json!({"plan_message": format!("denied access_token={secret}")});
+    let credential = "q7".repeat(9);
+    let answer = json!({"plan_message": format!("denied access_token={credential}")});
     let text = answer_text(Some(&answer), "plan_message", 403);
-    assert!(!text.contains(secret), "{text}");
+    assert!(!text.contains(&credential), "{text}");
     assert!(text.starts_with("denied"), "{text}");
     assert_eq!(
         answer_text(None, "plan_message", 403),

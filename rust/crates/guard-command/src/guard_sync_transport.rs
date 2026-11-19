@@ -944,69 +944,6 @@ pub fn urlopen_json_within_budget(
     })
 }
 
-/// [`urlopen_json_within_budget`] that keeps an HTTP refusal's headers and body,
-/// for callers whose handling depends on the fields of Guard Cloud's error body.
-pub fn urlopen_json_detailed(
-    request: &GuardSyncRequest,
-    timeout_seconds: f64,
-    retry_timeout_seconds: f64,
-    budget: &SyncBudget,
-) -> Result<Value, SyncFetchError> {
-    sync_retries(
-        request,
-        timeout_seconds,
-        retry_timeout_seconds,
-        true,
-        false,
-        Some(budget),
-    )?
-    .ok_or_else(|| {
-        EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
-            .into()
-    })
-}
-
-/// An HTTP error response that survived the retry machine.
-#[derive(Debug)]
-pub struct SyncHttpFailure {
-    pub status: u16,
-    pub headers: BTreeMap<String, String>,
-    pub body: Vec<u8>,
-}
-
-impl SyncHttpFailure {
-    /// The reason [`EvalError::HttpStatus`] would carry for this response.
-    pub fn reason(&self) -> String {
-        http_error_reason_message(self.status, &self.headers, &self.body)
-    }
-}
-
-/// Why a Guard Cloud exchange failed: an HTTP refusal with its full response,
-/// or any other failure.
-#[derive(Debug)]
-pub enum SyncFetchError {
-    Http(SyncHttpFailure),
-    Other(EvalError),
-}
-
-impl From<EvalError> for SyncFetchError {
-    fn from(error: EvalError) -> Self {
-        Self::Other(error)
-    }
-}
-
-impl SyncFetchError {
-    /// The [`EvalError`] the plain transport functions report.
-    pub fn into_eval_error(self) -> EvalError {
-        match self {
-            Self::Http(failure) => {
-                sync_http_eval_error(failure.status, &failure.headers, &failure.body)
-            }
-            Self::Other(error) => error,
-        }
-    }
-}
-
 /// `urllib.error.HTTPError` → `EvalError::HttpStatus` — carry the code so the
 /// `_evaluate_with_cloud` 401-refresh branch can read `http_status()`.
 fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &[u8]) -> EvalError {
