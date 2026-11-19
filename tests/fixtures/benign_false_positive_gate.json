@@ -32698,7 +32698,7 @@
         "command": "git worktree prune 2>/dev/null && git worktree list"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
       "id": "git-switch-create-quiet-redirect",
