@@ -76,7 +76,63 @@ fn producer_allowed(shape: &FindShape<'_>, child: &[String], context: PathContex
                 .patterns
                 .iter()
                 .any(|pattern| plain_extension_pattern(pattern)))
-        && contained_roots(shape, context)
+        && (contained_roots(shape, context)
+            || (metadata_child(child) && metadata_roots(shape.roots, context)))
+}
+
+/// A child that prints only what the directory entry says about each file:
+/// its name, size, owner and times. `wc` reads the bytes to count them, so it
+/// stays bound to the workspace with the readers.
+fn metadata_child(child: &[String]) -> bool {
+    child.first().is_some_and(|name| {
+        matches!(
+            crate::parser_executables::executable_basename(name),
+            "ls" | "stat"
+        )
+    })
+}
+
+/// A root outside the workspace for a metadata child.
+///
+/// `find ROOT -type f` already lists every name below a root that passes
+/// the bounded read-target proof, and a metadata child adds only what `ls -l`
+/// shows about each of those names. The root still has to resolve to a
+/// directory strictly below the home directory with no hidden component on
+/// the way, so a home dot-directory, the home directory itself and paths
+/// outside home keep review whatever the child.
+fn metadata_roots<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool {
+    let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
+        return false;
+    };
+    if !verified_path_context(Some(home), Some(cwd))
+        || !std::path::Path::new(home).is_absolute()
+        || !std::path::Path::new(cwd).is_absolute()
+    {
+        return false;
+    }
+    let Ok(home_root) = std::fs::canonicalize(home) else {
+        return false;
+    };
+    roots.iter().all(|root| {
+        let root = root.as_ref();
+        let spelled = match root.strip_prefix("~/") {
+            Some(rest) => std::path::Path::new(home).join(rest),
+            None => std::path::Path::new(cwd).join(root),
+        };
+        !root.starts_with(['\\', '-'])
+            && (root.starts_with("~/") || !root.starts_with('~'))
+            && bounded_read_target(root, Some(home), Some(cwd), true)
+            && std::fs::canonicalize(spelled).is_ok_and(|resolved| {
+                resolved.is_dir()
+                    && resolved.strip_prefix(&home_root).is_ok_and(|below| {
+                        below.components().next().is_some()
+                            && below.components().all(|part| {
+                                matches!(part, std::path::Component::Normal(name)
+                                    if !name.to_string_lossy().starts_with('.'))
+                            })
+                    })
+            })
+    })
 }
 
 /// The child as it will run, with one stand-in file operand last.
