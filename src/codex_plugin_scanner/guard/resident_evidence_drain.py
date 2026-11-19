@@ -151,7 +151,9 @@ class ResidentEvidenceDrain:
                         maybe_log()
 
     def _drain_pages(self, *, deadline_monotonic: float | None = None) -> bool:
-        for _ in range(_MAX_PAGES_PER_WAKE):
+        pages = 0
+        while deadline_monotonic is not None or pages < _MAX_PAGES_PER_WAKE:
+            pages += 1
             if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
                 return False
             page = self._fetch_page(deadline_monotonic=deadline_monotonic)
