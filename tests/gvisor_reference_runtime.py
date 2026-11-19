@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, final
 
-from codex_plugin_scanner.guard.runtime.execution_assurance_contract import framed_digest
+from tests.execution_assurance_contract import framed_digest
 
 
 class ProviderPlanError(ValueError):
