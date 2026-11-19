@@ -488,6 +488,23 @@ Most Claude Code holds on the 32 seeds were `git commit -m "$(cat <<'EOF' ... EO
 
 On the 16 random seeds the same build saved 61.3–61.7% cost and 69.6–69.9% tokens (was 59.7–60.1% / 68.5–68.8%), passed 15 (no Guard 14 and 13), and held nothing.
 
+#### Oh My Pi edits that name a missing file
+
+Most Oh My Pi holds were `edit` calls whose header line held leaked reasoning, such as `[tool/analysis code] ... "[src/app.py#D5E8]`. Guard could not prove which file the header named, so the edit went to review, and the agent then waited on an edit that could never apply. After the fix that blocks such an edit at once with a reason showing how to write the header, on the same seeds and no-Guard runs:
+
+| set | | before | after |
+|---|---|---|---|
+| 32 seeds | cost saved | 55.3% | 59.2% |
+| | tokens saved | 62.2% | 71.9% |
+| | passed (no Guard 32) | 26 | 29 |
+| | holds | 25 | 12 |
+| 16 random seeds | cost saved | 58.8–69.0% | 64.2–73.0% |
+| | tokens saved | 65.1–72.5% | 73.6–79.1% |
+| | passed (no Guard 14) | 13 | 15 |
+| | holds | 13 | 0 |
+
+Two of the three 32-seed failures are rename steps that also failed before the fix.
+
 ## General-savings measurements (2026-11-16)
 
 Step-by-step workflow anatomy, harness coverage, used and wrong notes, note build time under load,
