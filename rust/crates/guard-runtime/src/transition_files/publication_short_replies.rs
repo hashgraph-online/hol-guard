@@ -93,15 +93,10 @@ fn enable(call: &mut Call<'_>, guard_home: &Path, path: &Path) -> Step<Checked<V
     let record = recorded(guard_home, path);
     let current = current(&payload).map(ToOwned::to_owned);
     match current.as_deref() {
+        // Guard's text with no record that Guard wrote it: someone else put
+        // it there, so Guard does not claim it (a later "off" would delete it).
         Some(value) if value == TEXT => {
-            if record != Record::Wrote(TEXT.to_owned()) {
-                write_record(call, guard_home, path, Record::Wrote(TEXT.to_owned()))?;
-            }
-            return Ok(Ok(view(
-                path,
-                current.as_deref(),
-                &Record::Wrote(TEXT.to_owned()),
-            )));
+            return Ok(Ok(view(path, current.as_deref(), &record)));
         }
         Some(value) if !matches!(&record, Record::Wrote(wrote) if wrote == value) => {
             // Instructions the user wrote: Guard leaves them as they are.
@@ -222,7 +217,12 @@ pub(crate) fn first_ask_due(guard_home: &Path, user_home: Option<&Path>) -> bool
         .ok()
         .and_then(|home| home.parent().map(Path::to_path_buf));
     let user_home = user_home.and_then(|home| fs::canonicalize(home).ok());
-    parent.is_some() && parent == user_home && records(guard_home).is_empty()
+    // Any record file, even one Guard cannot read, means Guard asked before.
+    let never_asked = matches!(
+        fs::symlink_metadata(record_path(guard_home)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound
+    );
+    parent.is_some() && parent == user_home && never_asked
 }
 
 /// The record value is the text Guard wrote, or the word `off`. The written

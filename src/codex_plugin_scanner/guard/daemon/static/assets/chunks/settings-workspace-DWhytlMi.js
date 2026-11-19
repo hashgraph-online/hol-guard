@@ -8992,14 +8992,27 @@ function CodexShortReplies({ gate, disabled, cigarOn }) {
   const [saving, setSaving] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [proof, setProof] = reactExports.useState(null);
+  const [readError, setReadError] = reactExports.useState(null);
+  const [attempt, setAttempt] = reactExports.useState(0);
+  const revision = reactExports.useRef(0);
   const demo = isGuardDemoMode();
   reactExports.useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    readCodexShortReplies(controller.signal).then(setState, () => void 0);
+    revision.current += 1;
+    const mine = revision.current;
+    readCodexShortReplies(controller.signal).then((read) => {
+      if (revision.current !== mine) return;
+      setState(read);
+      setReadError(null);
+    }, (cause) => {
+      if (controller.signal.aborted || revision.current !== mine) return;
+      setReadError(message(cause));
+    });
     return () => controller.abort();
-  }, [demo, cigarOn]);
+  }, [demo, cigarOn, attempt]);
   async function save(enabled, credentials) {
+    revision.current += 1;
     setSaving(true);
     setError(null);
     try {
@@ -9016,7 +9029,17 @@ function CodexShortReplies({ gate, disabled, cigarOn }) {
       setSaving(false);
     }
   }
-  if (demo || state === null) return null;
+  if (demo) return null;
+  if (state === null) {
+    if (readError === null) return null;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Short Codex replies", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption max-w-prose text-amber-800", children: readError }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: () => {
+        setReadError(null);
+        setAttempt((count2) => count2 + 1);
+      }, children: "Try again" })
+    ] }) });
+  }
   const on = state.state === "on";
   const next = !on;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -9036,7 +9059,7 @@ function CodexShortReplies({ gate, disabled, cigarOn }) {
           }
         )
       ] }),
-      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption pb-3 text-amber-800", children: error }) : null
+      error ?? readError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "guard-settings-caption pb-3 text-amber-800", children: error ?? readError }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,

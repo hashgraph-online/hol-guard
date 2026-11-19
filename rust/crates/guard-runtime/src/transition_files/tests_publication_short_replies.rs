@@ -180,3 +180,23 @@ fn only_a_guard_home_in_the_home_folder_asks_and_only_once() {
     );
     assert!(!first_ask_due(&homes.guard(), Some(&homes.root)));
 }
+
+#[test]
+fn guards_text_written_by_someone_else_is_not_claimed() {
+    let homes = Homes::new();
+    let config = format!("developer_instructions = {TEXT:?}\n");
+    let path = homes.write_config(&config);
+    assert_eq!(homes.ask("enable")["state"], "yours");
+    assert_eq!(recorded(&homes.guard(), &path), Record::None);
+    homes.ask("disable");
+    assert_eq!(instructions(&path).as_deref(), Some(TEXT));
+}
+
+#[test]
+fn an_unreadable_record_never_asks_again() {
+    let homes = Homes::new();
+    homes.write_config(USER_CONFIG);
+    fs::create_dir_all(homes.guard()).unwrap();
+    fs::write(homes.guard().join("codex-short-replies.json"), b"{not json").unwrap();
+    assert!(!first_ask_due(&homes.guard(), Some(&homes.root)));
+}

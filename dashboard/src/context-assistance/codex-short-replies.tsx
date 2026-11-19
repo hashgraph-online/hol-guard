@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionButton } from "../approval-center-primitives";
 import { isGuardDemoMode } from "../guard-demo";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
@@ -36,17 +36,30 @@ export function CodexShortReplies({ gate, disabled, cigarOn }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proof, setProof] = useState<Proof | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  // Each read and save takes a new number; a read answers only if nothing started after it.
+  const revision = useRef(0);
   const demo = isGuardDemoMode();
 
   useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    // A read that fails shows nothing: Guard cannot tell what the config holds.
-    readCodexShortReplies(controller.signal).then(setState, () => undefined);
+    revision.current += 1;
+    const mine = revision.current;
+    readCodexShortReplies(controller.signal).then((read) => {
+      if (revision.current !== mine) return;
+      setState(read);
+      setReadError(null);
+    }, (cause: unknown) => {
+      if (controller.signal.aborted || revision.current !== mine) return;
+      setReadError(message(cause));
+    });
     return () => controller.abort();
-  }, [demo, cigarOn]);
+  }, [demo, cigarOn, attempt]);
 
   async function save(enabled: boolean, credentials?: ContextProof) {
+    revision.current += 1;
     setSaving(true);
     setError(null);
     try {
@@ -64,7 +77,16 @@ export function CodexShortReplies({ gate, disabled, cigarOn }: Props) {
     }
   }
 
-  if (demo || state === null) return null;
+  if (demo) return null;
+  if (state === null) {
+    if (readError === null) return null;
+    return <SettingsFormSection title="Short Codex replies">
+      <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+        <p role="alert" className="guard-settings-caption max-w-prose text-amber-800">{readError}</p>
+        <ActionButton variant="outline" onClick={() => { setReadError(null); setAttempt((count) => count + 1); }}>Try again</ActionButton>
+      </div>
+    </SettingsFormSection>;
+  }
   const on = state.state === "on";
   const next = !on;
   return <>
@@ -78,7 +100,7 @@ export function CodexShortReplies({ gate, disabled, cigarOn }: Props) {
           </ActionButton>
         )}
       </div>
-      {error ? <p role="alert" className="guard-settings-caption pb-3 text-amber-800">{error}</p> : null}
+      {error ?? readError ? <p role="alert" className="guard-settings-caption pb-3 text-amber-800">{error ?? readError}</p> : null}
     </SettingsFormSection>
     <SettingsSaveProofModal open={proof !== null} mode="verify-save" gate={gate}
       title={proof?.enabled ? "Approve short Codex replies" : "Approve turning off short Codex replies"}
