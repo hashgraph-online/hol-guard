@@ -51,6 +51,9 @@ const HOOK_BYPASSES: &[&str] = &[
     "python3 -c 'import os; os.system(\"git \" + \"commit --no-verify -m wip\")'",
     "env HUSKY=0 \\\n  git commit -m wip",
     "env \"HUSKY=0\" git commit \"-m\" \"multi\\\nline\" --no-verify",
+    "env git commit -m '> wip' --no-verify",
+    "env git commit -m '>' wip --no-verify",
+    "env git commit -m \\>wip --no-verify",
 ];
 
 const WHOLE_TREE_STAGES: &[&str] = &[
@@ -93,6 +96,8 @@ const WHOLE_TREE_STAGES: &[&str] = &[
     "cd sub | cat; git add .",
     "cd missing || git add .",
     "node -e 'const x = `${(\"}\", execSync(\"git add -A\"))}`'",
+    "python3 -c 'import subprocess; root = find(); subprocess.run([\"git\", \"add\", \".\"], cwd=root)'",
+    "node -e \"require('child_process').execSync('git add .', {cwd: process.cwd()})\"",
 ];
 
 const QUIET: &[&str] = &[
@@ -160,6 +165,8 @@ const QUIET: &[&str] = &[
     "export HUSKY=0; env --unset=HUSKY git commit -m wip",
     "export HUSKY=0; env -uHUSKY git commit -m wip",
     "node -e 'const x = `${(\"}\", console.log(\"git add -A\"))}`'",
+    "env git commit -m wip 2>'err.log'",
+    "env git commit -m '\\> wip'",
 ];
 
 #[test]

@@ -224,12 +224,29 @@ pub(crate) fn assignment(token: &str) -> Option<(&str, &str)> {
 
 /// A command's words as the shell splits them, with quotes and backslashes
 /// removed. `None` when a quote is left open.
+#[cfg(test)]
 pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
+    split_marked(text).map(|words| words.into_iter().map(|word| word.text).collect())
+}
+
+/// One word the shell split off, and whether its first character was quoted
+/// or escaped, so it cannot start a redirection.
+pub(crate) struct Word {
+    pub(crate) text: String,
+    pub(crate) literal: bool,
+}
+
+/// [`split_words`], with each word's [`Word::literal`] mark.
+pub(crate) fn split_marked(text: &str) -> Option<Vec<Word>> {
     let mut words = Vec::new();
     let mut word = String::new();
     let mut started = false;
+    let mut literal = false;
     let mut chars = text.chars();
     while let Some(c) = chars.next() {
+        if !started && matches!(c, '\'' | '"' | '\\') {
+            literal = true;
+        }
         match c {
             '\'' => {
                 started = true;
@@ -262,7 +279,7 @@ pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
             // A backslash before a newline joins the lines and starts no
             // word.
             '\\' => match chars.next() {
-                Some('\n') => {}
+                Some('\n') => literal = started && literal,
                 Some(next) => {
                     started = true;
                     word.push(next);
@@ -271,9 +288,11 @@ pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
             },
             c if c.is_whitespace() => {
                 if started {
-                    words.push(std::mem::take(&mut word));
+                    let text = std::mem::take(&mut word);
+                    words.push(Word { text, literal });
                     started = false;
                 }
+                literal = false;
             }
             c => {
                 started = true;
@@ -282,7 +301,10 @@ pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
         }
     }
     if started {
-        words.push(word);
+        words.push(Word {
+            text: word,
+            literal,
+        });
     }
     Some(words)
 }

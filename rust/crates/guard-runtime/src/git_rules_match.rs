@@ -82,17 +82,16 @@ fn scan(text: &str, depth: usize, state: &mut State, found: &mut Breaks) {
         while let Some(inner) = embedded.next_if(|inner| inner.start < segment.end) {
             scan(&inner.text, depth + 1, &mut { *state }, found);
         }
-        let raw = text
-            .get(segment.start..segment.end)
-            .unwrap_or(&segment.text);
+        let (start, end) = span(text, segment);
+        let raw = text.get(start..end).unwrap_or(&segment.text);
         let gap = |from: usize, to: usize| operator(text.get(from..to).unwrap_or(";"));
         let before = position
             .checked_sub(1)
-            .map(|at| gap(segments[at].end, segment.start));
+            .map(|at| gap(span(text, &segments[at]).1, start));
         let piped = before == Some(Op::Pipe)
             || segments
                 .get(position + 1)
-                .is_some_and(|next| gap(segment.end, next.start) == Op::Pipe);
+                .is_some_and(|next| gap(end, span(text, next).0) == Op::Pipe);
         let fallback = state.fallback.take();
         state.moved_now = false;
         match (before, fallback) {
@@ -138,14 +137,71 @@ fn operator(gap: &str) -> Op {
     }
 }
 
-/// The words without their redirections (`> out`, `2>&1`, `<in`).
-fn without_redirects(words: Vec<String>) -> Vec<String> {
+/// Where `segment` sits in `text`, in bytes. The command model counts
+/// characters, and when it unwraps a leading `env` its span covers only the
+/// unwrapped length, so the end is found again from the segment's own text.
+fn span(text: &str, segment: &CommandSegment) -> (usize, usize) {
+    let byte = |chars: usize| {
+        text.char_indices()
+            .nth(chars)
+            .map_or(text.len(), |(at, _)| at)
+    };
+    let start = byte(segment.start);
+    let fallback = byte(segment.end);
+    let own = segment.text.trim_end();
+    let end = text
+        .get(start..)
+        .filter(|_| !own.is_empty())
+        .and_then(|rest| rest.find(own))
+        .map_or_else(
+            || command_end(text, start).max(fallback),
+            |at| start + at + own.len(),
+        );
+    (start, end.max(start))
+}
+
+/// The end of the simple command that starts at `from`: the first unquoted
+/// `;`, `|`, `&` or newline that is not part of a redirection such as `2>&1`.
+fn command_end(text: &str, from: usize) -> usize {
+    let Some(rest) = text.get(from..) else {
+        return text.len();
+    };
+    let mut quote = None;
+    let mut previous = ' ';
+    let mut chars = rest.char_indices().peekable();
+    while let Some((at, c)) = chars.next() {
+        match (quote, c) {
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (Some('"') | None, '\\') => {
+                chars.next();
+            }
+            (Some(_), _) => {}
+            (None, '\'' | '"') => quote = Some(c),
+            (None, '&')
+                if matches!(previous, '>' | '<')
+                    || chars.peek().is_some_and(|(_, next)| *next == '>') => {}
+            (None, ';' | '|' | '&' | '\n') => return from + at,
+            _ => {}
+        }
+        previous = c;
+    }
+    text.len()
+}
+
+/// The words without their redirections (`> out`, `2>&1`, `<in`). A word
+/// whose first character was quoted, such as the message `'> wip'`, is an
+/// argument, not a redirection.
+fn without_redirects(words: Vec<crate::git_rules_state::Word>) -> Vec<String> {
     let mut kept = Vec::new();
     let mut words = words.into_iter();
-    while let Some(word) = words.next() {
+    while let Some(crate::git_rules_state::Word {
+        text: word,
+        literal,
+    }) = words.next()
+    {
         let operator = word.trim_start_matches(|c: char| c.is_ascii_digit());
         let operator = operator.strip_prefix('&').unwrap_or(operator);
-        if !operator.starts_with(['<', '>']) {
+        if literal || !operator.starts_with(['<', '>']) {
             kept.push(word);
             continue;
         }
@@ -181,7 +237,7 @@ fn segment_breaks(
     // The command model unwraps a leading `env` and drops its options, so
     // a segment that starts with one is read from its source words: `env -C`
     // moves the folder and `env -u` clears a switch.
-    if let Some(words) = crate::git_rules_state::split_words(raw).map(without_redirects) {
+    if let Some(words) = crate::git_rules_state::split_marked(raw).map(without_redirects) {
         let words: Vec<&str> = words.iter().map(String::as_str).collect();
         let at = words
             .iter()
@@ -303,7 +359,9 @@ fn inline(runtime: &str, code: &str, hooks: Hooks, depth: usize, child: State, f
     for call in calls {
         let mut inner = child;
         if let Some(cwd) = &call.cwd {
-            inner.dir = inner.dir.enter(cwd);
+            // The same placing as `git -C`: a folder held in a variable is
+            // taken as the top of the tree.
+            inner.dir = crate::git_rules_git::enter(inner.dir, cwd, inner.top);
             inner.origin = None;
         }
         match call.call {

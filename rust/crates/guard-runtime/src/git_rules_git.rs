@@ -264,7 +264,7 @@ fn excludes(path: &str) -> bool {
 
 /// The folder after `git -C target`. The top of the tree, an absolute path
 /// inside it and a variable that may name it count as the top.
-fn enter(dir: Dir, target: &str, top: Option<&Path>) -> Dir {
+pub(crate) fn enter(dir: Dir, target: &str, top: Option<&Path>) -> Dir {
     if matches!(target, "." | "./") {
         return dir;
     }
