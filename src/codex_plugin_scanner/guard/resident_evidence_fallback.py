@@ -59,7 +59,7 @@ _USER_PROMPT_SUBMIT = "UserPromptSubmit"
 # The desktop notice for a connector-setup review the resident queued.
 _CONNECTOR_NOTICE_FIELD = "connector_setup_notice"
 _CAPTURE_MARKER = ("diagnostics", "codex-binding-capture.v2.json")
-_MCP_RETRY_KEYS: set[str] = set()
+_MCP_RETRY_ATTEMPTS: dict[str, int] = {}
 
 
 class _DrainHost(Protocol):
@@ -202,8 +202,12 @@ def _submit_fallback_activity(
     try:
         if discovery:
             discover = getattr(host.activity_writer, "submit_composio_discovery", None)
-            if callable(discover) and discover(harness=harness, payload=payload, succeeded=succeeded) is False:
-                return False
+            if callable(discover):
+                # A false discovery result means no Composio action was
+                # applicable for this ordinary hook. Command activity still
+                # has to be submitted independently.
+                with suppress(Exception):
+                    discover(harness=harness, payload=payload, succeeded=succeeded)
         return (
             submit(
                 harness=harness,
@@ -254,22 +258,22 @@ def _record_mcp_with_one_retry(record: object, write: Callable[[], object]) -> F
         key = json.dumps(record, sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError):
         return "drop"
-    if key in _MCP_RETRY_KEYS:
-        _MCP_RETRY_KEYS.discard(key)
-        try:
-            return "handled" if write() else "drop"
-        except Exception:
-            return "drop"
+    attempt = _MCP_RETRY_ATTEMPTS.get(key, 0) + 1
+    if attempt > 3:
+        _MCP_RETRY_ATTEMPTS.pop(key, None)
+        return "drop"
     try:
         result = write()
     except Exception:
         result = False
     committed = getattr(result, "committed", False) is True
     if bool(result):
+        _MCP_RETRY_ATTEMPTS.pop(key, None)
         return "handled"
     if committed:
+        _MCP_RETRY_ATTEMPTS.pop(key, None)
         return "drop"
-    if len(_MCP_RETRY_KEYS) >= 1024:
-        _MCP_RETRY_KEYS.clear()
-    _MCP_RETRY_KEYS.add(key)
+    if len(_MCP_RETRY_ATTEMPTS) >= 1024:
+        _MCP_RETRY_ATTEMPTS.clear()
+    _MCP_RETRY_ATTEMPTS[key] = attempt
     return "retry"

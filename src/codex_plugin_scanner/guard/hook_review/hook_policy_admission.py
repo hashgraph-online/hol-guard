@@ -14,6 +14,10 @@ from .hook_managed_install_state import _canonical_managed_harness, _hook_harnes
 _NATIVE_POLICY_NOT_READY_FALLBACK = (
     "HOL Guard could not prepare the native policy safely. This is usually temporary. Retry this action."
 )
+_NATIVE_POLICY_INSTALL_REPAIR_FALLBACK = (
+    "HOL Guard could not prepare the native policy safely. Guard's installed files disagree, so retrying will not "
+    "clear it. Ask the user to run `hol-guard doctor`."
+)
 _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK = (
     "HOL Guard could not prepare the native policy safely. The native runtime is not answering. "
     "Retry once more; if it still fails, ask the user to run `hol-guard repair` in a terminal."
@@ -42,6 +46,8 @@ def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | Non
         and streak >= RESIDENT_FAIL_FAST_STREAK
     ):
         return _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
+    if last_error == "native_command_program_binding_mismatch":
+        return _NATIVE_POLICY_INSTALL_REPAIR_FALLBACK
     return _NATIVE_POLICY_NOT_READY_FALLBACK
 
 

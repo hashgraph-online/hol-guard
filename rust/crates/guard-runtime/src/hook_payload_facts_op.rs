@@ -142,7 +142,7 @@ pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, S
     let input = tool_input(payload);
     let command = command(payload, input.as_ref());
     let tool_name = tool_name(payload);
-    encode_response(&json!({
+    let response = json!({
         "schema": RESULT_SCHEMA,
         "result": {
             "request_id": request.request_id,
@@ -152,7 +152,13 @@ pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, S
             "tool_name": tool_name.clone(),
             "launch_target": launch_target(input.as_ref(), command.as_deref(), &tool_name),
         },
-    }))
+    });
+    let encoded = serde_json::to_vec(&response)
+        .map_err(|_| "hook_payload_facts_response_invalid".to_owned())?;
+    if encoded.len() > guard_contracts::MAX_NATIVE_RESPONSE_BYTES {
+        return Err("hook_payload_facts_response_too_large".to_owned());
+    }
+    encode_response(&response)
 }
 
 #[cfg(test)]

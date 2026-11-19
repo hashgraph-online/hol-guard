@@ -122,8 +122,10 @@ def test_mcp_fallback_retries_a_failed_write_once() -> None:
 
     record = {"kind": "mcp_tool_call", "identity": "identity"}
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
+    assert _record_mcp_with_one_retry(record, failed_write) == "retry"
+    assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "drop"
-    assert calls == ["write", "write"]
+    assert calls == ["write", "write", "write", "write"]
 
 
 def test_mcp_fallback_drops_after_a_committed_followup_failure() -> None:

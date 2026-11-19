@@ -491,6 +491,20 @@ class HookWorkerNativeMixin:
                         ),
                         False,
                     )
+                if edge_hint is True and (facts is None or facts.command is None):
+                    return (
+                        _record_unavailable_native(
+                            self,
+                            payload,
+                            harness=native_harness,
+                            event_name="PreToolUse",
+                            reason_code="native_command_facts_unavailable",
+                            reason="HOL Guard could not identify this command safely.",
+                            guard_home=guard_home,
+                            deadline=deadline,
+                        ),
+                        False,
+                    )
                 command_block = native_exact_command_block_response(
                     self.store,
                     harness=native_harness,

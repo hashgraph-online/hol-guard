@@ -49,3 +49,16 @@ fn command_and_launch_facts_are_resident_owned() {
     assert_eq!(output["result"]["tool_name"], "Bash");
     assert_eq!(output["result"]["launch_target"], "  echo hi  ");
 }
+
+#[test]
+fn oversized_tool_input_is_rejected_before_response_encoding() {
+    let request = HookPayloadFactsRequestV1 {
+        schema: "guard-hook-payload-facts-request.v1".to_owned(),
+        request_id: "facts-large".to_owned(),
+        payload: json!({"toolInput": {"command": "x".repeat(guard_contracts::MAX_NATIVE_RESPONSE_BYTES)}}),
+    };
+    assert_eq!(
+        evaluate(&request).unwrap_err(),
+        "hook_payload_facts_response_too_large"
+    );
+}
