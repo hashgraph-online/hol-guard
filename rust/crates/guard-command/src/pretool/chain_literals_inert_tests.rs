@@ -296,6 +296,15 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         "git -c core.hooksPath=x commit -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
         "git tag -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
         "git commit --file=x -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        // A flag before `-m` that takes a value, a repeated `-m` or `--`
+        // makes Git read the substitution as that value or as a path.
+        "git commit -m -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -- -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -F -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit --author -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -t -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -Sa -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit --trailer -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
         "git commit -m\"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
         "echo git commit -m && echo -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
         // An unquoted delimiter expands the body, so its text is not data.

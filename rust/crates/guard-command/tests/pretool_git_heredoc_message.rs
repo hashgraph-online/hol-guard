@@ -136,6 +136,9 @@ fn code_and_punctuation_in_a_substituted_commit_message_are_message_text() {
     for command in [
         // A second substitution in the same word is not message text.
         "git commit -m \"$(cat <<'EOF'\nuse `id`\nEOF\n) $(cat ~/.ssh/id_rsa)\"",
+        // The substitution is a path or a flag's value, not the message.
+        "git commit -m -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -- -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
         // A global option before the subcommand is not a plain commit.
         "git -c core.hooksPath=x commit -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
         // An unquoted delimiter expands the body.

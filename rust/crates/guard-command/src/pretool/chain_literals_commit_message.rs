@@ -22,9 +22,11 @@ use crate::shell_structure::ShellCommandSubstitution;
 pub(super) const STAND_IN: char = '_';
 
 /// Whether `substitution` is the whole value of `git commit`'s `-m` or
-/// `--message`: its command begins `git commit`, every word after that is a
-/// plain flag, and the last one, set apart by a blank, is `-m` or
-/// `--message`.
+/// `--message`: its command begins `git commit`, every word after that but
+/// the last is a flag known to take no value, and the last one, set apart by
+/// a blank, is `-m` or `--message`. A flag that takes a value, a repeated
+/// `-m` or `--` would make Git read the substitution as that value or as a
+/// path, so each refuses.
 ///
 /// `chars` is the heredoc-masked command. Quotes are followed so an operator
 /// inside a quoted word does not start a command. An earlier substitution in
@@ -77,21 +79,48 @@ pub(super) fn message_slot(
     let [git, commit, flags @ ..] = words.as_slice() else {
         return false;
     };
+    let [before @ .., last] = flags else {
+        return false;
+    };
     *git == "git"
         && *commit == "commit"
-        && flags
-            .last()
-            .is_some_and(|last| *last == "-m" || *last == "--message")
-        && flags.iter().all(|flag| plain_flag(flag))
+        && (*last == "-m" || *last == "--message")
+        && before.iter().all(|flag| valueless_flag(flag))
 }
 
-/// A flag with no value glued to it, such as `-a`, `-s` or `--amend`.
-fn plain_flag(word: &str) -> bool {
-    word.len() > 1
-        && word.starts_with('-')
-        && word
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+/// `git commit` options that never take the next word as their value.
+const VALUELESS_LONG: [&str; 16] = [
+    "--all",
+    "--allow-empty",
+    "--allow-empty-message",
+    "--amend",
+    "--edit",
+    "--gpg-sign",
+    "--no-edit",
+    "--no-gpg-sign",
+    "--no-post-rewrite",
+    "--no-signoff",
+    "--no-verify",
+    "--quiet",
+    "--reset-author",
+    "--signoff",
+    "--verbose",
+    "--verify",
+];
+
+/// A flag known to take no value, such as `-a`, `-as`, `-S` or `--amend`.
+/// Short flags may be grouped; `-S` stands alone, since a letter after it is
+/// its key.
+fn valueless_flag(word: &str) -> bool {
+    if VALUELESS_LONG.contains(&word) || word == "-S" {
+        return true;
+    }
+    word.strip_prefix('-').is_some_and(|letters| {
+        !letters.is_empty()
+            && letters
+                .bytes()
+                .all(|letter| matches!(letter, b'a' | b'e' | b'n' | b'q' | b's' | b'v'))
+    })
 }
 
 /// The message as the projection writes it: each character `carried`
