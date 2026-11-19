@@ -1326,65 +1326,24 @@ def sync_runtime_session(
     can finish the rest of its sync before reporting it.
     """
 
+    from .cloud_bundle_sync import cloud_event_sync
+
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
     sync_url = _sync.normalized_runtime_sessions_sync_url(
         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
     )
     session_payload = _cloud_runtime_session_payload(store, session)
-    body = json.dumps({"session": session_payload}).encode("utf-8")
-    request = _guard_sync_request(
-        resolved_auth_context,
-        request_url=sync_url,
-        method="POST",
-        data=body,
-        extra_headers=None,
+    answer = cloud_event_sync(
+        Path(store.guard_home),
+        "runtime_session",
+        auth_context=resolved_auth_context,
+        session=session_payload,
     )
-    try:
-        payload = _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
-        )
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            recorded_at = _now()
-            summary = {
-                "synced_at": None,
-                "runtime_session_synced_at": None,
-                "runtime_session_id": session_payload["sessionId"],
-                "runtime_sessions_visible": 0,
-                "runtime_session_sync_skipped": True,
-                "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
-                "local_guard_online_at": recorded_at,
-                "runtime_harness": session_payload["harness"],
-                "runtime_surface": session_payload["surface"],
-                "runtime_workspace": session_payload["workspace"],
-                "runtime_device_id": session_payload["deviceId"],
-            }
-            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
-            return summary
-        if error.code == 429:
-            retry_after_seconds = _parse_retry_after_header(error)
-            recorded_at = _now()
-            summary = {
-                "synced_at": None,
-                "runtime_session_synced_at": None,
-                "runtime_session_id": session_payload["sessionId"],
-                "runtime_sessions_visible": 0,
-                "runtime_session_sync_skipped": True,
-                "runtime_session_sync_reason": "runtime_session_rate_limited",
-                "local_guard_online_at": recorded_at,
-                "runtime_harness": session_payload["harness"],
-                "runtime_surface": session_payload["surface"],
-                "runtime_workspace": session_payload["workspace"],
-                "runtime_device_id": session_payload["deviceId"],
-                "retry_after_seconds": retry_after_seconds,
-            }
-            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
-            return summary
-        raise RuntimeError(_sync_http_error_message(error)) from error
-    except OSError as error:
-        raise RuntimeError(_sync_url_error_message(error)) from error
+    if not isinstance(answer, dict):
+        raise RuntimeError("Invalid sync response")
+    if answer.get("status") == "skipped" and isinstance(answer.get("summary"), dict):
+        return dict(answer["summary"])
+    payload = answer.get("response")
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     catalog_sync: dict[str, object]

@@ -49,8 +49,9 @@ def cloud_event_sync(
     action: str,
     *,
     auth_context: Mapping[str, object] | None = None,
+    session: Mapping[str, object] | None = None,
 ) -> object:
-    """The native upload's result for ``action`` (``guard_events`` or ``pain_signals``)."""
+    """The native result for ``action``: ``guard_events``, ``pain_signals`` or ``runtime_session``."""
 
     return run_native_cloud_sync(
         CLOUD_EVENT_SYNC_COMMAND,
@@ -59,6 +60,7 @@ def cloud_event_sync(
         action,
         auth_context=auth_context,
         subject="event sync",
+        extra=None if session is None else {"session": dict(session)},
     )
 
 
@@ -70,6 +72,7 @@ def run_native_cloud_sync(
     *,
     auth_context: Mapping[str, object] | None,
     subject: str,
+    extra: Mapping[str, object] | None = None,
 ) -> object:
     """Send one request to a native Cloud sync command and raise its failure."""
 
@@ -86,7 +89,7 @@ def run_native_cloud_sync(
     ):
         raise RuntimeError(_UNAVAILABLE_MESSAGE.format(subject=subject))
     runtime = status.identity.path
-    request: dict[str, object] = {"action": action, "guardHome": str(guard_home)}
+    request: dict[str, object] = {**(extra or {}), "action": action, "guardHome": str(guard_home)}
     supplied = auth_context if auth_context is not None else _test_auth_context()
     if supplied is not None:
         request["authContext"] = _json_auth_context(supplied)

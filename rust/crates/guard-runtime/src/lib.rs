@@ -846,6 +846,7 @@ mod cloud_bundle_sync;
 mod cloud_event_command;
 mod cloud_event_sync;
 mod cloud_pain_signal_sync;
+mod cloud_runtime_session_sync;
 mod codex_hook_identity_op;
 mod command_pack_record_op;
 #[allow(dead_code)]

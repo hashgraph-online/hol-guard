@@ -179,7 +179,7 @@ pub(crate) fn answer_text(answer: Option<&Value>, key: &str, status: u16) -> Str
 }
 
 /// `parse_retry_after_header`: whole seconds, at least one.
-fn retry_after_seconds(header: Option<&str>) -> i64 {
+pub(crate) fn retry_after_seconds(header: Option<&str>) -> i64 {
     header
         .and_then(|value| value.trim().parse::<i64>().ok())
         .map_or(RATE_LIMIT_DEFAULT_SECONDS, |seconds| seconds.max(1))

@@ -1,5 +1,6 @@
 //! The `cloud-event-sync` command: `hol-guard sync` asks the native runtime
-//! to upload the local Guard event queue and the cloud pain signals.
+//! to upload the local Guard event queue and the cloud pain signals, and to
+//! publish the runtime session.
 
 use std::path::PathBuf;
 
@@ -10,6 +11,7 @@ use crate::cloud_bundle_command::{failure, store_for};
 use crate::cloud_bundle_fetch::{brokered, SyncError};
 use crate::cloud_event_sync::{event_store, sync_guard_events};
 use crate::cloud_pain_signal_sync::sync_pain_signals;
+use crate::cloud_runtime_session_sync::sync_runtime_session;
 
 pub(crate) const COMMAND: &str = "cloud-event-sync";
 pub(crate) const FEATURE: &str = "cloud-event-sync-v1";
@@ -22,6 +24,9 @@ struct Request {
     /// A sign-in the caller already resolved.
     #[serde(default)]
     auth_context: Option<Map<String, Value>>,
+    /// The session payload for `runtime_session`.
+    #[serde(default)]
+    session: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +36,8 @@ enum Action {
     GuardEvents,
     /// `sync_pain_signals`.
     PainSignals,
+    /// `sync_runtime_session`, up to the Cloud answer.
+    RuntimeSession,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Value {
@@ -45,6 +52,10 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
     let answer = match request.action {
         Action::GuardEvents => brokered(|| sync_guard_events(&store)),
         Action::PainSignals => brokered(|| sync_pain_signals(&store)),
+        Action::RuntimeSession => {
+            let session = request.session.unwrap_or(Value::Null);
+            brokered(|| sync_runtime_session(&store, &session))
+        }
     };
     match answer {
         Ok(result) => json!({"ok": true, "result": result}),
