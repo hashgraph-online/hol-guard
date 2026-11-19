@@ -154,6 +154,11 @@ def test_a_codex_patch_adding_the_pinned_file_is_the_pinned_write() -> None:
         "*** Begin Patch\n*** Add File: notes.md\n+a\n*** Add File: other.md\n+b\n*** End Patch\n",
         "*** Begin Patch\n*** Update File: old.md\n*** Move to: notes.md\n*** End Patch\n",
         "*** Begin Patch\n*** Delete File: notes.md\n*** End Patch\n",
+        # An unfinished patch never runs, so it is not an attempt at the write.
+        "*** Begin Patch\n*** Add File: notes.md\n+text\n",
+        "*** Add File: notes.md\n+text\n*** End Patch\n",
+        "*** Add File: notes.md\n+text\n",
+        "*** Begin Patch\n*** Add File: notes.md\ntext\n*** End Patch\n",
     ],
 )
 def test_other_codex_patches_are_not_the_pinned_write(patch: str) -> None:
