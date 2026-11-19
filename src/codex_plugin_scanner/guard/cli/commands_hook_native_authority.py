@@ -17,6 +17,7 @@ from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..hook_review.hook_availability_policy import (
     availability_harness_response,
+    canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
 )
 from ..hook_review.hook_fail_closed import fail_closed_response
@@ -171,10 +172,10 @@ def try_native_hook_authority(
         _record_native_hook_exception(
             guard_home,
             harness=harness,
-            event_name=event_name or "PreToolUse",
+            event_name=event_name or canonical_hook_event_name(payload),
         )
         _log_worker_exception(error, harness=harness)
-        event_name = event_name or "PreToolUse"
+        event_name = event_name or canonical_hook_event_name(payload)
         response = availability_harness_response(
             harness=harness,
             event_name=event_name,
@@ -326,13 +327,13 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = "PreToolUse"
+    event_name = canonical_hook_event_name(payload)
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)
         event_name = native_hook_event(
             payload, context.guard_home, deadline=deadline
-        ) or "PreToolUse"
+        ) or canonical_hook_event_name(payload)
         payload = dict(payload)
         # This process runs in the shell the command is about to run in, so its
         # environment is the caller context the daemon would get from a bridge.

@@ -44,8 +44,6 @@ def _payload(tmp_path: Path, **extra: object) -> dict[str, object]:
 
 @pytest.fixture(autouse=True)
 def _resident_payload_facts(monkeypatch: pytest.MonkeyPatch) -> None:
-    facts = SimpleNamespace(command="lanectl status", tool_input={"command": "lanectl status"})
-    monkeypatch.setattr(native_review_connector, "native_hook_facts", lambda *_args, **_kwargs: facts)
     monkeypatch.setattr(
         review,
         "native_hook_facts",
@@ -196,10 +194,10 @@ def test_a_review_with_a_risk_signal_never_looks_up_a_connector(tmp_path: Path, 
     assert (
         native_review_connector.native_review_connector_lookup(
             payload=_payload(tmp_path),
+            command="lanectl status",
             native_result={**_native_review(), "reason_code": reason_code},
             workspace=tmp_path,
             home_dir=None,
-            guard_home=tmp_path / "guard",
         )
         is None
     )
@@ -211,10 +209,10 @@ def test_a_review_with_a_risk_signal_never_looks_up_a_connector(tmp_path: Path, 
 def test_an_unrecognised_command_looks_up_its_connector(tmp_path: Path, reason_code: str) -> None:
     lookup = native_review_connector.native_review_connector_lookup(
         payload=_payload(tmp_path),
+        command="lanectl status",
         native_result={**_native_review(), "reason_code": reason_code},
         workspace=tmp_path,
         home_dir=None,
-        guard_home=tmp_path / "guard",
     )
 
     assert lookup is not None
@@ -228,10 +226,10 @@ def test_the_lookup_uses_the_path_the_agent_runs_with(tmp_path: Path, monkeypatc
     for stamped in ({"path": "/home/dev/.local/bin:/usr/bin"}, {"path": "bad\0path"}, None):
         lookup = native_review_connector.native_review_connector_lookup(
             payload=_payload(tmp_path, guard_execution_environment=stamped),
+            command="lanectl status",
             native_result=_native_review(),
             workspace=tmp_path,
             home_dir=None,
-            guard_home=tmp_path / "guard",
         )
         assert lookup is not None
         env: Any = lookup["env"]
@@ -250,10 +248,10 @@ def test_a_launch_too_large_for_the_queue_call_queues_an_ordinary_review(
     assert (
         native_review_connector.native_review_connector_lookup(
             payload=_payload(tmp_path),
+            command="lanectl status",
             native_result=_native_review(),
             workspace=tmp_path,
             home_dir=None,
-            guard_home=tmp_path / "guard",
         )
         is None
     )

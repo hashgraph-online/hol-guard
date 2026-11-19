@@ -47,6 +47,7 @@ from ..native_runtime_status_share import share_verified_runtime_status
 from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
 from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
+from .hook_availability_policy import canonical_hook_event_name
 from .hook_worker_native import HookWorkerNativeMixin
 from .hook_worker_readiness import prepare_workspace_policy
 
@@ -465,7 +466,9 @@ class HookWorker(HookWorkerNativeMixin):
         # Event identity is a resident-owned fact. If the resident is
         # unavailable, use the fail-closed default without re-parsing the
         # payload in Python.
-        return native_hook_event(payload, self.store.guard_home, deadline=deadline) or "PreToolUse"
+        return native_hook_event(payload, self.store.guard_home, deadline=deadline) or canonical_hook_event_name(
+            payload
+        )
 
 
 __all__ = [

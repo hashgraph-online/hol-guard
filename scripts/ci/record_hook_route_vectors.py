@@ -50,7 +50,6 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
 )
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
-from tests.native_payload_facts_support import fixture_event_name
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/hook_route_vectors.json.gz")
 
@@ -59,6 +58,27 @@ _EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
 _PASSTHROUGH_HARNESSES = frozenset({"devin", "zcode"})
 SESSION = "session-1"
 _PERMISSION_PROMPT = {"hook_event_name": "Notification", "notification_type": "permission_prompt"}
+
+
+def fixture_event_name(payload: Mapping[str, object]) -> str:
+    """Project fixture labels for the retired Python route oracle."""
+
+    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
+        value = payload.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        raw = value.strip()
+        compact = raw.lower().replace("_", "").replace("-", "")
+        if compact.startswith("pretool") or compact.startswith("before"):
+            return "PreToolUse"
+        if compact.startswith("posttool") or compact.startswith("after"):
+            return "PostToolUse"
+        if compact in {"permissionrequest", "permissionrequestv2"}:
+            return "PermissionRequest"
+        if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
+            return "UserPromptSubmit"
+        return raw
+    return "PreToolUse"
 
 # Payload shapes as the harnesses send them: every key the event-name helpers read.
 PAYLOADS: tuple[dict[str, object], ...] = (

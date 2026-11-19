@@ -77,11 +77,9 @@ _COMMAND_ONLY_INPUT_KEYS = frozenset(
 )
 
 
-def _command_only_payload(payload: Mapping[str, object], guard_home: Path) -> bool:
+def _command_only_payload(tool_input: Mapping[str, object] | None) -> bool:
     """True when the shell command is the only content the tool call carries."""
 
-    facts = native_hook_facts(payload, guard_home)
-    tool_input = facts.tool_input if facts is not None else None
     if tool_input is None:
         return False
     return all(isinstance(key, str) and key in _COMMAND_ONLY_INPUT_KEYS for key in tool_input)
@@ -230,8 +228,8 @@ def _live_reviewed_command(approval: Mapping[str, object], guard_home: Path) -> 
     workspace_path = Path(workspace_text) if isinstance(workspace_text, str) and workspace_text.strip() else None
     raw_payload = envelope.get("raw_payload_redacted") if isinstance(envelope, Mapping) else None
     if isinstance(raw_payload, Mapping) and any(key in raw_payload for key in ("tool_input", "toolInput")):
-        facts = native_hook_facts(raw_payload, guard_home)
-        if facts is None or facts.tool_input is None or not _command_only_payload(raw_payload, guard_home):
+        facts = native_hook_facts(raw_payload, guard_home, deadline=time.monotonic() + _LIVE_BUDGET_SECONDS)
+        if facts is None or not _command_only_payload(facts.tool_input):
             return None
         cwd = _stored_launch_cwd(raw_payload, workspace_path)
         if cwd is None and _names_launch_directory(raw_payload):

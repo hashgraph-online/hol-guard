@@ -68,15 +68,15 @@ def pause_native_pre_tool_for_approval(
     exact_command_block: object = None,
 ) -> dict[str, object]:
     """Answer a native review from the edge's custom extension rule and review evidence."""
+    # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
+    custom = None if local_cli_rule is None else cast("dict[str, object]", local_cli_rule["harness_response"])
+    if local_cli_rule is not None and local_cli_rule["blocked"] is True:
+        return cast("dict[str, object]", custom)
     facts = native_hook_facts(payload, guard_home, deadline=deadline)
     if facts is None:
         return _policy_binding_failed(harness, native_result, guard_home)
     launch_target = facts.launch_target
     tool_name = facts.tool_name
-    # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
-    custom = None if local_cli_rule is None else cast("dict[str, object]", local_cli_rule["harness_response"])
-    if local_cli_rule is not None and local_cli_rule["blocked"] is True:
-        return cast("dict[str, object]", custom)
     # A custom block denies whatever the policy binding holds, so it settles
     # before the binding is checked. The edge answered the receipt's policy
     # binding, the retry binding and the exact-action token in the same round
@@ -174,10 +174,10 @@ def pause_native_pre_tool_for_approval(
     # reason as evidence.
     connector_lookup = native_review_connector_lookup(
         payload=payload,
+        command=facts.command,
         native_result=native_result,
         workspace=workspace,
         home_dir=home_dir,
-        guard_home=guard_home,
     )
     if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
