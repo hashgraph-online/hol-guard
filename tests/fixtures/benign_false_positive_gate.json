@@ -1498,6 +1498,40 @@
       "expect": "allow"
     },
     {
+      "id": "grep-recursive-escaped-route-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn useState app/registry/\\[slug\\]/page.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-recursive-escaped-route-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln export app/registry/\\[slug\\]"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "grep-recursive-numbered",
       "fix_area": "shell",
       "harnesses": [

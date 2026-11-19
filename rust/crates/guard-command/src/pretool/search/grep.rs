@@ -436,6 +436,9 @@ fn scan_into(
                         &exclusions.directories,
                         true,
                     ) || proven_glob(target, context)))
+                    // `app/[slug]/route.ts` names one route when its class
+                    // matches nothing, and is walked as that path.
+                    || (!dereference && tree::safe_literal_bracket_search_target(target, context))
                     // A sensitive file the pattern cannot match prints nothing.
                     || clearance.as_ref().is_some_and(|clearance| {
                         tree::safe_recursive_target_cleared(

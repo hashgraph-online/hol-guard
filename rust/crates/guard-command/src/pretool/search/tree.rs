@@ -298,6 +298,9 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 /// walk admits. A pattern only in the last component proves just the
 /// entries it names: `tests/*.py` never opens `tests/fixtures/.env`.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
+    if !literal_bracket::literal_spelling_searchable(value, context) {
+        return false;
+    }
     let searched =
         |path: PathBuf| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false);
     match glob_expand::expand_glob_search(value, context) {
