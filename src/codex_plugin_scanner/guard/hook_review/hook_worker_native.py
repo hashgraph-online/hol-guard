@@ -395,7 +395,7 @@ class HookWorkerNativeMixin:
         native_result = cast("Mapping[str, object]", edge["result"])
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
-        if accepted_receipt is not None and deferred_receipts is not None:
+        if accepted_receipt is not None and defer_accepted_recording and deferred_receipts is not None:
             deferred_receipts.append(accepted_receipt)
         submit = getattr(self.activity_writer, "submit_native_decision_receipt", None)
         if (
