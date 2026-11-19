@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.project-m",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "name": "project-m",
   "description": "Local-first shared memory layer and Model Context Protocol (MCP) server synchronizing state, tasks, and architectural decisions across Claude Desktop, Google Antigravity, and OpenAI Codex on local SQLite WAL. Off until you turn it on.",
   "trustClass": "external",
