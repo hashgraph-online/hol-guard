@@ -36,7 +36,8 @@ pub(crate) const OVERSIZED_OUTPUT_WITHHELD: &str =
 /// Record what the harness can enforce on output it already delivered.
 ///
 /// Runs after `seal_output_mask`, so Guard still masks the output in its own
-/// records and evidence.
+/// records and evidence. A Codex excerpt turned into a withholding is sealed
+/// again, since `block` always masks.
 pub(crate) fn settle(harness: &str, response: &mut HookReviewResponseV1) {
     if DELIVERED_BEFORE_REVIEW.contains(&harness)
         && WITHHOLDING_ACTIONS.contains(&response.model_output_action.as_str())
@@ -50,6 +51,9 @@ pub(crate) fn settle(harness: &str, response: &mut HookReviewResponseV1) {
         response.model_output_action = "block".to_owned();
         response.reason = Some(OVERSIZED_OUTPUT_WITHHELD.to_owned());
         response.reviewed_excerpt = None;
+        // A withheld result is masked output; the mask sealed for the
+        // excerpt verdict no longer describes it.
+        response.seal_output_mask();
     }
 }
 
@@ -113,6 +117,7 @@ mod tests {
         let edge = post_tool_with("codex", oversized());
         assert_eq!(edge.result["reason_code"], "output_too_large");
         assert_eq!(edge.result["model_output_action"], "block");
+        assert_eq!(edge.result["output_masked"], true);
         assert_eq!(edge.result["reason"], super::OVERSIZED_OUTPUT_WITHHELD);
         assert!(edge
             .result
