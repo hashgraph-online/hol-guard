@@ -99,9 +99,19 @@ fn admit_contained(config: &BridgeConfig, prepared: &Prepared) {
     let Some(guard_home) = guard_home(&config.state_path) else {
         return;
     };
-    if let Ok(serde_json::Value::Object(payload)) = serde_json::from_str(&prepared.data) {
-        crate::native_admitted_call::record_for_hook(&guard_home, "codex", &payload);
+    // The same parser routing used: a lone surrogate in an unrelated field
+    // must not leave a routed call without its witness. The witness keys on
+    // the call id and tool name only.
+    let Ok(payload) = pyjson::parse_mapping_lone_surrogates(&prepared.data) else {
+        return;
+    };
+    let mut identity = serde_json::Map::new();
+    for field in ["tool_use_id", "tool_name"] {
+        if let Some(value) = text(&payload.value, field) {
+            identity.insert(field.to_owned(), serde_json::Value::from(value));
+        }
     }
+    crate::native_admitted_call::record_for_hook(&guard_home, "codex", &identity);
 }
 
 fn text<'a>(value: &'a PyVal, name: &str) -> Option<&'a str> {

@@ -229,7 +229,8 @@ pub fn guard_approval_inspection_command(
 
 /// Whether `command` is one plain read of Guard's own safety guide,
 /// `cat ~/.hol-support/SAFETY.md` or the same file named by its absolute path
-/// below `home_dir`, the hook's user home.
+/// below `home_dir`, the hook's user home. The tilde form counts only
+/// unquoted, where the shell expands it.
 ///
 /// `hol-guard install codex` writes a managed block to the Codex `AGENTS.md`
 /// asking the agent to read that guide before acting, and Codex does, as its
@@ -278,8 +279,10 @@ pub fn guard_safety_guide_read_command(command: &str, home_dir: &str) -> bool {
     }
     let directory = home.join(".hol-support");
     let guide = directory.join("SAFETY.md");
-    let named = target == "~/.hol-support/SAFETY.md"
-        || std::path::Path::new(target.as_str()) == guide.as_path();
+    // The shell expands only an unquoted tilde; a quoted one names a
+    // `~` directory below the working directory.
+    let tilde = target == "~/.hol-support/SAFETY.md" && !command.contains(['\'', '"']);
+    let named = tilde || std::path::Path::new(target.as_str()) == guide.as_path();
     named
         && std::fs::symlink_metadata(&directory)
             .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())

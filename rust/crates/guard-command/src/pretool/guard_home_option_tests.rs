@@ -256,10 +256,31 @@ fn a_plain_read_of_the_safety_guide_is_guards_own() {
         "cat ~/.hol-support/SAFETY.md",
         text
     ));
+    // The command names the guide with `/`, as an agent writes it on every
+    // platform; the home keeps its native separators.
+    let slashed = text.replace('\\', "/");
     assert!(guard_safety_guide_read_command(
-        &format!("cat {text}/.hol-support/SAFETY.md"),
+        &format!("cat {slashed}/.hol-support/SAFETY.md"),
         text
     ));
+    assert!(guard_safety_guide_read_command(
+        &format!("cat '{slashed}/.hol-support/SAFETY.md'"),
+        text
+    ));
+    let _ = std::fs::remove_dir_all(home);
+}
+
+#[test]
+fn a_quoted_tilde_is_not_the_guide() {
+    let home = guide_home("quoted");
+    let text = home.to_str().unwrap();
+    for command in [
+        "cat '~/.hol-support/SAFETY.md'",
+        "cat \"~/.hol-support/SAFETY.md\"",
+        "cat ~'/.hol-support/SAFETY.md'",
+    ] {
+        assert!(!guard_safety_guide_read_command(command, text), "{command}");
+    }
     let _ = std::fs::remove_dir_all(home);
 }
 

@@ -561,6 +561,41 @@ fn a_contained_call_keeps_its_output_through_post_tool_use() {
 }
 
 #[test]
+fn a_lone_surrogate_elsewhere_still_leaves_the_witness() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    let pre =
+        codex_call("PreToolUse", workspace.path(), "t1").replacen('{', r#"{"extra":"\ud800","#, 1);
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(true)));
+    let route = settle(
+        &config,
+        &prepared(&pre),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    let Route::Respond(rendered) = route else {
+        panic!("{route:?}")
+    };
+    let rendered: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    let output = &rendered["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "allow");
+    take_request(output["updatedInput"]["command"].as_str().unwrap());
+    assert!(admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
+}
+
+#[test]
 fn a_denial_that_stands_leaves_no_witness() {
     let home = witness_home();
     let workspace = tempfile::tempdir().unwrap();
