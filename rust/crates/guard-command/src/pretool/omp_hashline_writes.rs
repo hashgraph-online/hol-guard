@@ -235,9 +235,14 @@ pub(super) fn evaluate_hashline_edit(
             None => written.clone(),
         };
         // Only an ordinary name may say it is missing; a sensitive or
-        // protected one keeps its review.
+        // protected one keeps its review. Oh My Pi resolves `..` before it
+        // opens a path, so `ghost/../src/a.ts` may name a file that exists
+        // even though `ghost` does not; such a path keeps its review.
         let missing_target = || {
-            super::safe_reads::missing_read_target(target, home_dir, cwd, false)
+            !Path::new(target)
+                .components()
+                .any(|part| part == std::path::Component::ParentDir)
+                && super::safe_reads::missing_read_target(target, home_dir, cwd, false)
                 && !super::sensitive_command(target)
                 && !super::apply_patch_writes::protected_name(Path::new(target))
         };

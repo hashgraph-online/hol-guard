@@ -157,22 +157,18 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
     // A header with a bad tag names no file Guard can prove. The edit keeps
     // its review, so a person can still approve it, and the reason tells the
     // agent how to write a header Guard can prove.
-    for (input, shown) in [(
-        patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
-        "`[src/a.ts#NOPE]`",
-    )] {
-        let result = evaluate("omp", &input);
-        assert_eq!(
-            (result.minimum_action.as_str(), result.reason_code.as_str()),
-            ("review", "native_file_write_review"),
-            "{input}"
-        );
-        assert!(
-            result.reason.contains(shown) && result.reason.contains("[src/app.py#1A2B]"),
-            "{}",
-            result.reason
-        );
-    }
+    let input = patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]);
+    let result = evaluate("omp", &input);
+    assert_eq!(
+        (result.minimum_action.as_str(), result.reason_code.as_str()),
+        ("review", "native_file_write_review"),
+        "{input}"
+    );
+    assert!(
+        result.reason.contains("`[src/a.ts#NOPE]`") && result.reason.contains("[src/app.py#1A2B]"),
+        "{}",
+        result.reason
+    );
     // Oh My Pi reads these headers as tagged paths to files that do not
     // exist, so the edit cannot apply. Guard stops it at once and shows the
     // agent the header it can prove, instead of holding it for review. The
@@ -228,11 +224,16 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         let result = evaluate("omp", &input);
         assert_ne!(result.minimum_action, "allow", "{input} {result:?}");
     }
-    // Oh My Pi resolves `..` before it opens a path, so this may apply. It
-    // keeps its review.
-    let input = patch(&["[*** Update File: ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]);
-    let result = evaluate("omp", &input);
-    assert_eq!(result.minimum_action, "review", "{input} {result:?}");
+    // Oh My Pi resolves `..` before it opens a path, so these may apply even
+    // though `ghost` does not exist. They keep their review rather than
+    // being stopped as a missing file.
+    for input in [
+        patch(&["[*** Update File: ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        patch(&["[ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(result.minimum_action, "review", "{input} {result:?}");
+    }
     // Only Oh My Pi's edit tool takes a hashline patch.
     let result = evaluate("claude-code", &patch(&[put_a]));
     assert_ne!(result.minimum_action, "allow", "{result:?}");
