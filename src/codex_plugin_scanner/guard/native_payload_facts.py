@@ -114,7 +114,14 @@ def native_hook_facts(
 def native_hook_event(
     payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None
 ) -> str | None:
-    facts = native_hook_facts(payload, guard_home, deadline=deadline)
+    # Event identity does not depend on tool input. Keep this request small so
+    # a large action payload cannot turn event lookup into an outage.
+    event_payload = {
+        key: payload[key]
+        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+        if key in payload
+    }
+    facts = native_hook_facts(event_payload, guard_home, deadline=deadline)
     return facts.event_name if facts is not None else None
 
 
