@@ -47,9 +47,7 @@ from ..native_runtime_status_share import share_verified_runtime_status
 from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
 from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
-from .hook_request_parsing import (
-    runtime_hook_event_name,
-)
+from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 from .hook_worker_native import HookWorkerNativeMixin
 from .hook_worker_readiness import prepare_workspace_policy
 
@@ -317,6 +315,15 @@ class HookWorker(HookWorkerNativeMixin):
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
         event_name = event_name or self._hook_event_name(payload, deadline)
+        if event_name is None:
+            # The resident owns event identity. This label only selects the
+            # fixed outage response and never enters semantic routing.
+            return availability_harness_response(
+                harness=harness,
+                event_name=canonical_hook_event_name(payload),
+                reason_code="native_hook_event_unavailable",
+                reason="HOL Guard could not identify this hook event safely.",
+            )
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)
             if answered is not None:
@@ -465,7 +472,9 @@ class HookWorker(HookWorkerNativeMixin):
         return None
 
     def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str:
-        return native_hook_event(payload, self.store.guard_home, deadline=deadline) or runtime_hook_event_name(payload)
+        # Event identity is a resident-owned fact. A missing fact stays
+        # unavailable so callers can shape an outage response separately.
+        return native_hook_event(payload, self.store.guard_home, deadline=deadline)
 
 
 __all__ = [

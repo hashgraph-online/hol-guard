@@ -26,7 +26,6 @@ from .hook_native_review_approval import (
 )
 from .hook_native_saved_approval import native_exact_command_block_response
 from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
-from .hook_request_parsing import pre_tool_command
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -472,14 +471,33 @@ class HookWorkerNativeMixin:
             # A saved or Guard Cloud block on this exact command outranks the
             # edge's allow; Watch records the call and lets it run.
             if not recording_only:
-                facts = native_hook_facts(payload, guard_home, deadline=deadline)
+                edge_hint = edge.get("exact_command_block")
+                facts = (
+                    native_hook_facts(payload, guard_home, deadline=deadline)
+                    if edge_hint is not False
+                    else None
+                )
+                if facts is None and edge_hint is not False:
+                    return (
+                        _record_unavailable_native(
+                            self,
+                            payload,
+                            harness=native_harness,
+                            event_name="PreToolUse",
+                            reason_code="native_payload_facts_unavailable",
+                            reason="HOL Guard could not identify this command safely.",
+                            guard_home=guard_home,
+                            deadline=deadline,
+                        ),
+                        False,
+                    )
                 command_block = native_exact_command_block_response(
                     self.store,
                     harness=native_harness,
-                    command=facts.command if facts is not None else pre_tool_command(payload),
+                    command=facts.command if facts is not None else None,
                     native_result=native_result,
                     workspace=workspace,
-                    edge_hint=edge.get("exact_command_block"),
+                    edge_hint=edge_hint,
                 )
                 if command_block is not None:
                     return (
