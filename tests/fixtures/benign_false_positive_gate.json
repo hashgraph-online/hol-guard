@@ -24050,6 +24050,23 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-python-heredoc-non-ascii-in-nested-quote-f-string",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'EOF'\nimport json\nprint(f'{'' if 0 else ｅｘｅｃ(\"import os\")}')\nprint(json.dumps(1))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "developer-checkout-fetch-chain",
       "fix_area": "developer-checkout",
       "harnesses": [

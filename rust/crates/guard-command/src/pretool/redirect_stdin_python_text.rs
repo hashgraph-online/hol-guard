@@ -8,12 +8,14 @@
 //!
 //! Text inside a comment or a plain string literal is never an identifier, so
 //! here each non-ASCII character there becomes `?`, which joins no name.
-//! Non-ASCII anywhere else keeps the program held: in code, and inside an
-//! f-string or t-string, whose braces hold code.
+//! Non-ASCII anywhere else keeps the program held: in code, and anywhere
+//! from the first f-string or t-string on. Their braces hold code, and since
+//! Python 3.12 that code may reuse the outer quote (`f'{'' or x}'`), so a
+//! quote inside one does not show where the literal ends.
 
 /// `source` with each non-ASCII character inside a comment or a plain string
-/// literal replaced by `?`. `None` when non-ASCII sits in code or in an
-/// f-string or t-string, or when a string is left open.
+/// literal replaced by `?`. `None` when non-ASCII sits in code or anywhere
+/// after an f-string or t-string opens, or when a string is left open.
 pub(super) fn ascii_view(source: &str) -> Option<String> {
     let chars: Vec<char> = source.chars().collect();
     let mut out = String::with_capacity(source.len());
@@ -26,7 +28,13 @@ pub(super) fn ascii_view(source: &str) -> Option<String> {
                     at += 1;
                 }
             }
-            '\'' | '"' => at = string(&chars, at, template(&chars[..at]), &mut out)?,
+            '\'' | '"' if template(&chars[..at]) => {
+                if !chars[at..].iter().all(char::is_ascii) {
+                    return None;
+                }
+                at = string(&chars, at, &mut out)?;
+            }
+            '\'' | '"' => at = string(&chars, at, &mut out)?,
             character if !character.is_ascii() => return None,
             character => {
                 out.push(character);
@@ -58,7 +66,7 @@ fn template(before: &[char]) -> bool {
 
 /// Copies the string literal opening at `start` and returns the index just
 /// past its closing quote.
-fn string(chars: &[char], start: usize, template: bool, out: &mut String) -> Option<usize> {
+fn string(chars: &[char], start: usize, out: &mut String) -> Option<usize> {
     let quote = chars[start];
     let closes = |at: usize, width: usize| (at..at + width).all(|i| chars.get(i) == Some(&quote));
     let width = if closes(start, 3) { 3 } else { 1 };
@@ -76,9 +84,6 @@ fn string(chars: &[char], start: usize, template: bool, out: &mut String) -> Opt
         // A backslash keeps the next character in the string, raw or not.
         let step = if character == '\\' { 2 } else { 1 };
         for &inner in chars.get(at..at + step)? {
-            if template && !inner.is_ascii() {
-                return None;
-            }
             out.push(masked(inner));
         }
         at += step;
@@ -100,7 +105,8 @@ mod tests {
             ("e = 'it\\'s é'\n", "e = 'it\\'s ?'\n"),
             ("b = rb'x' + u'ü'\n", "b = rb'x' + u'?'\n"),
             ("empty = '' + 'é'\n", "empty = '' + '?'\n"),
-            ("print(f'{x}') # é\n", "print(f'{x}') # ?\n"),
+            // Text before the first template is still read.
+            ("print('é')\nprint(f'{x}')\n", "print('?')\nprint(f'{x}')\n"),
         ] {
             assert_eq!(ascii_view(source).as_deref(), Some(view), "{source:?}");
         }
@@ -116,6 +122,10 @@ mod tests {
             "print(f'café')\n",
             "print(t'é')\n",
             "print(rf'é')\n",
+            // PEP 701: the inner quotes do not end the template.
+            "print(f'{'' if 0 else ｅｘｅｃ(\"1\")}')\n",
+            "print(t\"{\"\" or ｅｘｅｃ('pass')}\")\n",
+            "print(f'{x}')\nprint('é')\n",
             "x = 1\u{a0}+ 1\n",
             "\u{feff}print(1)\n",
             // A string left open swallows what follows.
