@@ -21,6 +21,7 @@ def record_policy_fence_window(
     action: str,
     admitted: bool | None = None,
     waited_ms: int | None = None,
+    request_id: str | None = None,
     deadline: float | None = None,
 ) -> Mapping[str, object] | None:
     """Update resident fence-window state and return a completed event, if any."""
@@ -33,7 +34,7 @@ def record_policy_fence_window(
         canonical_home = guard_home
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
-        "request_id": f"policy-fence-window-{uuid.uuid4().hex}",
+        "request_id": request_id or f"policy-fence-window-{uuid.uuid4().hex}",
         "guard_home": str(canonical_home),
         "action": action,
     }

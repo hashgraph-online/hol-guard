@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 
@@ -85,6 +86,7 @@ class PolicySourceFenceWait:
         self._until: float | None = None
         self._exhausted = False
         self._entered = False
+        self._request_id = f"policy-fence-wait-{uuid.uuid4().hex}"
 
     def pause(self) -> bool:
         """Sleep one poll interval; False once the bounded wait is spent."""
@@ -93,14 +95,15 @@ class PolicySourceFenceWait:
         if self._until is None:
             self._until = fence_wait_until(now, self._deadline)
             if self._guard_home is not None:
-                self._entered = (
-                    record_policy_fence_window(
-                        self._guard_home,
-                        action="enter",
-                        deadline=self._deadline,
-                    )
-                    is not None
+                result = record_policy_fence_window(
+                    self._guard_home,
+                    action="enter",
+                    request_id=self._request_id,
+                    deadline=self._deadline,
                 )
+                self._entered = result is not None
+                if isinstance(result, dict) and result.get("event_name"):
+                    _record_event(self._store, result)
         if now + POLL_SECONDS > self._until:
             self._exhausted = True
             return False
@@ -127,6 +130,7 @@ class PolicySourceFenceWait:
         event = record_policy_fence_window(
             self._guard_home,
             action="leave",
+            request_id=self._request_id,
             admitted=not self._exhausted,
             deadline=self._deadline,
         )

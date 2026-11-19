@@ -72,7 +72,7 @@ fn an_expired_window_preserves_counts_for_late_leaves() {
         .get_mut(home)
         .expect("synthetic window")
         .waiters
-        .front_mut()
+        .get_mut("fence-stale-first")
         .expect("stale waiter");
     *stale -= MAX_WINDOW_AGE_MICROS + 1;
     drop(windows);

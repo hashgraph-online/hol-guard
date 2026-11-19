@@ -75,10 +75,11 @@ def test_wait_exhaustion_is_reported_as_not_admitted(monkeypatch, tmp_path: Path
     )
     assert wait.pause() is False
     wait.finish()
-    assert calls == [
-        {"action": "enter", "deadline": 10.0},
-        {"action": "leave", "admitted": False, "deadline": 10.0},
-    ]
+    assert [call["action"] for call in calls] == ["enter", "leave"]
+    assert calls[0]["deadline"] == 10.0
+    assert calls[1]["deadline"] == 10.0
+    assert calls[1]["admitted"] is False
+    assert calls[0]["request_id"] == calls[1]["request_id"]
 
 
 def test_direct_wait_rejects_invalid_values(monkeypatch, tmp_path: Path) -> None:
