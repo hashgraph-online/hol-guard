@@ -37,7 +37,7 @@ needs code inside the shell itself, and each shell offers a different hook:
 
 | Shell | Pre-execution hook | Can it refuse the command? |
 | --- | --- | --- |
-| zsh | a replacement `accept-line` widget | Yes, by not accepting the line |
+| zsh | a replacement for every widget that runs the line: `accept-line`, `accept-and-hold`, `accept-line-and-down-history` (Ctrl+O in the emacs keymap) and `accept-and-infer-next-history` | Yes, by not accepting the line; a widget left unreplaced runs the line unchecked |
 | bash | `DEBUG` trap with `shopt -s extdebug` | Yes, a nonzero return skips the command |
 | fish | `fish_preexec` event | No |
 | PowerShell | PSReadLine `CommandValidationHandler` | Yes, by throwing |
@@ -64,13 +64,15 @@ needs code inside the shell itself, and each shell offers a different hook:
   records the previous value so uninstall can put it back.
 - **No shell profile rewrites.** The launch script lives under Guard's home.
   Guard does not write to `~/.zshrc`, `~/.bashrc`, PowerShell profiles or any
-  other user file. Acceptance for SW-053 is that no byte outside the Guard-owned
-  profile entry changes.
+  other user file. Acceptance is that Guard changes only what it owns: the
+  Guard profile entry in `settings.json`, the launch script under Guard's home
+  and, only when the user asked for it, `defaultProfile.<os>`, whose previous
+  value Guard records. No other setting and no shell file changes.
 - **Environment handoff.** The script passes the session's workspace and a
   `CURSOR_TERMINAL` surface marker to the runtime, so receipts name the
   terminal surface and do not count as editor or CLI evidence.
-- **Conflict detection.** If the user's rc files already replace
-  `accept-line`, set a `DEBUG` trap or define a validation handler, the check
+- **Conflict detection.** If the user's rc files already replace any of the
+  zsh widgets that run a line, bind another widget that runs one, set a `DEBUG` trap or define a validation handler, the check
   stays out and `hol-guard doctor cursor` reports the terminal as unprotected
   rather than chaining or overriding the user's hook.
 - **Failure behavior.** If the runtime cannot answer, the check must say so on
@@ -92,11 +94,19 @@ needs code inside the shell itself, and each shell offers a different hook:
   typed line.
 - Remote and container terminals start their shells elsewhere and would not
   load the profile.
+- Input to a program that is reading from the terminal goes to that program,
+  not to the shell's line editor. A long-running process an agent started, or
+  any interactive tool such as a REPL, receives later input unchecked, so the
+  second case in [the gap](#the-gap) stays open under option 3.
 
 ## Recommendation
 
-Keep option 1 and the `unsupported` row. The terminal is a person typing, and
-every action an agent takes already goes through Cursor's agent hooks. Option 3
+Keep option 1 and the `unsupported` row. The terminal is a person typing.
+Agent shell commands, MCP calls, file reads and `preToolUse` file writes go
+through Cursor's agent hooks; inline edits that bypass `preToolUse` and
+cloud-agent actions are not covered (see
+[harness claims](harness-claims.md#cursor) and the
+[local and cloud contract](cursor-local-cloud-contract.md)). Option 3
 adds shell code to a user-facing terminal for a path the user can step around,
 so it should start only on a concrete request, after this page is reviewed, and
-with SW-053's no-rewrite and uninstall tests written first.
+with its no-rewrite and uninstall tests written first.
