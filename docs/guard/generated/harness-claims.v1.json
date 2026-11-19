@@ -125,7 +125,8 @@
       "expires_at": null,
       "limitations": [],
       "known_blind_spots": [
-        "Background sessions without an active terminal may not surface hook events."
+        "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+        "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
       ],
       "evidence": {}
     },
@@ -1187,7 +1188,8 @@
       "failure_behavior": "fail_closed",
       "state": "configured",
       "known_blind_spots": [
-        "Background sessions without an active terminal may not surface hook events."
+        "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+        "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
       ],
       "limitations": []
     },

@@ -138,3 +138,6 @@ on the same machine.
 
 A project's own hooks run alongside Guard's. They do not replace them. The workspace hook scan reviews
 hook commands it finds in the project's `.claude/settings.json` and `.claude/settings.local.json`.
+
+Sessions started with `--bare`, or with setting sources that leave out `user`, never load Guard's
+hooks. See [Claude Code session modes](./claude-code-sessions.md) for each way of starting Claude Code.
