@@ -8,6 +8,7 @@ the sync error classes the CLI already reports.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 from collections.abc import Mapping
@@ -46,7 +47,7 @@ def cloud_bundle_sync(
     request: dict[str, object] = {"action": action, "guardHome": str(guard_home)}
     supplied = auth_context if auth_context is not None else _test_auth_context()
     if supplied is not None:
-        request["authContext"] = dict(supplied)
+        request["authContext"] = _json_auth_context(supplied)
     completed = run_isolated_hook_process(
         (str(runtime), CLOUD_BUNDLE_SYNC_COMMAND, "--stdin"),
         input_text=json.dumps(request, sort_keys=True, separators=(",", ":")),
@@ -90,6 +91,14 @@ def _failure(response: Mapping[str, object]) -> RuntimeError:
     if outcome == "not_available":
         return GuardSyncNotAvailableError(text, retryable=response.get("retryable") is True)
     return RuntimeError(text)
+
+
+def _json_auth_context(supplied: Mapping[str, object]) -> dict[str, object]:
+    """A resolved sign-in carries its DPoP key as a dataclass; send it as a plain object."""
+    return {
+        key: dataclasses.asdict(value) if dataclasses.is_dataclass(value) and not isinstance(value, type) else value
+        for key, value in supplied.items()
+    }
 
 
 def _test_auth_context() -> dict[str, object] | None:

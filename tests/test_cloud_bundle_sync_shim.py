@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_launch_runtime, native_runtime
+from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime.cloud_bundle_sync import (
     CLOUD_BUNDLE_SYNC_COMMAND,
@@ -61,6 +62,28 @@ def test_result_and_request_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     assert cloud_bundle_sync(tmp_path, "network", auth_context=supplied) == {"status": "synced"}
     assert sent == [{"action": "network", "authContext": supplied, "guardHome": str(tmp_path)}]
+
+
+def test_resolved_sign_in_key_is_sent_as_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _answer(monkeypatch, tmp_path, {"ok": True, "result": {}})
+    key = GuardDpopKeyMaterial(
+        algorithm="ES256",
+        private_key_pem="pem",
+        public_jwk={"kty": "EC"},
+        public_jwk_thumbprint="thumb",
+    )
+    supplied = {"sync_url": "http://127.0.0.1:9/api/guard/receipts/sync", "dpop_key_material": key}
+
+    cloud_bundle_sync(tmp_path, "supply_chain", auth_context=supplied)
+    assert sent[0]["authContext"] == {
+        "sync_url": "http://127.0.0.1:9/api/guard/receipts/sync",
+        "dpop_key_material": {
+            "algorithm": "ES256",
+            "private_key_pem": "pem",
+            "public_jwk": {"kty": "EC"},
+            "public_jwk_thumbprint": "thumb",
+        },
+    }
 
 
 @pytest.mark.parametrize(
