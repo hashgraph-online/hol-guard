@@ -7,10 +7,8 @@
 use super::fixed_command_floor;
 
 fn model(command: &str) -> crate::CanonicalCommandV1 {
-    crate::parse_command(
-        &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
-    )
-    .unwrap()
+    crate::parse_command(&serde_json::from_value(serde_json::json!({"command": command})).unwrap())
+        .unwrap()
 }
 
 #[test]
