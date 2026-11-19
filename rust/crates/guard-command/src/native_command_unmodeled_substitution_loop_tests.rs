@@ -104,6 +104,18 @@ fn diagnose(command: &str) -> String {
 }
 
 #[test]
+fn launchers_that_run_substitution_outputs_cannot_be_inert() {
+    // These execute an argument as a command, like sudo and pkexec.
+    // Retained substitution values must not make them eligible for review.
+    for launcher in ["run0", "gsudo"] {
+        for executable in [launcher.to_string(), format!("/usr/bin/{launcher}")] {
+            let command = format!("for x in a; do {executable} $(printf sh) -c id; done");
+            assert!(!super::interpreter_free(&command), "{command}");
+        }
+    }
+}
+
+#[test]
 fn a_shell_state_path_assignment_is_not_treated_as_plain_data() {
     // In zsh, `path` is tied to PATH; unlike `artifact_path`, it can change
     // which commands execute. The uncertain floor must not treat it as an
