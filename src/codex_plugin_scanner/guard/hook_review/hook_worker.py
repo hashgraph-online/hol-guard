@@ -317,7 +317,7 @@ class HookWorker(HookWorkerNativeMixin):
         event_name = event_name or self._hook_event_name(payload, deadline)
         if event_name is None and harness.strip().lower().replace("_", "-") == "claude-code":
             candidate = payload.get("hook_event_name")
-            if candidate in {"PermissionRequest", "Stop", "Notification", "PostToolUse"}:
+            if isinstance(candidate, str) and candidate in {"PermissionRequest", "Stop", "Notification", "PostToolUse"}:
                 event_name = candidate
         if event_name is None:
             return unavailable_event_response(
