@@ -581,10 +581,11 @@ class StoreSecretPolicyIntegrityMixin:
         normalized = self._normalize_policy_integrity_control_state(payload)
         if normalized is None:
             return False
-        current = self._load_policy_integrity_control_state(create=False)
-        if current is not None and normalized["generation"] < current["generation"]:
-            return False
-        return self._store_policy_integrity_control_state(normalized)
+        with self.hold_policy_integrity_generation_lock():
+            current = self._load_policy_integrity_control_state(create=False)
+            if current is not None and normalized["generation"] < current["generation"]:
+                return False
+            return self._store_policy_integrity_control_state(normalized)
 
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []

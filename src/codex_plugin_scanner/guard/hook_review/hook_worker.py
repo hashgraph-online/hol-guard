@@ -47,9 +47,9 @@ from ..native_runtime_status_share import share_verified_runtime_status
 from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
 from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
-from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 from .hook_worker_native import HookWorkerNativeMixin
 from .hook_worker_readiness import prepare_workspace_policy
+from .hook_worker_unavailable import unavailable_event_response
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
@@ -316,36 +316,10 @@ class HookWorker(HookWorkerNativeMixin):
         harness = self._runtime_harness(params) or default_harness
         event_name = event_name or self._hook_event_name(payload, deadline)
         if event_name is None:
-            # The resident owns event identity. This label only selects the
-            # fixed outage response and never enters semantic routing.
-            fallback_event = canonical_hook_event_name(payload)
-            if fallback_event == "PostToolUse":
-                from ..cli.commands_support_command_activity import hook_post_succeeded
-
-                self._record_post_tool_activity(
-                    harness=harness,
-                    payload=payload,
-                    succeeded=hook_post_succeeded(fallback_event, payload),
-                )
-            normalized_harness = harness.strip().lower().replace("_", "-")
-            if fallback_event == "PermissionRequest":
-                if normalized_harness == "claude-code":
-                    return {
-                        "guard_permission_passthrough": True,
-                        "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
-                    }
-                if normalized_harness in _PERMISSION_PASSTHROUGH_HARNESSES:
-                    return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
-            response = availability_harness_response(
+            return unavailable_event_response(
+                self,
+                payload=payload,
                 harness=harness,
-                event_name=fallback_event,
-                reason_code="native_hook_event_unavailable",
-                reason="HOL Guard could not identify this hook event safely.",
-            )
-            return self._apply_structured_unavailable_overlay(
-                response,
-                harness=harness,
-                event_name=fallback_event,
                 guard_home=guard_home,
                 workspace=workspace,
             )

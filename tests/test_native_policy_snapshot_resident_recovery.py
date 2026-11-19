@@ -443,15 +443,14 @@ def _daemon_with(publisher: object) -> SimpleNamespace:
 
 
 def test_not_ready_reason_sends_the_user_to_repair_once_failures_repeat(monkeypatch) -> None:
-    reason = (
-        "HOL Guard could not prepare the native policy safely. native_client_timed_out. "
-        "Guard's native runtime is not answering. Retry once more; if it still fails, "
-        "ask the user to run `hol-guard repair` in a terminal."
+    monkeypatch.setattr(
+        admission,
+        "native_policy_not_ready_reason",
+        lambda *args, **kwargs: "delegated-reason-should-not-be-used",
     )
-    monkeypatch.setattr(admission, "native_policy_not_ready_reason", lambda *args, **kwargs: reason)
     reason = admission._native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK)))
 
-    assert "native_client_timed_out" in reason
+    assert reason == admission._NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
     assert "hol-guard repair" in reason
     assert "Retry once more" in reason
 

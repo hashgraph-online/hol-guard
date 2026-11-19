@@ -215,6 +215,10 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
         if queued is not None:
             # After the receipt, as the proxy raises them.
             _raise_approval_surface(store, guard_home, harness, queued)
+    except ValueError:
+        # Decode and validation failures are permanent for this record. They
+        # must not block later evidence behind a retryable write failure.
+        return False
     except Exception:
         # A record the proxy could not have written is dropped, never guessed.
         return McpEvidenceWriteResult(False, committed)

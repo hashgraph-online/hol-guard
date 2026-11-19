@@ -27,11 +27,11 @@ def native_hook_review_binding(
     """Validate and project one committed binding through the resident."""
 
     revision = cli_revision if isinstance(cli_revision, int) and not isinstance(cli_revision, bool) else None
-    timeout_seconds = 0.25 if deadline is None else min(0.25, deadline - time.monotonic())
-    if timeout_seconds <= 0:
-        return None
     status = native_runtime_status(deadline_monotonic=deadline)
     if status.identity is None:
+        return None
+    timeout_seconds = 0.25 if deadline is None else min(0.25, deadline - time.monotonic())
+    if timeout_seconds <= 0:
         return None
     request = {
         "schema": _REQUEST_SCHEMA,

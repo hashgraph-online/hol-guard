@@ -277,6 +277,10 @@ def record_mcp_relay_package_evidence(
                 scanner_evidence=scanner_evidence,
                 redaction_level=redaction_level,
             )
+    except ValueError:
+        # Decode and validation failures are permanent for this record. They
+        # must not block later evidence behind a retryable write failure.
+        return False
     except Exception:
         # A record the proxy could not have written is dropped, never guessed.
         return McpEvidenceWriteResult(False, committed)
