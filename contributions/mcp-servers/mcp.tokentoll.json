@@ -3,7 +3,7 @@
   "id": "mcp.tokentoll",
   "version": "1.0.0",
   "name": "tokentoll",
-  "description": "Reviews tokentoll's two read-only analysis tools: scan estimates the monthly cost of LLM API calls found in a codebase, and diff compares those costs between two git refs. Neither tool writes files or changes state, so both keep Guard's usual handling. Off until you turn it on.",
+  "description": "Reviews tokentoll's two analysis tools: scan estimates the monthly cost of LLM API calls found in a codebase, and diff compares those costs between two git refs. Both can fetch LiteLLM pricing data on first use and write it to the ~/.tokentoll cache, so both keep Guard's usual handling. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -21,7 +21,9 @@
     "command": "tokentoll-mcp"
   },
   "riskClasses": [
-    "local-source-read"
+    "local-source-read",
+    "external-network-read",
+    "local-file-write"
   ],
   "tools": [
     {
@@ -41,6 +43,6 @@
     "https://github.com/Jwrede/tokentoll"
   ],
   "saferAlternatives": [
-    "Both tools only read the checkout they are pointed at; run scan against the repository you intend to review."
+    "scan and diff read source and git history without modifying the checkout; on first use they download LiteLLM pricing data and cache it under ~/.tokentoll, so pre-populate that cache to avoid network access."
   ]
 }
