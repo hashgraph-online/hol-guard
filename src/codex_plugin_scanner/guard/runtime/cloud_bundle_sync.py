@@ -2,7 +2,7 @@
 
 The native runtime fetches, verifies and saves the workspace's signed
 supply-chain and network protection bundles, and uploads the local Guard event
-queue and pain signals, under the machine's managed network policy. This
+queue, the receipts and pain signals, under the machine's managed network policy. This
 module only sends the request and raises its answer as the sync error classes
 the CLI already reports.
 """
@@ -19,6 +19,7 @@ CLOUD_BUNDLE_SYNC_COMMAND = "cloud-bundle-sync"
 CLOUD_BUNDLE_SYNC_FEATURE = "cloud-bundle-sync-v1"
 CLOUD_EVENT_SYNC_COMMAND = "cloud-event-sync"
 CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
+CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
@@ -62,6 +63,83 @@ def cloud_event_sync(
         subject="event sync",
         extra=None if session is None else {"session": dict(session)},
     )
+
+
+def cloud_receipt_upload(
+    guard_home: Path,
+    upload: Mapping[str, object],
+    *,
+    auth_context: Mapping[str, object] | None = None,
+) -> object:
+    """Upload the local receipts natively and return what Guard Cloud answered."""
+
+    return run_native_cloud_sync(
+        CLOUD_EVENT_SYNC_COMMAND,
+        CLOUD_RECEIPT_UPLOAD_FEATURE,
+        guard_home,
+        "receipts",
+        auth_context=auth_context,
+        subject="receipt sync",
+        extra={"upload": dict(upload)},
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class ReceiptUploadAnswer:
+    """What Guard Cloud answered across the receipt batches of one sync."""
+
+    now: str
+    synced_at: object
+    receipts: int
+    receipts_stored: int
+    advisories: list[dict[str, object]]
+    policy_bundle_provided: bool
+    policy_bundle_malformed: bool
+    policy_bundle: dict[str, object] | None
+    policy_bundle_sync_payload: dict[str, object] | None
+    policy_bundle_delivery_provided: bool
+    policy_bundle_delivery: object
+    alert_preferences: dict[str, object] | None
+    review_verification_keys: object
+    receipt_cursor_rowid: int | None
+    receipt_cursor_backfill: bool
+    receipts_skipped: int = 0
+
+    @classmethod
+    def from_native(cls, answer: Mapping[str, object]) -> ReceiptUploadAnswer:
+        bundle = answer.get("policy_bundle")
+        bundle = bundle if isinstance(bundle, dict) else {}
+        sync_payload = bundle.get("sync_payload")
+        sync_payload = sync_payload if isinstance(sync_payload, dict) else None
+        policy_bundle = None if sync_payload is None else sync_payload.get("policyBundle")
+        advisories = answer.get("advisories")
+        preferences = answer.get("alert_preferences")
+        cursor = answer.get("receipt_cursor_rowid")
+        now = answer.get("now")
+        if not isinstance(now, str) or not now:
+            raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+        return cls(
+            now=now,
+            synced_at=answer.get("synced_at"),
+            receipts=_count(answer.get("receipts")),
+            receipts_stored=_count(answer.get("receipts_stored")),
+            advisories=[item for item in advisories if isinstance(item, dict)] if isinstance(advisories, list) else [],
+            policy_bundle_provided=bundle.get("provided") is True,
+            policy_bundle_malformed=bundle.get("malformed") is True,
+            policy_bundle=policy_bundle if isinstance(policy_bundle, dict) else None,
+            policy_bundle_sync_payload=sync_payload,
+            policy_bundle_delivery_provided=bundle.get("delivery_provided") is True,
+            policy_bundle_delivery=bundle.get("delivery"),
+            alert_preferences=preferences if isinstance(preferences, dict) else None,
+            review_verification_keys=answer.get("review_verification_keys"),
+            receipt_cursor_rowid=cursor if isinstance(cursor, int) and not isinstance(cursor, bool) else None,
+            receipt_cursor_backfill=answer.get("receipt_cursor_backfill") is True,
+            receipts_skipped=_count(answer.get("receipts_skipped")),
+        )
+
+
+def _count(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def run_native_cloud_sync(

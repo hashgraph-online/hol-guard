@@ -247,7 +247,7 @@ fn parse_micros(value: &str) -> Option<i64> {
 }
 
 /// `_sync_timestamp`: the cloud's `syncedAt` when it is a timestamp.
-fn synced_at(payload: &Value) -> String {
+pub(crate) fn synced_at(payload: &Value) -> String {
     match payload.get("syncedAt").and_then(Value::as_str) {
         Some(value) if !value.trim().is_empty() && parse_micros(value).is_some() => {
             value.to_owned()

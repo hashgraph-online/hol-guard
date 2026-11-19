@@ -204,6 +204,25 @@ def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: py
 
 
 @pytest.fixture(autouse=True)
+def _receipt_upload_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the receipt upload through the urllib a test fakes.
+
+    Mark a test ``native_receipt_upload`` to upload with the native command.
+    """
+
+    if request.node.get_closest_marker("native_receipt_upload") is not None:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.receipt_upload_transport import receipt_upload_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_receipt_upload",
+        receipt_upload_over_urllib(cloud_bundle_sync.cloud_receipt_upload),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _python_cursor_hook_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     """Install Cursor hooks with the Python bridge argv.
 

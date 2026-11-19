@@ -22,8 +22,6 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
     _ensure_relaxed_receipt_redaction_resync,
     _persist_cloud_receipt_redaction_level,
-    _receipt_sync_cursor_rowids_from_batch,
-    _receipt_sync_rows_with_command_detail_backfill,
     _resolve_cloud_receipt_redaction_level,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -33,6 +31,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.support import receipt_upload_transport as upload
 
 
 def _store_blocked_command_receipt(store: GuardStore, receipt_id: str = "guard-receipt-sync-auth") -> None:
@@ -417,7 +416,7 @@ def test_cloud_receipt_redaction_tightening_keeps_receipt_cursor(tmp_path) -> No
 
 
 def test_command_detail_backfill_rows_do_not_advance_receipt_cursor() -> None:
-    rowids = _receipt_sync_cursor_rowids_from_batch(
+    rowids = upload.receipt_sync_cursor_rowids_from_batch(
         [
             {"receipt_id": "cursor-1", "receipt_rowid": 101},
             {"receipt_id": "backfill-1", "receipt_rowid": 5000},
@@ -618,7 +617,7 @@ def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_
         ),
     )
 
-    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+    rows, marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
@@ -648,7 +647,7 @@ def test_relaxed_redaction_command_detail_backfill_marker_prevents_repeat(tmp_pa
         "2026-04-15T00:01:00Z",
     )
 
-    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+    rows, marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
@@ -663,7 +662,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
     tmp_path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 1)
+    monkeypatch.setattr(upload, "RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 1)
     store = GuardStore(tmp_path)
     for index in range(2):
         store.add_receipt(
@@ -712,7 +711,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
             ),
         )
 
-    first_rows, first_marker = _receipt_sync_rows_with_command_detail_backfill(
+    first_rows, first_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
@@ -729,7 +728,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
         "2026-04-15T00:02:00Z",
     )
 
-    second_rows, second_marker = _receipt_sync_rows_with_command_detail_backfill(
+    second_rows, second_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=[],
         redaction_level="partial",
