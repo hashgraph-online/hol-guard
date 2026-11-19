@@ -45,7 +45,10 @@ def unavailable_event_response(
     response = availability_harness_response(
         harness=harness,
         event_name=fallback_event,
-        reason_code="native_hook_event_unavailable",
+        reason_code={
+            "PreToolUse": "native_pre_tool_unavailable",
+            "PostToolUse": "native_post_tool_unavailable",
+        }.get(fallback_event, "native_hook_event_unavailable"),
         reason="HOL Guard could not identify this hook event safely.",
     )
     return worker._apply_structured_unavailable_overlay(
