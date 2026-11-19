@@ -168,5 +168,5 @@ suspicious = "deny"
 # 0.14.2 is on crates.io. Remove this section and the matching deny.toml
 # allow-git entry before merging.
 [patch.crates-io]
-cigar-context = { git = "https://github.com/hashgraph-online/hol-cigar", rev = "3e7d6dc1bca005d93bf01c2071928a9188196763" }
-cigar-windows-ipc = { git = "https://github.com/hashgraph-online/hol-cigar", rev = "3e7d6dc1bca005d93bf01c2071928a9188196763" }
+cigar-context = { git = "https://github.com/hashgraph-online/hol-cigar", rev = "d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce" }
+cigar-windows-ipc = { git = "https://github.com/hashgraph-online/hol-cigar", rev = "d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce" }

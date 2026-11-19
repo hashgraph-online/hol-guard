@@ -326,7 +326,7 @@ dependencies = [
 [[package]]
 name = "cigar-context"
 version = "0.14.2"
-source = "git+https://github.com/hashgraph-online/hol-cigar?rev=3e7d6dc1bca005d93bf01c2071928a9188196763#3e7d6dc1bca005d93bf01c2071928a9188196763"
+source = "git+https://github.com/hashgraph-online/hol-cigar?rev=d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce#d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce"
 dependencies = [
  "base64 0.22.1",
  "cigar-windows-ipc",
@@ -345,7 +345,7 @@ dependencies = [
 [[package]]
 name = "cigar-windows-ipc"
 version = "0.9.4"
-source = "git+https://github.com/hashgraph-online/hol-cigar?rev=3e7d6dc1bca005d93bf01c2071928a9188196763#3e7d6dc1bca005d93bf01c2071928a9188196763"
+source = "git+https://github.com/hashgraph-online/hol-cigar?rev=d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce#d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce"
 dependencies = [
  "windows-sys 0.61.2",
 ]
