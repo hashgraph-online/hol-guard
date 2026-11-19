@@ -332,9 +332,16 @@ def test_control_library_steps_read_the_daemon_state(tmp_path: Path) -> None:
 
 
 def test_native_daemon_worker_passes_are_not_library_calls(tmp_path: Path) -> None:
-    # The native daemon runs the heartbeat, the idle hold and storage
-    # maintenance itself.
-    for name in ("worker.idle_holds", "worker.maintain_activity", "worker.runtime_heartbeat"):
+    # The native daemon runs the heartbeat, the idle hold, storage
+    # maintenance, the one-file extraction sweep and the sync-profile lookup
+    # behind the idle hold itself.
+    for name in (
+        "worker.cloud_workspace",
+        "worker.idle_holds",
+        "worker.maintain_activity",
+        "worker.onefile_reclaim",
+        "worker.runtime_heartbeat",
+    ):
         assert _call(tmp_path, name, {})["error"]["message"] == "unknown_call"  # type: ignore[index]
 
 
@@ -344,13 +351,11 @@ def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> 
     assert reconciled["ok"]["repaired_harnesses"] == []  # type: ignore[index]
 
 
-def test_worker_aibom_and_onefile_passes_answer(tmp_path: Path) -> None:
+def test_worker_aibom_pass_answers(tmp_path: Path) -> None:
     aibom = _call(tmp_path, "worker.aibom_inventory", {})
     assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]
     payload = GuardStore(tmp_path).get_sync_payload("aibom_inventory_daemon")
     assert isinstance(payload, dict) and payload["status"] == "missing_workspace_context"
-    assert _call(tmp_path, "worker.onefile_reclaim", {})["ok"] == {"ok": True, "skipped": True}
-    assert _call(tmp_path, "worker.cloud_workspace", {})["ok"] == {"ok": True, "workspace_id": None}
 
 
 def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:

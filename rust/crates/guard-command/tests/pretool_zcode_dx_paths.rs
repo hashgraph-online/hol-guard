@@ -3,6 +3,8 @@
 //! because of dot names, tool symlinks or a same-named directory.
 use guard_command::pretool::{evaluate_pre_tool_envelope_with_execution_context, PathContext};
 use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 fn fixture(label: &str) -> PathBuf {
@@ -20,6 +22,19 @@ fn write(path: PathBuf, text: &str) {
 }
 
 fn decide(tool: &str, input: serde_json::Value, home: &Path, cwd: &Path) -> String {
+    // Exercise the same authenticated HOME proof as production. A caller's
+    // bare PathContext flag is not evidence that the shell will expand '~'
+    // under the home directory inspected by Guard.
+    let path = std::env::var("PATH").unwrap_or_default();
+    let home_text = home.to_string_lossy().into_owned();
+    let environment = BTreeMap::from([("HOME", home_text.clone()), ("PATH", path.clone())]);
+    let execution = guard_contracts::GuardExecutionEnvironmentV1 {
+        path,
+        environment_names: environment.keys().map(|name| (*name).to_owned()).collect(),
+        environment_digest: hex::encode(Sha256::digest(serde_json::to_vec(&environment).unwrap())),
+        home: Some(home_text),
+        ..Default::default()
+    };
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {
         evaluate_pre_tool_envelope_with_execution_context(
             harness,
@@ -38,7 +53,7 @@ fn decide(tool: &str, input: serde_json::Value, home: &Path, cwd: &Path) -> Stri
                 npm_config_inert: false,
                 pip_config_inert: false,
                 python_environment_inert: false,
-                shell_home_matches: false,
+                shell_home_matches: true,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
@@ -46,7 +61,7 @@ fn decide(tool: &str, input: serde_json::Value, home: &Path, cwd: &Path) -> Stri
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
-            None,
+            Some(&execution),
         )
         .decision
     });

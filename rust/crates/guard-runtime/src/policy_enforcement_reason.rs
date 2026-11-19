@@ -90,6 +90,8 @@ fn risk_label(risk: &str) -> &'static str {
         "package_install" => "package install",
         "low_trust_artifact" => "low trust score",
         "runtime_known_vulnerable" => "known vulnerable runtime",
+        "git_hook_bypass" => "skipped git hooks",
+        "git_stage_all" => "whole-tree git staging",
         "execution" => "command execution",
         "supply_chain" => "supply chain",
         "policy_bypass" => "policy bypass",

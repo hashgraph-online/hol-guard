@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-grounded-harness",
+  "version": "1.0.0",
+  "name": "Krusch Grounded Harness MCP",
+  "description": "Turn-0 workspace schema grounding, scale-aware profile resolution, read-memoized tool interception, and defect-only outer stop-gate MCP server (kruschdev/grounded-harness v0.2.1). Read-only Turn-0 grounding, scale profile lookup, and session summary inherit Guard policy; SQLite session creation, tool interception, outcome logging, and stop verification require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/grounded-harness"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://github.com/kruschdev/grounded-harness",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-grounded-harness"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "local-sqlite-write"
+  ],
+  "tools": [
+    {
+      "name": "krusch_ground_workspace",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_resolve_scale_profile",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_grounded_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_grounded_session_start",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_intercept",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_outcome",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_verify_stop",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/grounded-harness",
+    "https://github.com/kruschdev/grounded-harness/blob/main/src/mcp.js",
+    "https://github.com/kruschdev/grounded-harness/blob/main/README.md",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/grounded-harness"
+  ],
+  "saferAlternatives": [
+    "Use krusch_ground_workspace and krusch_resolve_scale_profile to inspect CSV/JSON/SQLite workspace schemas and scale profiles without writing session rows.",
+    "Keep krusch_grounded_session_start, krusch_grounded_intercept, krusch_grounded_outcome, and krusch_grounded_verify_stop on Review because they mutate session state in the local SQLite WAL store.",
+    "Point krusch_ground_workspace only at project directories the coding agent is already authorized to read."
+  ]
+}

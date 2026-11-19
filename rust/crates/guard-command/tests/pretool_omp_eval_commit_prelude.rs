@@ -26,6 +26,9 @@ const AGENT_PROGRAMS: &[&str] = &[
     r#"const d = await commit.draft(); print(d); await d.take("src/config.js"); return await d.commit("Raise widgets request timeout", ["- Documented requestTimeoutMs."]);"#,
     "const d = await commit.draft(); return await d.take('src/sum.js');",
     "const d = await commit.draft(); return await d;",
+    "const d = await commit.draft(); return await d.show();",
+    "const d = await commit.draft(); return await d.show('notes.md');",
+    "const d = await commit.draft(); return await d.show('notes.md', {silent: true});",
     "const d = await commit.draft(); await d.take('**'); return await d.commit('Add temperature conversion CLI', {body:['Implement commands.','Document usage.']});",
     r#"const d = await commit.draft(); print(await d.commit("Fix punctuation in slugs", ["Normalize punctuation."]));"#,
     "const d=await commit.draft(); return await d.take(['index.html','style.css','game.js']);",
@@ -37,6 +40,7 @@ const AGENT_PROGRAMS: &[&str] = &[
     "const d = await commit.draft(); return {type:typeof d, keys:Object.keys(d), commit:typeof d.commit};",
     "const d = await commit.draft(); return d.commit.toString();",
     "const d = await commit.draft(); return d.details;",
+    r#"const d = await commit.draft(); await d.take("scripts/check.sh"); return await d.commit("Add release check script", "Mirror the release checklist steps.");"#,
     "const d = await commit.draft(); return { keys: Object.keys(d), proto: Object.getOwnPropertyNames(Object.getPrototypeOf(d)) };",
 ];
 
@@ -96,6 +100,12 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
     let session = session("omp-eval-commit-refused");
     for code in [
         "const d = await commit.draft(); return await d.commit('x', {amend: true});",
+        // `show(path)` prints that path's hunks, the read `git diff HEAD --
+        // <path>` performs and Guard reviews when the path names a secret.
+        "const d = await commit.draft(); return await d.show('.env');",
+        "const d = await commit.draft(); return await d.show('config/.env.local');",
+        "const d = await commit.draft(); return await d.show('deploy/id_rsa', {silent: true});",
+        "const d = await commit.draft(); return await d.show(['notes.md', '.env']);",
         "const d = await commit.draft(); for (const p of ['a']) await d.take(p); return await d.commit('x');",
         "const d = await import('xd://eval/commit'); print(d)",
         "const m = 'x'; const d = await commit.draft(); return await d.commit(m);",
@@ -124,6 +134,56 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
     ] {
         let result = eval(&session, code);
         assert_ne!(result.minimum_action, "allow", "{code}");
+    }
+}
+
+/// Each eval cell is judged on its own, so a cell cannot prove a name bound
+/// by an earlier cell still holds a draft. Those cells stay reviewed, and the
+/// review tells the agent to make and use the draft in one cell, which is
+/// allowed.
+#[test]
+fn a_draft_from_an_earlier_cell_stays_reviewed_with_one_cell_advice() {
+    let session = session("omp-eval-commit-earlier-cell");
+    std::fs::write(session.primary.join("notes.md"), "draft\n").unwrap();
+    let first = eval(&session, "const d = await commit.draft(); print(d);");
+    assert_eq!(first.minimum_action, "allow");
+    for code in [
+        "await d.show();",
+        "await d.take('docs/branch-audit.md'); print(d);",
+        "await d.commit('docs: record audit logs summary', ['- Summarize the audit.']);",
+        "print(await d.diff()); return d.details;",
+    ] {
+        let result = eval(&session, code);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("review", "native_pre_tool_unknown_review"),
+            "{code}"
+        );
+        assert!(
+            result.reason.contains("in the same cell"),
+            "{code}: {}",
+            result.reason
+        );
+    }
+    let one_cell = eval(
+        &session,
+        "const d = await commit.draft(); await d.take('notes.md'); await d.commit('docs: add notes', ['- Add notes.']);",
+    );
+    assert_eq!(one_cell.minimum_action, "allow");
+    // A carried name used outside the draft grammar keeps the plain eval review.
+    for code in [
+        "await d.commit('x', {amend: true});",
+        "const d = {show() {}}; await d.show();",
+        "await d.push('x');",
+        "globalThis.d = 1; await d.show();",
+    ] {
+        let result = eval(&session, code);
+        assert_eq!(result.minimum_action, "review", "{code}");
+        assert!(
+            !result.reason.contains("in the same cell"),
+            "{code}: {}",
+            result.reason
+        );
     }
 }
 

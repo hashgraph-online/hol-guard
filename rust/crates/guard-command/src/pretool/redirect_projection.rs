@@ -13,6 +13,8 @@ use targets::{
 
 #[path = "redirect_git_chain.rs"]
 pub(super) mod git_chain;
+#[path = "redirect_input.rs"]
+mod input;
 #[path = "redirect_leading_chain.rs"]
 mod leading_chain;
 #[path = "redirect_stdin.rs"]
@@ -77,8 +79,10 @@ pub(super) fn project(
     // Whether a separator came after the literal standard input, so which
     // command the shell hands those bytes to is no longer in the text.
     let mut stdin_separated = false;
-    // The single file a plain `< path` redirect feeds the first command.
-    let mut input_source: Option<String> = None;
+    // The single file a plain `< path` redirect reads, and where the command
+    // it feeds starts in `out`.
+    let mut input_source: Option<(String, usize)> = None;
+    let mut input_site = input::InputSite::new();
     let mut removed = false;
     let mut targets: Vec<String> = Vec::new();
     let mut bounded_writes = true;
@@ -116,6 +120,9 @@ pub(super) fn project(
                 }
                 let opens = substitution(&chars, index);
                 separated |= opens;
+                if opens {
+                    input_site.opaque();
+                }
                 beyond_pipeline |= opens;
                 out.push(current);
                 index += 1;
@@ -132,6 +139,9 @@ pub(super) fn project(
                 || (current == '&' && chars.get(index + 1) != Some(&'>'))
                 || substitution(&chars, index));
         separated |= separates;
+        if separates {
+            input_site.separator(&chars, index, &out);
+        }
         stdin_separated |= saw_stdin_data && separates;
         beyond_pipeline |= separates
             && (!targets.is_empty() || !super::super::chain_temporary::plain_pipe(&chars, index));
@@ -183,7 +193,8 @@ pub(super) fn project(
                 continue;
             }
             '<' => {
-                index = remove_input_redirect(&chars, index, &out, separated, &mut input_source)?;
+                let site = (&input_site, separated, saw_stdin_data);
+                index = input::remove(&chars, index, &out, site, &mut input_source)?;
                 removed = true;
                 continue;
             }
@@ -217,12 +228,9 @@ pub(super) fn project(
     } else {
         command
     };
-    // `cmd < file` reads `file` and hands its bytes to `cmd` on standard
-    // input, which is what `cat file | cmd` does. Modelling it that way keeps
-    // the read under the proof `cat` already gets and leaves `cmd` an
-    // operand-free filter, the shape it actually runs in.
+    // `cmd < file` is `cat file | cmd`; see [`input`].
     let command = match &input_source {
-        Some(source) => format!("cat {source} | {command}"),
+        Some((source, at)) => input::splice(&out, command, source, *at)?,
         None => command,
     };
     let command = relative_saved_reads(command, &targets, context.cwd);
@@ -574,54 +582,6 @@ fn remove_output_redirect(
     );
     targets.push(target);
     out.push(' ');
-    Some(index)
-}
-
-/// Remove a plain `< path` input redirect, recording the file it reads.
-///
-/// Only the first command's own redirect is modelled: once a separator,
-/// pipe, group or substitution has been seen, the redirect belongs to a
-/// later command and prefixing a reader would misplace the read. `<<`,
-/// `<<<`, `<&` and `<>` are other forms and keep the fail-closed path, as
-/// does a second redirect or a target the shell would expand.
-fn remove_input_redirect(
-    chars: &[char],
-    start: usize,
-    out: &str,
-    separated: bool,
-    input_source: &mut Option<String>,
-) -> Option<usize> {
-    if separated
-        || input_source.is_some()
-        || matches!(chars.get(start + 1), Some('&' | '>'))
-        || !trailing_word(out).is_empty()
-    {
-        return None;
-    }
-    let mut index = start + 1;
-    while matches!(chars.get(index), Some(' ' | '\t')) {
-        index += 1;
-    }
-    let target_start = index;
-    while chars
-        .get(index)
-        .is_some_and(|value| !value.is_whitespace() && !matches!(value, ';' | '|' | '&' | ')'))
-    {
-        index += 1;
-    }
-    let target: String = chars[target_start..index].iter().collect();
-    if target.is_empty()
-        || target.len() > 4096
-        || target.starts_with('-')
-        || !target
-            .chars()
-            .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:~".contains(value))
-    {
-        return None;
-    }
-    // The guard above leaves `out` empty or ended by its own separator, so
-    // the removed redirect needs none of its own.
-    *input_source = Some(target);
     Some(index)
 }
 

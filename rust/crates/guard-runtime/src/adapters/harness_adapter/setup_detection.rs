@@ -138,6 +138,7 @@ fn setup_detection(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
                 .is_some_and(|manifest| proof::verify(ctx, manifest) == Some(true));
         return Ok(json!({
             "installed": installed,
+            "managed_active": is_active(managed.as_ref()),
             "needs_repair": false,
             "command_available": diagnostics
                 .get("command_available")
@@ -158,6 +159,7 @@ fn setup_detection(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let config_paths = contract_config_paths::dispatch(ctx, fields)?;
     Ok(json!({
         "installed": checked == Some("active") || (checked.is_none() && managed_active),
+        "managed_active": managed_active,
         "needs_repair": checked == Some("broken")
             || (managed_active && matches!(checked, Some("partial" | "not_found"))),
         "command_available": command.get("path").is_some_and(Value::is_string),

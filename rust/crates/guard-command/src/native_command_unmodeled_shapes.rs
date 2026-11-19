@@ -98,9 +98,10 @@ pub(super) fn data_heredocs(text: &str) -> Option<(String, bool)> {
             out.push(line.to_owned());
             continue;
         };
-        if after.starts_with('<') || before.contains(['\'', '"']) {
+        if after.starts_with('<') {
             return None;
         }
+        let split = super::heredoc_lead::command_start(&out.join("\n"), before)?;
         let strip_tabs = after.starts_with('-');
         let after = after.strip_prefix('-').unwrap_or(after).trim_start();
         let quoted = after.starts_with(['\'', '"']);
@@ -133,7 +134,6 @@ pub(super) fn data_heredocs(text: &str) -> Option<(String, bool)> {
         if !quoted && body.iter().any(|row| row.contains(['$', '`', '\\'])) {
             return None;
         }
-        let split = before.rfind([';', '&', '|', '(']).map_or(0, |at| at + 1);
         let (lead, command) = before.split_at(split);
         let command = command.trim();
         let inert = HEREDOC_PYTHON.contains(&command) && python_is_builtin_only(&body);
