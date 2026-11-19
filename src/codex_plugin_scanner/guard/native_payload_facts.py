@@ -94,6 +94,8 @@ def native_hook_facts(
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
+    if response is None:
+        return None
     result = response.get("result") if isinstance(response, Mapping) else None
     if not isinstance(result, Mapping):
         if status.identity is not None:
@@ -200,6 +202,8 @@ def native_connector_lookup(
             status=status,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    if response is None:
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
     lookup = result.get("connector_lookup") if isinstance(result, Mapping) else None
