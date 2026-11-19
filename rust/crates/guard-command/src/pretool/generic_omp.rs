@@ -8,6 +8,8 @@
 #[path = "generic_omp_eval.rs"]
 mod eval;
 pub use eval::omp_eval_commit_drafts;
+#[path = "generic_omp_goal.rs"]
+mod goal;
 #[path = "generic_omp_grep_glob.rs"]
 mod grep_glob;
 #[path = "generic_omp_host_refs.rs"]
@@ -22,6 +24,7 @@ mod yield_report;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result};
 use crate::native_command_controls::CompiledNativeCommandControls;
+use goal::{goal_input, goal_state};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 pub(super) use host_refs::host_reference_reason;
 use listing_proof::{listing, search_targets, walk_inside_session};
@@ -248,56 +251,6 @@ fn brief_strings(value: &Value, out: &mut Vec<String>) {
         Value::Object(map) => map.values().for_each(|item| brief_strings(item, out)),
         _ => {}
     }
-}
-
-/// `goal` keeps Oh My Pi's session objective. `op` is one of `create`,
-/// `get`, `complete`, `drop` and `resume`; `objective` is the sentence the
-/// model writes for itself and `token_budget` a number. Nothing in that input
-/// names a file, a command, a package or a host, so the call changes only the
-/// session's own bookkeeping, the way `todo` does. Every other key, and any
-/// value of another type, is not Oh My Pi's goal input and keeps its review.
-fn goal_input(input: &Map<String, Value>) -> bool {
-    let known_shape = |key: &str, value: &Value| match key {
-        "op" => matches!(
-            value.as_str(),
-            Some("complete" | "create" | "drop" | "get" | "resume")
-        ),
-        "objective" => value.is_string(),
-        "token_budget" => value.is_u64(),
-        _ => false,
-    };
-    input.contains_key("op") && input.iter().all(|(key, value)| known_shape(key, value))
-}
-
-/// The bookkeeping proof for `goal`. `get` reads the objective; the other ops
-/// write it. Neither reaches past the session, so both are allowed once the
-/// input is Oh My Pi's own shape and carries no path.
-fn goal_state(
-    payload: &Value,
-    signals: &GenericSignals,
-    context: &OmpContext<'_>,
-) -> Option<PreToolResultV1> {
-    let input = strict_tool_input(payload)?;
-    if !signals.path_values.is_empty() || !goal_input(input) {
-        return None;
-    }
-    let operation = match input.get("op").and_then(Value::as_str) {
-        Some("get") => PreToolOperationV1::Read,
-        _ => PreToolOperationV1::Set,
-    };
-    Some(generic_result(
-        generic_action(
-            context.harness,
-            context.event,
-            PreToolActionTypeV1::Harness,
-            operation,
-            true,
-            false,
-        ),
-        "allow",
-        "native_omp_goal_state",
-        "The Rust authority allowed this Oh My Pi goal call; it reads or sets the session's own objective and reaches nothing outside it.",
-    ))
 }
 
 fn delegation_result(tool: &str, context: &OmpContext<'_>) -> PreToolResultV1 {
