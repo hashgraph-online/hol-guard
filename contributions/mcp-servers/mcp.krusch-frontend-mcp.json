@@ -3,7 +3,7 @@
   "id": "mcp.krusch-frontend-mcp",
   "version": "1.1.1",
   "name": "Krusch Frontend MCP",
-  "description": "Local stdio MCP server providing canonical HTML/SVG/Lego UI templates, WCAG contrast color palettes, CSS-to-Tailwind conversion, responsive breakpoint specs, and design-rule RAG. Pure in-memory template and CSS helpers inherit Guard policy; Figma token ingestion (SQLite write + Ollama embedding) and semantic design-rule search (Ollama embedding) require review. Off until you turn it on.",
+  "description": "Local stdio MCP server providing canonical HTML/SVG/Lego UI templates, WCAG contrast color palettes, CSS-to-Tailwind conversion, responsive breakpoint specs, and design-rule RAG. Pure in-memory helpers inherit Guard policy; analyze_layout_structure and generate_component_styles call the configured Ollama model and require review. Figma token ingestion (SQLite write + Ollama embedding) and semantic design-rule search (Ollama embedding) require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -24,7 +24,8 @@
   },
   "riskClasses": [
     "local-sqlite-write",
-    "external-embedding-request"
+    "external-embedding-request",
+    "external-model-request"
   ],
   "tools": [
     {
@@ -41,11 +42,11 @@
     },
     {
       "name": "analyze_layout_structure",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "generate_component_styles",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "generate_responsive_breakpoints",
