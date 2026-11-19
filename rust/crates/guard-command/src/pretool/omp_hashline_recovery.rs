@@ -128,7 +128,8 @@ pub(super) fn unparseable_header_reason(line: &str) -> String {
 }
 
 /// Whether `line` opens a header Oh My Pi cannot parse: its opening `[`
-/// closes before the end of the line, or the line does not end with `]`.
+/// closes before the end of the line, it holds nothing, or the line does
+/// not end with `]`.
 fn closes_early(line: &str) -> bool {
     let Some(body) = line.strip_prefix('[') else {
         return false;
@@ -145,7 +146,9 @@ fn closes_early(line: &str) -> bool {
             ']' => {
                 depth -= 1;
                 if depth == 0 {
-                    return index + 1 != body.len();
+                    // An empty header such as `[]` or `[ ]` names nothing.
+                    return index + 1 != body.len()
+                        || body[..index].trim_matches([' ', '\t']).is_empty();
                 }
             }
             _ => {}

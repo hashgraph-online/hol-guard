@@ -125,6 +125,7 @@ fn first_headers_oh_my_pi_cannot_read_are_named() {
         "[src/a.py#1A2B]]",
         "[a]b#1A2B]",
         "[]",
+        "[ ]",
         "[src/a.py#1A2B",
     ] {
         let input = format!("*** Begin Patch\n{line}\nPUT 1.=1:\n+x\n*** End Patch\n");
