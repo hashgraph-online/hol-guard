@@ -86,10 +86,6 @@
       "state": "inherit"
     },
     {
-      "name": "db_open_in",
-      "state": "inherit"
-    },
-    {
       "name": "doctor",
       "state": "inherit"
     },
@@ -126,10 +122,6 @@
       "state": "inherit"
     },
     {
-      "name": "open",
-      "state": "inherit"
-    },
-    {
       "name": "pg_list",
       "state": "inherit"
     },
@@ -155,10 +147,6 @@
     },
     {
       "name": "share_list",
-      "state": "inherit"
-    },
-    {
-      "name": "sites_check",
       "state": "inherit"
     },
     {
@@ -234,9 +222,9 @@
     "https://github.com/itismowgli/localsites/blob/master/SECURITY.md"
   ],
   "saferAlternatives": [
-    "Start with the read tools: sites_list, status, sites_check, doctor and logs show what is running and what is broken without changing anything.",
+    "Start with the read tools: sites_list, status, doctor and logs show what is running and what is broken without changing anything.",
     "LocalSites enforces its own approvals in its background service, not in the app UI: risky calls wait for the person to click Approve, and agents can't approve their own requests.",
-    "Every tool not listed here, including tools added in later LocalSites versions, gets Guard review.",
+    "Every tool not listed here gets Guard review, including open and db_open_in (they launch apps), sites_check (loading a page runs project code) and tools added in later versions.",
     "Installing updates, moving projects to the Trash, installing Homebrew and sending problem reports are blocked here, as LocalSites already refuses them to agents.",
     "Tools that reveal passwords exist only when the server is started with --allow-secrets; leave that flag off.",
     "This entry matches the localsites executable and the LocalSites app binary. Launched through a shell or another wrapper, Guard keeps its normal handling."
