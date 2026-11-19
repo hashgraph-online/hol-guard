@@ -9,6 +9,7 @@ fn request(home: &str, action: &str) -> HookPolicyFenceWindowRequestV1 {
         action: action.to_owned(),
         admitted: None,
         waited_ms: None,
+        attempt_until_micros: None,
     }
 }
 
@@ -74,7 +75,7 @@ fn an_expired_window_preserves_counts_for_late_leaves() {
         .waiters
         .get_mut("fence-stale-first")
         .expect("stale waiter");
-    *stale -= MAX_WINDOW_AGE_MICROS + 1;
+    stale.started_micros -= MAX_WINDOW_AGE_MICROS + 1;
     drop(windows);
 
     let mut leave = request(home, "leave");
@@ -107,7 +108,7 @@ fn a_sweep_and_direct_wait_queue_both_events() {
         .waiters
         .get_mut("fence-queued-stale")
         .expect("stale waiter");
-    *stale -= MAX_WINDOW_AGE_MICROS + 1;
+    stale.started_micros -= MAX_WINDOW_AGE_MICROS + 1;
     drop(windows);
 
     let mut direct = request(home, "absorb_direct");
@@ -153,7 +154,7 @@ fn an_admitted_leave_wins_over_expiry_for_its_waiter() {
         .waiters
         .get_mut("fence-admitted-late")
         .expect("stale waiter");
-    *stale -= MAX_WINDOW_AGE_MICROS + 1;
+    stale.started_micros -= MAX_WINDOW_AGE_MICROS + 1;
     drop(windows);
 
     let mut leave = request(home, "leave");
@@ -168,6 +169,53 @@ fn an_admitted_leave_wins_over_expiry_for_its_waiter() {
     );
     assert_eq!(
         result["result"]["window_event"]["payload"]["exhausted_calls"],
+        0
+    );
+}
+
+#[test]
+fn an_active_attempt_survives_a_sweep_before_its_late_leave() {
+    let home = "/synthetic/active-attempt-fence";
+    let mut first = request(home, "enter");
+    first.request_id = "fence-active-first".to_owned();
+    let _: Value = serde_json::from_slice(&evaluate(&first).expect("enter")).expect("response");
+
+    let windows = WINDOWS.get().expect("window state");
+    let mut windows = windows.lock().expect("window lock");
+    let waiter = windows
+        .get_mut(home)
+        .expect("synthetic window")
+        .waiters
+        .get_mut("fence-active-first")
+        .expect("active waiter");
+    waiter.started_micros -= MAX_WINDOW_AGE_MICROS + 1;
+    drop(windows);
+
+    let mut attempt = request(home, "attempt");
+    attempt.request_id = "fence-active-first".to_owned();
+    attempt.attempt_until_micros = Some(now_micros().expect("clock").saturating_add(10_000_000));
+    let _: Value = serde_json::from_slice(&evaluate(&attempt).expect("attempt")).expect("response");
+
+    let mut second = request(home, "enter");
+    second.request_id = "fence-active-second".to_owned();
+    let swept: Value =
+        serde_json::from_slice(&evaluate(&second).expect("sweep")).expect("response");
+    assert!(swept["result"]["window_event"].is_null());
+
+    let mut leave = request(home, "leave");
+    leave.request_id = "fence-active-second".to_owned();
+    leave.admitted = Some(true);
+    let _: Value =
+        serde_json::from_slice(&evaluate(&leave).expect("second leave")).expect("response");
+    leave.request_id = "fence-active-first".to_owned();
+    let final_event: Value =
+        serde_json::from_slice(&evaluate(&leave).expect("first leave")).expect("response");
+    assert_eq!(
+        final_event["result"]["window_event"]["payload"]["absorbed_calls"],
+        2
+    );
+    assert_eq!(
+        final_event["result"]["window_event"]["payload"]["exhausted_calls"],
         0
     );
 }

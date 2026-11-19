@@ -21,6 +21,7 @@ def record_policy_fence_window(
     action: str,
     admitted: bool | None = None,
     waited_ms: int | None = None,
+    attempt_until_micros: int | None = None,
     request_id: str | None = None,
     deadline: float | None = None,
 ) -> Mapping[str, object] | Sequence[Mapping[str, object]] | None:
@@ -42,6 +43,8 @@ def record_policy_fence_window(
         request["admitted"] = admitted
     if waited_ms is not None:
         request["waited_ms"] = waited_ms
+    if attempt_until_micros is not None:
+        request["attempt_until_micros"] = attempt_until_micros
     try:
         # Leave is cleanup for a successful enter. Keep its short transport
         # budget even when the hook's decision deadline has elapsed so the

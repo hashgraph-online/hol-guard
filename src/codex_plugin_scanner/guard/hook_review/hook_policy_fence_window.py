@@ -89,6 +89,7 @@ class PolicySourceFenceWait:
         self._sleep = sleep or time.sleep
         self._until: float | None = None
         self._exhausted = False
+        self._attempt_registered = False
         self._request_id = f"policy-fence-wait-{uuid.uuid4().hex}"
 
     def pause(self) -> bool:
@@ -120,7 +121,20 @@ class PolicySourceFenceWait:
     def attempt_deadline(self) -> float | None:
         if self._until is None or self._deadline is None:
             return self._deadline
-        return self._deadline - DEADLINE_MARGIN_SECONDS
+        deadline = self._deadline - DEADLINE_MARGIN_SECONDS
+        if not self._attempt_registered and self._guard_home is not None:
+            self._attempt_registered = True
+            attempt_until_micros = max(0, int(deadline * 1_000_000))
+            event = record_policy_fence_window(
+                self._guard_home,
+                action="attempt",
+                request_id=self._request_id,
+                attempt_until_micros=attempt_until_micros,
+                deadline=deadline,
+            )
+            if event:
+                _record_event(self._store, event)
+        return deadline
 
     def finish(self) -> None:
         """Leave this hook's resident fence window share once."""

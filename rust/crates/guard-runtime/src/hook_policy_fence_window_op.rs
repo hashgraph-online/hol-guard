@@ -29,12 +29,19 @@ pub(crate) struct HookPolicyFenceWindowRequestV1 {
     pub(crate) admitted: Option<bool>,
     #[serde(default)]
     pub(crate) waited_ms: Option<u64>,
+    #[serde(default)]
+    pub(crate) attempt_until_micros: Option<i64>,
+}
+
+struct Waiter {
+    started_micros: i64,
+    attempt_until_micros: Option<i64>,
 }
 
 #[derive(Default)]
 struct WindowState {
     started_micros: i64,
-    waiters: HashMap<String, i64>,
+    waiters: HashMap<String, Waiter>,
     absorbed: u64,
     exhausted: u64,
     pending_events: VecDeque<Value>,
@@ -85,7 +92,10 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         || request.request_id.len() > 128
         || request.guard_home.is_empty()
         || request.guard_home.len() > 4096
-        || !matches!(request.action.as_str(), "enter" | "leave" | "absorb_direct")
+        || !matches!(
+            request.action.as_str(),
+            "enter" | "leave" | "attempt" | "absorb_direct"
+        )
     {
         return Err("hook_policy_fence_window_payload_invalid".to_owned());
     }
@@ -95,17 +105,25 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         .lock()
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
+    if request.action == "attempt" {
+        if let Some(waiter) = state.waiters.get_mut(&request.request_id) {
+            waiter.attempt_until_micros = request.attempt_until_micros.filter(|until| *until > now);
+        }
+    }
     let mut completed = state.pending_events.pop_front();
     let mut live = HashMap::new();
-    for (request_id, started) in state.waiters.drain() {
+    for (request_id, waiter) in state.waiters.drain() {
         if request.action == "leave" && request_id == request.request_id {
-            live.insert(request_id, started);
+            live.insert(request_id, waiter);
             continue;
         }
-        if now.saturating_sub(started) > MAX_WINDOW_AGE_MICROS {
+        let expiry = waiter
+            .attempt_until_micros
+            .unwrap_or_else(|| waiter.started_micros.saturating_add(MAX_WINDOW_AGE_MICROS));
+        if now > expiry {
             state.exhausted = state.exhausted.saturating_add(1);
         } else {
-            live.insert(request_id, started);
+            live.insert(request_id, waiter);
         }
     }
     state.waiters = live;
@@ -127,9 +145,16 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                 state.absorbed = 0;
                 state.exhausted = 0;
             }
-            state.waiters.insert(request.request_id.clone(), now);
+            state.waiters.insert(
+                request.request_id.clone(),
+                Waiter {
+                    started_micros: now,
+                    attempt_until_micros: None,
+                },
+            );
             completed
         }
+        "attempt" => completed,
         "leave" => {
             if state.waiters.remove(&request.request_id).is_some() {
                 if request.admitted == Some(true) {

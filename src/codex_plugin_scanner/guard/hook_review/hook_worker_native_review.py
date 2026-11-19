@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_hook_render import native_recording_only_for_binding
+from ..native_payload_facts import native_hook_facts
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_resident_client import native_resident_client_failure_code
+from .hook_native_review_approval import _native_review_artifact_id
+from .hook_native_review_binding import native_review_settle
 from .hook_native_review_fence import native_review_fence, published_binding_token
 from .hook_policy_fence_window import (
     POLICY_UPDATE_PENDING_REASON_CODE,
@@ -225,7 +228,14 @@ def _review_native_edge_once(
         ) as fenced:
             if fenced is None:
                 unleased_binding = published_binding_token(worker.policy_snapshot_publisher, deadline=deadline)
-            claim_for_review = claim_saved_approval and not (fenced is None and unleased_binding is None)
+            # A claimed saved approval is only peeked here. Spend it after the
+            # final binding check below, so a superseded binding cannot consume
+            # an approval whose allow we refuse to deliver.
+            claim_for_review = (
+                claim_saved_approval
+                and claimed_saved_allow_hash is None
+                and not (fenced is None and unleased_binding is None)
+            )
             response, native_used = worker._review_native_edge_with_snapshot(
                 payload=payload,
                 harness=harness,
@@ -268,6 +278,37 @@ def _review_native_edge_once(
                 guard_home=guard_home,
                 workspace=workspace,
             )
+        if response.get("approval_reuse_status") == "accepted" and claimed_saved_allow_hash is not None:
+            facts = native_hook_facts(payload, guard_home, deadline=deadline)
+            spent = None
+            if facts is not None:
+                spent = native_review_settle(
+                    worker.store,
+                    harness=harness,
+                    tool_name=facts.tool_name,
+                    artifact_id=_native_review_artifact_id(harness, facts.tool_name),
+                    launch_target=facts.launch_target,
+                    workspace=workspace,
+                    identity=claimed_saved_allow_hash,
+                    spend=True,
+                    claimed_saved_allow_hash=claimed_saved_allow_hash,
+                    claimed_approval_request_id=claimed_approval_request_id,
+                )
+            if spent != "allowed":
+                return worker._apply_structured_unavailable_overlay(
+                    _record_unavailable_native(
+                        worker,
+                        payload,
+                        harness=harness,
+                        event_name=event_name,
+                        reason_code="native_saved_approval_unavailable",
+                        guard_home=guard_home,
+                    ),
+                    harness=harness,
+                    event_name=event_name,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                )
         if capture_receipts and worker.capture_writer is not None:
             with suppress(Exception):
                 _ = worker.capture_writer.submit_native_capture(
