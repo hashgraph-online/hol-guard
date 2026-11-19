@@ -111,8 +111,8 @@ pub(super) fn native(
 /// the device has no healthy OAuth sign-in to sync with.
 fn cloud_workspace(config: &ReadConfig) -> Option<String> {
     let store = crate::package_authority_op::ResidentSupplyChainStore::new(
-        std::path::Path::new(&config.store_path),
-        std::path::Path::new(&config.guard_home),
+        config.store_path(),
+        config.guard_home(),
     );
     guard_command::local_supply_chain::SupplyChainStore::get_cloud_sync_profile(&store)?
         .get("workspace_id")
