@@ -189,6 +189,40 @@ fn whole_tree_stages_are_found() {
     }
 }
 
+/// `git stage` is `git-add(1)` under the second name Git documents for it,
+/// so a user rule that asks for files staged by name has to read it. Matching
+/// the literal word `add` let the same whole-tree staging through unasked.
+#[test]
+fn the_second_name_for_add_stages_the_whole_tree() {
+    for command in [
+        "git stage -A",
+        "git stage .",
+        "git stage --all",
+        "git stage -u",
+        "git stage -- .",
+        "python3 -c 'import subprocess; subprocess.run([\"git\", \"stage\", \".\"])'",
+    ] {
+        assert!(
+            breaks(command, None).stage_all,
+            "missed whole-tree stage: {command}"
+        );
+    }
+    // The synonym stops where `git add` stops: naming files, or previewing
+    // the whole tree, breaks no rule.
+    for command in [
+        "git stage README.md",
+        "git stage docs/notes.md src/main.rs",
+        "git stage --dry-run -A",
+        "git stage -p",
+    ] {
+        assert_eq!(
+            breaks(command, None),
+            Breaks::default(),
+            "flagged: {command}"
+        );
+    }
+}
+
 #[test]
 fn ordinary_git_work_breaks_no_rule() {
     for command in QUIET {
