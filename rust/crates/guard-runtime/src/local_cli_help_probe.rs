@@ -6,10 +6,18 @@
 //! On Unix it leads a process group of its own, and that whole group is
 //! killed when the help run ends, whether it exited, timed out or printed too
 //! much, so nothing it started outlives the probe. The group is killed before
-//! the program is reaped, so its id cannot have been reused. On Windows the
-//! help run stays in this command's Job Object, which the bounded launcher
-//! closes when the command ends. Output read before a timeout is kept even when
-//! a leftover child still holds the pipe.
+//! the program is reaped, so its id cannot have been reused.
+//!
+//! A group of its own is outside the launcher's process group, so the
+//! launcher's cancel or deadline kill would miss it if this command were
+//! killed mid-probe. A small watcher in a group of its own holds a pipe from
+//! this command: when the probe ends normally it is told so and exits, and
+//! when the pipe closes without that word (this command was killed) it kills
+//! the help group. A help run never starts without its watcher.
+//!
+//! On Windows the help run stays in this command's Job Object, which the
+//! bounded launcher closes when the command ends. Output read before a
+//! timeout is kept even when a leftover child still holds the pipe.
 
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
@@ -76,6 +84,14 @@ fn read_help_output(argv: &[String], folder: &std::path::Path) -> std::io::Resul
         command.process_group(0);
     }
     let mut child = command.spawn()?;
+    #[cfg(unix)]
+    let watch = match GroupWatch::start(child.id()) {
+        Ok(watch) => watch,
+        Err(error) => {
+            stop(&mut child);
+            return Err(error);
+        }
+    };
     // The parent's copies of the write end go with `command`, so the read
     // below ends when the program and everything it started let go.
     drop(command);
@@ -104,6 +120,8 @@ fn read_help_output(argv: &[String], folder: &std::path::Path) -> std::io::Resul
     });
     let finished = receiver.recv_timeout(HELP_TIMEOUT).is_ok();
     stop(&mut child);
+    #[cfg(unix)]
+    watch.release();
     if !finished {
         // Killing the group closes every copy of the pipe, so the reader ends.
         let _ = receiver.recv_timeout(Duration::from_secs(1));
@@ -129,6 +147,55 @@ fn stop(child: &mut Child) {
     }
     let _ = child.kill();
     let _ = child.wait();
+}
+
+/// Kills the help run's process group if this command dies before
+/// [`GroupWatch::release`]: the watcher reads one line from a pipe this
+/// command holds, and a pipe closed without that line means this command was
+/// killed. The watcher leads a group of its own, so the launcher's kill of
+/// this command's group cannot take it down first.
+#[cfg(unix)]
+struct GroupWatch {
+    watcher: Child,
+    line: Option<std::process::ChildStdin>,
+}
+
+#[cfg(unix)]
+impl GroupWatch {
+    const SCRIPT: &'static str = "read done || kill -s KILL -- \"-$1\"";
+
+    fn start(group: u32) -> std::io::Result<Self> {
+        use std::os::unix::process::CommandExt;
+        let mut watcher = Command::new("/bin/sh")
+            .args(["-c", Self::SCRIPT, "sh", &group.to_string()])
+            .env_clear()
+            .env("PATH", SAFE_PATH)
+            .current_dir("/")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()?;
+        let line = watcher.stdin.take();
+        if line.is_none() {
+            let _ = watcher.kill();
+            let _ = watcher.wait();
+            return Err(std::io::Error::other("help watcher has no input pipe"));
+        }
+        Ok(Self { watcher, line })
+    }
+
+    /// The probe ended here and its group is already killed: tell the watcher
+    /// and reap it.
+    fn release(mut self) {
+        use std::io::Write;
+        if let Some(mut line) = self.line.take() {
+            let _ = line.write_all(b"done\n");
+        }
+        if self.watcher.wait().is_err() {
+            let _ = self.watcher.kill();
+        }
+    }
 }
 
 fn help_env(folder: &std::path::Path) -> Vec<(String, String)> {
@@ -222,6 +289,40 @@ mod tests {
         assert!(output.contains("Usage: slow"), "{output:?}");
         std::thread::sleep(Duration::from_millis(200));
         assert!(!running(&format!("sleep {marker}")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_watcher_kills_the_help_group_when_this_command_dies_mid_probe() {
+        use std::os::unix::process::CommandExt;
+        let marker = format!("33.{}", std::process::id());
+        let mut probe = Command::new("/bin/sleep")
+            .arg(&marker)
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let mut watch = GroupWatch::start(probe.id()).unwrap();
+        // Closing the pipe without the word is what this command's death looks like.
+        drop(watch.line.take());
+        watch.watcher.wait().unwrap();
+        probe.wait().unwrap();
+        assert!(!running(&format!("sleep {marker}")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_released_watcher_leaves_the_group_alone() {
+        use std::os::unix::process::CommandExt;
+        let marker = format!("34.{}", std::process::id());
+        let mut probe = Command::new("/bin/sleep")
+            .arg(&marker)
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        GroupWatch::start(probe.id()).unwrap().release();
+        assert!(probe.try_wait().unwrap().is_none());
+        let _ = probe.kill();
+        let _ = probe.wait();
     }
 
     #[cfg(unix)]
