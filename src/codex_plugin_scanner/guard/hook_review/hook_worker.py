@@ -480,8 +480,17 @@ class HookWorker(HookWorkerNativeMixin):
 
     def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str | None:
         # Event identity is a resident-owned fact. A missing fact stays
-        # unavailable so callers can shape an outage response separately.
-        return native_hook_event(payload, self.store.guard_home, deadline=deadline)
+        # unavailable so callers can shape an outage response separately. An
+        # explicit wire label still lets the caller reach that bounded
+        # fail-safe path when the resident cannot answer the fact lookup.
+        event = native_hook_event(payload, self.store.guard_home, deadline=deadline)
+        if event is not None:
+            return event
+        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
 
 
 __all__ = [
