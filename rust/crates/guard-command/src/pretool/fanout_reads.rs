@@ -110,7 +110,9 @@ fn metadata_child(child: &[String]) -> bool {
 /// shows about each of those names. The root still has to resolve to a
 /// directory strictly below the home directory with no hidden component on
 /// the way, so a home dot-directory, the home directory itself and paths
-/// outside home keep review whatever the child.
+/// outside home keep review whatever the child. A `~/` root needs the shell's
+/// own home to be the declared one as well: where they differ the shell walks
+/// a tree this proof never resolved.
 fn metadata_roots<R: AsRef<str>>(
     roots: &[R],
     producer: &CommandSegmentV1,
@@ -143,7 +145,7 @@ fn metadata_roots<R: AsRef<str>>(
             None => std::path::Path::new(cwd).join(root),
         };
         !root.starts_with(['\\', '-'])
-            && (root.starts_with("~/") || !root.starts_with('~'))
+            && (!root.starts_with('~') || (context.shell_home_matches && root.starts_with("~/")))
             && bounded_read_target(root, Some(home), Some(cwd), true)
             && std::fs::canonicalize(spelled).is_ok_and(|resolved| {
                 resolved.is_dir()
@@ -460,4 +462,54 @@ pub(super) fn whitespace_split_reason(model: &CanonicalCommandV1) -> Option<Stri
             "HOL Guard requires review because xargs splits file names on whitespace, so a crafted directory name can add another path. Use find DIR -type f -name '*.ext' -exec cat {} +, or find ... -print0 | xargs -0 cat, which Guard can prove read-only."
                 .to_owned()
         })
+}
+
+#[cfg(all(test, unix))]
+mod shell_home_tests {
+    use super::*;
+
+    fn parsed(command: &str) -> CanonicalCommandV1 {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({
+                "command": command,
+                "dialect": "posix",
+                "transport": "shell_string",
+                "provenance": "pre-tool-generic",
+            }))
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// A `~/` root is resolved against the home the hook declares. When the
+    /// shell runs with another `HOME` the command walks a different tree, so
+    /// the proof would stand for a path that is never read.
+    #[test]
+    fn a_tilde_root_needs_the_shell_to_use_the_declared_home() {
+        let home = std::env::temp_dir().join(format!(
+            "guard-fanout-home-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let sibling = home.join("Code/org/service-api/src");
+        std::fs::create_dir_all(&sibling).unwrap();
+        let cwd = home.join("Code/org/app-portal");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let home_text = home.to_str().unwrap().to_owned();
+        let cwd_text = cwd.to_str().unwrap().to_owned();
+        let model = parsed(r"find ~/Code/org/service-api/src -type f -exec stat {} \;");
+        let producer = model.segments.first().unwrap();
+        let roots = ["~/Code/org/service-api/src"];
+        let context = |shell_home_matches| PathContext {
+            home_dir: Some(&home_text),
+            cwd: Some(&cwd_text),
+            shell_home_matches,
+            ..Default::default()
+        };
+
+        assert!(metadata_roots(&roots, producer, context(true)));
+        assert!(!metadata_roots(&roots, producer, context(false)));
+
+        std::fs::remove_dir_all(&home).ok();
+    }
 }
