@@ -165,7 +165,10 @@ fn post_tool_policy(
     request: &NativeHookRequestV1,
     payload_kind: GuardHookPayloadKindV2,
     mut response: HookReviewResponseV1,
-    (delivery, admitted_call): (Option<&VerifiedBashDelivery>, impl FnOnce() -> PostAdmission),
+    (delivery, admitted_call): (
+        Option<&VerifiedBashDelivery>,
+        impl FnOnce() -> PostAdmission,
+    ),
     recording_only: bool,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<HookReviewResponseV1, String> {
