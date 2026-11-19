@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.krusch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Krusch Harness MCP",
   "description": "PostgreSQL-backed coding and staged execution harness that stages diffs, runs sandboxed verification, and commits working-tree writes via a two-phase commit (2PC) apply journal. Status, diff, and diagnostic reads inherit Guard policy; task execution, diff apply, rejection, and abort require review. Off until you turn it on.",
   "trustClass": "external",
@@ -9,7 +9,7 @@
   "publisher": {
     "id": "io.github.kruschdev",
     "displayName": "Krusch (@kruschdev)",
-    "url": "https://github.com/kruschdev/krusch"
+    "url": "https://github.com/kruschdev/krusch-coding-harness"
   },
   "icon": {
     "kind": "react-icon",
@@ -62,10 +62,11 @@
     }
   ],
   "referenceUrls": [
-    "https://github.com/kruschdev/krusch",
-    "https://github.com/kruschdev/krusch/blob/main/src/server/mcp-server.js",
-    "https://github.com/kruschdev/krusch/blob/main/README.md",
-    "https://krusch.dev/articles/krusch-coding-harness.html"
+    "https://github.com/kruschdev/krusch-coding-harness",
+    "https://github.com/kruschdev/krusch-coding-harness/blob/main/src/server/mcp-server.js",
+    "https://github.com/kruschdev/krusch-coding-harness/blob/main/README.md",
+    "https://krusch.dev/articles/krusch-coding-harness.html",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/krusch-coding-harness"
   ],
   "saferAlternatives": [
     "Use krusch_task_status, krusch_diff, and krusch_explain to inspect staged unified diffs, verification runs, and blocker diagnostics before applying any changes.",

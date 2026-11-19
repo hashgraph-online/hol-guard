@@ -487,8 +487,7 @@ integers wider than the resident's number type. Each travels as a token drawn
 from a per-request random prefix that is verified to match no string in the
 payload, with its meaning in a separate map, so a config file cannot spell a
 token itself and nothing it contains can pass as a substituted scalar.
-`native_codex_hook_identity.py` ships the entries across and fails closed;
-no Python copy of the identity rules remains.
+No Python copy of the identity rules remains.
 
 Whether the authenticated Codex hook manifest still describes the live
 installation is decided in the native runtime. The `verify_manifest` Codex

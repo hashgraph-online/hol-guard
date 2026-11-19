@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_codex_hook_identity as bridge
 from tests.python_oracles import codex_hook_identity
+from tests.python_oracles import native_codex_hook_identity as bridge
 from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_DEFINITION_TOO_DEEP,
     CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE,

@@ -26,9 +26,9 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from .native_context import _resolve_digest_home, ensure_resident_prerequisite
-from .native_execution import _resident_request
-from .native_store_policy import _payload
+from codex_plugin_scanner.guard.native_context import _resolve_digest_home, ensure_resident_prerequisite
+from codex_plugin_scanner.guard.native_execution import _resident_request
+from codex_plugin_scanner.guard.native_store_policy import _payload
 
 CODEX_HOOK_IDENTITY_FEATURE = "codex-hook-identity-v1"
 # Adds the ``inventory`` entry: a whole source's hook walk in one answer.
