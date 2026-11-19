@@ -123,6 +123,8 @@ fn a_pathspec_after_double_dash_must_not_be_an_option() {
     for command in [
         "git diff --name-only -- '--include=*.tsx'",
         "git diff -m --name-only -- '--include=*.tsx'",
+        "git checkout -m -- '--include=*.tsx'",
+        "git restore -m -- '--include=*.tsx'",
         "git worktree remove ../review --force && git diff --name-only -- '--include=*.tsx'",
     ] {
         for harness in HARNESSES {
