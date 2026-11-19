@@ -1,4 +1,9 @@
-"""A gateway error on a command queue request is retried after a second, not a minute."""
+"""Command queue requests go through the native Guard Cloud request.
+
+The native runtime pauses briefly before a gateway retry, so a lease, ack or
+result is retried quickly rather than after the minute a sync waits. The Python
+retry machine that other sync requests still use keeps its own waits.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +16,10 @@ from email.message import Message
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import command_queue_http
+from codex_plugin_scanner.guard.runtime import cloud_bundle_sync, command_queue_http
 from codex_plugin_scanner.guard.runtime import runner as runner_module
+
+_AUTH = {"sync_url": "https://cloud.example.test/api/guard/receipts/sync"}
 
 
 def _gateway_error(code: int, *, retry_after: str | None = None) -> urllib.error.HTTPError:
@@ -39,50 +46,50 @@ def transport(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(runner_module, "managed_urlopen", fake_urlopen)
     monkeypatch.setattr(runner_module.time, "sleep", sleeps.append)
     monkeypatch.setattr(runner_module, "_refresh_guard_sync_request", lambda _request: None)
-    monkeypatch.setattr(
-        command_queue_http,
-        "_guard_sync_request",
-        lambda _auth, *, request_url, method, data: urllib.request.Request(request_url, data=data, method=method),
-    )
     return responses, sleeps
 
 
-def _lease() -> dict[str, object]:
-    return command_queue_http.request_json(
-        {"sync_url": "https://cloud.example.test/api/guard/receipts/sync"},
-        method="POST",
-        path="/lease",
-        payload={"waitMs": 25000},
+def test_a_lease_is_one_native_request_with_the_queue_timeouts(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def native(auth_context, **options):
+        calls.append({"auth": auth_context, **options})
+        return {"item": None}
+
+    monkeypatch.setattr(cloud_bundle_sync, "cloud_json_request", native)
+
+    answer = command_queue_http.request_json(_AUTH, method="POST", path="/lease", payload={"waitMs": 25000})
+
+    assert answer == {"item": None}
+    assert calls == [
+        {
+            "auth": _AUTH,
+            "url": "https://cloud.example.test/api/guard/commands/lease",
+            "body": b'{"waitMs":25000}',
+            "timeout_seconds": 35,
+            "retry_timeout_seconds": 60,
+        }
+    ]
+
+
+def test_a_command_queue_request_is_a_post() -> None:
+    with pytest.raises(ValueError, match="POST"):
+        command_queue_http.request_json(_AUTH, method="GET", path="/lease", payload={})
+
+
+def test_an_unhinted_gateway_wait_is_honored_by_the_python_retry_machine(transport) -> None:
+    responses, sleeps = transport
+    responses.extend([_gateway_error(503), {"item": None}])
+
+    payload = runner_module._urlopen_json_with_timeout_retry(
+        request=urllib.request.Request("https://cloud.example.test/api/guard/commands/lease", method="POST"),
+        timeout_seconds=35,
+        retry_timeout_seconds=60,
+        unhinted_gateway_retry_seconds=1.0,
     )
 
-
-@pytest.mark.parametrize("code", [502, 503, 504])
-def test_a_lease_whose_server_went_away_is_retried_after_a_second(transport, code: int) -> None:
-    responses, sleeps = transport
-    responses.extend([_gateway_error(code), {"item": None}])
-
-    assert _lease() == {"item": None}
-    # A deploy that replaces the server answers the open lease with a gateway
-    # error; waiting the sync default of a minute held every decision made
-    # meanwhile for that minute.
+    assert payload == {"item": None}
     assert sleeps == [1.0]
-
-
-def test_a_gateway_error_that_names_a_delay_is_still_honored(transport) -> None:
-    responses, sleeps = transport
-    responses.extend([_gateway_error(503, retry_after="7"), {"item": None}])
-
-    assert _lease() == {"item": None}
-    assert sleeps == [7]
-
-
-def test_a_gateway_error_that_persists_reaches_the_queue_loop_after_its_retries(transport) -> None:
-    responses, sleeps = transport
-    responses.extend([_gateway_error(502), _gateway_error(502), _gateway_error(502)])
-
-    with pytest.raises(urllib.error.HTTPError):
-        _lease()
-    assert sleeps == [1.0, 1.0]
 
 
 def test_other_sync_requests_keep_the_default_gateway_wait(transport) -> None:

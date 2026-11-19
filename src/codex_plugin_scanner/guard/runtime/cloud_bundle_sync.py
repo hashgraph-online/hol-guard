@@ -10,9 +10,13 @@ the CLI already reports.
 from __future__ import annotations
 
 import dataclasses
+import http.client
+import io
 import json
 import os
+import urllib.error
 from collections.abc import Mapping
+from email.message import Message
 from pathlib import Path
 
 CLOUD_BUNDLE_SYNC_COMMAND = "cloud-bundle-sync"
@@ -20,6 +24,7 @@ CLOUD_BUNDLE_SYNC_FEATURE = "cloud-bundle-sync-v1"
 CLOUD_EVENT_SYNC_COMMAND = "cloud-event-sync"
 CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
 CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
+CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v1"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
@@ -82,6 +87,73 @@ def cloud_receipt_upload(
         subject="receipt sync",
         extra={"upload": dict(upload)},
     )
+
+
+def cloud_json_request(
+    auth_context: Mapping[str, object],
+    *,
+    url: str,
+    body: bytes,
+    timeout_seconds: float,
+    retry_timeout_seconds: float,
+) -> dict[str, object]:
+    """POST ``body`` to ``url`` with the resolved sign-in and return Guard Cloud's object answer.
+
+    The native runtime signs and sends the request under the managed network
+    policy. An HTTP refusal is raised as the ``HTTPError`` and a failure with no
+    answer as the ``URLError`` the callers already handle.
+    """
+
+    from ..config import resolve_guard_home
+
+    request: dict[str, object] = {
+        "url": url,
+        "body": body.decode("utf-8"),
+        "timeoutSeconds": float(timeout_seconds),
+        "retryTimeoutSeconds": float(retry_timeout_seconds),
+    }
+    answer = run_native_cloud_sync(
+        CLOUD_EVENT_SYNC_COMMAND,
+        CLOUD_JSON_REQUEST_FEATURE,
+        resolve_guard_home(),
+        "request",
+        auth_context=auth_context,
+        subject="Cloud request",
+        extra={"request": request},
+    )
+    return cloud_json_answer(url, answer)
+
+
+def cloud_json_answer(url: str, answer: object) -> dict[str, object]:
+    """Guard Cloud's object answer from the native ``request`` result, or its failure raised."""
+
+    if not isinstance(answer, dict):
+        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+    response = answer.get("response")
+    if isinstance(response, dict):
+        return response
+    refusal = answer.get("refusal")
+    if isinstance(refusal, dict) and isinstance(refusal.get("status"), int):
+        headers = Message()
+        raw_headers = refusal.get("headers")
+        for name, value in (raw_headers if isinstance(raw_headers, dict) else {}).items():
+            if isinstance(name, str) and isinstance(value, str):
+                headers[name] = value
+        body = refusal.get("body")
+        payload = body.encode("utf-8") if isinstance(body, str) else b""
+        status = refusal["status"]
+        reason = http.client.responses.get(status, "")
+        raise urllib.error.HTTPError(url, status, reason, headers, io.BytesIO(payload))
+    transport = answer.get("transport")
+    if isinstance(transport, dict):
+        reason = transport.get("reason")
+        text = reason if isinstance(reason, str) else ""
+        if transport.get("timeout") is True:
+            raise urllib.error.URLError(TimeoutError(text))
+        if transport.get("outage") is True:
+            raise urllib.error.URLError(ConnectionError(text))
+        raise urllib.error.URLError(text)
+    raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
 
 
 @dataclasses.dataclass(frozen=True)

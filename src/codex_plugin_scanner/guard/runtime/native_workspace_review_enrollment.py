@@ -15,7 +15,6 @@ from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, _run_native_process, native_runtime_status
 from .command_queue_protocol import command_api_url
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, exact_cloud_review_operations
-from .runner import _guard_sync_request, _urlopen_json_with_timeout_retry
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -59,13 +58,15 @@ def _fetch_authority(auth_context: dict[str, object]) -> bytes:
         "/current",
         base_path="/api/guard/review/v2/authority",
     )
-    request = _guard_sync_request(
+    from . import cloud_bundle_sync
+
+    response = cloud_bundle_sync.cloud_json_request(
         auth_context,
-        request_url=url,
-        method="POST",
-        data=b'{"protocolVersion":2}',
+        url=url,
+        body=b'{"protocolVersion":2}',
+        timeout_seconds=5,
+        retry_timeout_seconds=5,
     )
-    response = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=5, retry_timeout_seconds=5)
     if set(response) != {"authority", "protocolVersion"} or response["protocolVersion"] != 2:
         raise ValueError("native_workspace_review_authority_response_invalid")
     record = response["authority"]
