@@ -262,7 +262,9 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
             if bare.starts_with('-') {
                 return bare.starts_with("-F") || bare.starts_with("-v");
             }
-            let lowered = word.to_ascii_lowercase();
+            // Awk receives shell-dequoted program text; split quoting must not
+            // conceal executable primitives such as sys""tem or get''line.
+            let lowered = bare.to_ascii_lowercase();
             !["system", "getline", "popen", "|", "`", "$(", "@", "${"]
                 .iter()
                 .any(|bad| lowered.contains(bad))
