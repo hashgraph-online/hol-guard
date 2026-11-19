@@ -596,7 +596,15 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
     // would floor an ordinary `remote.*url` read. The pattern still faces the
     // markers the glob's own text names, the screen a search pattern faces.
     let patterns = git_config_reads::configuration_patterns(segment);
+    // A word after the standalone `--` delimiter is positional, even if it
+    // looks like `--name=value`. Git treats it as a pathspec, so discarding
+    // its prefix before screening could conceal credential-named files.
+    let mut positional = false;
     arguments_outside_message(segment).any(|argument| {
+        if argument == "--" {
+            positional = true;
+            return false;
+        }
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
@@ -611,7 +619,7 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
             // it match `--include=private-key.tsx`, so an ordinary filtered
             // search picks up a fixed floor no Allow can settle. The value
             // after the `=` still faces every screen a bare operand faces.
-            Some((name, value)) if option_name(name) => {
+            Some((name, value)) if !positional && option_name(name) => {
                 sensitive_read_path_argument(&readable_pattern(value).0)
             }
             Some((name, _))
@@ -1597,6 +1605,8 @@ fn evaluate_single_command(
 #[path = "control_flow_tests.rs"]
 mod control_flow_tests;
 #[cfg(test)]
+mod fixed_glob_option_boundary_tests;
+#[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;
 #[cfg(test)]
@@ -1608,8 +1618,6 @@ mod tests;
 mod tests_benign_probes;
 #[cfg(test)]
 mod tests_fanout_reads;
-#[cfg(test)]
-mod fixed_glob_option_boundary_tests;
 #[cfg(test)]
 mod tests_filter_file_reads;
 #[cfg(test)]
