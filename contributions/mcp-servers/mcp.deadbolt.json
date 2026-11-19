@@ -3,7 +3,7 @@
   "id": "mcp.deadbolt",
   "version": "1.0.0",
   "name": "DEADBOLT Governance MCP",
-  "description": "2-hop AST blast-radius lease planner, slop-breaker policy floor, SHA-256 cryptographic audit chain verifier, and staged PR gate MCP server (kruschdev/deadbolt v0.1.0). Local work-order hydration, 2-hop AST blast-radius mapping, and audit-chain verification inherit Guard policy; reconciliation checks and verified stage apply/PR dispatch require review. Off until you turn it on.",
+  "description": "2-hop AST blast-radius lease planner, slop-breaker policy floor, SHA-256 cryptographic audit chain verifier, and staged PR gate MCP server (kruschdev/deadbolt v0.1.0). Local work-order hydration requires review; 2-hop AST blast-radius mapping and audit-chain verification inherit Guard policy; reconciliation checks and verified stage apply/PR dispatch require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -31,7 +31,7 @@
   "tools": [
     {
       "name": "deadbolt_hydrate_work_order",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "deadbolt_map_blast_radius",
