@@ -29,13 +29,11 @@ mod literal_bracket;
 #[path = "operand.rs"]
 mod operand;
 
-use literal_bracket::inert_bracket_class;
-
 pub(super) use descendant::{descendant_allowed, hidden_allowed};
 pub(in crate::pretool) use descendant::{key_file_name, SECRET_EXTENSIONS};
 pub(in crate::pretool) use literal_bracket::{
-    listable_spelling, safe_literal_bracket_listing_target, safe_literal_bracket_read_target,
-    safe_literal_bracket_search_target, safe_literal_bracket_tree,
+    inert_bracket_class, listable_spelling, safe_literal_bracket_listing_target,
+    safe_literal_bracket_read_target, safe_literal_bracket_search_target, safe_literal_bracket_tree,
 };
 use operand::checked_directory;
 pub(super) use operand::{expanded_operand, home_relative, real_allowed_directory, HAZARDS};
@@ -299,6 +297,9 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 /// walk admits. A pattern only in the last component proves just the
 /// entries it names: `tests/*.py` never opens `tests/fixtures/.env`.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
+    if !literal_bracket::literal_spelling_searchable(value, context) {
+        return false;
+    }
     let searched =
         |path: PathBuf| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false);
     match glob_expand::expand_glob_search(value, context) {

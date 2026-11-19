@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "omp-browser-own-app-interaction",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab = await browser.open({name:'fp-app',url:'http://127.0.0.1:4173/',app:'own'}); await tab.fill('#name','Ada'); await tab.click('#save'); await tab.close();",
+        "language": "js",
+        "title": "Local browser regression"
+      },
+      "cwd": "worktree",
+      "expect": "quiet"
+    },
+    {
+      "id": "omp-browser-callback-bound-wait",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab=browser.tab('fp-app'); await tab.run(async ({wait}) => { await wait(100); });",
+        "language": "js",
+        "title": "Local browser regression"
+      },
+      "cwd": "worktree",
+      "expect": "quiet"
+    },
+    {
+      "id": "omp-browser-callback-unbound-wait",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab=browser.tab('fp-app'); await tab.run(async ({page}) => { await wait(100); });",
+        "language": "js",
+        "title": "Local browser regression"
+      },
+      "cwd": "worktree",
+      "expect": "block"
+    },
+    {
+      "id": "omp-browser-callback-unbound-page",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab=browser.tab('fp-app'); await tab.run(async ({wait}) => { await page.click('#save'); });",
+        "language": "js",
+        "title": "Local browser regression"
+      },
+      "cwd": "worktree",
+      "expect": "block"
+    },
+    {
+      "id": "omp-browser-shadowed-wait",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const wait=100; const tab=browser.tab('fp-app'); await tab.run(async ({page}) => { await wait(100); });",
+        "language": "js",
+        "title": "Local browser regression"
+      },
+      "cwd": "worktree",
+      "expect": "block"
+    }
+  ]
+}

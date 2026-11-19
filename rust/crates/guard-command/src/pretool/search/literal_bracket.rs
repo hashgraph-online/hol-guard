@@ -124,7 +124,7 @@ pub(in crate::pretool) fn safe_literal_bracket_read_target(
 /// directory named `S` rather than reach the literal route. A class holding a
 /// range is left to review, because the shell expands the range in the
 /// locale's collating sequence, which neither matcher models.
-pub(super) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool {
+pub(in crate::pretool) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool {
     value.contains('[')
         && !value.contains(['*', '?', '!'])
         && !super::super::glob_class::bracket_fallback_unsafe(value)
@@ -161,4 +161,24 @@ fn literal_bracket_walk(value: &str, context: ReadContext<'_>) -> bool {
         return false;
     };
     !super::inside_agent_state(&root, context) && super::walk(root, &[], &[], false, false)
+}
+
+/// A search operand whose brackets may have been escaped, as in
+/// `grep -rn foo trap/\[k\]`. The shell removes the backslashes before the
+/// screen sees the word, so it reads like the pattern `trap/[k]`, and a proof
+/// of what that pattern matches (`trap/k`) says nothing about the entry the
+/// program searches, the literal `trap/[k]`. When an entry of that literal
+/// name exists it has to clear the search screen on its own, followed
+/// through any link to where it leads.
+pub(super) fn literal_spelling_searchable(value: &str, context: ReadContext<'_>) -> bool {
+    if !value.contains('[') {
+        return true;
+    }
+    let Some(path) = super::expanded_operand(value, context) else {
+        return false;
+    };
+    match std::fs::symlink_metadata(path) {
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        Ok(_) => literal_bracket_walk(value, context),
+    }
 }

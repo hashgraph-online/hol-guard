@@ -18,6 +18,13 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="noexec mounts and POSIX
 _SCRIPT = b"#!/bin/sh\necho verified\n"
 
 
+@pytest.fixture(autouse=True)
+def _no_copy_from_another_test():
+    root_module.release_copies()
+    yield
+    root_module.release_copies()
+
+
 def _deny_exec_in_system_temp(monkeypatch: pytest.MonkeyPatch) -> None:
     """Answer X_OK the way Linux does for a file on a noexec /tmp mount."""
     system_temp = Path(tempfile.gettempdir()).resolve()
@@ -41,13 +48,13 @@ def guard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return home
 
 
-def test_an_executable_system_temp_is_used_without_touching_the_guard_home(guard_home: Path) -> None:
+def test_without_a_guard_home_each_process_uses_its_own_system_temp_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(root_module, "_private_roots", [])
     with root_module.verified_executable(_SCRIPT) as path:
         assert path.parent.parent == Path(tempfile.gettempdir())
         assert path.read_bytes() == _SCRIPT
     root_module.release_copies()
     assert not path.exists()
-    assert not (guard_home / "native-exec").exists()
 
 
 def test_a_noexec_system_temp_runs_the_verified_bytes_from_the_private_guard_home_folder(
@@ -63,7 +70,8 @@ def test_a_noexec_system_temp_runs_the_verified_bytes_from_the_private_guard_hom
         completed = subprocess.run([str(path)], capture_output=True, check=True)
         assert completed.stdout == b"verified\n"
     root_module.release_copies()
-    assert not path.parent.exists()
+    # Kept for later processes, which compare it with their verified bytes before running it.
+    assert path.read_bytes() == _SCRIPT
 
 
 @pytest.mark.parametrize("weakness", ["group-writable-home", "open-private-folder", "symlinked-private-folder"])

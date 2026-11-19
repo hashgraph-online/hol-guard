@@ -68,6 +68,7 @@ from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .release_budgets import attempt_observations, release_budgets
+from .repeat_cases import REPEAT_ORACLE
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
@@ -228,6 +229,7 @@ def run_case(
                 memory_bank="learn" in scenario.required_tools,
                 github_tool="github" in scenario.required_tools,
                 structured_tasks=scenario.id == TASK_SCHEMA_CASE,
+                tool_call_loop_guard=scenario.oracle != REPEAT_ORACLE,
             )
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
