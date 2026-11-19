@@ -30,6 +30,10 @@ fn an_awk_that_could_run_or_write_anything_stays_refused_in_a_substitution() {
         // The shell removes the quoting before awk reads its options.
         r#"echo $(awk '-f' payload.awk)"#,
         r#"echo $(awk "-f" payload.awk)"#,
+        // An expanded awk program can run arbitrary code; it is not a literal filter.
+        r#"echo $(awk "$P" f)"#,
+        r#"echo $(awk $P f)"#,
+        r#"echo $(awk "{print $1}" f)"#,
         r#"echo $(awk \-f payload.awk)"#,
         // Bash joins split-quoted words before awk sees its program:
         // sys""tem and get''line remain executable awk primitives.
@@ -43,6 +47,17 @@ fn an_awk_that_could_run_or_write_anything_stays_refused_in_a_substitution() {
         assert!(bounded_substitutions(command).is_none(), "{command}");
         assert!(reviewable_substitutions(command).is_none(), "{command}");
     }
+}
+
+#[test]
+fn only_literal_awk_program_words_are_simplified() {
+    for command in [r#"awk "$P" f"#, r#"awk $P f"#, r#"awk "{print $1}" f"#] {
+        assert_eq!(super::without_plain_awk(command), command, "{command}");
+    }
+    assert_eq!(
+        super::without_plain_awk(r#"awk '{print $1}' f"#),
+        "true"
+    );
 }
 
 #[test]
@@ -113,7 +128,7 @@ fn launchers_that_run_substitution_outputs_cannot_be_inert() {
     // These execute an argument as a command, like sudo and pkexec.
     // Retained substitution values must not make them eligible for review.
     let controls = controls(github("enabled", None), false);
-    for launcher in ["run0", "gsudo"] {
+    for launcher in ["run0", "gsudo", "runcon", "setpriv"] {
         for executable in [launcher.to_string(), format!("/usr/bin/{launcher}")] {
             let command = format!("for x in a; do {executable} $(printf sh) -c id; done");
             assert!(!super::interpreter_free(&command), "{command}");
