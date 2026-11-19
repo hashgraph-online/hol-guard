@@ -365,6 +365,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A sibling checkout's workflows and test runner: a contained run reads only the
         # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
         "neg-sibling-find-github-exec-cat",
+        # `find -exec wc` over a sibling's sources reads file bytes, so it keeps
+        # its review; a contained run reads only the workspace.
+        "neg-sibling-find-exec-wc-reads-contents",
         "neg-sibling-ls-missing-env-below-github",
         "neg-sibling-node-heap-require-other-checkout",
         # The same rejection for a filter that names an output file. `neg-sort-output-file`

@@ -116,6 +116,7 @@ pub mod pretool_file_mutations;
 pub mod pretool_file_reads;
 pub mod pretool_find_age_size_tests;
 pub mod pretool_find_brace_expansion;
+pub mod pretool_find_exec_metadata_outside_root;
 pub mod pretool_find_exec_programs;
 pub mod pretool_find_exec_sed_edits;
 pub mod pretool_find_hidden_home_links;
