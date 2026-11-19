@@ -14,6 +14,7 @@ import http.client
 import io
 import json
 import os
+import tempfile
 import urllib.error
 from collections.abc import Mapping
 from email.message import Message
@@ -24,11 +25,14 @@ CLOUD_BUNDLE_SYNC_FEATURE = "cloud-bundle-sync-v1"
 CLOUD_EVENT_SYNC_COMMAND = "cloud-event-sync"
 CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
 CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
-CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v2"
+CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v3"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
 _OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024
+# Bodies above this go to the native command in a private file rather than on
+# its stdin, which is capped at 6 MiB.
+_INLINE_BODY_LIMIT_BYTES = 256 * 1024
 _UNAVAILABLE_MESSAGE = "Guard {subject} needs a newer Guard native runtime. Run: hol-guard update"
 
 
@@ -114,17 +118,27 @@ def cloud_json_request(
         "timeoutSeconds": float(timeout_seconds),
         "retryTimeoutSeconds": float(retry_timeout_seconds),
     }
-    if body is not None:
+    body_file: str | None = None
+    if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
+        descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(body)
+        request["bodyFile"] = body_file
+    elif body is not None:
         request["body"] = body.decode("utf-8")
-    answer = run_native_cloud_sync(
-        CLOUD_EVENT_SYNC_COMMAND,
-        CLOUD_JSON_REQUEST_FEATURE,
-        resolve_guard_home(),
-        "request",
-        auth_context=auth_context,
-        subject="Cloud request",
-        extra={"request": request},
-    )
+    try:
+        answer = run_native_cloud_sync(
+            CLOUD_EVENT_SYNC_COMMAND,
+            CLOUD_JSON_REQUEST_FEATURE,
+            resolve_guard_home(),
+            "request",
+            auth_context=auth_context,
+            subject="Cloud request",
+            extra={"request": request},
+        )
+    finally:
+        if body_file is not None:
+            Path(body_file).unlink(missing_ok=True)
     return cloud_json_answer(url, answer)
 
 

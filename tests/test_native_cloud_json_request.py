@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import threading
 import urllib.error
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
@@ -102,3 +104,16 @@ def test_a_request_without_a_body_is_a_get(cloud_origin: str) -> None:
 
     assert answer == {"versionNumber": 3, "path": "/api/guard/policy/delivery"}
     assert _CloudHandler.bodies == [b"GET"]
+
+
+def test_a_body_over_the_inline_limit_is_sent_from_a_private_file(
+    cloud_origin: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    page = json.dumps({"page": "x" * (2 * 1024 * 1024)}).encode("utf-8")
+
+    answer = _send(cloud_origin, f"{cloud_origin}/api/guard/runtime/extension-catalog/sync-v2", body=page)
+
+    assert answer == {"item": None, "path": "/api/guard/runtime/extension-catalog/sync-v2"}
+    assert _CloudHandler.bodies == [page]
+    assert list(tmp_path.iterdir()) == []

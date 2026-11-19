@@ -20,7 +20,7 @@ pub(crate) const FEATURE: &str = "cloud-event-sync-v1";
 /// The `receipts` action.
 pub(crate) const RECEIPTS_FEATURE: &str = "cloud-receipt-upload-v1";
 /// The `request` action.
-pub(crate) const REQUEST_FEATURE: &str = "cloud-json-request-v2";
+pub(crate) const REQUEST_FEATURE: &str = "cloud-json-request-v3";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

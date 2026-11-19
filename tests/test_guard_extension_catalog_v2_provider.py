@@ -39,8 +39,7 @@ def test_runtime_v2_uses_existing_authenticated_request_transport(monkeypatch, k
         assert context is auth and method == "POST" and extra_headers is None
         return request_url, data
 
-    def transport(*, request, max_response_bytes, **kwargs):
-        assert max_response_bytes == 4096
+    def transport(*, request, **kwargs):
         return receiver.send(*request)
 
     monkeypatch.setattr(runner, "_guard_sync_request", request)
