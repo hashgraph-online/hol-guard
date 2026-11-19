@@ -1,6 +1,6 @@
 //! The `cloud-event-sync` command: `hol-guard sync` asks the native runtime
-//! to upload the local Guard event queue and the cloud pain signals, and to
-//! publish the runtime session.
+//! to upload the local receipts, the Guard event queue and the cloud pain
+//! signals, and to publish the runtime session.
 
 use std::path::PathBuf;
 
@@ -11,10 +11,13 @@ use crate::cloud_bundle_command::{failure, store_for};
 use crate::cloud_bundle_fetch::{brokered, SyncError};
 use crate::cloud_event_sync::{event_store, sync_guard_events};
 use crate::cloud_pain_signal_sync::sync_pain_signals;
+use crate::cloud_receipt_upload::{upload_receipts, UploadRequest, UploadState};
 use crate::cloud_runtime_session_sync::sync_runtime_session;
 
 pub(crate) const COMMAND: &str = "cloud-event-sync";
 pub(crate) const FEATURE: &str = "cloud-event-sync-v1";
+/// The `receipts` action.
+pub(crate) const RECEIPTS_FEATURE: &str = "cloud-receipt-upload-v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -27,6 +30,9 @@ struct Request {
     /// The session payload for `runtime_session`.
     #[serde(default)]
     session: Option<Value>,
+    /// What the caller built for `receipts`.
+    #[serde(default)]
+    upload: Option<UploadRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,6 +44,8 @@ enum Action {
     PainSignals,
     /// `sync_runtime_session`, up to the Cloud answer.
     RuntimeSession,
+    /// `sync_receipts`, up to the Cloud answers.
+    Receipts,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Value {
@@ -56,6 +64,15 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
             let session = request.session.unwrap_or(Value::Null);
             brokered(|| sync_runtime_session(&store, &session))
         }
+        Action::Receipts => match request.upload {
+            Some(upload) => {
+                let mut state = UploadState::default();
+                brokered(|| upload_receipts(&store, &upload, &mut state))
+            }
+            None => Err(SyncError::Failed(
+                "The receipt upload request is missing.".to_owned(),
+            )),
+        },
     };
     match answer {
         Ok(result) => json!({"ok": true, "result": result}),
@@ -69,7 +86,7 @@ mod tests {
 
     #[test]
     fn unreadable_request_is_a_failure() {
-        let answer = run_command(b"{\"guardHome\": \"/nonexistent\", \"action\": \"receipts\"}");
+        let answer = run_command(b"{\"guardHome\": \"/nonexistent\", \"action\": \"inventory\"}");
         assert_eq!(answer["ok"], json!(false));
         assert_eq!(answer["outcome"], json!("failed"));
     }

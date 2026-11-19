@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
+from tests.support.receipt_upload_transport import RECEIPT_SYNC_BATCH_SIZE
 
 SCHEMA = json.loads(
     (Path(__file__).resolve().parents[1] / "contracts" / "fleet-posture" / "v1" / "schema.json").read_text(
@@ -148,12 +149,12 @@ def test_session_capabilities_advertise_fleet_posture() -> None:
 def test_posture_rides_only_on_the_first_batch_and_is_schema_valid(
     store: GuardStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _add_receipts(store, guard_runner_module._RECEIPT_SYNC_BATCH_SIZE * 2 + 5)
+    _add_receipts(store, RECEIPT_SYNC_BATCH_SIZE * 2 + 5)
     bodies = _install_transport(monkeypatch)
 
     summary = guard_runner_module.sync_receipts(store)
 
-    assert summary["receipts"] == guard_runner_module._RECEIPT_SYNC_BATCH_SIZE * 2 + 5
+    assert summary["receipts"] == RECEIPT_SYNC_BATCH_SIZE * 2 + 5
     assert len(bodies) == 3
     posture = bodies[0]["syncContext"]["fleetPosture"]
     Draft202012Validator(SCHEMA).validate(posture)
