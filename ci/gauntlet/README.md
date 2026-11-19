@@ -423,7 +423,9 @@ The bash-lifecycle cases (`approved-bash-script-*`) run only on harnesses with G
 owner, Oh My Pi and Pi. Their oracle needs the one script grant and the owner journal that binds
 the approved script's content to its run. Other harnesses have no such execution binding, so Guard
 contains the script instead of offering a content-bound approval, and the oracle cannot hold there.
-On those lanes the cases are left out of `expected_scenarios` and named in the summary's
+A case that names a tool runs only on a lane that has that tool: Codex has a shell but no file-read
+tool, so `approved-retry-identical-file-read`, which pins a read through the read tool, is left out
+there. On those lanes the cases are left out of `expected_scenarios` and named in the summary's
 `not_driven` list, and selecting one with `--case` is refused.
 
 The lane's `relayed-approval-link` case asks the opposite question: when nobody answers the card,

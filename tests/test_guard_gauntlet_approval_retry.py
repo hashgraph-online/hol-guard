@@ -115,14 +115,23 @@ def test_a_native_bash_owner_lane_drives_every_case(harness: str):
     assert lane_scenarios(catalog, harness) == catalog
 
 
-@pytest.mark.parametrize("harness", ["codex", "claude-code", "cursor"])
-def test_a_lane_without_the_native_bash_owner_skips_only_the_lifecycle_cases(harness: str):
+@pytest.mark.parametrize(
+    ("harness", "no_tool"),
+    [
+        ("codex", {"approved-retry-identical-file-read"}),
+        ("claude-code", set()),
+        ("cursor", set()),
+    ],
+)
+def test_a_lane_skips_only_the_cases_it_cannot_drive(harness: str, no_tool: set[str]):
     # Guard contains an approved script on these harnesses instead of binding its
-    # content to the run, so the grant-and-journal oracle can never hold there.
+    # content to the run, so the grant-and-journal oracle can never hold there. Codex
+    # has no file-read tool, so the case that pins a read through it cannot bind.
     catalog = load_catalog(APPROVAL_RETRY_CATALOG)
     lane = lane_scenarios(catalog, harness)
-    assert {scenario.id for scenario in catalog} - {scenario.id for scenario in lane} == BASH_LIFECYCLE_CASES
-    assert [scenario for scenario in catalog if scenario.id not in BASH_LIFECYCLE_CASES] == list(lane)
+    skipped = BASH_LIFECYCLE_CASES | no_tool
+    assert {scenario.id for scenario in catalog} - {scenario.id for scenario in lane} == skipped
+    assert [scenario for scenario in catalog if scenario.id not in skipped] == list(lane)
 
 
 def test_core_catalog_never_carries_the_lane_oracle():

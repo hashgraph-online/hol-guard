@@ -29,7 +29,7 @@ from .approval_rows import connector_classes
 from .catalog import Scenario, catalog_digest, load_catalog
 from .fixtures import create_run_root, digest_file
 from .harness_case import run_harness_case
-from .harnesses import adapter
+from .harnesses import ADAPTERS, adapter
 from .interruptions import report_sections
 from .parallel import terminate_as_exit
 from .source_identity import source_identity
@@ -39,8 +39,20 @@ REPO = HERE.parents[1]
 
 
 def lane_scenarios(catalog: tuple[Scenario, ...], harness: str) -> tuple[Scenario, ...]:
-    """The cases this harness can drive: the Bash lifecycle cases need the native Bash owner."""
-    return tuple(s for s in catalog if harness in BASH_OWNER_HARNESSES or s.id not in BASH_LIFECYCLE_CASES)
+    """The cases this harness can drive.
+
+    The Bash lifecycle cases need the native Bash owner, and a case that names a tool
+    needs a harness with that tool: Codex has a shell but no file-read tool, so a case
+    pinning a read through the read tool can never bind there.
+    """
+    lane = ADAPTERS.get(harness)
+    tools = lane.native_tools if lane is not None else None
+    return tuple(
+        s
+        for s in catalog
+        if (harness in BASH_OWNER_HARNESSES or s.id not in BASH_LIFECYCLE_CASES)
+        and (tools is None or set(s.required_tools) <= tools)
+    )
 
 
 def run_approval_retry_suite(
