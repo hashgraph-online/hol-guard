@@ -291,11 +291,7 @@ pub(super) fn contained(
     let single = direct.is_none();
     let runs_directly = direct
         .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
-    // A redirect that opens no file -- `2>&1`, `2>/dev/null`, `>/dev/null` --
-    // confines nothing, so the sandbox adds nothing to a command the same
-    // text without it is allowed to run directly. Routing it here cost the
-    // user's own extension Allow: `git checkout -q main 2>/dev/null` asked
-    // for the sandbox while `git checkout -q main` ran.
+    // File-free redirects need no sandbox, so keep the extension Allow.
     let allowed = projected.minimum_action == "allow"
         && !projected.action.sensitive_target
         && !runs_directly
