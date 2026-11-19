@@ -43,6 +43,10 @@ pub(crate) trait Hol {
     fn index(&self, index: Index) -> Result<Vec<Value>, String>;
     /// Sends the weekly report and returns how many entries HOL accepted.
     fn post_report(&self, report: &Value) -> Result<i64, String>;
+    /// A runtime directory the user configured through the environment.
+    fn configured_dir(&self, name: &str) -> Option<String> {
+        std::env::var(name).ok().filter(|value| !value.is_empty())
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -161,8 +165,8 @@ pub(crate) fn entries_from(raw: &[u8]) -> Result<Vec<Value>, bool> {
 }
 
 /// The agent runtime homes that exist under `home`.
-pub(crate) fn runtime_homes(home: &Path) -> Map<String, Value> {
-    let configured = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+pub(crate) fn runtime_homes(hol: &dyn Hol, home: &Path) -> Map<String, Value> {
+    let configured = |name: &str| hol.configured_dir(name);
     let joined = |name: &str| home.join(name).to_string_lossy().into_owned();
     let candidates = [
         (
@@ -267,7 +271,7 @@ pub(crate) fn native_request(request: &Value) -> Result<Value, String> {
 
 /// `{"updates": [...], "dismissed": n}` for the plugins installed here.
 pub(crate) fn check_updates(hol: &dyn Hol, home: &Path, guard_home: &str) -> Result<Value, String> {
-    let homes = runtime_homes(home);
+    let homes = runtime_homes(hol, home);
     let index = installed_index(plugin_index(hol)?, &homes)?;
     let slugs: BTreeSet<&str> = index
         .iter()

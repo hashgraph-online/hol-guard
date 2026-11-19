@@ -16,6 +16,8 @@ struct FakeHol {
     refuse_post: bool,
     /// Turns counts off while the index downloads.
     opt_out_home: Option<PathBuf>,
+    /// Turns counts back on with a new device key after opting out.
+    rekey: bool,
     /// What a second sender and the state file saw while the report posted.
     seen_mid_send: RefCell<Option<(Option<String>, String, String)>>,
     probe_home: Option<(PathBuf, PathBuf)>,
@@ -31,6 +33,7 @@ impl FakeHol {
             sent: RefCell::new(Vec::new()),
             refuse_post: false,
             opt_out_home: None,
+            rekey: false,
             seen_mid_send: RefCell::new(None),
             probe_home: None,
         }
@@ -41,6 +44,9 @@ impl Hol for FakeHol {
     fn index(&self, index: Index) -> Result<Vec<Value>, String> {
         if let Some(guard_home) = &self.opt_out_home {
             turn_off(guard_home).expect("off");
+            if self.rekey {
+                turn_on(guard_home).expect("on again");
+            }
         }
         match index {
             Index::Plugin => Ok(self.index.clone()),
@@ -65,6 +71,12 @@ impl Hol for FakeHol {
         }
         self.sent.borrow_mut().push(report.clone());
         Ok(1)
+    }
+
+    /// Ignores `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so tests see only the
+    /// temp home whatever the test process inherited.
+    fn configured_dir(&self, _name: &str) -> Option<String> {
+        None
     }
 }
 
@@ -247,6 +259,21 @@ fn turning_counts_off_during_a_send_stops_it_and_stays_off() {
             last_week: None
         }
     );
+}
+
+#[test]
+fn a_new_device_key_during_a_send_stops_it() {
+    let homes = homes();
+    turn_on(&homes.guard).expect("on");
+    let mut hol = FakeHol::new();
+    hol.opt_out_home = Some(homes.guard.clone());
+    hol.rekey = true;
+    assert_eq!(
+        send_now(&hol, &homes.guard, &homes.user, WEEK),
+        Err(OFF_MESSAGE.to_owned())
+    );
+    assert!(hol.sent.borrow().is_empty());
+    assert_eq!(read_state(&homes.guard).last_week, None);
 }
 
 #[test]

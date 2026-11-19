@@ -276,7 +276,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 
 /// `{"installed": n, "report": {...}}` for this machine and week.
 fn build_report(hol: &dyn Hol, home: &Path, secret: &str, week: &str) -> Result<Value, String> {
-    let homes = host::runtime_homes(home);
+    let homes = host::runtime_homes(hol, home);
     let index = host::installed_index(host::plugin_index(hol)?, &homes)?;
     host::native_request(&json!({
         "command": "report",
@@ -361,7 +361,10 @@ fn send_claimed(
         .and_then(Value::as_array)
         .map_or(0, Vec::len);
     // Counts can be turned off while the index downloads and the report builds.
-    if !read_state(guard_home).enabled {
+    // A key reset in the meantime must not ship a report keyed to the old one.
+    if !read_state(guard_home).enabled
+        || read_secret(guard_home).as_deref() != Some(secret.as_str())
+    {
         return Err(OFF_MESSAGE.to_owned());
     }
     let accepted = if listed > 0 {

@@ -39,12 +39,30 @@ fn no_installed_repository_keeps_no_listing() {
     assert!(filter_installed(index, None).is_empty());
 }
 
+/// A HOL that never answers and reads no runtime-home overrides, so the
+/// test sees only its temp home.
+struct NoEnvHol;
+
+impl Hol for NoEnvHol {
+    fn index(&self, _index: Index) -> Result<Vec<Value>, String> {
+        Err("offline".to_owned())
+    }
+
+    fn post_report(&self, _report: &Value) -> Result<i64, String> {
+        Err("offline".to_owned())
+    }
+
+    fn configured_dir(&self, _name: &str) -> Option<String> {
+        None
+    }
+}
+
 #[test]
 fn runtime_homes_name_only_directories_that_exist() {
     let home = tempfile::tempdir().expect("home");
     std::fs::create_dir(home.path().join(".gemini")).expect("gemini");
     std::fs::write(home.path().join(".cursor"), b"").expect("cursor file");
-    let homes = runtime_homes(home.path());
+    let homes = runtime_homes(&NoEnvHol, home.path());
     assert_eq!(
         homes.get("gemini").and_then(Value::as_str),
         Some(home.path().join(".gemini").to_string_lossy().as_ref())
