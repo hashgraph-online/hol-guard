@@ -154,13 +154,14 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         let result = evaluate("omp", &input);
         assert_eq!(result.minimum_action, "review", "{input}: {result:?}");
     }
-    // A decorated header names no file Guard can prove. The edit keeps its
-    // review, so a person can still approve it, and the reason tells the
-    // agent how to write a header Guard can prove.
+    // A header Guard cannot read the way Oh My Pi does names no file Guard
+    // can prove. The edit keeps its review, so a person can still approve
+    // it, and the reason tells the agent how to write a header Guard can
+    // prove.
     for (input, shown) in [
         (
-            patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[*** Update File: src/a.ts#0AC4]`",
+            patch(&["[*** Update File: \"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Update File: \"src/a.ts\"#0AC4]`",
         ),
         (
             patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
@@ -205,16 +206,34 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             result.reason
         );
     }
-    // Newer Oh My Pi unwraps a bracketed patch sentinel in a header row and
-    // resolves `..` before it opens a path, so these may apply. They keep
-    // their review.
+    // Oh My Pi 18.8 and later unwrap bracketed patch markers and drop
+    // `***`/`Update File:` noise before opening the path, so these edit
+    // src/a.ts and get the same proof as the plain header. The first two
+    // are headers models sent in benchmark sessions.
     for input in [
+        patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        "*** Begin Patch\n[*** Begin Patch [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n"
+            .to_owned(),
         patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-        patch(&["[*** Update File: ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        format!("[*** Begin Patch]\n{put_a}"),
     ] {
         let result = evaluate("omp", &input);
-        assert_eq!(result.minimum_action, "review", "{input} {result:?}");
+        assert_eq!(result.minimum_action, "allow", "{input} {result:?}");
     }
+    // Unwrapping keeps the protected-path checks: the header below names
+    // `.git/hooks/pre-commit` once the marker is gone.
+    for input in [
+        patch(&["[*** Abort [.git/hooks/pre-commit#0AC4]\nPUT >$:\n+x\n"]),
+        patch(&["[*** Update File: .env#0AC4]\nPUT >$:\n+EXTRA=1\n"]),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_ne!(result.minimum_action, "allow", "{input} {result:?}");
+    }
+    // Oh My Pi resolves `..` before it opens a path, so this may apply. It
+    // keeps its review.
+    let input = patch(&["[*** Update File: ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]);
+    let result = evaluate("omp", &input);
+    assert_eq!(result.minimum_action, "review", "{input} {result:?}");
     // Only Oh My Pi's edit tool takes a hashline patch.
     let result = evaluate("claude-code", &patch(&[put_a]));
     assert_ne!(result.minimum_action, "allow", "{result:?}");
@@ -301,28 +320,28 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         })),
         ("block".to_owned(), "native_missing_path".to_owned())
     );
-    // A decorated header and its copies keep the review, and the reason still
-    // shows the agent the plain header.
-    let result = evaluate_pre_tool_envelope_with_context(
-        "omp",
-        "PreToolUse",
-        &json!({"tool_name": "edit", "tool_input": {
-            "input": patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "path": "*** Update File: src/a.ts",
-            "paths": ["*** Update File: src/a.ts"],
-        }}),
-        None,
-        None,
-        root.to_str(),
-        workspace.to_str(),
-    );
-    assert_eq!(result.minimum_action, "review", "{result:?}");
-    assert!(
-        result.reason.contains("`[*** Update File: src/a.ts#0AC4]`")
-            && result.reason.contains("[src/app.py#1A2B]"),
-        "{}",
-        result.reason
-    );
+    // Oh My Pi copies the path it will open, so a decorated header comes
+    // with the plain path and keeps the proof. A raw copy of the decorated
+    // header is not what Oh My Pi sends and keeps the review.
+    for (copy, want) in [
+        ("src/a.ts", "allow"),
+        ("*** Update File: src/a.ts", "review"),
+    ] {
+        let result = evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": {
+                "input": patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+                "path": copy,
+                "paths": [copy],
+            }}),
+            None,
+            None,
+            root.to_str(),
+            workspace.to_str(),
+        );
+        assert_eq!(result.minimum_action, want, "{copy}: {result:?}");
+    }
     // Fields that are not an exact copy of the headers keep the review.
     for tool_input in [
         json!({"input": patch(&[put_a]), "path": ".env", "paths": ["src/a.ts"]}),
