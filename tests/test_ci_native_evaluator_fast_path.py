@@ -26,6 +26,11 @@ def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> N
         "Upload native command evaluators"
     )
     assert "Upload matching native command projections" in names
+    identity = next(step for step in producer if step.get("id") == "identity")
+    build = next(step for step in producer if step.get("name") == "Build native command evaluators once for pytest shards")
+    assert "sync_repo_version.py --check" in identity["run"]
+    assert build["env"]["HOL_GUARD_PACKAGE_VERSION"] == "${{ steps.identity.outputs.version }}"
+    assert build["env"]["HOL_GUARD_BUILD_SHA"] == "${{ steps.identity.outputs.source_sha }}"
 
     # Public catalogs must be regenerated from the staged trust bindings before
     # they are uploaded. All consumers must receive the same verified artifacts.
