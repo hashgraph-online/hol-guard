@@ -3,7 +3,7 @@
   "id": "mcp.project-m",
   "version": "1.0.0",
   "name": "project-m",
-  "description": "Local-first shared memory layer and Model Context Protocol (MCP) server synchronizing state, tasks, and architectural decisions across Claude Desktop, Google Antigravity, and OpenAI Codex on local SQLite WAL. Off until you turn it on.",
+  "description": "Local-first shared memory layer and Model Context Protocol (MCP) server for Claude, Antigravity, and Codex. This binding covers direct project-m executable launches (e.g., via uv tool install or pip); repository setups running through uv wrapper commands are outside this direct-command binding. Off until you turn it on",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
