@@ -21,7 +21,12 @@ fn a_missing_hidden_build_folder_named_by_its_full_path_is_allowed() {
         .join("../../target/absent-repository-hidden-fixtures")
         .join(format!("fixture-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    for directory in ["work/app/.git", "work/app/src", "work/sib/.git", "work/plain"] {
+    for directory in [
+        "work/app/.git",
+        "work/app/src",
+        "work/sib/.git",
+        "work/plain",
+    ] {
         std::fs::create_dir_all(root.join(directory)).unwrap();
     }
     let root = std::fs::canonicalize(&root).unwrap();
@@ -46,7 +51,7 @@ fn a_missing_hidden_build_folder_named_by_its_full_path_is_allowed() {
             ),
             ("ls ~/work/app/.next/tsconfig.tsbuildinfo".to_owned(), true),
             (format!("ls -la {app}/.turbo"), true),
-            (format!("ls {app}/src/.cache/build"), true),
+            (format!("ls {app}/src/.svelte-kit/output"), true),
             (format!("ls {sib}/.next/BUILD_ID"), true),
             // Agent state, credential stores and environment files keep the
             // review a listing of them gets.
@@ -54,6 +59,12 @@ fn a_missing_hidden_build_folder_named_by_its_full_path_is_allowed() {
             (format!("ls {app}/.aws/config"), false),
             (format!("ls {app}/.env.local"), false),
             (format!("ls {app}/.next/.env.production"), false),
+            // A missing hidden name that is not build output, such as where a
+            // tool keeps a login, or a package's own dot folder, stays
+            // reviewed: the answer says whether the tool is set up.
+            (format!("ls {app}/.aws-session"), false),
+            (format!("ls {app}/.cache/build"), false),
+            (format!("ls {app}/node_modules/.husky"), false),
             // Outside a repository the hidden name keeps its review.
             (format!("ls {plain}/.next/BUILD_ID"), false),
             (format!("ls {app}/out/.next/BUILD_ID"), false),

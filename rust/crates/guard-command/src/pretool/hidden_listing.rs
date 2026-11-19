@@ -80,16 +80,13 @@ pub(in crate::pretool) fn absent_probe_hidden_ancestor(
     }) && repository_hidden_directory(parent, home_dir, cwd)
 }
 
-/// Whether `expanded`, a path that is not there, may be probed by its full
-/// path when the missing part below `ancestor` holds a hidden name, as
-/// `ls ~/work/app/.next/tsconfig.tsbuildinfo` does before the first build.
-///
-/// The probe prints `No such file or directory` and nothing else, so it may
-/// name what a listing of the same path could show if it were there. The
-/// missing names are joined to the resolved ancestor, so a link in the
-/// existing prefix is screened where it leads, under the hidden-listing
-/// screens: a work tree below home, no agent state, credential store, harness
-/// home or environment file among the names, and no sensitive family.
+/// A path that is not there below a repository's build output, as
+/// `ls ~/work/app/.next/tsconfig.tsbuildinfo` before the first build. It
+/// prints only `No such file or directory`. Each missing hidden name must be
+/// regenerated output (`.next`, `.turbo`): a missing login name such as
+/// `.aws-session` would answer whether a tool is set up. The names join the
+/// resolved ancestor, so a link in the existing prefix is screened where it
+/// leads, under the screens a listing of the path would get.
 pub(in crate::pretool) fn absent_repository_hidden_path(
     expanded: &Path,
     ancestor: &Path,
@@ -100,9 +97,7 @@ pub(in crate::pretool) fn absent_repository_hidden_path(
     let (Ok(resolved), Ok(missing)) = (resolved, expanded.strip_prefix(ancestor)) else {
         return false;
     };
-    missing
-        .components()
-        .all(|part| matches!(part, Component::Normal(_)))
+    crate::pretool::safe_writes::screens::regenerated_hidden_names(resolved.file_name(), missing)
         && repository_hidden_below(&resolved.join(missing), home_dir, cwd, false)
 }
 
