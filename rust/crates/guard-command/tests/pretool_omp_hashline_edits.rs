@@ -441,3 +441,50 @@ fn edits_without_a_file_header_name_no_file() {
         );
     }
 }
+
+// Edits Oh My Pi models sent with a tool error or their reasoning in place
+// of the first header. Oh My Pi rejects each without writing, so Guard
+// blocks it with how to write the header instead of asking for approval.
+#[test]
+fn edits_whose_first_header_cannot_be_read_are_blocked() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/omp-hashline-fixtures")
+        .join(format!(
+            "unreadable-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+    std::fs::create_dir_all(&root).unwrap();
+    let _cleanup = fixture::FixtureCleanup(root.clone());
+    let workspace = fixture::canonical_spelling(&root).join("project");
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join("src/a.py"), "a = 1\n").unwrap();
+    let evaluate = |input: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": {"input": input}}),
+            None,
+            None,
+            root.to_str(),
+            workspace.to_str(),
+        )
+    };
+    for header in [
+        "[assistant/analysis code] *** Begin Patch [tool_error] Invalid input: expected header line, got: '[src/a.py#D7FC]",
+        "[{\"?\":\"\"}*** End Patch?]We need proper tool syntax. [path#8A65]",
+        "[tool_error] Tool input must be provided as a plain string, not JSON.",
+        "[{\"path\":\"src/a.py\",\"line_start\":1,\"content\":\"a = 2\"}] then write it",
+    ] {
+        let result = evaluate(&patch(&[&format!("{header}\nPUT 1.=1:\n+a = 2\n")]));
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_omp_edit_header_unreadable"),
+            "{header}"
+        );
+        assert!(result.reason.contains("[src/app.py#1A2B]"), "{}", result.reason);
+    }
+    let fine = evaluate(&patch(&["[src/a.py#0AC4]\nPUT 1.=1:\n+a = 2\n"]));
+    assert_eq!(fine.minimum_action, "allow", "{}", fine.reason_code);
+}
