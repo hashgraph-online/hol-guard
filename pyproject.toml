@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.59.0"
+version = "3.60.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs. It covers the agent events listed in its support matrix and does not cover actions an agent runs outside its hooks."
 readme = "README.md"
 license = "Apache-2.0"
