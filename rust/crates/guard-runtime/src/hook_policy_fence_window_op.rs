@@ -1,6 +1,6 @@
 //! Resident-owned accounting for policy-source fence windows.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -33,7 +33,7 @@ pub(crate) struct HookPolicyFenceWindowRequestV1 {
 #[derive(Default)]
 struct WindowState {
     started_micros: i64,
-    waiters: HashMap<String, i64>,
+    waiters: VecDeque<i64>,
     absorbed: u64,
     exhausted: u64,
     pending_event: Option<Value>,
@@ -89,16 +89,15 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
     let mut completed = state.pending_event.take();
-    let stale: Vec<String> = state
-        .waiters
-        .iter()
-        .filter(|(_, started)| now.saturating_sub(**started) > MAX_WINDOW_AGE_MICROS)
-        .map(|(request_id, _)| request_id.clone())
-        .collect();
-    for request_id in stale {
-        state.waiters.remove(&request_id);
-        state.exhausted = state.exhausted.saturating_add(1);
+    let mut live = VecDeque::new();
+    for started in state.waiters.drain(..) {
+        if now.saturating_sub(started) > MAX_WINDOW_AGE_MICROS {
+            state.exhausted = state.exhausted.saturating_add(1);
+        } else {
+            live.push_back(started);
+        }
     }
+    state.waiters = live;
     if state.waiters.is_empty() && state.started_micros != 0 && state.exhausted > 0 {
         let value = event(state.started_micros, now, state.absorbed, state.exhausted)?;
         if completed.is_none() {
@@ -117,11 +116,11 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                 state.absorbed = 0;
                 state.exhausted = 0;
             }
-            state.waiters.insert(request.request_id.clone(), now);
+            state.waiters.push_back(now);
             completed
         }
         "leave" => {
-            if state.waiters.remove(&request.request_id).is_some() {
+            if state.waiters.pop_front().is_some() {
                 if request.admitted == Some(true) {
                     state.absorbed = state.absorbed.saturating_add(1);
                 } else {

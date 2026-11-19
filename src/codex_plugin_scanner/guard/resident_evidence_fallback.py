@@ -158,6 +158,7 @@ def record_resident_evidence_fallback(host: _DrainHost, record: object) -> Fallb
             event=_POST_TOOL_USE,
             payload=payload,
             succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
+            discovery=True,
         ):
             return "retry"
         return "handled"
@@ -167,6 +168,10 @@ def record_resident_evidence_fallback(host: _DrainHost, record: object) -> Fallb
         event=_PRE_TOOL_USE,
         payload=payload,
         succeeded=True,
+        policy_action=response.get("policy_action"),
+        receipt_id=accepted.get("decision_id") if accepted is not None else None,
+        prompted=response.get("prompted") is True,
+        approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
     ):
         return "retry"
     if record.get("connector_notice_raised") is not True:
@@ -183,6 +188,11 @@ def _submit_fallback_activity(
     event: str,
     payload: Mapping[str, object],
     succeeded: bool,
+    policy_action: object = None,
+    receipt_id: object = None,
+    prompted: bool = False,
+    approval_reuse_status: object = "not-applicable",
+    discovery: bool = False,
 ) -> bool:
     """Submit fallback activity synchronously on the drain thread."""
 
@@ -190,7 +200,25 @@ def _submit_fallback_activity(
     if not callable(submit):
         return True
     try:
-        return submit(harness=harness, event=event, payload=payload, succeeded=succeeded) is not False
+        if discovery:
+            discover = getattr(host.activity_writer, "submit_composio_discovery", None)
+            if callable(discover) and discover(harness=harness, payload=payload, succeeded=succeeded) is False:
+                return False
+        return (
+            submit(
+                harness=harness,
+                event=event,
+                payload=payload,
+                succeeded=succeeded,
+                policy_action=policy_action if isinstance(policy_action, str) else None,
+                receipt_id=receipt_id if isinstance(receipt_id, str) else None,
+                prompted=prompted,
+                approval_reuse_status=(
+                    approval_reuse_status if isinstance(approval_reuse_status, str) else "not-applicable"
+                ),
+            )
+            is not False
+        )
     except Exception:
         return False
 
