@@ -1,6 +1,6 @@
 //! Resident-owned accounting for policy-source fence windows.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,6 +16,7 @@ const RESULT_SCHEMA: &str = "guard-hook-policy-fence-window-result.v1";
 const EVENT_NAME: &str = "policy_source_fence_window";
 const MAX_WAIT_MS: u64 = 8_000;
 const MAX_WINDOW_AGE_MICROS: i64 = 9_000_000;
+const MAX_PENDING_EVENTS: usize = 16;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,7 +37,7 @@ struct WindowState {
     waiters: HashMap<String, i64>,
     absorbed: u64,
     exhausted: u64,
-    pending_event: Option<Value>,
+    pending_events: VecDeque<Value>,
 }
 
 static WINDOWS: OnceLock<Mutex<HashMap<String, WindowState>>> = OnceLock::new();
@@ -72,6 +73,12 @@ fn event(
     }))
 }
 
+fn queue_event(state: &mut WindowState, value: Value) {
+    if state.pending_events.len() < MAX_PENDING_EVENTS {
+        state.pending_events.push_back(value);
+    }
+}
+
 pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u8>, String> {
     if request.schema != REQUEST_SCHEMA
         || request.request_id.is_empty()
@@ -88,7 +95,7 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         .lock()
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
-    let mut completed = state.pending_event.take();
+    let mut completed = state.pending_events.pop_front();
     let mut live = HashMap::new();
     for (request_id, started) in state.waiters.drain() {
         if now.saturating_sub(started) > MAX_WINDOW_AGE_MICROS {
@@ -103,7 +110,7 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         if completed.is_none() {
             completed = Some(value);
         } else {
-            state.pending_event = Some(value);
+            queue_event(state, value);
         }
         state.started_micros = 0;
         state.absorbed = 0;
@@ -134,7 +141,7 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                     if completed.is_none() {
                         Some(value)
                     } else {
-                        state.pending_event = Some(value);
+                        queue_event(state, value);
                         completed
                     }
                 } else {
@@ -158,7 +165,7 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
                 if completed.is_none() {
                     Some(value)
                 } else {
-                    state.pending_event = Some(value);
+                    queue_event(state, value);
                     completed
                 }
             }

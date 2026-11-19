@@ -92,3 +92,49 @@ fn an_expired_window_preserves_counts_for_late_leaves() {
         1
     );
 }
+
+#[test]
+fn a_sweep_and_direct_wait_queue_both_events() {
+    let home = "/synthetic/queued-fence-events";
+    let mut enter = request(home, "enter");
+    enter.request_id = "fence-queued-stale".to_owned();
+    let _: Value = serde_json::from_slice(&evaluate(&enter).expect("enter")).expect("response");
+    let windows = WINDOWS.get().expect("window state");
+    let mut windows = windows.lock().expect("window lock");
+    let stale = windows
+        .get_mut(home)
+        .expect("synthetic window")
+        .waiters
+        .get_mut("fence-queued-stale")
+        .expect("stale waiter");
+    *stale -= MAX_WINDOW_AGE_MICROS + 1;
+    drop(windows);
+
+    let mut direct = request(home, "absorb_direct");
+    direct.waited_ms = Some(25);
+    let first: Value =
+        serde_json::from_slice(&evaluate(&direct).expect("direct wait")).expect("response");
+    assert_eq!(first["result"]["window_event"]["event_name"], EVENT_NAME);
+    assert_eq!(
+        first["result"]["window_event"]["payload"]["exhausted_calls"],
+        1
+    );
+    assert_eq!(
+        first["result"]["window_event"]["payload"]["absorbed_calls"],
+        0
+    );
+
+    let mut next = request(home, "enter");
+    next.request_id = "fence-queued-next".to_owned();
+    let queued: Value =
+        serde_json::from_slice(&evaluate(&next).expect("queued event")).expect("response");
+    assert_eq!(queued["result"]["window_event"]["event_name"], EVENT_NAME);
+    assert_eq!(
+        queued["result"]["window_event"]["payload"]["absorbed_calls"],
+        1
+    );
+    assert_eq!(
+        queued["result"]["window_event"]["payload"]["exhausted_calls"],
+        0
+    );
+}
