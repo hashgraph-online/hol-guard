@@ -203,9 +203,10 @@ fn config_stable_route(
     context: PathContext<'_>,
 ) -> Option<std::path::PathBuf> {
     let index = crate::command_compatibility::git_command_index(&segment.arguments)?;
-    let operation = segment.arguments.get(index)?;
+    let operation =
+        crate::command_compatibility::canonical_git_subcommand(segment.arguments.get(index)?);
     CONFIG_STABLE_STEPS
-        .contains(&operation.as_str())
+        .contains(&operation)
         .then(|| routed_checkout(segment, context))
         .flatten()
 }
@@ -369,7 +370,10 @@ fn preserves_configuration(arguments: &[String]) -> bool {
     let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
         return false;
     };
-    match arguments.get(index).map(String::as_str) {
+    match arguments
+        .get(index)
+        .map(|word| crate::command_compatibility::canonical_git_subcommand(word))
+    {
         // `git worktree add` writes a configuration of its own; the actions
         // that only list or retire a checkout leave this one's alone.
         Some("worktree") => arguments
@@ -391,7 +395,10 @@ fn preserves_tree(arguments: &[String]) -> bool {
     let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
         return false;
     };
-    match arguments.get(index).map(String::as_str) {
+    match arguments
+        .get(index)
+        .map(|word| crate::command_compatibility::canonical_git_subcommand(word))
+    {
         Some("worktree") => arguments
             .get(index + 1)
             .is_some_and(|action| TREE_PRESERVING_WORKTREE_ACTIONS.contains(&action.as_str())),
