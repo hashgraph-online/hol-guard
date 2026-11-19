@@ -34,7 +34,7 @@ fn command_and_launch_facts_are_resident_owned() {
         }),
     };
     let output: Value = serde_json::from_slice(&evaluate(&request).expect("facts")).expect("json");
-    assert_eq!(output["result"]["command"], "echo hi");
+    assert_eq!(output["result"]["command"], "  echo hi  ");
     assert_eq!(output["result"]["tool_name"], "Bash");
-    assert_eq!(output["result"]["launch_target"], "echo hi");
+    assert_eq!(output["result"]["launch_target"], "  echo hi  ");
 }

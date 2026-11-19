@@ -70,6 +70,13 @@ fn text(value: Option<&Value>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn raw_text(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .filter(|value| !py_strip(value).is_empty())
+        .map(ToOwned::to_owned)
+}
+
 fn tool_input(payload: &Map<String, Value>) -> Option<Map<String, Value>> {
     ["tool_input", "toolInput"]
         .iter()
@@ -83,7 +90,7 @@ fn command(payload: &Map<String, Value>, input: Option<&Map<String, Value>>) -> 
         .chain(std::iter::once(payload));
     for candidate in candidates {
         for key in ["command", "cmd", "shell_command", "shellCommand"] {
-            if let Some(value) = text(candidate.get(key)) {
+            if let Some(value) = raw_text(candidate.get(key)) {
                 return Some(value);
             }
         }

@@ -48,6 +48,10 @@ def native_hook_facts(
             "tool_name",
             "toolName",
             "tool",
+            "command",
+            "cmd",
+            "shell_command",
+            "shellCommand",
         )
         if key in payload
     }
