@@ -1,0 +1,257 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 22,
+  "discoveryDigest": "39609ff39c6c459539f57be45ef0ec4f548b023790f5950c43ef3b987f139098",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-6fac46371233d11b",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "add_records",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-9b240b51e53a8a2f",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "change_primary_nameservers",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-f2fd3b52bba55d7f",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "change_rrset_protection",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d65b67841cdf9809",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "change_rrset_ttl",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-6ec6b48345218027",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "change_zone_protection",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-7652e2decffcf7fe",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "change_zone_ttl",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-815b43bf087508a7",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "create_rrset",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-6b4bbf4f1b2ff32c",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "create_zone",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-3ff4df8367b47ea7",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "delete_rrset",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-3cf0844396694471",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "delete_zone",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d0c28a589be53167",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "export_zonefile",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-fa139efd00ef6176",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_rrset",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-572aa329d2274bf6",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_zone",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-b5d3f54fd0f5ce34",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_zone_action",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-fd2db7519ada8a44",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "import_zonefile",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-efea0fb2720bbcd5",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "list_rrsets",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a39ad57018e86d49",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "list_zone_actions",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-afd8cb148122bec6",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "list_zones",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d157f7856d7a1cb6",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "remove_records",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-ebddab1fb8a1bd6f",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "set_records",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a1b64557f37cda37",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "update_rrset",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-b4a5d75c26292ba2",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "update_zone",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    }
+  ],
+  "reviewedOperations": 22,
+  "revisionDigest": "7a7e6a2136c994ae287021901c2a2af98710dbf58f4a3baeef0a30c3d17d948a",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "inherit",
+  "upstreamVersion": "0.6.0"
+}

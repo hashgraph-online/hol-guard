@@ -1,0 +1,248 @@
+{
+  "discoveryDigest": "39609ff39c6c459539f57be45ef0ec4f548b023790f5950c43ef3b987f139098",
+  "entries": {
+    "tool-3cf0844396694471": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Permanently deletes a zone and all its records; irreversible.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-3ff4df8367b47ea7": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Permanently deletes a record set and all its records; irreversible.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-572aa329d2274bf6": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Reads one zone's full details; read-only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-6b4bbf4f1b2ff32c": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Creates a new zone; additive, governed by default policy.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-6ec6b48345218027": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Can disable a zone's delete protection, removing an existing safeguard.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-6fac46371233d11b": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Adds records and keeps existing ones; additive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-7652e2decffcf7fe": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Changes the default TTL; reversible timing change only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-815b43bf087508a7": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Creates a new record set; additive, governed by default policy.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-9b240b51e53a8a2f": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Replaces a secondary zone's primary nameservers; changes where zone transfers come from.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-a1b64557f37cda37": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Replaces all labels on a record set; the server marks it destructive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-a39ad57018e86d49": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Lists asynchronous zone actions; read-only, no mutation.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "allow"
+    },
+    "tool-afd8cb148122bec6": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Lists zones and their status; read-only, no mutation.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "allow"
+    },
+    "tool-b4a5d75c26292ba2": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Replaces all labels on a zone; the server marks it destructive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-b5d3f54fd0f5ce34": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Reads one action's status and result; read-only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-d0c28a589be53167": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Exports a zone file for reading; read-only, no change to the zone.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-d157f7856d7a1cb6": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Removes records by value; can remove the last record of a set.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-d65b67841cdf9809": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Changes one record set's TTL; reversible timing change only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-ebddab1fb8a1bd6f": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Replaces all records in a set; records not listed are dropped.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-efea0fb2720bbcd5": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Lists record sets in a zone; read-only, no mutation.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "allow"
+    },
+    "tool-f2fd3b52bba55d7f": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Can disable a record set's change protection, removing an existing safeguard.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-fa139efd00ef6176": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Reads one record set; read-only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-fd2db7519ada8a44": {
+      "evidenceUrl": "https://github.com/ni-c/hetzner-dns-mcp#tools",
+      "rationale": "Replaces the entire contents of a zone from an imported zone file.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}

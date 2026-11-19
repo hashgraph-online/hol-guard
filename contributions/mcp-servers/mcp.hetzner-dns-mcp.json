@@ -1,0 +1,125 @@
+{
+  "activation": "opt-in",
+  "description": "Conservative operation knowledge compiled from a contributor inventory.",
+  "homepage": "https://github.com/ni-c/hetzner-dns-mcp",
+  "icon": {
+    "kind": "none"
+  },
+  "id": "mcp.hetzner-dns-mcp",
+  "launch": {
+    "command": "npx",
+    "kind": "package-launcher",
+    "package": "hetzner-dns-mcp"
+  },
+  "name": "Hetzner DNS",
+  "publisher": {
+    "displayName": "ni-c",
+    "id": "io.github.ni-c"
+  },
+  "referenceUrls": [
+    "https://github.com/ni-c/hetzner-dns-mcp"
+  ],
+  "riskClasses": [
+    "execution"
+  ],
+  "saferAlternatives": [
+    "Inspect the exact target and required permissions before running this operation."
+  ],
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "tools": [
+    {
+      "name": "add_records",
+      "state": "inherit"
+    },
+    {
+      "name": "change_primary_nameservers",
+      "state": "review"
+    },
+    {
+      "name": "change_rrset_protection",
+      "state": "review"
+    },
+    {
+      "name": "change_rrset_ttl",
+      "state": "inherit"
+    },
+    {
+      "name": "change_zone_protection",
+      "state": "review"
+    },
+    {
+      "name": "change_zone_ttl",
+      "state": "inherit"
+    },
+    {
+      "name": "create_rrset",
+      "state": "inherit"
+    },
+    {
+      "name": "create_zone",
+      "state": "inherit"
+    },
+    {
+      "name": "delete_rrset",
+      "state": "review"
+    },
+    {
+      "name": "delete_zone",
+      "state": "review"
+    },
+    {
+      "name": "export_zonefile",
+      "state": "inherit"
+    },
+    {
+      "name": "get_rrset",
+      "state": "inherit"
+    },
+    {
+      "name": "get_zone",
+      "state": "inherit"
+    },
+    {
+      "name": "get_zone_action",
+      "state": "inherit"
+    },
+    {
+      "name": "import_zonefile",
+      "state": "review"
+    },
+    {
+      "name": "list_rrsets",
+      "state": "allow"
+    },
+    {
+      "name": "list_zone_actions",
+      "state": "allow"
+    },
+    {
+      "name": "list_zones",
+      "state": "allow"
+    },
+    {
+      "name": "remove_records",
+      "state": "review"
+    },
+    {
+      "name": "set_records",
+      "state": "review"
+    },
+    {
+      "name": "update_rrset",
+      "state": "review"
+    },
+    {
+      "name": "update_zone",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "trustClass": "external",
+  "version": "1.0.0"
+}

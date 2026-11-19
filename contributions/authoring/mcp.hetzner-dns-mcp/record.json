@@ -1,0 +1,13 @@
+{
+  "builderVersion": "1.0.0",
+  "contributionId": "mcp.hetzner-dns-mcp",
+  "managedFiles": {
+    "contributions/authoring/mcp.hetzner-dns-mcp/README.md": "20b91e05a21ebf083eb4ac11353af6cf8a3a86194fe75bfea74fef7afe979b36",
+    "contributions/authoring/mcp.hetzner-dns-mcp/discovery.json": "d4c26c1607239975b69442d21b8d91cb6d32d431a37a6f6fe1557e86f55e4b9e",
+    "contributions/authoring/mcp.hetzner-dns-mcp/report.json": "3bd3312edd35d8ca2b616b93a3cd6cbafd02cdc56acc6352cd34574a017acdb7",
+    "contributions/authoring/mcp.hetzner-dns-mcp/review.json": "4357063b934df3ad652008a34280000d86c2b305b71c99a323004087af0f6dce",
+    "contributions/mcp-servers/mcp.hetzner-dns-mcp.json": "c5db151079dc88a6f6a7dbf4a51cecb5e0b7e9c39120e409ec20539dd3e498bf"
+  },
+  "revisionDigest": "7a7e6a2136c994ae287021901c2a2af98710dbf58f4a3baeef0a30c3d17d948a",
+  "schemaVersion": "guard.extension-authoring-install.v1"
+}

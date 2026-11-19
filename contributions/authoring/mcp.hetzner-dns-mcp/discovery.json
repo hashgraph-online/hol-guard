@@ -1,0 +1,267 @@
+{
+  "adapter": "mcp",
+  "digest": "39609ff39c6c459539f57be45ef0ec4f548b023790f5950c43ef3b987f139098",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "metadata": {
+    "description": "Manage DNS zones and records (zonefiles, RRSets, TTL, protection) via the Hetzner Cloud API",
+    "executable": "",
+    "homepage": "https://github.com/ni-c/hetzner-dns-mcp",
+    "kind": "mcp",
+    "launcher": "npx",
+    "license": "MIT",
+    "name": "Hetzner DNS",
+    "package": "hetzner-dns-mcp",
+    "publisher": {
+      "displayName": "ni-c",
+      "id": "io.github.ni-c"
+    },
+    "slug": "hetzner-dns-mcp",
+    "upstreamVersion": "0.6.0"
+  },
+  "operations": [
+    {
+      "evidenceSha256": "01d57eee4b4937eca16eb2f9b795945d9698f59e249a4748d15fb17a01248672",
+      "flags": [],
+      "hints": [],
+      "id": "tool-6fac46371233d11b",
+      "name": "add_records",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "677a284fcb1c83da3a6f088b5ccf059b6e1ec324b6cb0f5229f2d47177390046",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-9b240b51e53a8a2f",
+      "name": "change_primary_nameservers",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "ca5bb7e9ab6897289666c82f04d7a1eee19f508e9d3dcabcee4d496b9eed4c00",
+      "flags": [],
+      "hints": [],
+      "id": "tool-f2fd3b52bba55d7f",
+      "name": "change_rrset_protection",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "eac5a0969947cd90ea31f6cda71b1ed725eb03516eb860611fa50d3142669049",
+      "flags": [],
+      "hints": [],
+      "id": "tool-d65b67841cdf9809",
+      "name": "change_rrset_ttl",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "3501cc11502c7a40b10b1816c6116553564c3b5250684e1f5d09801069bc6264",
+      "flags": [],
+      "hints": [],
+      "id": "tool-6ec6b48345218027",
+      "name": "change_zone_protection",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c856b4c282f648bcc02753ab2e3f1196d0f5a35e07fbf400bdd8ed47edf5a9d7",
+      "flags": [],
+      "hints": [],
+      "id": "tool-7652e2decffcf7fe",
+      "name": "change_zone_ttl",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "f7e41523ac92910cf476077cd8518d131c7540c1b863ee76d77e6dacca7e29b4",
+      "flags": [],
+      "hints": [],
+      "id": "tool-815b43bf087508a7",
+      "name": "create_rrset",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "a83b71ed87b2d5f04bdf1aa777167b2400c057ec6590a7542b7a68928c27df84",
+      "flags": [],
+      "hints": [],
+      "id": "tool-6b4bbf4f1b2ff32c",
+      "name": "create_zone",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "6a1fafc38be163ca7b23e638bd967ce5fd8be6497b9396d075b206e802abd32c",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name"
+      ],
+      "id": "tool-3ff4df8367b47ea7",
+      "name": "delete_rrset",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "9013432dffaee60283a6508f5b8edccdd40f28df43af9854af48773059c68810",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name"
+      ],
+      "id": "tool-3cf0844396694471",
+      "name": "delete_zone",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "ec9543f1fbe8b3db6bfaa49710f10cf0fb298793a05c441d225d4f3d73f74e46",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-d0c28a589be53167",
+      "name": "export_zonefile",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "d4055a2b730d31f91386953d9db09ff7af05bb11c64c1a15a285cd16d1e7bffb",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-fa139efd00ef6176",
+      "name": "get_rrset",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "9b3d4208002adab1a6b8e94ed46aafa7a5bc637a580d2ff13989e73ca36956e7",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-572aa329d2274bf6",
+      "name": "get_zone",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "5440e15479bb6582e6bee86d137d2664f94426a72bbaf5f67d468282cd47b8f7",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-b5d3f54fd0f5ce34",
+      "name": "get_zone_action",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "5d2ca383a10cf30ed5774031801d7986f8e305bdbbbb507e703db561dd63d133",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-fd2db7519ada8a44",
+      "name": "import_zonefile",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "503e0e78a7aa476237ab50103deb72cc8eb51eef5ef1992ca667e727f0e58811",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-efea0fb2720bbcd5",
+      "name": "list_rrsets",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "40cb317e5398e14d2c4541a10ace9b182e4e20497aa01377e841f03b898e4817",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-a39ad57018e86d49",
+      "name": "list_zone_actions",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "b2d1e080e34f77d8c3125acc3c9d94dd8f9e2c2eb95cc35f6322810bf33cc1c6",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-afd8cb148122bec6",
+      "name": "list_zones",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "37e55c2ae16e449d086815533d383089f8fe77849e38015fdddddc3ee1ddae5a",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "destructive-name"
+      ],
+      "id": "tool-d157f7856d7a1cb6",
+      "name": "remove_records",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "7285f5f63ac20700a8b6472b117125b17dfb6bcf18e59690e9d2aa941bd10774",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-ebddab1fb8a1bd6f",
+      "name": "set_records",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "5cae96a1e6ef4c7881e15638c43787d6ac0f26dc57d9352e76611764ae23f06e",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-a1b64557f37cda37",
+      "name": "update_rrset",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "40c0bf978bc421ba6f77b64efbd70e519ea07ddec3b25a1b3c38bf2d92b661e7",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-b4a5d75c26292ba2",
+      "name": "update_zone",
+      "optionsWithValues": [],
+      "path": []
+    }
+  ],
+  "schemaVersion": "guard.extension-discovery.v1",
+  "sourceSha256": "45acfc8b2c5b4b1b70ff9b756a17aee4b4b72aa9141b0e0667747584e34396a4"
+}
