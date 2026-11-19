@@ -115,6 +115,9 @@ fn a_loop_that_keeps_a_value_and_runs_no_interpreter_reaches_review() {
         r#"if [ -f VERSION ]; then v=$(cat VERSION); printf '%s\n' "$v"; fi"#,
         "set -e\nfor entry in 'a 1' 'b 2'; do\n  set -- $entry\n  actual=$(shasum -a 256 \"$1\" | awk '{print $1}')\n  test \"$actual\" = \"$2\"\ndone",
         "set -eu\nfor file in a.js b.tgz; do\n  artifact_path=\"$HOME/Downloads/w/$file\"\n  hash=$(shasum -a 256 \"$artifact_path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/notes.md >/dev/null\ndone\nprintf 'ok\\n'",
+        // The same loop as the benign gate case
+        // `artifact-checksum-loop-against-release-notes` spells it.
+        "set -eu\nfor file in widgets-1.4.0.js widgets-1.4.0.tgz; do\n  artifact_path=\"$HOME/Downloads/widgets-1.4.0/$file\"\n  hash=$(shasum -a 256 \"$artifact_path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/release-1.4.0.md >/dev/null\ndone\nprintf 'All artifact checksums match\\n'",
     ] {
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));

@@ -35272,7 +35272,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "set -eu\nfor file in widgets-1.4.0.js widgets-1.4.0.tgz; do\n  path=\"$HOME/Downloads/widgets-1.4.0/$file\"\n  hash=$(shasum -a 256 \"$path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/release-1.4.0.md >/dev/null\ndone\nprintf 'All artifact checksums match\\n'"
+        "command": "set -eu\nfor file in widgets-1.4.0.js widgets-1.4.0.tgz; do\n  artifact_path=\"$HOME/Downloads/widgets-1.4.0/$file\"\n  hash=$(shasum -a 256 \"$artifact_path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/release-1.4.0.md >/dev/null\ndone\nprintf 'All artifact checksums match\\n'"
       },
       "cwd": "worktree",
       "expect": "allow_or_review"
