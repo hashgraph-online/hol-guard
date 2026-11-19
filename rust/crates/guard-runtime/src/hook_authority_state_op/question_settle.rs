@@ -156,14 +156,19 @@ impl Env<'_> {
         args.insert("reason".to_owned(), json!(reason));
         args.insert("source".to_owned(), json!(source));
         args.insert("now".to_owned(), json!(self.now));
-        let generation: i64 = self
-            .connection
-            .query_row(
-                "select coalesce(max(integrity_generation), 0) from policy_decisions",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|_| ERROR_STORE)?;
+        let generation = payload
+            .get("current_generation")
+            .and_then(Value::as_i64)
+            .filter(|generation| *generation >= 0)
+            .unwrap_or_else(|| {
+                self.connection
+                    .query_row(
+                        "select coalesce(max(integrity_generation), 0) from policy_decisions",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0)
+            });
         args.insert("current_generation".to_owned(), json!(generation));
         if let (Some(key), Some(key_id)) = (self.key.as_ref(), self.key_id) {
             args.insert(

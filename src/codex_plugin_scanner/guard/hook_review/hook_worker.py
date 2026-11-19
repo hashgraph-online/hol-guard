@@ -322,6 +322,7 @@ class HookWorker(HookWorkerNativeMixin):
                 harness=harness,
                 guard_home=guard_home,
                 workspace=workspace,
+                deadline=deadline,
             )
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)

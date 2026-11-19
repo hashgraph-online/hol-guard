@@ -20,6 +20,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from hook_route_vector_inputs import (
+    COPILOT_STAGES,
+    EDGE_EVENTS,
+    HARNESSES,
+    PASSTHROUGH_HARNESSES,
+    PAYLOADS,
+    REWRITTEN,
+    SESSION,
+    fixture_event_name,
+)
+
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_event_name, _optional_string
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _canonical_harness_name,
@@ -30,87 +41,6 @@ from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailabl
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/hook_route_vectors.json.gz")
 
-HARNESSES = ("codex", "claude-code", "claude", "copilot", "cursor", "devin", "zcode", "grok", "unknown-harness")
-_EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
-_PASSTHROUGH_HARNESSES = frozenset({"devin", "zcode"})
-_PRE_EVENTS = frozenset(
-    {
-        "pretool",
-        "pretooluse",
-        "pretoolcall",
-        "beforeshellexecution",
-        "beforereadfile",
-        "beforewritefile",
-        "beforemcpexecution",
-    }
-)
-_POST_EVENTS = frozenset(
-    {
-        "posttool",
-        "posttooluse",
-        "posttoolcall",
-        "aftershellexecution",
-        "afterreadfile",
-        "afterwritefile",
-        "aftermcpexecution",
-    }
-)
-SESSION = "session-1"
-_PERMISSION_PROMPT = {"hook_event_name": "Notification", "notification_type": "permission_prompt"}
-
-
-def fixture_event_name(payload: Mapping[str, object]) -> str:
-    """Project fixture labels for the retired Python route oracle."""
-
-    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
-        value = payload.get(key)
-        if not isinstance(value, str) or not value.strip():
-            continue
-        raw = value.strip()
-        compact = raw.lower().replace("_", "").replace("-", "")
-        if compact in _PRE_EVENTS:
-            return "PreToolUse"
-        if compact in _POST_EVENTS:
-            return "PostToolUse"
-        if compact in {"permissionrequest", "permissionrequestv2"}:
-            return "PermissionRequest"
-        if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
-            return "UserPromptSubmit"
-        return raw
-    return "PreToolUse"
-
-# Payload shapes as the harnesses send them: every key the event-name helpers read.
-PAYLOADS: tuple[dict[str, object], ...] = (
-    {},
-    {"hook_event_name": "PreToolUse"},
-    {"hook_event_name": "pretooluse"},
-    {"hook_name": "preToolUse"},
-    {"event": "PostToolUse"},
-    {"hookEventName": "PostToolUse"},
-    {"hook_event_name": "UserPromptSubmit"},
-    {"hook_event_name": "UserPromptSubmitted"},
-    {"hook_event_name": "PermissionRequest"},
-    {"hook_event_name": "PermissionRequestV2"},
-    {"hook_name": "permission_request"},
-    {"eventName": "PermissionRequest"},
-    {"hook_event_name": "copilotPermissionRequest"},
-    {"hook_event_name": "Stop"},
-    {"hook_event_name": "Stop", "notification_type": "permission_prompt"},
-    _PERMISSION_PROMPT,
-    {"hook_event_name": "Notification", "notification_type": "idle_prompt"},
-    {"hook_event_name": "Notification"},
-    {"hook_event_name": "SessionStart"},
-    {"hook_event_name": "beforeShellExecution"},
-    {"hookName": "afterShellExecution"},
-)
-# Harnesses whose preparation rewrites the event name: (as invoked, as prepared).
-REWRITTEN: tuple[tuple[dict[str, object], dict[str, object]], ...] = (
-    ({"hookEventName": "preToolUse"}, {"hook_event_name": "PreToolUse"}),
-    ({"eventName": "PermissionRequest"}, {"hook_event_name": "PermissionRequest"}),
-    ({"hook_event_name": "PermissionRequest"}, {"hook_event_name": "PreToolUse"}),
-    ({"hook_event_name": "PreToolUse"}, {"hook_event_name": "PermissionRequest"}),
-)
-COPILOT_STAGES = ("", "pretooluse", "permissionrequest", "posttooluse")
 
 RC = {
     "unavailable": 11,
@@ -321,7 +251,7 @@ def _recorded_ladder(case: Case, r: Recorder, claim: Mapping[str, object]) -> in
     payload = case.prepared
     canonical = case.canonical
     claude = canonical == "claude-code"
-    if fixture_event_name(case.entry) == "PermissionRequest" and canonical in _PASSTHROUGH_HARNESSES:
+    if fixture_event_name(case.entry) == "PermissionRequest" and canonical in PASSTHROUGH_HARNESSES:
         return 0
     if claude and _hook_event_name(payload) == "PostToolUse":
         pending_pair = r.pending_pair()
@@ -333,7 +263,7 @@ def _recorded_ladder(case: Case, r: Recorder, claim: Mapping[str, object]) -> in
     edge_result, edge_receipt, edge_failure = edge.get("result"), edge.get("receipt"), edge.get("failure_reason_code")
     recording_only = bool(edge.get("recording_only"))
     event_name = _hook_event_name(payload) or fixture_event_name(payload)
-    if event_name in _EDGE_EVENTS and edge_result is None:
+    if event_name in EDGE_EVENTS and edge_result is None:
         return r.unavailable(event_name, str(edge_failure or "native_hook_event_unavailable"), recording_only)
     contained = r.containment(edge_result)
     if contained is not None:

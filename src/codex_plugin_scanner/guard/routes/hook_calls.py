@@ -165,6 +165,14 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
     return key
 
 
+def hook_integrity_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Begin a policy-integrity generation before a Rust hook write."""
+
+    from .policy_write_calls import integrity_begin
+
+    return integrity_begin(store, args)
+
+
 def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Finalize Rust's policy-integrity generation in the secret store."""
 
@@ -204,19 +212,26 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
     source = _text(args.get("source"))
     if not (session_id and artifact_id and pending_artifact_hash and reason and source):
         return {"valid": False}
+    try:
+        integrity = hook_integrity_begin(store, {"now": _now(), "sign": True})
+    except Exception:
+        return {"valid": False}
+    payload = {
+        "artifact_id": artifact_id,
+        "pending_artifact_hash": pending_artifact_hash,
+        "reason": reason,
+        "source": source,
+        "plan": args.get("plan"),
+    }
+    if isinstance(integrity.get("current_generation"), int):
+        payload["current_generation"] = integrity["current_generation"]
     reply = hook_authority_state(
         store,
         "claude_question_save",
         now=_now(),
         required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
         session_id=session_id,
-        payload={
-            "artifact_id": artifact_id,
-            "pending_artifact_hash": pending_artifact_hash,
-            "reason": reason,
-            "source": source,
-            "plan": args.get("plan"),
-        },
+        payload=payload,
     )
     if not isinstance(reply, dict) or reply.get("saved") is not True:
         return {"valid": False}
@@ -309,6 +324,7 @@ HOOK_CALLS = {
     "hook.claude_question_save": hook_claude_question_save,
     "hook.codex_live_decision": codex_live_decision,
     "hook.integrity_key": hook_integrity_key,
+    "hook.integrity_begin": hook_integrity_begin,
     "hook.integrity_finalize": hook_integrity_finalize,
     "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,

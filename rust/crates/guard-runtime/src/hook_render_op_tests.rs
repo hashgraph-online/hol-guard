@@ -1,6 +1,9 @@
 use super::*;
 use serde_json::json;
 
+#[path = "hook_render_availability_tests.rs"]
+mod availability;
+
 fn request(kind: &str) -> HookRenderRequestV1 {
     HookRenderRequestV1 {
         schema: guard_contracts::HOOK_RENDER_REQUEST_SCHEMA.to_owned(),
@@ -50,26 +53,6 @@ fn recording_only_response_continues() {
         result.payload.expect("payload")["response"]["policy_action"],
         "warn"
     );
-}
-
-#[test]
-fn availability_is_resident_owned() {
-    let mut req = request("availability");
-    req.cli = Some(json!({"payload": {"hook_event_name": "copilotPermissionRequest"}}));
-    let response = decode(evaluate_hook_render_request(&req).expect("encoded"))
-        .payload
-        .expect("payload")["response"]
-        .clone();
-    assert_eq!(response["event_name"], "PermissionRequest");
-    assert_eq!(response["pauses"], true);
-    assert_eq!(response["permission_request"], true);
-
-    req.cli = Some(json!({"payload": {"hook_event_name": "PostToolUse"}}));
-    let response = decode(evaluate_hook_render_request(&req).expect("encoded"))
-        .payload
-        .expect("payload")["response"]
-        .clone();
-    assert_eq!(response["pauses"], false);
 }
 
 #[test]

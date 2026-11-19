@@ -358,65 +358,11 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
 }
 
 fn availability_event_name(payload: &Object) -> String {
-    for key in [
-        "event",
-        "eventName",
-        "hook_event_name",
-        "hookEventName",
-        "hook_name",
-        "hookName",
-    ] {
-        let Some(raw) = payload.get(key).and_then(Value::as_str) else {
-            continue;
-        };
-        let raw = crate::claude_hook_bridge_render::py_strip(raw);
-        if raw.is_empty() {
-            continue;
-        }
-        let compact = raw
-            .to_lowercase()
-            .chars()
-            .filter(|character| *character != '_' && *character != '-')
-            .collect::<String>();
-        if matches!(
-            compact.as_str(),
-            "pretool"
-                | "pretooluse"
-                | "pretoolcall"
-                | "beforeshellexecution"
-                | "beforereadfile"
-                | "beforewritefile"
-                | "beforemcpexecution"
-        ) {
-            return "PreToolUse".to_owned();
-        }
-        if matches!(
-            compact.as_str(),
-            "posttool"
-                | "posttooluse"
-                | "posttoolcall"
-                | "aftershellexecution"
-                | "afterreadfile"
-                | "afterwritefile"
-                | "aftermcpexecution"
-        ) {
-            return "PostToolUse".to_owned();
-        }
-        if matches!(
-            compact.as_str(),
-            "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
-        ) {
-            return "PermissionRequest".to_owned();
-        }
-        if matches!(
-            compact.as_str(),
-            "prompt" | "userpromptsubmit" | "userpromptsubmitted"
-        ) {
-            return "UserPromptSubmit".to_owned();
-        }
-        return raw.to_owned();
+    let mut event = crate::hook_payload_facts_op::runtime_event(payload);
+    if event == "copilotPermissionRequest" {
+        event = "PermissionRequest".to_owned();
     }
-    "PreToolUse".to_owned()
+    event
 }
 
 fn render_edge(request: &HookRenderRequestV1) -> Result<Object, &'static str> {

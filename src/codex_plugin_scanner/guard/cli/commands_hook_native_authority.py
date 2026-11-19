@@ -331,7 +331,6 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = canonical_hook_event_name(payload, guard_home=context.guard_home)
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)

@@ -258,7 +258,10 @@ fn integrity_finalize(config: &ReadConfig, next_control_state: Option<&Value>) -
 
 /// Runs `work` holding the generation lock. `None` when the lock cannot be
 /// taken in time, as the library's wait raises.
-fn locked<T>(config: &ReadConfig, work: impl FnOnce() -> Option<T>) -> Option<T> {
+pub(in crate::daemon_edge) fn locked<T>(
+    config: &ReadConfig,
+    work: impl FnOnce() -> Option<T>,
+) -> Option<T> {
     let file = generation_lock(config.guard_home())?;
     let answer = work();
     let _ = fs2::FileExt::unlock(&file);

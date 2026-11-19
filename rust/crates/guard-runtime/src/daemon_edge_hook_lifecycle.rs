@@ -8,9 +8,9 @@
 //! step for every op that signs or verifies state.
 //!
 //! A Claude `PostToolUse` that answers the HOL Guard approval question is
-//! settled here too. Saving the answer is a policy write in the same
-//! authority-state transaction, so the pending permission cannot survive a
-//! successful policy save.
+//! settled here too. Saving the answer holds the policy-integrity generation
+//! lock across begin, save, finalize, and consume, so an interrupted write
+//! cannot race another signer or consume a pending permission after failure.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -262,29 +262,44 @@ impl Hook<'_> {
         match settled(&reply)? {
             Settled::Answered => Some(json!({})),
             Settled::Save(mut save) => {
-                save.insert("session_id".to_owned(), session_id.into());
-                // The resident consumes the pending permission and writes the
-                // policy plan in the same authority-state transaction.
-                let saved = self.authority_op(QUESTION_SAVE, &save, expires, |request| {
-                    request.payload = Some(Value::Object(save.clone()));
-                })?;
-                if saved.get("saved") != Some(&Value::Bool(true)) {
-                    return None;
-                }
-                let finalized = self.call_within(
-                    "hook.integrity_finalize",
-                    json!({
-                        "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
-                    }),
-                    super::budget_left(expires),
-                )?;
-                if finalized.get("finalized") != Some(&Value::Bool(true)) {
-                    return None;
-                }
-                let consumed = self.authority_op(QUESTION_CONSUME, &save, expires, |request| {
-                    request.payload = Some(Value::Object(save.clone()));
-                })?;
-                (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
+                crate::daemon_edge::reads::writes::policy_write::locked(self.config, || {
+                    save.insert("session_id".to_owned(), session_id.into());
+                    let integrity = self.call_by(
+                        "hook.integrity_begin",
+                        json!({"now": now_isoformat()?, "sign": true}),
+                        expires,
+                    )?;
+                    if let Some(generation) = integrity.get("current_generation") {
+                        save.insert("current_generation".to_owned(), generation.clone());
+                    }
+                    let saved = self.authority_op_with_key(
+                        QUESTION_SAVE,
+                        &save,
+                        expires,
+                        &integrity,
+                        |request| {
+                            request.payload = Some(Value::Object(save.clone()));
+                        },
+                    )?;
+                    if saved.get("saved") != Some(&Value::Bool(true)) {
+                        return None;
+                    }
+                    let finalized = self.call_within(
+                        "hook.integrity_finalize",
+                        json!({
+                            "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
+                        }),
+                        super::budget_left(expires),
+                    )?;
+                    if finalized.get("finalized") != Some(&Value::Bool(true)) {
+                        return None;
+                    }
+                    let consumed =
+                        self.authority_op(QUESTION_CONSUME, &save, expires, |request| {
+                            request.payload = Some(Value::Object(save.clone()));
+                        })?;
+                    (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
+                })
             }
         }
     }
@@ -308,6 +323,17 @@ impl Hook<'_> {
         shape: impl FnOnce(&mut HookAuthorityStateRequestV1),
     ) -> Option<Value> {
         let key = self.call_by("hook.integrity_key", json!({}), expires)?;
+        self.authority_op_with_key(op, payload, expires, &key, shape)
+    }
+
+    fn authority_op_with_key(
+        &self,
+        op: &str,
+        payload: &Map<String, Value>,
+        expires: f64,
+        key: &Map<String, Value>,
+        shape: impl FnOnce(&mut HookAuthorityStateRequestV1),
+    ) -> Option<Value> {
         let mut request = request(
             &self.config.store_path,
             &self.config.guard_home,
