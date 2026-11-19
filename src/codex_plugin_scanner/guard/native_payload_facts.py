@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
+from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 _FEATURE = "hook-payload-facts-v1"
 _REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
@@ -78,6 +80,7 @@ def native_hook_facts(
     if timeout_seconds <= 0:
         return None
     try:
+        status = native_runtime_status()
         response = _resident_request(
             operation="hook_payload_facts",
             request=wire,
@@ -86,11 +89,17 @@ def native_hook_facts(
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_PAYLOAD_FACTS_MAX_REQUEST_BYTES,
+            record_success=False,
+            status=status,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
     if not isinstance(result, Mapping):
+        if status.identity is not None:
+            native_record_resident_failure(
+                status.identity.sha256, guard_home, reason="native_hook_payload_facts_result"
+            )
         return None
     event = result.get("event_name")
     tool_input = result.get("tool_input")
@@ -107,7 +116,13 @@ def native_hook_facts(
         or not isinstance(launch_target, str)
         or not launch_target
     ):
+        if status.identity is not None:
+            native_record_resident_failure(
+                status.identity.sha256, guard_home, reason="native_hook_payload_facts_result"
+            )
         return None
+    if status.identity is not None:
+        native_record_resident_success(status.identity.sha256, guard_home)
     return NativePayloadFacts(event, tool_input, command, tool_name, launch_target)
 
 
@@ -172,6 +187,7 @@ def native_connector_lookup(
         "env": dict(os.environ),
     }
     try:
+        status = native_runtime_status()
         response = _resident_request(
             operation="hook_connector_facts",
             request=wire,
@@ -180,12 +196,18 @@ def native_connector_lookup(
             required_feature=_CONNECTOR_FEATURE,
             response_schema=_CONNECTOR_RESULT_SCHEMA,
             max_request_bytes=_CONNECTOR_MAX_REQUEST_BYTES,
+            record_success=False,
+            status=status,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     result = response.get("result") if isinstance(response, Mapping) else None
     lookup = result.get("connector_lookup") if isinstance(result, Mapping) else None
     if not isinstance(lookup, Mapping):
+        if status.identity is not None:
+            native_record_resident_failure(
+                status.identity.sha256, guard_home, reason="native_hook_connector_facts_result"
+            )
         return None
     if (
         set(lookup) != {"command", "cwd", "home_dir", "user_home", "env"}
@@ -199,7 +221,13 @@ def native_connector_lookup(
         or not isinstance(lookup.get("env"), Mapping)
         or not all(isinstance(key, str) and isinstance(value, str) for key, value in lookup["env"].items())
     ):
+        if status.identity is not None:
+            native_record_resident_failure(
+                status.identity.sha256, guard_home, reason="native_hook_connector_facts_result"
+            )
         return None
+    if status.identity is not None:
+        native_record_resident_success(status.identity.sha256, guard_home)
     return dict(lookup)
 
 

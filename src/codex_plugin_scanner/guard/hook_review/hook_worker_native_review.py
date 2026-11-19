@@ -248,7 +248,7 @@ def _review_native_edge_once(
             # already out of time.
         if fenced is None and (
             unleased_binding is None
-            or published_binding_token(worker.policy_snapshot_publisher, deadline=deadline) != unleased_binding
+            or published_binding_token(worker.policy_snapshot_publisher) != unleased_binding
         ):
             # Reached without the lease, and a control mutation published
             # across it. Honouring this response could allow a command, or

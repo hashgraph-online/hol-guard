@@ -199,6 +199,11 @@ def _submit_fallback_activity(
     submit = getattr(host.activity_writer, "submit_command_activity", None)
     if not callable(submit):
         return True
+    if event == _PRE_TOOL_USE and not isinstance(policy_action, str):
+        # The resident writer permanently refuses a PreToolUse activity without
+        # a terminal action. A recovery response has no action to invent, so
+        # acknowledge this record instead of retrying it forever.
+        return True
     try:
         if discovery:
             discover = getattr(host.activity_writer, "submit_composio_discovery", None)

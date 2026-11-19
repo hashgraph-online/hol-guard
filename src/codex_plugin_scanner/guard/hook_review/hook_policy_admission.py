@@ -10,6 +10,7 @@ from ..native_policy_admission import native_policy_not_ready_reason
 from ..native_policy_snapshot_resident_recovery import RESIDENT_FAIL_FAST_STREAK, is_resident_class_error
 from .hook_fail_closed import unmanaged_passthrough
 from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
+from .hook_policy_fence_window import policy_update_pending_reason
 
 _NATIVE_POLICY_NOT_READY_FALLBACK = (
     "HOL Guard could not prepare the native policy safely. This is usually temporary. Retry this action."
@@ -35,6 +36,8 @@ def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | Non
         reason = native_policy_not_ready_reason(last_error, streak, guard_home, deadline=deadline)
         if reason is not None:
             return reason
+    if last_error == "native_business_source_mutation_in_progress":
+        return policy_update_pending_reason()
     # A resident that is already down cannot answer the Rust posture query.
     # Keep this fixed transport-outage response local so repeated failures do
     # not send the hook back into an unproductive retry loop.

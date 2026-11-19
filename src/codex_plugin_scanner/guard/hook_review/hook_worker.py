@@ -319,6 +319,14 @@ class HookWorker(HookWorkerNativeMixin):
             # The resident owns event identity. This label only selects the
             # fixed outage response and never enters semantic routing.
             fallback_event = canonical_hook_event_name(payload)
+            if fallback_event == "PostToolUse":
+                from ..cli.commands_support_command_activity import hook_post_succeeded
+
+                self._record_post_tool_activity(
+                    harness=harness,
+                    payload=payload,
+                    succeeded=hook_post_succeeded(fallback_event, payload),
+                )
             response = availability_harness_response(
                 harness=harness,
                 event_name=fallback_event,

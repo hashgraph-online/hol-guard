@@ -50,7 +50,7 @@ def fixture_event_name(payload: Mapping[str, object]) -> str:
             return "PreToolUse"
         if compact.startswith("posttool") or compact.startswith("after"):
             return "PostToolUse"
-        if compact in {"permissionrequest", "permissionrequestv2"}:
+        if compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}:
             return "PermissionRequest"
         if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
             return "UserPromptSubmit"
