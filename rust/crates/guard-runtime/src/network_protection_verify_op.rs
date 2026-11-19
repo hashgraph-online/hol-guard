@@ -190,7 +190,7 @@ fn refusal(message: &str) -> NetworkProtectionBundleError {
 /// the same way. Here an empty keyring is not neutral: it restores the pinned
 /// production fingerprint as the only anchor, so a saved row that is present
 /// but unreadable would quietly widen trust. Only an absent row may be empty.
-fn trusted_keys(
+pub(crate) fn trusted_keys(
     raw: Option<&Value>,
 ) -> Result<Vec<SupplyChainVerificationKey>, NetworkProtectionBundleError> {
     let readable = match raw {

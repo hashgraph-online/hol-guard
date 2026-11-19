@@ -839,6 +839,14 @@ mod runtime_output_directory;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod cloud_bundle_command;
+mod cloud_bundle_fetch;
+mod cloud_bundle_network;
+mod cloud_bundle_sync;
+mod cloud_event_command;
+mod cloud_event_sync;
+mod cloud_pain_signal_sync;
+mod cloud_runtime_session_sync;
 mod codex_hook_identity_op;
 mod command_pack_record_op;
 #[allow(dead_code)]
@@ -884,8 +892,10 @@ mod kimi_hook_config;
 mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
 mod local_cli_change_request;
+mod local_cli_discover;
 mod local_cli_grant_op;
 mod local_cli_help;
+mod local_cli_help_probe;
 mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;

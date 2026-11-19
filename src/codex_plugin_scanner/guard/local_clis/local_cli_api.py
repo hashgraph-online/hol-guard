@@ -7,7 +7,7 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -49,7 +49,6 @@ from ..runtime.local_cli_commands import (
 from ..runtime.local_cli_help import (
     discover_local_cli_commands,
     help_invocation_for_command,
-    run_cli_help,
 )
 from ..runtime.local_cli_identity import (
     UnlistedCliIdentity,
@@ -1407,19 +1406,12 @@ def _discover_from_command(
     *,
     cancel: threading.Event | None = None,
 ) -> tuple[tuple[LocalCliCommand, ...], str, str | None]:
-    """Discover ``identity``'s commands through ``guard_home``'s own resident.
+    """Discover ``identity``'s commands with the native ``local-cli-discover`` command.
 
     ``guard_home`` is the daemon's store home, not the operator's home
-    directory. A daemon started on an overridden home must read help text
-    through the resident that home runs; the default home's resident may not
-    exist, and provisioning one there would touch an install this daemon does
-    not serve.
-
-    Once ``cancel`` is set, no further --help process starts.
+    directory; it decides which paths Guard may probe. Setting ``cancel``
+    stops the native command and every --help run it started.
     """
-
-    def probe(argv: Sequence[str]) -> str:
-        return "" if cancel is not None and cancel.is_set() else run_cli_help(argv)
 
     source_path: str | None = None
     for candidate in local_cli_recognition_candidates(command, cwd=cwd, home_dir=home_dir, guard_home=guard_home):
@@ -1440,6 +1432,6 @@ def _discover_from_command(
         if tool_path is None:
             continue
         source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else tool_path
-        commands, help_status = discover_local_cli_commands(matched, argv, runner=probe, guard_home=guard_home)
+        commands, help_status = discover_local_cli_commands(matched, argv, cancel=cancel)
         return commands, help_status, source_path
     return default_local_cli_commands(identity.name), "failed", source_path
