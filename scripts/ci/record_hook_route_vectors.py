@@ -48,8 +48,8 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _canonical_harness_name,
     _is_copilot_permission_request,
 )
-from codex_plugin_scanner.guard.native_payload_facts import fallback_runtime_event_name
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
+from codex_plugin_scanner.guard.native_payload_facts import fallback_runtime_event_name
 from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/hook_route_vectors.json.gz")
