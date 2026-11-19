@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from ..native_daemon_route import _decide
-from ..native_payload_facts import fallback_tool_input
+from ..native_payload_facts import native_hook_facts
 from ..native_resident_decision import ResidentOperation
 from ..runtime.extension_allow_hint import (
     hint_authority_admitted,
@@ -77,10 +77,11 @@ _COMMAND_ONLY_INPUT_KEYS = frozenset(
 )
 
 
-def _command_only_payload(payload: Mapping[str, object]) -> bool:
+def _command_only_payload(payload: Mapping[str, object], guard_home: Path) -> bool:
     """True when the shell command is the only content the tool call carries."""
 
-    tool_input = fallback_tool_input(payload)
+    facts = native_hook_facts(payload, guard_home)
+    tool_input = facts.tool_input if facts is not None else None
     if tool_input is None:
         return False
     return all(isinstance(key, str) and key in _COMMAND_ONLY_INPUT_KEYS for key in tool_input)
@@ -199,7 +200,7 @@ def native_review_hint_ask(deadline: float | None) -> dict[str, object] | None:
     return {"budget_ms": budget_ms} if budget_ms > 0 else None
 
 
-def _live_reviewed_command(approval: Mapping[str, object]) -> tuple[str, Path | None] | None:
+def _live_reviewed_command(approval: Mapping[str, object], guard_home: Path) -> tuple[str, Path | None] | None:
     """The command of a pending approval and where to review it again, for both read-time hints.
 
     A stored envelope redacts a launch directory outside the home directory to
@@ -228,8 +229,9 @@ def _live_reviewed_command(approval: Mapping[str, object]) -> tuple[str, Path | 
     workspace_text = approval.get("workspace")
     workspace_path = Path(workspace_text) if isinstance(workspace_text, str) and workspace_text.strip() else None
     raw_payload = envelope.get("raw_payload_redacted") if isinstance(envelope, Mapping) else None
-    if isinstance(raw_payload, Mapping) and fallback_tool_input(raw_payload) is not None:
-        if not _command_only_payload(raw_payload):
+    if isinstance(raw_payload, Mapping) and any(key in raw_payload for key in ("tool_input", "toolInput")):
+        facts = native_hook_facts(raw_payload, guard_home)
+        if facts is None or facts.tool_input is None or not _command_only_payload(raw_payload, guard_home):
             return None
         cwd = _stored_launch_cwd(raw_payload, workspace_path)
         if cwd is None and _names_launch_directory(raw_payload):
@@ -254,7 +256,7 @@ def live_approval_extension_hint(
 
     if not hint_authority_admitted(snapshot):
         return None
-    live = _live_reviewed_command(approval)
+    live = _live_reviewed_command(approval, guard_home)
     if live is None:
         return None
     command, cwd = live

@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..local_cli_hook import launch_env
-from ..native_payload_facts import fallback_command
+from ..native_payload_facts import native_hook_facts
 from .hook_native_exact_action import launch_cwd, launch_path
 
 CONNECTOR_SETUP_REQUIRED = "connector_setup_required"
@@ -40,12 +40,14 @@ def native_review_connector_lookup(
     native_result: Mapping[str, object],
     workspace: Path | None,
     home_dir: Path | None,
+    guard_home: Path,
 ) -> dict[str, object] | None:
     """The launch the queue call looks the review's connector up from, or ``None`` for an ordinary review."""
 
     if native_result.get("reason_code") not in NON_RECOGNITION_REASON_CODES:
         return None
-    command = fallback_command(payload)
+    facts = native_hook_facts(payload, guard_home)
+    command = facts.command if facts is not None else None
     cwd = launch_cwd(payload, workspace)
     if command is None or cwd is None:
         return None

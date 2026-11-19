@@ -42,6 +42,22 @@ def _payload(tmp_path: Path, **extra: object) -> dict[str, object]:
     return {"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path), **extra}
 
 
+@pytest.fixture(autouse=True)
+def _resident_payload_facts(monkeypatch: pytest.MonkeyPatch) -> None:
+    facts = SimpleNamespace(command="lanectl status", tool_input={"command": "lanectl status"})
+    monkeypatch.setattr(native_review_connector, "native_hook_facts", lambda *_args, **_kwargs: facts)
+    monkeypatch.setattr(
+        review,
+        "native_hook_facts",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            command="lanectl status",
+            launch_target="lanectl status",
+            tool_name="Bash",
+            tool_input={"command": "lanectl status"},
+        ),
+    )
+
+
 def _pause(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -183,6 +199,7 @@ def test_a_review_with_a_risk_signal_never_looks_up_a_connector(tmp_path: Path, 
             native_result={**_native_review(), "reason_code": reason_code},
             workspace=tmp_path,
             home_dir=None,
+            guard_home=tmp_path / "guard",
         )
         is None
     )
@@ -197,6 +214,7 @@ def test_an_unrecognised_command_looks_up_its_connector(tmp_path: Path, reason_c
         native_result={**_native_review(), "reason_code": reason_code},
         workspace=tmp_path,
         home_dir=None,
+        guard_home=tmp_path / "guard",
     )
 
     assert lookup is not None
@@ -213,6 +231,7 @@ def test_the_lookup_uses_the_path_the_agent_runs_with(tmp_path: Path, monkeypatc
             native_result=_native_review(),
             workspace=tmp_path,
             home_dir=None,
+            guard_home=tmp_path / "guard",
         )
         assert lookup is not None
         env: Any = lookup["env"]
@@ -230,7 +249,11 @@ def test_a_launch_too_large_for_the_queue_call_queues_an_ordinary_review(
 
     assert (
         native_review_connector.native_review_connector_lookup(
-            payload=_payload(tmp_path), native_result=_native_review(), workspace=tmp_path, home_dir=None
+            payload=_payload(tmp_path),
+            native_result=_native_review(),
+            workspace=tmp_path,
+            home_dir=None,
+            guard_home=tmp_path / "guard",
         )
         is None
     )

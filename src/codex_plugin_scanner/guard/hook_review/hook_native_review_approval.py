@@ -15,12 +15,7 @@ from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSE
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
-from ..native_payload_facts import (
-    fallback_command,
-    fallback_launch_target,
-    fallback_tool_name,
-    native_hook_facts,
-)
+from ..native_payload_facts import native_hook_facts
 from .hook_fail_closed import (
     canonical_harness,
     render_accepted_allow,
@@ -74,8 +69,10 @@ def pause_native_pre_tool_for_approval(
 ) -> dict[str, object]:
     """Answer a native review from the edge's custom extension rule and review evidence."""
     facts = native_hook_facts(payload, guard_home, deadline=deadline)
-    launch_target = facts.launch_target if facts is not None else fallback_launch_target(payload)
-    tool_name = facts.tool_name if facts is not None else fallback_tool_name(payload)
+    if facts is None:
+        return _policy_binding_failed(harness, native_result, guard_home)
+    launch_target = facts.launch_target
+    tool_name = facts.tool_name
     # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
     custom = None if local_cli_rule is None else cast("dict[str, object]", local_cli_rule["harness_response"])
     if local_cli_rule is not None and local_cli_rule["blocked"] is True:
@@ -97,7 +94,7 @@ def pause_native_pre_tool_for_approval(
     command_block = native_exact_command_block_response(
         store,
         harness=harness,
-        command=facts.command if facts is not None else fallback_command(payload),
+        command=facts.command,
         native_result=native_result,
         workspace=workspace,
         edge_hint=exact_command_block,
@@ -176,7 +173,11 @@ def pause_native_pre_tool_for_approval(
     # and answers the agent with its setup text; the row keeps the native
     # reason as evidence.
     connector_lookup = native_review_connector_lookup(
-        payload=payload, native_result=native_result, workspace=workspace, home_dir=home_dir
+        payload=payload,
+        native_result=native_result,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
     )
     if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
