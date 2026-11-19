@@ -208,6 +208,9 @@ def _saved_package_approval(
             workspace_dir=install_dir,
             now=datetime.now(tz=timezone.utc).isoformat(),
             execution_context=execution_context,
+            # The hook route reviews the install whatever the evaluator rates
+            # it, so a saved Always allow is reused the way it is for a review.
+            current_action="review",
         )
     except Exception:
         _LOGGER.warning("Package approval key unavailable for a native package review", exc_info=True)

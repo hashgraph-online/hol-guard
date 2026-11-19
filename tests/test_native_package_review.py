@@ -274,6 +274,39 @@ def test_the_package_key_resolves_npm_through_the_agents_path(tmp_path: Path, mo
     assert [call["environment"] for call in built] == [{"PATH": "/opt/node/bin", "HOME": "/home/agent"}]
 
 
+def test_a_saved_package_allow_is_reused_for_an_install_the_evaluator_allows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`npm ci --ignore-scripts` is rated allow by the evaluator but still
+    reviewed by the hook route, so the saved allow is looked up as a review."""
+
+    from codex_plugin_scanner.guard import local_supply_chain, package_execution_context
+
+    asked: list[object] = []
+
+    def resolve(evaluation: object, **kwargs: object) -> object:
+        asked.append(kwargs.get("current_action"))
+        return SimpleNamespace(
+            approval_reuse_decision={"decision_id": 1}, evaluation=SimpleNamespace(policy_action="allow")
+        )
+
+    monkeypatch.setattr(package_execution_context, "build_package_execution_context", _plan(object()))
+    monkeypatch.setattr(
+        local_supply_chain, "package_current_action_and_hash", _plan(("allow", "guard-approval-context:v1:x"))
+    )
+    monkeypatch.setattr(local_supply_chain, "_resolve_stored_package_policy_override", resolve)
+    artifact = SimpleNamespace(metadata={"redacted_command": "npm ci --ignore-scripts"}, harness="omp", artifact_id="x")
+    evaluation = SimpleNamespace(review_settlement=("review", None), policy_action="allow")
+
+    key, reused = package_review._saved_package_approval(
+        object(), artifact=artifact, evaluation=evaluation, install_dir=tmp_path, environment={}
+    )
+
+    assert asked == ["review"]
+    assert reused is True
+    assert key == {"harness": "omp", "artifact_id": "x", "artifact_hash": "guard-approval-context:v1:x"}
+
+
 @pytest.mark.parametrize("stamp", [None, "PATH=/bin", {"path": 3, "home": ""}])
 def test_an_unusable_stamp_gives_the_key_no_environment(stamp: object) -> None:
     assert package_review._stamped_environment({"guard_execution_environment": stamp}) == {}
