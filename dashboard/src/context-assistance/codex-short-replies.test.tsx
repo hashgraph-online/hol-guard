@@ -52,7 +52,7 @@ try {
   await assert.rejects(readCodexShortReplies(), /does not understand/);
 
   // Until the config read answers, the page cannot say whether it is on, so it shows nothing.
-  assert.equal(renderToStaticMarkup(<CodexShortReplies gate={null} disabled={false} />), "");
+  assert.equal(renderToStaticMarkup(<CodexShortReplies gate={null} disabled={false} cigarOn />), "");
 } finally {
   globalThis.fetch = originalFetch;
   if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);

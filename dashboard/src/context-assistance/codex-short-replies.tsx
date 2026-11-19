@@ -8,7 +8,8 @@ import { ContextAssistanceApiError } from "./api";
 import { readCodexShortReplies, setCodexShortReplies, type CodexShortRepliesState } from "./codex-short-replies-api";
 import type { ContextProof } from "./workspaces-api";
 
-type Props = { gate: GuardApprovalGatePublicConfig | null; disabled: boolean };
+/** cigarOn: CIGAR's saved switch. Turning CIGAR on can write the instruction, so the page reads it again. */
+type Props = { gate: GuardApprovalGatePublicConfig | null; disabled: boolean; cigarOn: boolean };
 type Proof = { enabled: boolean; error: string | null };
 
 function message(cause: unknown): string {
@@ -21,11 +22,16 @@ function caption(state: CodexShortRepliesState["state"]): string {
   return "Off. Turn it on to ask Codex to keep its own words short. In Guard's tests this cut the Codex bill by 5–14% with no task lost.";
 }
 
+function buttonLabel(saving: boolean, on: boolean): string {
+  if (saving) return "Saving…";
+  return on ? "Turn off" : "Turn on";
+}
+
 /**
  * Turning CIGAR on also asks Codex for short replies, unless the user turned that off here.
  * Guard writes one line to the Codex config and never changes instructions the user wrote.
  */
-export function CodexShortReplies({ gate, disabled }: Props) {
+export function CodexShortReplies({ gate, disabled, cigarOn }: Props) {
   const [state, setState] = useState<CodexShortRepliesState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +44,7 @@ export function CodexShortReplies({ gate, disabled }: Props) {
     // A read that fails shows nothing: Guard cannot tell what the config holds.
     readCodexShortReplies(controller.signal).then(setState, () => undefined);
     return () => controller.abort();
-  }, [demo]);
+  }, [demo, cigarOn]);
 
   async function save(enabled: boolean, credentials?: ContextProof) {
     setSaving(true);
@@ -68,7 +74,7 @@ export function CodexShortReplies({ gate, disabled }: Props) {
         {state.state === "yours" ? null : (
           <ActionButton variant="outline" disabled={disabled || saving}
             onClick={() => { if (gate?.enabled) setProof({ enabled: next, error: null }); else void save(next); }}>
-            {saving ? "Saving…" : on ? "Turn off" : "Turn on"}
+            {buttonLabel(saving, on)}
           </ActionButton>
         )}
       </div>

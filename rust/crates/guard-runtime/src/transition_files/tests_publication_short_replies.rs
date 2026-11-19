@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 use super::super::dispatch;
 use super::super::publication_lean::config_path;
-use super::{recorded, Record, TEXT};
+use super::{first_ask_due, recorded, Record, TEXT};
 
 const KEY: &str = "developer_instructions";
 const USER_CONFIG: &str = "# my Codex settings
@@ -95,7 +95,8 @@ fn turning_cigar_on_adds_short_replies_and_keeps_the_users_file() {
 #[test]
 fn instructions_the_user_wrote_are_left_alone() {
     let homes = Homes::new();
-    let mine = format!("{USER_CONFIG}\n{KEY} = \"Explain every step.\"\n");
+    // A root key must come before the first table, or TOML reads it as part of that table.
+    let mine = format!("{KEY} = \"Explain every step.\"\n{USER_CONFIG}");
     let path = homes.write_config(&mine);
 
     assert_eq!(homes.ask("ensure")["state"], "yours");
@@ -148,4 +149,34 @@ fn text_an_earlier_guard_wrote_is_updated() {
 
     assert_eq!(homes.ask("ensure")["state"], "on");
     assert_eq!(instructions(&path).as_deref(), Some(TEXT));
+}
+
+#[test]
+fn deleting_guards_line_by_hand_counts_as_turning_it_off() {
+    let homes = Homes::new();
+    let path = homes.write_config(USER_CONFIG);
+    homes.ask("ensure");
+    fs::write(&path, USER_CONFIG).unwrap();
+
+    assert_eq!(homes.ask("ensure")["state"], "off");
+    assert_eq!(fs::read_to_string(&path).unwrap(), USER_CONFIG);
+    assert_eq!(recorded(&homes.guard(), &path), Record::Off);
+}
+
+#[test]
+fn only_a_guard_home_in_the_home_folder_asks_and_only_once() {
+    let homes = Homes::new();
+    let path = homes.write_config(USER_CONFIG);
+    fs::create_dir_all(homes.guard()).unwrap();
+    // The Guard home sits in `root`, so `root` plays the user's home folder.
+    assert!(first_ask_due(&homes.guard(), Some(&homes.root)));
+    assert!(!first_ask_due(&homes.guard(), Some(&homes.home())));
+    assert!(!first_ask_due(&homes.guard(), None));
+
+    homes.ask("ensure");
+    assert_eq!(
+        recorded(&homes.guard(), &path),
+        Record::Wrote(TEXT.to_owned())
+    );
+    assert!(!first_ask_due(&homes.guard(), Some(&homes.root)));
 }

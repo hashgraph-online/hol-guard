@@ -4909,7 +4909,7 @@ function ContextNotesPanel({ scope, disabled, gate, onChanged }) {
     )
   ] });
 }
-const object$9 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$7 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 async function saveCigarPreference(config, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Turning on CIGAR requires a local Guard installation.");
   const timeout = AbortSignal.timeout(12e3);
@@ -4926,11 +4926,11 @@ async function saveCigarPreference(config, proof, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$9(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
-    throw new ContextAssistanceApiError(code, response.status === 400 && object$9(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
+    const code = object$7(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
+    throw new ContextAssistanceApiError(code, response.status === 400 && object$7(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
   }
-  const saved = object$9(body) && object$9(body.settings) ? body.settings.context_assistance : null;
-  if (!object$9(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
+  const saved = object$7(body) && object$7(body.settings) ? body.settings.context_assistance : null;
+  if (!object$7(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
     throw new ContextAssistanceApiError("settings_payload_invalid", "Guard returned settings this page does not understand. Refresh status.");
   }
   return saved;
@@ -5053,13 +5053,13 @@ function SwarmContextPanel({ target, ready, loaded, scope, filesAllowed, allowFi
     ] })
   ] });
 }
-const object$8 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const object$6 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const text$1 = (value) => typeof value === "string";
 const list = (value, max, item) => {
   if (!Array.isArray(value) || value.length > max || !value.every(item)) invalid$4();
   return value;
 };
-const place = (row2) => object$8(row2) && text$1(row2.label) && text$1(row2.path);
+const place = (row2) => object$6(row2) && text$1(row2.label) && text$1(row2.path);
 const size$1 = (value) => Number.isSafeInteger(value) && value >= 0;
 function invalid$4() {
   throw new ContextAssistanceApiError("folder_payload_invalid", "Guard returned an unexpected folder list. Try again.");
@@ -5083,10 +5083,10 @@ async function browse(input, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$8(body) && text$1(body.code) && /^[a-z0-9_]{1,80}$/.test(body.code) ? body.code : "folder_unavailable";
+    const code = object$6(body) && text$1(body.code) && /^[a-z0-9_]{1,80}$/.test(body.code) ? body.code : "folder_unavailable";
     throw new ContextAssistanceApiError(code, MESSAGES[code] ?? (response.status === 404 ? "This Guard version cannot browse folders yet. Update Guard, then try again." : "Guard could not open that folder."));
   }
-  if (!object$8(body) || body.schema !== "guard-context-folders.v1") invalid$4();
+  if (!object$6(body) || body.schema !== "guard-context-folders.v1") invalid$4();
   return body;
 }
 async function listFolders(path, hidden, signal) {
@@ -5102,7 +5102,7 @@ async function listFolders(path, hidden, signal) {
     truncated: body.truncated,
     places: list(body.places, 32, place),
     roots: list(body.roots, 26, place),
-    entries: list(body.entries, 400, (row2) => object$8(row2) && text$1(row2.name) && text$1(row2.path) && typeof row2.project === "boolean")
+    entries: list(body.entries, 400, (row2) => object$6(row2) && text$1(row2.name) && text$1(row2.path) && typeof row2.project === "boolean")
   };
 }
 async function listProjectFiles(workspace, path, signal) {
@@ -5113,9 +5113,9 @@ async function listProjectFiles(workspace, path, signal) {
     path: body.path,
     maxFileBytes: body.max_file_bytes,
     truncated: body.truncated,
-    entries: list(body.entries, 400, (row2) => object$8(row2) && text$1(row2.name) && text$1(row2.relative)),
-    files: list(body.files, 400, (row2) => object$8(row2) && text$1(row2.name) && text$1(row2.relative) && size$1(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
-    suggested: list(body.suggested, 8, (row2) => object$8(row2) && text$1(row2.relative) && size$1(row2.size))
+    entries: list(body.entries, 400, (row2) => object$6(row2) && text$1(row2.name) && text$1(row2.relative)),
+    files: list(body.files, 400, (row2) => object$6(row2) && text$1(row2.name) && text$1(row2.relative) && size$1(row2.size) && typeof row2.available === "boolean" && (row2.reason === null || ["too_large", "not_text", "empty"].includes(String(row2.reason)))),
+    suggested: list(body.suggested, 8, (row2) => object$6(row2) && text$1(row2.relative) && size$1(row2.size))
   };
 }
 function folderCrumbs(path, separator) {
@@ -6621,30 +6621,30 @@ function CigarSavingsPanel({ savings }) {
 }
 const PATH$2 = "/v1/context-assistance/usage";
 const USAGE_FIELDS = ["uncached_input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "requests", "compactions"];
-const object$7 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const count$2 = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
 const text = (v) => v === null || typeof v === "string";
 function totals(v) {
-  return object$7(v) && USAGE_FIELDS.every((field) => count$2(v[field]));
+  return object$5(v) && USAGE_FIELDS.every((field) => count$2(v[field]));
 }
 function tool(v) {
-  return object$7(v) && typeof v.harness === "string" && count$2(v.sessions) && totals(v.totals) && Array.isArray(v.recent) && v.recent.every((s) => object$7(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
+  return object$5(v) && typeof v.harness === "string" && count$2(v.sessions) && totals(v.totals) && Array.isArray(v.recent) && v.recent.every((s) => object$5(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
 }
 const SAVINGS_FIELDS = ["sessions", "prompts", "context_tokens", "files_shown", "files_checked", "files_opened_anyway", "measured_sessions", "used_tokens", "estimated_saved_tokens"];
 function savingsTotals(v) {
-  return object$7(v) && SAVINGS_FIELDS.every((field) => count$2(v[field]));
+  return object$5(v) && SAVINGS_FIELDS.every((field) => count$2(v[field]));
 }
 function savingsApp(v) {
-  return savingsTotals(v) && object$7(v) && typeof v.app === "string" && count$2(v.rate_percent) && v.rate_percent < 100;
+  return savingsTotals(v) && object$5(v) && typeof v.app === "string" && count$2(v.rate_percent) && v.rate_percent < 100;
 }
 function parseSavings(v) {
-  if (!object$7(v) || v.schema !== "guard-cigar-savings.v1" || v.estimate !== true || !count$2(v.window_days) || !savingsTotals(v.total) || !Array.isArray(v.apps) || !v.apps.every(savingsApp)) {
+  if (!object$5(v) || v.schema !== "guard-cigar-savings.v1" || v.estimate !== true || !count$2(v.window_days) || !savingsTotals(v.total) || !Array.isArray(v.apps) || !v.apps.every(savingsApp)) {
     return null;
   }
   return { window_days: v.window_days, total: v.total, apps: v.apps };
 }
 function parseUsageMeter(body) {
-  if (!object$7(body) || body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable" || !count$2(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool) || !Array.isArray(body.week) || !body.week.every(tool) || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string") || body.refreshing !== void 0 && typeof body.refreshing !== "boolean") {
+  if (!object$5(body) || body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable" || !count$2(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool) || !Array.isArray(body.week) || !body.week.every(tool) || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string") || body.refreshing !== void 0 && typeof body.refreshing !== "boolean") {
     throw new ContextAssistanceApiError("usage_payload_invalid", "Guard returned usage numbers this page does not understand.");
   }
   return { ...body, savings: parseSavings(body.savings) };
@@ -7052,7 +7052,7 @@ function cigarPythonBlock(catalog, build) {
   if (build.qualification === "local_candidate") return "This Python build is a local development candidate.";
   return null;
 }
-const object$6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$4 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id$3 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const word = (v) => typeof v === "string" && /^[a-z0-9_]{1,128}$/.test(v);
 const count$1 = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -7062,11 +7062,11 @@ function invalid$3() {
 }
 function recovery(v) {
   if (v === void 0 || v === null) return null;
-  if (!object$6(v) || typeof v.id !== "string" || !/^[a-f0-9]{32}$/.test(v.id) || !isCigarGeneration(v.expected_generation) || !count$1(v.started_at_ms) || !count$1(v.deadline_at_ms) || v.deadline_at_ms < v.started_at_ms) invalid$3();
+  if (!object$4(v) || typeof v.id !== "string" || !/^[a-f0-9]{32}$/.test(v.id) || !isCigarGeneration(v.expected_generation) || !count$1(v.started_at_ms) || !count$1(v.deadline_at_ms) || v.deadline_at_ms < v.started_at_ms) invalid$3();
   return { id: v.id, expected_generation: v.expected_generation, started_at_ms: v.started_at_ms, deadline_at_ms: v.deadline_at_ms };
 }
 function parseCigarVersionJob(value) {
-  if (!object$6(value) || !id$3(value.job_id) || !word(value.phase) || !word(value.code) || !count$1(value.created_at_ms) || !count$1(value.updated_at_ms) || value.updated_at_ms < value.created_at_ms || !count$1(value.deadline_at_ms) || value.deadline_at_ms < value.created_at_ms || !(value.worker_live === null || typeof value.worker_live === "boolean") || typeof value.cancel_requested !== "boolean" || typeof value.recovery_available !== "boolean" || value.worker_live === true && value.recovery_available) invalid$3();
+  if (!object$4(value) || !id$3(value.job_id) || !word(value.phase) || !word(value.code) || !count$1(value.created_at_ms) || !count$1(value.updated_at_ms) || value.updated_at_ms < value.created_at_ms || !count$1(value.deadline_at_ms) || value.deadline_at_ms < value.created_at_ms || !(value.worker_live === null || typeof value.worker_live === "boolean") || typeof value.cancel_requested !== "boolean" || typeof value.recovery_available !== "boolean" || value.worker_live === true && value.recovery_available) invalid$3();
   const base = {
     schema: String(value.schema),
     job_id: value.job_id,
@@ -7132,7 +7132,7 @@ function parseCigarVersionJob(value) {
   };
 }
 function parseCigarVersionJobs(value) {
-  if (!object$6(value) || !Array.isArray(value.jobs) || value.jobs.length > 32) invalid$3();
+  if (!object$4(value) || !Array.isArray(value.jobs) || value.jobs.length > 32) invalid$3();
   const jobs = value.jobs.map(parseCigarVersionJob);
   if (new Set(jobs.map((job) => job.job_id)).size !== jobs.length) invalid$3();
   return jobs;
@@ -7277,7 +7277,7 @@ function cigarSetupReason(cause, fallback) {
 function guard(deps) {
   if (deps.stopped()) throw new CigarSetupStopped();
 }
-function failure$2(stage, cause) {
+function failure$1(stage, cause) {
   if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
   if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
   throw new CigarSetupError(stage, cigarSetupReason(cause, "Guard did not confirm this step."));
@@ -7302,7 +7302,7 @@ async function follow(deps, stage, input, proof, done) {
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
-    if (!transient(cause)) failure$2(stage, cause);
+    if (!transient(cause)) failure$1(stage, cause);
     uncertain = true;
   }
   const started = deps.now();
@@ -7316,7 +7316,7 @@ async function follow(deps, stage, input, proof, done) {
       uncertain = false;
     } catch (cause) {
       const retry = transient(cause) || uncertain && missingJob(cause);
-      if (!retry) failure$2(stage, cause);
+      if (!retry) failure$1(stage, cause);
       if (deps.now() - heard > QUIET_LIMIT_MS) {
         throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
       }
@@ -7410,7 +7410,7 @@ async function runCigarSetup(plan, initial2, deps, proof) {
     try {
       saved = await deps.saveSettings(turnOnPreferences(previous, runtime), proof);
     } catch (cause) {
-      failure$2("start", cause);
+      failure$1("start", cause);
     }
     deps.onSaved(saved, previous);
   }
@@ -7419,7 +7419,7 @@ async function runCigarSetup(plan, initial2, deps, proof) {
   try {
     state = await deps.activate();
   } catch (cause) {
-    if (!transient(cause)) failure$2("start", cause);
+    if (!transient(cause)) failure$1("start", cause);
     fresh = false;
     unconfirmed = true;
   }
@@ -7442,7 +7442,7 @@ async function runCigarSetup(plan, initial2, deps, proof) {
       state = await deps.status();
       fresh = true;
     } catch (cause) {
-      if (!transient(cause)) failure$2("start", cause);
+      if (!transient(cause)) failure$1("start", cause);
       fresh = false;
       continue;
     }
@@ -8386,7 +8386,7 @@ function CigarVersionStatusBand({ status, data, loading, actions }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: actions })
   ] }) });
 }
-const object$5 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const object$3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const readRoutes = {
   releases: "/v1/context-assistance/versions",
   catalog: "/v1/context-assistance/catalog",
@@ -8395,7 +8395,7 @@ const readRoutes = {
 };
 const noProof = /* @__PURE__ */ new Set(["releases", "catalog", "interpreters", "jobs", "job", "cancel", "preferences"]);
 function parseCigarVersionsReply(value) {
-  if (!object$5(value) || value.schema !== "guard-cigar-versions-result.v1" || !object$5(value.result)) {
+  if (!object$3(value) || value.schema !== "guard-cigar-versions-result.v1" || !object$3(value.result)) {
     throw new ContextAssistanceApiError("versions_payload_invalid", "Guard returned incompatible CIGAR update data. Refresh status.");
   }
   return { state: parseContextAssistanceStatus(value.state), result: value.result };
@@ -8433,12 +8433,12 @@ async function requestCigarVersions(input, proof, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$5(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : object$5(body) && typeof body.error === "string" && /^approval_gate_[a-z0-9_]{1,140}$/.test(body.error) ? body.error : "context_assistance_unavailable";
+    const code = object$3(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : object$3(body) && typeof body.error === "string" && /^approval_gate_[a-z0-9_]{1,140}$/.test(body.error) ? body.error : "context_assistance_unavailable";
     throw new ContextAssistanceApiError(code, errorMessage(code, response.status));
   }
   return parseCigarVersionsReply(body);
 }
-const object$4 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id$2 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const digest = (v) => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
 const count = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -8452,13 +8452,13 @@ function pythonVersion(v) {
   return Array.isArray(v) && v.length === 3 && v.every((n) => count(n) && n <= 65535);
 }
 function wheelBytes(v) {
-  if (!object$4(v) || !count(v.bytes) || v.bytes === 0 || !digest(v.sha256)) invalid$2();
+  if (!object$2(v) || !count(v.bytes) || v.bytes === 0 || !digest(v.sha256)) invalid$2();
   return v.bytes;
 }
 function parsePlatform(v) {
-  if (!object$4(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$2();
+  if (!object$2(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$2();
   const hasWheel = v.wheel !== null;
-  const locked = v.package_tree_sha256 !== null && v.dependencies.some((w) => object$4(w) && w.distribution === "protobuf");
+  const locked = v.package_tree_sha256 !== null && v.dependencies.some((w) => object$2(w) && w.distribution === "protobuf");
   const bytes = (hasWheel ? wheelBytes(v.wheel) : 0) + v.dependencies.reduce((n, w) => n + wheelBytes(w), 0);
   if (!count(bytes)) invalid$2();
   return {
@@ -8474,7 +8474,7 @@ function parsePlatform(v) {
   };
 }
 function parseBuild(v) {
-  if (!object$4(v) || !isCigarBuildIdentity(v.identity) || !id$2(v.profile_id) || !["stable", "preview", "local_candidate"].includes(String(v.channel)) || typeof v.withdrawn !== "boolean" || !Array.isArray(v.platforms) || v.platforms.length === 0 || v.platforms.length > 7) invalid$2();
+  if (!object$2(v) || !isCigarBuildIdentity(v.identity) || !id$2(v.profile_id) || !["stable", "preview", "local_candidate"].includes(String(v.channel)) || typeof v.withdrawn !== "boolean" || !Array.isArray(v.platforms) || v.platforms.length === 0 || v.platforms.length > 7) invalid$2();
   const platforms = v.platforms.map(parsePlatform);
   if (new Set(platforms.map((p) => p.platform)).size !== platforms.length) invalid$2();
   return { identity: {
@@ -8486,7 +8486,7 @@ function parseBuild(v) {
   }, profile_id: v.profile_id, channel: v.channel, withdrawn: v.withdrawn, platforms };
 }
 function parseInterpreter(v) {
-  if (!object$4(v) || !id$2(v.build_id) || !pythonVersion(v.python_version) || !platform(v.platform) || !qualification(v.qualification) || typeof v.withdrawn !== "boolean" || !count(v.archive_bytes) || v.archive_bytes === 0) invalid$2();
+  if (!object$2(v) || !id$2(v.build_id) || !pythonVersion(v.python_version) || !platform(v.platform) || !qualification(v.qualification) || typeof v.withdrawn !== "boolean" || !count(v.archive_bytes) || v.archive_bytes === 0) invalid$2();
   return {
     build_id: v.build_id,
     python_version: [...v.python_version],
@@ -8497,7 +8497,7 @@ function parseInterpreter(v) {
   };
 }
 function parseCigarCatalogMetadata(v) {
-  if (!object$4(v) || !["bundled", "cached"].includes(String(v.source)) || typeof v.fresh_for_preparation !== "boolean" || !diagnostic(v.diagnostic) || !diagnostic(v.trust_diagnostic) || !diagnostic(v.feed_diagnostic) || typeof v.trust_configured !== "boolean" || typeof v.remote_feed_configured !== "boolean" || v.activation_granted !== false || v.fresh_for_preparation && v.diagnostic !== null) invalid$2();
+  if (!object$2(v) || !["bundled", "cached"].includes(String(v.source)) || typeof v.fresh_for_preparation !== "boolean" || !diagnostic(v.diagnostic) || !diagnostic(v.trust_diagnostic) || !diagnostic(v.feed_diagnostic) || typeof v.trust_configured !== "boolean" || typeof v.remote_feed_configured !== "boolean" || v.activation_granted !== false || v.fresh_for_preparation && v.diagnostic !== null) invalid$2();
   return {
     source: v.source,
     fresh_for_preparation: v.fresh_for_preparation,
@@ -8509,20 +8509,20 @@ function parseCigarCatalogMetadata(v) {
   };
 }
 function parseCigarCatalog(v) {
-  if (!object$4(v) || v.schema !== "guard-cigar-releases.v1" || !(v.host_platform === void 0 || v.host_platform === null || platform(v.host_platform)) || !Array.isArray(v.builds) || v.builds.length > 128 || !Array.isArray(v.interpreter_builds) || v.interpreter_builds.length > 128) invalid$2();
+  if (!object$2(v) || v.schema !== "guard-cigar-releases.v1" || !(v.host_platform === void 0 || v.host_platform === null || platform(v.host_platform)) || !Array.isArray(v.builds) || v.builds.length > 128 || !Array.isArray(v.interpreter_builds) || v.interpreter_builds.length > 128) invalid$2();
   const builds = v.builds.map(parseBuild), interpreters = v.interpreter_builds.map(parseInterpreter);
   if (new Set(builds.map((b) => b.identity.build_id)).size !== builds.length || new Set(interpreters.map((b) => b.build_id)).size !== interpreters.length) invalid$2();
   return { host_platform: v.host_platform ?? null, builds, interpreter_builds: interpreters, catalog: parseCigarCatalogMetadata(v.catalog) };
 }
-const object$3 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object$1 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id$1 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 function invalid$1() {
   throw new ContextAssistanceApiError("versions_interpreters_invalid", "Guard returned incompatible Python registration data. Refresh updates.");
 }
 function parseCigarInterpreters(value) {
-  if (!object$3(value) || !Array.isArray(value.interpreters) || value.interpreters.length > 16) invalid$1();
+  if (!object$1(value) || !Array.isArray(value.interpreters) || value.interpreters.length > 16) invalid$1();
   const values = value.interpreters.map((v) => {
-    if (!object$3(v) || !id$1(v.interpreter_id) || !Array.isArray(v.python_version) || v.python_version.length !== 3 || !v.python_version.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 65535) || !id$1(v.platform) || !id$1(v.implementation) || !id$1(v.abi) || typeof v.managed !== "boolean" || !(v.build_id === null || id$1(v.build_id)) || v.managed !== (v.build_id !== null)) invalid$1();
+    if (!object$1(v) || !id$1(v.interpreter_id) || !Array.isArray(v.python_version) || v.python_version.length !== 3 || !v.python_version.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 65535) || !id$1(v.platform) || !id$1(v.implementation) || !id$1(v.abi) || typeof v.managed !== "boolean" || !(v.build_id === null || id$1(v.build_id)) || v.managed !== (v.build_id !== null)) invalid$1();
     return {
       interpreter_id: v.interpreter_id,
       python_version: [...v.python_version],
@@ -8536,14 +8536,14 @@ function parseCigarInterpreters(value) {
   if (new Set(values.map((v) => v.interpreter_id)).size !== values.length) invalid$1();
   return values;
 }
-const object$2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const mode = (v) => typeof v === "string" && ["manual", "notify", "prepare"].includes(v);
 function invalid() {
   throw new ContextAssistanceApiError("versions_preferences_invalid", "Guard returned incompatible CIGAR update preferences. Refresh preferences.");
 }
 function preferences(v) {
-  if (!object$2(v) || !mode(v.mode) || typeof v.allow_preview !== "boolean" || typeof v.retain_last_good !== "boolean" || !(v.pinned_build === void 0 || v.pinned_build === null || id(v.pinned_build))) invalid();
+  if (!object(v) || !mode(v.mode) || typeof v.allow_preview !== "boolean" || typeof v.retain_last_good !== "boolean" || !(v.pinned_build === void 0 || v.pinned_build === null || id(v.pinned_build))) invalid();
   return {
     mode: v.mode,
     allow_preview: v.allow_preview,
@@ -8552,7 +8552,7 @@ function preferences(v) {
   };
 }
 function parseCigarUpdateSettings(v) {
-  if (!object$2(v) || v.schema !== "guard-cigar-update-preferences.v1" || typeof v.revision !== "string" || !/^sha256:[a-f0-9]{64}$/.test(v.revision) || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !Array.isArray(v.locked_settings) || v.locked_settings.length > 64 || !v.locked_settings.every((k) => typeof k === "string" && k.length <= 256 && /^context_assistance_updates(?:\.[a-z_]+)?$/.test(k)) || !object$2(v.capabilities) || !Array.isArray(v.capabilities.modes) || v.capabilities.modes.length > 3 || !v.capabilities.modes.every(mode) || new Set(v.capabilities.modes).size !== v.capabilities.modes.length || typeof v.capabilities.automatic_preparation !== "boolean" || typeof v.capabilities.automatic_selection !== "boolean" || typeof v.capabilities.retention_reduction !== "boolean") invalid();
+  if (!object(v) || v.schema !== "guard-cigar-update-preferences.v1" || typeof v.revision !== "string" || !/^sha256:[a-f0-9]{64}$/.test(v.revision) || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !Array.isArray(v.locked_settings) || v.locked_settings.length > 64 || !v.locked_settings.every((k) => typeof k === "string" && k.length <= 256 && /^context_assistance_updates(?:\.[a-z_]+)?$/.test(k)) || !object(v.capabilities) || !Array.isArray(v.capabilities.modes) || v.capabilities.modes.length > 3 || !v.capabilities.modes.every(mode) || new Set(v.capabilities.modes).size !== v.capabilities.modes.length || typeof v.capabilities.automatic_preparation !== "boolean" || typeof v.capabilities.automatic_selection !== "boolean" || typeof v.capabilities.retention_reduction !== "boolean") invalid();
   return {
     requested: preferences(v.requested),
     effective: preferences(v.effective),
@@ -8839,20 +8839,13 @@ function CigarVersionsPanel(props) {
     )
   ] });
 }
-const PATH$1 = "/v1/context-assistance/codex-lean";
-const object$1 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-function parsed$1(body) {
-  const state = object$1(body) ? body.state : null;
-  const limit = object$1(body) ? body.limit : null;
-  if (state !== "on" && state !== "off" && state !== "yours" || limit !== null && typeof limit !== "number") {
-    throw new ContextAssistanceApiError("codex_lean_payload_invalid", "Guard returned a Codex setting this page does not understand.");
-  }
-  return { state, limit };
-}
-function failure$1(status, body, reading) {
-  let code = "codex_lean_unavailable";
-  if (object$1(body) && typeof body.code === "string") code = body.code;
-  else if (object$1(body) && typeof body.error === "string") code = body.error;
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const READ_TIMEOUT_MS = 12e3;
+const WRITE_TIMEOUT_MS = 6e4;
+function failure(fallback, status, body, reading) {
+  let code = fallback;
+  if (isObject(body) && typeof body.code === "string") code = body.code;
+  else if (isObject(body) && typeof body.error === "string") code = body.error;
   if (status === 403) return new ContextAssistanceApiError(code, "Guard needs your approval before this change.");
   if (code === "codex_config_unreadable") return new ContextAssistanceApiError(code, "Guard could not read your Codex config, so it left it as it is. Fix the file, then try again.");
   if (code === "codex_hooks_need_recovery") return new ContextAssistanceApiError(code, "Guard's Codex setup needs a repair first. Open Apps, repair Codex, then try again.");
@@ -8860,22 +8853,35 @@ function failure$1(status, body, reading) {
   if (reading) return new ContextAssistanceApiError(code, "Guard could not check your Codex config. Try again in a moment.");
   return new ContextAssistanceApiError(code, "Guard could not change your Codex config. Nothing was changed.");
 }
-async function call$1(init, signal) {
-  const timeout = AbortSignal.timeout(12e3);
-  const response = await fetchWithGuardAuth(PATH$1, { ...init, cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+async function callCodexConfig(path, fallback, parse, init, signal) {
+  const reading = init.method === "GET";
+  const timeout = AbortSignal.timeout(reading ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS);
+  const response = await fetchWithGuardAuth(path, { ...init, cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw failure$1(response.status, body, init.method === "GET");
-  return parsed$1(body);
+  if (!response.ok) throw failure(fallback, response.status, body, reading);
+  return parse(body);
 }
-function readCodexLean(signal) {
-  return call$1({ method: "GET" }, signal);
-}
-function removeCodexLean(proof, signal) {
-  return call$1({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-    enabled: false,
+function codexConfigChange(fields, proof) {
+  return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    ...fields,
     ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
     ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
-  }) }, signal);
+  }) };
+}
+const PATH$1 = "/v1/context-assistance/codex-lean";
+function parsed$1(body) {
+  const state = isObject(body) ? body.state : null;
+  const limit = isObject(body) ? body.limit : null;
+  if (state !== "on" && state !== "off" && state !== "yours" || limit !== null && typeof limit !== "number") {
+    throw new ContextAssistanceApiError("codex_lean_payload_invalid", "Guard returned a Codex setting this page does not understand.");
+  }
+  return { state, limit };
+}
+function readCodexLean(signal) {
+  return callCodexConfig(PATH$1, "codex_lean_unavailable", parsed$1, { method: "GET" }, signal);
+}
+function removeCodexLean(proof, signal) {
+  return callCodexConfig(PATH$1, "codex_lean_unavailable", parsed$1, codexConfigChange({ enabled: false }, proof), signal);
 }
 function message$1(cause) {
   return cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not reach your Codex config. Refresh and try again.";
@@ -8957,41 +8963,18 @@ function CodexLeanSessions({ gate, disabled }) {
 }
 const PATH = "/v1/context-assistance/codex-short-replies";
 const STATES = /* @__PURE__ */ new Set(["on", "off", "not_set", "yours"]);
-const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function parsed(body) {
-  const state = object(body) ? body.state : null;
+  const state = isObject(body) ? body.state : null;
   if (typeof state !== "string" || !STATES.has(state)) {
     throw new ContextAssistanceApiError("codex_short_replies_payload_invalid", "Guard returned a Codex setting this page does not understand.");
   }
   return { state };
 }
-function failure(status, body, reading) {
-  let code = "codex_short_replies_unavailable";
-  if (object(body) && typeof body.code === "string") code = body.code;
-  else if (object(body) && typeof body.error === "string") code = body.error;
-  if (status === 403) return new ContextAssistanceApiError(code, "Guard needs your approval before this change.");
-  if (code === "codex_config_unreadable") return new ContextAssistanceApiError(code, "Guard could not read your Codex config, so it left it as it is. Fix the file, then try again.");
-  if (code === "codex_hooks_need_recovery") return new ContextAssistanceApiError(code, "Guard's Codex setup needs a repair first. Open Apps, repair Codex, then try again.");
-  if (code === "codex_config_busy") return new ContextAssistanceApiError(code, "Another change to your Codex config is in progress. Try again in a moment.");
-  if (reading) return new ContextAssistanceApiError(code, "Guard could not check your Codex config. Try again in a moment.");
-  return new ContextAssistanceApiError(code, "Guard could not change your Codex config. Nothing was changed.");
-}
-async function call(init, signal) {
-  const timeout = AbortSignal.timeout(12e3);
-  const response = await fetchWithGuardAuth(PATH, { ...init, cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw failure(response.status, body, init.method === "GET");
-  return parsed(body);
-}
 function readCodexShortReplies(signal) {
-  return call({ method: "GET" }, signal);
+  return callCodexConfig(PATH, "codex_short_replies_unavailable", parsed, { method: "GET" }, signal);
 }
 function setCodexShortReplies(enabled, proof, signal) {
-  return call({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-    enabled,
-    ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
-    ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
-  }) }, signal);
+  return callCodexConfig(PATH, "codex_short_replies_unavailable", parsed, codexConfigChange({ enabled }, proof), signal);
 }
 function message(cause) {
   return cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not reach your Codex config. Refresh and try again.";
@@ -9001,7 +8984,11 @@ function caption$1(state) {
   if (state === "yours") return "Your Codex config has instructions you wrote, so Guard left them as they are.";
   return "Off. Turn it on to ask Codex to keep its own words short. In Guard's tests this cut the Codex bill by 5–14% with no task lost.";
 }
-function CodexShortReplies({ gate, disabled }) {
+function buttonLabel(saving, on) {
+  if (saving) return "Saving…";
+  return on ? "Turn off" : "Turn on";
+}
+function CodexShortReplies({ gate, disabled, cigarOn }) {
   const [state, setState] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
@@ -9012,7 +8999,7 @@ function CodexShortReplies({ gate, disabled }) {
     const controller = new AbortController();
     readCodexShortReplies(controller.signal).then(setState, () => void 0);
     return () => controller.abort();
-  }, [demo]);
+  }, [demo, cigarOn]);
   async function save(enabled, credentials) {
     setSaving(true);
     setError(null);
@@ -9046,7 +9033,7 @@ function CodexShortReplies({ gate, disabled }) {
               if (gate?.enabled) setProof({ enabled: next, error: null });
               else void save(next);
             },
-            children: saving ? "Saving…" : on ? "Turn off" : "Turn on"
+            children: buttonLabel(saving, on)
           }
         )
       ] }),
@@ -9498,7 +9485,7 @@ function ContextAssistanceSettings(props) {
       error: workspace ? null : error,
       headerControls: workspace,
       lean: workspace ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(CodexShortReplies, { gate: props.gate ?? null, disabled: props.disabled }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CodexShortReplies, { gate: props.gate ?? null, disabled: props.disabled, cigarOn: props.savedValue?.enabled === true }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(CodexLeanSessions, { gate: props.gate ?? null, disabled: props.disabled })
       ] }) : void 0,
       onChange: props.onChange,

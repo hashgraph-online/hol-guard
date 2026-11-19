@@ -192,7 +192,7 @@ export function ContextAssistanceSettings(props: Props) {
     dirty={dirty} error={workspace ? null : error}
     headerControls={workspace}
     lean={workspace ? <>
-      <CodexShortReplies gate={props.gate ?? null} disabled={props.disabled} />
+      <CodexShortReplies gate={props.gate ?? null} disabled={props.disabled} cigarOn={props.savedValue?.enabled === true} />
       <CodexLeanSessions gate={props.gate ?? null} disabled={props.disabled} />
     </> : undefined}
     onChange={props.onChange} onRefresh={() => void refresh()}

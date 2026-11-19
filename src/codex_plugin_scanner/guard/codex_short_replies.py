@@ -34,9 +34,7 @@ def ensure(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None =
         return _ask("ensure", home_dir, guard_home, environ)
 
 
-def _ask(
-    action: str, home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None
-) -> dict[str, object]:
+def _ask(action: str, home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None) -> dict[str, object]:
     from .native_transition_files import publication
 
     answer = publication("short_replies", guard_home, action=action, **_home_fields(home_dir, environ))

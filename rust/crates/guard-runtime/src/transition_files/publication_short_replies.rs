@@ -71,6 +71,17 @@ fn ensure(call: &mut Call<'_>, guard_home: &Path, path: &Path) -> Step<Checked<V
             Err(refusal) => Err(refusal),
         });
     }
+    if let Record::Wrote(_) = record {
+        let (_text, payload) = match read_config(path) {
+            Ok(read) => read,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        if current(&payload).is_none() {
+            // Guard wrote it and the user deleted the line: that is a no.
+            write_record(call, guard_home, path, Record::Off)?;
+            return Ok(Ok(view(path, None, &Record::Off)));
+        }
+    }
     enable(call, guard_home, path)
 }
 
@@ -200,6 +211,18 @@ pub(super) fn records(guard_home: &Path) -> Map<String, Value> {
             .collect(),
         _ => Map::new(),
     }
+}
+
+/// Whether turning CIGAR on should ask Codex for short replies: Guard has not
+/// asked yet, and the Guard home sits in the user's home folder. A home
+/// elsewhere belongs to a test or a sandbox, and the Codex config in the home
+/// folder is not its to change.
+pub(crate) fn first_ask_due(guard_home: &Path, user_home: Option<&Path>) -> bool {
+    let parent = fs::canonicalize(guard_home)
+        .ok()
+        .and_then(|home| home.parent().map(Path::to_path_buf));
+    let user_home = user_home.and_then(|home| fs::canonicalize(home).ok());
+    parent.is_some() && parent == user_home && records(guard_home).is_empty()
 }
 
 /// The record value is the text Guard wrote, or the word `off`. The written

@@ -237,3 +237,22 @@ fn only_a_cigar_change_or_a_reset_hands_settings_to_the_native_service() {
     let handed = HANDOFFS.with(|handoffs| handoffs.borrow().clone());
     assert_eq!(handed, vec![edge.home.clone()]);
 }
+
+#[test]
+fn only_turning_cigar_on_can_ask_codex_for_short_replies() {
+    assert!(turns_cigar_on(&entries(
+        json!({"context_assistance": {"enabled": true}, "mode": "observe"})
+    )));
+    for settings in [
+        json!({"context_assistance": {"enabled": false}}),
+        json!({"context_assistance": {"enabled": "true"}}),
+        json!({"context_assistance": {}}),
+        json!({"mode": "observe"}),
+    ] {
+        assert!(!turns_cigar_on(&entries(settings.clone())), "{settings}");
+    }
+    // A Guard home outside the home folder (every test home) is never handed over.
+    let edge = edge("short-replies", "");
+    let home = crate::claude_hook_bridge::home_directory();
+    assert!(!short_replies_first_ask_due(&edge.home, home.as_deref()));
+}

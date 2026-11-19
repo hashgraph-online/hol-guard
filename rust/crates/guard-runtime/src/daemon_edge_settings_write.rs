@@ -23,6 +23,7 @@ use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::pyjson::PyVal;
+use crate::transition_files::short_replies_first_ask_due;
 
 const UPDATE_SCHEMA: &str = "guard-config-update.v1";
 const RESET_CONFIRMATION: &str = "reset-local-settings";
@@ -51,6 +52,12 @@ pub(super) fn apply(
         return Some((400, json!({"error": missing_error})));
     };
     let hand_off = hands_off_to_context_assistance(settings);
+    // First CIGAR turn-on: the daemon asks Codex for short replies under its install lock.
+    let guard_home = Path::new(&config.guard_home);
+    let user_home = crate::claude_hook_bridge::home_directory();
+    if turns_cigar_on(settings) && short_replies_first_ask_due(guard_home, user_home.as_deref()) {
+        return None;
+    }
     let gate_payload = json_payload
         .get("settings")
         .and_then(|settings| settings.get("approval_gate"))
@@ -58,7 +65,6 @@ pub(super) fn apply(
     // The answer reads the gate under the daemon's session; without one the
     // daemon answers before anything is written.
     config.session_signals.as_ref()?;
-    let guard_home = Path::new(&config.guard_home);
     let previous = Loaded::read(guard_home)?;
     let presentation_only = !settings.is_empty()
         && settings
@@ -190,7 +196,6 @@ pub(super) fn reset(
     // The answer reads the gate under the daemon's session; without one the
     // daemon answers before anything is written.
     config.session_signals.as_ref()?;
-    let guard_home = Path::new(&config.guard_home);
     let previous = Loaded::read(guard_home)?;
     if let Some(refused) = settings_gate(json_payload, config)? {
         return Some(refused);
@@ -410,6 +415,12 @@ fn requeue_privacy_projection(config: &ReadConfig, reads: &NativeReads, level: &
 /// be handed them now rather than on the next context call.
 fn hands_off_to_context_assistance(settings: &[(String, PyVal)]) -> bool {
     settings.iter().any(|(key, _)| key == "context_assistance")
+}
+
+/// Whether the save sets `context_assistance.enabled` to true.
+fn turns_cigar_on(settings: &[(String, PyVal)]) -> bool {
+    matches!(lookup(settings, "context_assistance"), Some(PyVal::Dict(cigar))
+        if matches!(lookup(cigar, "enabled"), Some(PyVal::Bool(true))))
 }
 
 #[cfg(test)]
