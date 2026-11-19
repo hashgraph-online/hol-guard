@@ -46,6 +46,8 @@ pub(super) const LAUNCHERS: &[&str] = &[
     "pkexec",
     "run0",
     "gsudo",
+    "runcon",
+    "setpriv",
     "runuser",
     "unshare",
     "nsenter",
