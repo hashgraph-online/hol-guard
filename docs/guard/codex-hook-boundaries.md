@@ -28,9 +28,12 @@ direct edit that needs detection after the fact. Two limits remain:
 - Guard installs its Codex `PostToolUse` hook for `Bash`, `Read` and MCP tools
   only, so the written result of an `apply_patch` call is not observed.
 
-The Gauntlet Codex lane does not yet drive file-write cases, so no Guard
-release run has proven an `apply_patch` deny end to end. Until one does, the
-`apply_patch` row stays `configured`, not qualified.
+With Guard itself in place of the probe, a targeted Gauntlet run on Codex CLI
+0.169.0 drove three pinned write cases (a client secret, a hidden instruction
+for the next session, a `postinstall` script) through `apply_patch`. Guard
+denied each patch before it ran and no target file was written. That run used
+a lane change still under review; release qualification does not drive Codex
+write cases yet, so the `apply_patch` row stays `configured`, not qualified.
 
 ## Tool results
 
