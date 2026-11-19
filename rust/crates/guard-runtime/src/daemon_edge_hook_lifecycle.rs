@@ -285,7 +285,7 @@ impl Hook<'_> {
                         return None;
                     }
                     let finalized = self.call_within(
-                        "hook.integrity_finalize",
+                        "hook.integrity_finalize_locked",
                         json!({
                             "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
                         }),

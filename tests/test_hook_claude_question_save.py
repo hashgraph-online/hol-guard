@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.routes.hook_calls import HOOK_CALLS, hook_claude_question_save, hook_integrity_finalize
+from codex_plugin_scanner.guard.routes.hook_calls import (
+    HOOK_CALLS,
+    hook_claude_question_save,
+    hook_integrity_finalize,
+    hook_integrity_finalize_locked,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -42,3 +47,19 @@ def test_integrity_finalize_reports_a_failed_control_state_write() -> None:
             return False
 
     assert hook_integrity_finalize(Store(), {"next_control_state": {"generation": 1}}) == {"finalized": False}
+
+
+def test_locked_integrity_finalize_rejects_a_stale_generation() -> None:
+    class Store:
+        def _normalize_policy_integrity_control_state(self, payload: object) -> object:
+            return payload
+
+        def _load_policy_integrity_control_state(self, *, create: bool) -> dict[str, int]:
+            return {"generation": 2}
+
+        def _store_policy_integrity_control_state(self, payload: object) -> bool:
+            raise AssertionError("stale state must not be stored")
+
+    assert hook_integrity_finalize_locked(Store(), {"next_control_state": {"generation": 1}}) == {
+        "finalized": False
+    }
