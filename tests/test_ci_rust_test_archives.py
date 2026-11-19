@@ -70,6 +70,9 @@ def test_main_test_locks_follow_archive_families_and_leave_other_runs_independen
 def test_consumers_keep_the_checked_profile_and_main_only_compiler_cache_writes():
     ci = workflow("ci.yml")
     steps = ci["jobs"]["native-workspace"]["steps"]
+    assert ci["env"]["CARGO_PROFILE_RELEASE_OPT_LEVEL"] == (
+        "${{ github.event_name == 'pull_request' && '0' || 's' }}"
+    )
     assert ci["env"]["CARGO_PROFILE_RELEASE_LTO"] == "false"
     assert ci["env"]["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] == "16"
     profile = named(steps, "Configure the checked test profile")

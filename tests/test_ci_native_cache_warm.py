@@ -35,9 +35,8 @@ def test_warmer_runs_only_on_relevant_main_pushes_and_has_its_own_queue() -> Non
 def test_warmer_and_ci_share_builds_profiles_and_per_commit_deduplication() -> None:
     raw_ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     warm = yaml.safe_load((ROOT / ".github/workflows/native-ci-cache-warm.yml").read_text())
-    for flag in ("CARGO_PROFILE_RELEASE_LTO", "CARGO_PROFILE_RELEASE_CODEGEN_UNITS"):
+    for flag in ("CARGO_PROFILE_RELEASE_OPT_LEVEL", "CARGO_PROFILE_RELEASE_LTO", "CARGO_PROFILE_RELEASE_CODEGEN_UNITS"):
         assert warm["env"][flag] == raw_ci["env"][flag]
-    assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in warm["env"]
     for platform, producer, action in (
         ("linux", "native-command-evaluators", "ci-job-native-command-build"),
         ("macos", "macos-native-runtime", "ci-job-macos-native-runtime"),
