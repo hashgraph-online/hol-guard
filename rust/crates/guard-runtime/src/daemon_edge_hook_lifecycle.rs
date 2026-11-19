@@ -8,9 +8,9 @@
 //! step for every op that signs or verifies state.
 //!
 //! A Claude `PostToolUse` that answers the HOL Guard approval question is
-//! settled here too. Saving the answer is a policy write, which holds the
-//! integrity lock in Python, so the daemon hands the plan the op returned to
-//! the `hook.claude_question_save` library step.
+//! settled here too. Saving the answer is a policy write in the same
+//! authority-state transaction, so the pending permission cannot survive a
+//! successful policy save.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -42,6 +42,7 @@ const PERMISSION_PROMPT: &str = "claude_permission_prompt";
 const PERMISSION_REQUEST: &str = "claude_permission_request";
 const TURN_STOP: &str = "claude_turn_stop";
 const QUESTION_SETTLE: &str = "claude_question_settle";
+const QUESTION_SAVE: &str = "claude_question_save";
 /// `native_hook_authority_state._MAX_REQUEST_BYTES`: a larger request was
 /// refused before it reached the op.
 const MAX_REQUEST_BYTES: usize = 512 * 1024;
@@ -254,15 +255,15 @@ impl Hook<'_> {
             Settled::Answered => Some(json!({})),
             Settled::Save(mut save) => {
                 save.insert("session_id".to_owned(), session_id.into());
-                // A plan the library refuses leaves the hook to the review,
-                // as the refused plan did in Python.
-                // The save shares the grace the op above may have used.
-                let wait = super::budget_left(expires);
-                self.call_within("hook.claude_question_save", Value::Object(save), wait)?
-                    .get("valid")
-                    .and_then(Value::as_bool)
-                    .filter(|valid| *valid)
-                    .map(|_| json!({}))
+                // The resident consumes the pending permission and writes the
+                // policy plan in the same authority-state transaction.
+                self.authority_op(QUESTION_SAVE, &save, expires, |request| {
+                    request.payload = Some(Value::Object(save.clone()));
+                })?
+                .get("saved")
+                .and_then(Value::as_bool)
+                .filter(|saved| *saved)
+                .map(|_| json!({}))
             }
         }
     }

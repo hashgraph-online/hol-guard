@@ -97,6 +97,9 @@ impl Env<'_> {
                 request.payload.as_ref(),
                 request.tilde_home.as_deref(),
             ),
+            "claude_question_save" => {
+                self.claude_question_save(required(&request.session_id)?, hook_payload(request)?)
+            }
             "claude_lifecycle" => {
                 self.claude_lifecycle(request.session_id.as_deref(), hook_payload(request)?)
             }

@@ -56,6 +56,7 @@ pub struct HookAuthorityStateRequestV1 {
     pub guard_home: String,
     /// One of the `claude_*` / `cursor_*` operations or `state_is_fresh`.
     /// `claude_lifecycle` selects the Claude hook operation from `payload`.
+    /// `claude_question_save` persists a settled Claude approval plan.
     pub op: String,
     /// Wall-clock timestamp (`datetime.isoformat()`), used for signing,
     /// freshness and the audit rows.

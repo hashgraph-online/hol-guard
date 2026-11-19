@@ -174,18 +174,13 @@ def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
 
 
 def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Saves the answer the daemon read from Claude's HOL Guard approval question.
+    """Transport a settled Claude approval plan to the Rust authority op."""
 
-    The daemon settles the question against the session's pending review and
-    hands over the plan the op returned; the policy write holds the integrity
-    lock, so it stays here. ``valid`` is false for a plan the library refuses.
-    """
-
-    from ..cli import commands_support  # noqa: F401
     from ..cli._commands_shared import _now
-    from ..cli.commands_support_hook_state import _remove_claude_pending_permission
-    from ..cli.commands_support_permission_store import _write_claude_native_permission_plan
-    from ..native_hook_decision import NativeHookDecisionError, validated_permission_persist_plan
+    from ..native_hook_authority_state import (
+        HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+        hook_authority_state,
+    )
 
     session_id = _text(args.get("session_id"))
     artifact_id = _text(args.get("artifact_id"))
@@ -193,21 +188,20 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
     source = _text(args.get("source"))
     if not (session_id and artifact_id and reason and source):
         return {"valid": False}
-    try:
-        plan = validated_permission_persist_plan(args.get("plan"))
-    except NativeHookDecisionError:
-        return {"valid": False}
-    saved = _write_claude_native_permission_plan(
-        store=store,
-        plan=plan,
-        artifact_id=artifact_id,
-        reason=reason,
-        source=source,
+    reply = hook_authority_state(
+        store,
+        "claude_question_save",
         now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+        session_id=session_id,
+        payload={
+            "artifact_id": artifact_id,
+            "reason": reason,
+            "source": source,
+            "plan": args.get("plan"),
+        },
     )
-    if saved:
-        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
-    return {"valid": True, "saved": bool(saved)}
+    return reply if isinstance(reply, dict) else {"valid": False}
 
 
 _LIVE_DECISION_REVIEW_SECONDS = 1.45

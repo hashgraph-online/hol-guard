@@ -194,3 +194,59 @@ fn the_pending_artifact_details_reach_the_plan() {
     drop(connection);
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn question_save_persists_the_plan_and_consumes_pending_state() {
+    let case = cases()
+        .into_iter()
+        .find(|case| case["name"] == "answers-keyed-allow-once")
+        .unwrap();
+    let (path, connection) = fresh_store("question-save");
+    connection
+        .execute_batch(
+            "create table policy_decisions (
+                decision_id integer primary key autoincrement,
+                harness text not null,
+                scope text not null,
+                artifact_id text,
+                artifact_hash text,
+                workspace text,
+                publisher text,
+                action text not null,
+                reason text,
+                owner text,
+                source text not null,
+                expires_at text,
+                updated_at text,
+                integrity_version integer,
+                integrity_generation integer,
+                payload_hash text,
+                payload_mac text,
+                integrity_key_id text,
+                signed_at text
+            )",
+        )
+        .expect("policy schema");
+    let row = recorded(&case["pending"]);
+    let reply = settle(&connection, &row, Some(&projection(&case)));
+    assert_eq!(reply["outcome"], "save");
+    let mut save = reply.as_object().unwrap().clone();
+    save.insert("session_id".into(), json!(SESSION));
+    let saved = env(&connection)
+        .claude_question_save(SESSION, &save)
+        .expect("save");
+    assert_eq!(saved, json!({ "valid": true, "saved": true }));
+    assert!(env(&connection)
+        .claude_load_single_pending(SESSION)
+        .is_none());
+    let action: String = connection
+        .query_row(
+            "select action from policy_decisions where harness='claude-code' and scope='artifact'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("policy row");
+    assert_eq!(action, "allow");
+    drop(connection);
+    let _ = std::fs::remove_file(path);
+}

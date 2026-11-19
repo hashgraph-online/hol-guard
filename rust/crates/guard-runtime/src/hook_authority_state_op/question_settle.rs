@@ -16,9 +16,11 @@
 //! - `unanswered`: the question carries no answer that maps to an action, or
 //!   the pending permission lacks its artifact identity;
 //! - `save`: the plan to write, with the artifact, reason and source of the
-//!   policy row. The caller writes it and then removes the pending permission.
+//!   policy row. The resident save operation writes it and removes the pending
+//!   permission in the same transaction.
 
-use guard_contracts::NativePermissionPersistInputsV1;
+use base64ct::{Base64UrlUnpadded, Encoding};
+use guard_contracts::{NativePermissionPersistInputsV1, NativePermissionPersistPlanV1};
 
 use super::*;
 use crate::claude_guard_question::{verdict, Question};
@@ -41,6 +43,73 @@ fn reason(action: &str) -> &'static str {
 }
 
 impl Env<'_> {
+    /// Persists a settled AskUserQuestion plan and consumes its pending
+    /// permission in the same authority-state transaction.
+    pub(super) fn claude_question_save(
+        &self,
+        session_id: &str,
+        payload: &Object,
+    ) -> Result<Value, &'static str> {
+        let artifact_id = opt_str(payload, "artifact_id").ok_or(ERROR_INVALID)?;
+        let reason = opt_str(payload, "reason").ok_or(ERROR_INVALID)?;
+        let source = opt_str(payload, "source").ok_or(ERROR_INVALID)?;
+        let plan: NativePermissionPersistPlanV1 =
+            serde_json::from_value(payload.get("plan").cloned().ok_or(ERROR_INVALID)?)
+                .map_err(|_| ERROR_INVALID)?;
+        let (Some(stored_artifact_hash), Some(policy_action)) = (
+            plan.stored_artifact_hash.as_deref(),
+            plan.policy_action.as_deref(),
+        ) else {
+            return Err(ERROR_INVALID);
+        };
+        if !matches!(policy_action, "allow" | "block") {
+            return Err(ERROR_INVALID);
+        }
+        for event in plan.events.iter().filter(|event| event.before_policy) {
+            if !self.add_event_checked(&event.name, &Value::Object(event.payload.clone())) {
+                return Err(ERROR_STORE);
+            }
+        }
+        let mut args = Object::new();
+        args.insert("harness".to_owned(), json!("claude-code"));
+        args.insert("scope".to_owned(), json!("artifact"));
+        args.insert("artifact_id".to_owned(), json!(artifact_id));
+        args.insert("artifact_hash".to_owned(), json!(stored_artifact_hash));
+        args.insert("action".to_owned(), json!(policy_action));
+        args.insert("reason".to_owned(), json!(reason));
+        args.insert("source".to_owned(), json!(source));
+        args.insert("now".to_owned(), json!(self.now));
+        let generation: i64 = self
+            .connection
+            .query_row(
+                "select coalesce(max(integrity_generation), 0) from policy_decisions",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| ERROR_STORE)?;
+        args.insert("current_generation".to_owned(), json!(generation));
+        if let (Some(key), Some(key_id)) = (self.key.as_ref(), self.key_id) {
+            args.insert(
+                "integrity_key_b64".to_owned(),
+                json!(Base64UrlUnpadded::encode_string(key)),
+            );
+            args.insert("integrity_key_id".to_owned(), json!(key_id));
+        }
+        crate::guard_store_policy_upsert::upsert_policy(
+            self.connection,
+            &crate::guard_store_args::Args(&args),
+        )
+        .map_err(|_| ERROR_STORE)?;
+        for event in plan.events.iter().filter(|event| !event.before_policy) {
+            if !self.add_event_checked(&event.name, &Value::Object(event.payload.clone())) {
+                return Err(ERROR_STORE);
+            }
+        }
+        let pending_key = claude_pending_key(session_id, &artifact_id);
+        self.claude_remove_pending(session_id, &pending_key);
+        Ok(json!({ "valid": true, "saved": true }))
+    }
+
     /// `question` is the hook's projection (`event`, `tool_name`,
     /// `tool_input`, `tool_response` and the ordered `response_answers`);
     /// without one the call is not a question. The daemon asks only about an
