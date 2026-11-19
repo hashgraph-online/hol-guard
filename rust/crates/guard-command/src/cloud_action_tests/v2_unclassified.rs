@@ -152,3 +152,15 @@ fn the_shipped_presets_decide_an_unclassified_update_as_r16_says() {
         "require-reapproval"
     );
 }
+
+#[test]
+fn the_shipped_presets_allow_a_plain_read_with_unknown_facts() {
+    // A read's environment and object are unknown. A rule with no class
+    // list would treat that as a possible match and hold every read.
+    let read = ActionClassV2::Read;
+    for preset in ["relaxed", "balanced", "strict"] {
+        assert_eq!(simulate(preset, false, read), "allow", "{preset}");
+    }
+    // Writes still meet the production-deploy rule's unknown facts.
+    assert_eq!(simulate("strict", false, ActionClassV2::Execute), "block");
+}
