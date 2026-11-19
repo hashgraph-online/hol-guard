@@ -53,12 +53,23 @@ struct Walk {
     files: usize,
 }
 
-/// A name that is neither `.git`, a harness directory, a credential store nor
+/// A name that is neither `.git`, a harness folder, a credential store nor
 /// an environment file.
 fn screened(name: &str) -> bool {
-    name != ".git"
-        && !HARNESS_DIRECTORIES.contains(&name)
-        && !names_hold_credential_store(&[name.to_owned()])
+    name != ".git" && !harness_owned(name) && !names_hold_credential_store(&[name.to_owned()])
+}
+
+/// Whether a harness owns the folder: its own directory, or one named after
+/// it, such as the `.claude-plugin` folder that holds a plugin manifest.
+/// A search that reaches those reads how the agent itself is configured, so
+/// the proof leaves them to review even when the repository commits them.
+fn harness_owned(name: &str) -> bool {
+    HARNESS_DIRECTORIES.iter().any(|harness| {
+        name == *harness
+            || name
+                .strip_prefix(harness)
+                .is_some_and(|rest| rest.starts_with('-') || rest.starts_with('.'))
+    })
 }
 
 fn committed(path: &Path) -> bool {

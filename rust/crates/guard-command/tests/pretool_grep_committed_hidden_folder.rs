@@ -151,6 +151,16 @@ fn a_hidden_entry_that_is_not_a_clean_committed_document_keeps_its_review() {
             vec![("docs/.claude/notes.md", "palette\n")],
             vec![],
         ),
+        // A folder named after a harness holds the agent's own configuration
+        // just as the harness folder itself does.
+        (
+            "harness plugin",
+            vec![(
+                "docs/.claude-plugin/plugin.json",
+                "{\"author\": \"palette\"}\n",
+            )],
+            vec![],
+        ),
         ("store", vec![("docs/.aws/notes.md", "palette\n")], vec![]),
         (
             "environment",
