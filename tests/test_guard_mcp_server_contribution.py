@@ -8,17 +8,23 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution
+from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import _normalized_tool_name, validate_mcp_contribution
 from tests import mcp_contribution_loader as mcp_loader
 from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from .mcp_contribution_client import mcp_tool_state
+from .mcp_extension_driver import apply_contributed_mcp_decision
+from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
+_NJC_CHAIN_READS_URL = "https://njc-tx-explain.departmentofjazz.workers.dev/mcp"
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -249,7 +255,32 @@ def test_njc_chain_reads_unlisted_tools_default_to_review() -> None:
     payload = _njc_chain_reads_payload()
     declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
     assert declared["other"] == "review"
+    normalized_declared = {_normalized_tool_name(name) for name in declared}
+    assert _normalized_tool_name("unlisted_future_tool") not in normalized_declared
     assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
+
+
+def test_njc_chain_reads_stays_inert_until_local_admin_enable() -> None:
+    """Keep the paid remote tool inert until the external catalog entry is enabled locally."""
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json", command=_NJC_CHAIN_READS_URL, args=(), transport="http"
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="njc-chain-reads",
+        tool_name="money_trail",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="http",
+        server_identity=identity,
+    )
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    enabled = _AuthorityStore(
+        (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-njc-chain-reads", ControlState.ENABLED),)
+    )
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:
