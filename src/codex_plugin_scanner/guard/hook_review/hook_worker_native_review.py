@@ -224,7 +224,7 @@ def _review_native_edge_once(
             deadline=deadline,
         ) as fenced:
             if fenced is None:
-                unleased_binding = published_binding_token(worker.policy_snapshot_publisher)
+                unleased_binding = published_binding_token(worker.policy_snapshot_publisher, deadline=deadline)
             response, native_used = worker._review_native_edge_with_snapshot(
                 payload=payload,
                 harness=harness,
@@ -247,7 +247,8 @@ def _review_native_edge_once(
             # fence's own entry check still refuses to start a review that is
             # already out of time.
         if fenced is None and (
-            unleased_binding is None or published_binding_token(worker.policy_snapshot_publisher) != unleased_binding
+            unleased_binding is None
+            or published_binding_token(worker.policy_snapshot_publisher, deadline=deadline) != unleased_binding
         ):
             # Reached without the lease, and a control mutation published
             # across it. Honouring this response could allow a command, or

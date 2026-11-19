@@ -35,7 +35,9 @@ def _reader(publisher: object, name: str) -> Callable[[], object] | None:
     return reader if callable(reader) else None
 
 
-def published_binding_token(publisher: object) -> tuple[object, ...] | None:
+def published_binding_token(
+    publisher: object, *, deadline: float | None = None
+) -> tuple[object, ...] | None:
     """Read the *committed* control state, not the cached publisher snapshot.
 
     Another process can commit a control mutation while this process's
@@ -81,7 +83,7 @@ def published_binding_token(publisher: object) -> tuple[object, ...] | None:
         guard_home = getattr(publisher, "guard_home", None)
         if not isinstance(guard_home, Path):
             return None
-        return native_hook_review_binding(marker, identity, cli_revision, guard_home)
+        return native_hook_review_binding(marker, identity, cli_revision, guard_home, deadline=deadline)
     except (OSError, RuntimeError, TypeError, ValueError, KeyError, IndexError):
         return None
 
