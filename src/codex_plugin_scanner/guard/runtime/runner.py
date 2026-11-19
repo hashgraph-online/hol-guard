@@ -108,8 +108,6 @@ from .fleet_posture import (
     FleetPostureBuild,
     FleetPostureSettings,
     build_fleet_posture_state,
-    commit_fleet_posture_sent,
-    request_full_inventory,
 )
 from .fleet_posture_tools import device_display_name
 from .guard_run_evaluation import _get_default_detector_registry as _get_default_detector_registry
@@ -514,9 +512,7 @@ def sync_receipts(
     """Push local receipts to the configured sync endpoint."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _sync.normalized_receipts_sync_url(
-        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
-    )
+    _sync.normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
     _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
@@ -569,9 +565,6 @@ def sync_receipts(
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
     if uploaded.get("auth_refreshed") is True:
         resolved_auth_context = _resolve_guard_sync_auth_context(store)
-        sync_url = _sync.normalized_receipts_sync_url(
-            _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
-        )
     upload_answer = ReceiptUploadAnswer.from_native(uploaded)
     now = upload_answer.now
     policy_bundle_field_provided = upload_answer.policy_bundle_provided
@@ -989,7 +982,6 @@ def sync_receipts(
         sync_context=sync_context,
         bundle_hash_sent=bundle_hash_sent,
         auth_context=resolved_auth_context,
-        sync_url=sync_url,
         device_id=device_id,
         device_name=device_name,
         local_guard_online_at=local_guard_online_at,
@@ -3052,34 +3044,12 @@ def _build_fleet_posture_for_sync(
         return None
 
 
-def _record_fleet_posture_delivery(
-    store: GuardStore,
-    built: FleetPostureBuild | None,
-    response: dict[str, object],
-) -> None:
-    """Commit the sent snapshot and honour a ``fleetPostureRequest`` in the reply."""
-
-    stamp = _sync_timestamp(response)
-    if built is not None:
-        try:
-            commit_fleet_posture_sent(store, built, now=stamp)
-        except Exception:
-            _LOGGER.debug("Fleet posture snapshot could not be recorded", exc_info=True)
-    request = response.get("fleetPostureRequest")
-    if isinstance(request, dict) and request.get("inventory") == "full":
-        try:
-            request_full_inventory(store, source="cloud", now=stamp)
-        except Exception:
-            _LOGGER.debug("Fleet posture full-inventory request could not be recorded", exc_info=True)
-
-
 def _send_policy_ack_followup(
     store: GuardStore,
     *,
     sync_context: dict[str, object],
     bundle_hash_sent: str | None,
     auth_context: dict[str, object],
-    sync_url: str,
     device_id: str,
     device_name: str,
     local_guard_online_at: str,
@@ -3125,23 +3095,31 @@ def _send_policy_ack_followup(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )
-        followup_context = dict(sync_context)
-        if built is not None:
-            followup_context["fleetPosture"] = built.payload
-        request = _guard_sync_request(
-            auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=json.dumps({"receipts": [], "syncContext": followup_context}).encode("utf-8"),
-            extra_headers=None,
+        from .cloud_bundle_sync import cloud_receipt_upload
+
+        # One request with no receipts; the native upload sends the posture on
+        # it and records its delivery.
+        cloud_receipt_upload(
+            Path(store.guard_home),
+            {
+                "contextOnly": True,
+                "redactionLevel": "full",
+                "deviceId": device_id,
+                "deviceName": device_name,
+                "now": now,
+                "syncContext": sync_context,
+                "fleetPosture": None
+                if built is None
+                else {
+                    "payload": built.payload,
+                    "nextState": built.next_state,
+                    "advancedInventory": built.advanced_inventory,
+                },
+                "workspaceAssessments": None,
+                "allowAuthRefresh": False,
+            },
+            auth_context=auth_context,
         )
-        response = _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-        )
-        if isinstance(response, dict):
-            _record_fleet_posture_delivery(store, built, response)
     except Exception:
         _LOGGER.debug("Policy acknowledgement follow-up sync failed", exc_info=True)
 

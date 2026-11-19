@@ -62,8 +62,8 @@ def _auth(url: str) -> dict[str, object]:
     return {"sync_url": url, "access_" + "token": "-".join(("loopback", "only")), "dpop_key_material": None}
 
 
-def _add_receipts(store: GuardStore, count: int) -> None:
-    for index in range(count):
+def _add_receipts(store: GuardStore, count: int, *, start: int = 0) -> None:
+    for index in range(start, start + count):
         store.add_receipt(
             GuardReceipt(
                 receipt_id=f"native-upload-{index:03d}",
@@ -145,3 +145,46 @@ def test_a_refused_supplied_sign_in_is_not_refreshed(tmp_path, cloud_url) -> Non
 
     assert len(_CloudHandler.receipt_bodies) == 1
     assert _cursor(store) is None
+
+
+def test_a_context_only_request_sends_no_receipts_and_keeps_the_cursor(tmp_path, cloud_url) -> None:
+    from pathlib import Path
+
+    from codex_plugin_scanner.guard.runtime.cloud_bundle_sync import cloud_receipt_upload
+
+    store = GuardStore(tmp_path / "home")
+    _add_receipts(store, 3)
+    # The follow-up runs after the main upload saved its progress.
+    _sync(store, cloud_url)
+    marker = {"level": "partial", "before_rowid": 2, "complete": False, "updated_at": "2026-11-19T00:00:00Z"}
+    store.set_sync_payload("cloud_receipt_command_detail_backfill_v2", marker, "2026-11-19T00:00:00Z")
+    # A receipt past the cursor is not sent either.
+    _add_receipts(store, 1, start=3)
+    saved_cursor = store.get_sync_payload("receipt_sync_cursor")
+    assert isinstance(saved_cursor, dict)
+    _CloudHandler.receipt_bodies = []
+    context = {"deviceId": "device-1", "policyBundleAcknowledgement": {"bundleHash": "sha256:abc"}}
+
+    answer = cloud_receipt_upload(
+        Path(store.guard_home),
+        {
+            "contextOnly": True,
+            "redactionLevel": "full",
+            "deviceId": "device-1",
+            "deviceName": "Device",
+            "now": datetime.now(timezone.utc).isoformat(),
+            "syncContext": context,
+            "fleetPosture": None,
+            "workspaceAssessments": None,
+            "allowAuthRefresh": False,
+        },
+        auth_context=_auth(cloud_url),
+    )
+
+    [body] = _CloudHandler.receipt_bodies
+    assert body["receipts"] == []
+    assert body["syncContext"] == context
+    assert isinstance(answer, dict)
+    assert answer["receipts"] == 0
+    assert store.get_sync_payload("receipt_sync_cursor") == saved_cursor
+    assert store.get_sync_payload("cloud_receipt_command_detail_backfill_v2") == marker
