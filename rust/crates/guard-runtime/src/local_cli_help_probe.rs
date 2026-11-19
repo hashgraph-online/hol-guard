@@ -92,7 +92,7 @@ fn read_help_output(argv: &[String], folder: &std::path::Path) -> std::io::Resul
             if room == 0 {
                 break;
             }
-            match reader.read(&mut buffer[..room.min(buffer.len())]) {
+            match reader.read(&mut buffer[..room.min(4096)]) {
                 Ok(0) | Err(_) => break,
                 Ok(read) => match sink.lock() {
                     Ok(mut bytes) => bytes.extend_from_slice(&buffer[..read]),
