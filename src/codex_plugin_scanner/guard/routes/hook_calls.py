@@ -223,6 +223,7 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
     source = _text(args.get("source"))
     if not (session_id and artifact_id and pending_artifact_hash and reason and source):
         return {"valid": False}
+
     def save_under_lock() -> dict[str, object] | None:
         try:
             integrity = hook_integrity_begin(store, {"now": _now(), "sign": True})
@@ -273,11 +274,7 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
         payload={
             "artifact_id": artifact_id,
             "pending_artifact_hash": pending_artifact_hash,
-            **(
-                {"pending_id": args["pending_id"]}
-                if isinstance(args.get("pending_id"), str)
-                else {}
-            ),
+            **({"pending_id": args["pending_id"]} if isinstance(args.get("pending_id"), str) else {}),
         },
     )
     if not isinstance(consumed, dict) or consumed.get("consumed") is not True:

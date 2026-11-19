@@ -309,9 +309,7 @@ def emit_hook_review(
         # the document, a PostToolUse block and its reason included.
         return 0
     policy_action = (
-        "block"
-        if hook_event_pauses_when_unavailable(event_name, guard_home=guard_home, deadline=deadline)
-        else "allow"
+        "block" if hook_event_pauses_when_unavailable(event_name, guard_home=guard_home, deadline=deadline) else "allow"
     )
     return native_hook_verdict_exit_code(canonical, policy_action, event_name=event_name)
 

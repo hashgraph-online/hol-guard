@@ -35,9 +35,7 @@ def _reader(publisher: object, name: str) -> Callable[[], object] | None:
     return reader if callable(reader) else None
 
 
-def published_binding_token(
-    publisher: object, *, deadline: float | None = None
-) -> tuple[object, ...] | None:
+def published_binding_token(publisher: object, *, deadline: float | None = None) -> tuple[object, ...] | None:
     """Read the *committed* control state, not the cached publisher snapshot.
 
     Another process can commit a control mutation while this process's

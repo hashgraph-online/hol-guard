@@ -60,13 +60,23 @@ def canonical_hook_event_name(
             continue
         compact = _compact_hook_event_name(value)
         if compact in {
-            "pretool", "pretooluse", "pretoolcall", "beforeshellexecution", "beforereadfile",
-            "beforewritefile", "beforemcpexecution",
+            "pretool",
+            "pretooluse",
+            "pretoolcall",
+            "beforeshellexecution",
+            "beforereadfile",
+            "beforewritefile",
+            "beforemcpexecution",
         }:
             return "PreToolUse"
         if compact in {
-            "posttool", "posttooluse", "posttoolcall", "aftershellexecution", "afterreadfile",
-            "afterwritefile", "aftermcpexecution",
+            "posttool",
+            "posttooluse",
+            "posttoolcall",
+            "aftershellexecution",
+            "afterreadfile",
+            "afterwritefile",
+            "aftermcpexecution",
         }:
             return "PostToolUse"
         if compact in {"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"}:

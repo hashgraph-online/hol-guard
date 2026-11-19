@@ -415,9 +415,7 @@ class HookWorker(HookWorkerNativeMixin):
             payload={
                 "event_name": event_name,
                 **{
-                    name: payload[name]
-                    for name in _CLAUDE_LIFECYCLE_FIELDS
-                    if name != "event_name" and name in payload
+                    name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name != "event_name" and name in payload
                 },
             },
         )

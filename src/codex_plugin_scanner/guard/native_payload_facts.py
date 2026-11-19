@@ -128,9 +128,7 @@ def native_hook_facts(
     return NativePayloadFacts(event, command_only, command, tool_name, launch_target)
 
 
-def native_hook_event(
-    payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None
-) -> str | None:
+def native_hook_event(payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None) -> str | None:
     # Event identity does not depend on tool input. Keep this request small so
     # a large action payload cannot turn event lookup into an outage.
     event_payload = {
@@ -217,8 +215,7 @@ def native_connector_lookup(
         return None
     if (
         set(lookup) != {"command", "cwd", "home_dir", "user_home", "env"}
-        or
-        not isinstance(lookup.get("command"), str)
+        or not isinstance(lookup.get("command"), str)
         or not lookup.get("command", "").strip()
         or not isinstance(lookup.get("cwd"), str)
         or not lookup.get("cwd", "").strip()

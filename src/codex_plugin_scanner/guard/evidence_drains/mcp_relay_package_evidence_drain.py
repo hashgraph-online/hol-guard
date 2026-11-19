@@ -132,9 +132,7 @@ def is_mcp_relay_package_evidence(record: object) -> bool:
     return isinstance(record, Mapping) and record.get("kind") == MCP_PACKAGE_CALL_EVIDENCE_KIND
 
 
-def record_mcp_relay_package_evidence(
-    store: object, guard_home: Path, record: object
-) -> bool | McpEvidenceWriteResult:
+def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: object) -> bool | McpEvidenceWriteResult:
     """Record one relayed package call as the proxy records it."""
 
     from ..mcp_tool_calls import allow_tool_call, block_tool_call

@@ -472,11 +472,7 @@ class HookWorkerNativeMixin:
             # edge's allow; Watch records the call and lets it run.
             if not recording_only:
                 edge_hint = edge.get("exact_command_block")
-                facts = (
-                    native_hook_facts(payload, guard_home, deadline=deadline)
-                    if edge_hint is not False
-                    else None
-                )
+                facts = native_hook_facts(payload, guard_home, deadline=deadline) if edge_hint is not False else None
                 if facts is None and edge_hint is not False:
                     return (
                         _record_unavailable_native(
