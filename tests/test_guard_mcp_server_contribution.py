@@ -23,6 +23,7 @@ _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/m
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
 _NJC_CHAIN_READS_URL = "https://njc-tx-explain.departmentofjazz.workers.dev/mcp"
@@ -94,6 +95,29 @@ def test_rei_skills_tool_defaults_preserve_review_boundary() -> None:
         "other": "review",
     }
     assert mcp_tool_state(payload, "unlisted_tool") == "review"
+
+
+def test_lienzo_ui_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed Lienzo UI launch on the exact npm release."""
+    payload = json.loads(_LIENZO_UI.read_text(encoding="utf-8"))
+    validate_mcp_contribution(payload, filename=_LIENZO_UI.name)
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "lienzo-ui-mcp@1.7.3",
+    }
+
+
+def test_lienzo_ui_export_and_its_hidden_alias_require_review() -> None:
+    """The server accepts exportar_unity for export_unity; both names must stay review-gated."""
+    payload = json.loads(_LIENZO_UI.read_text(encoding="utf-8"))
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    for name in ("export_unity", "exportar_unity"):
+        assert declared[name] == "review"
+        assert mcp_tool_state(payload, name) == "review"
+    assert mcp_tool_state(payload, "lienzo_info") == "allow"
 
 
 def test_tether_contribution_is_external_opt_in() -> None:
