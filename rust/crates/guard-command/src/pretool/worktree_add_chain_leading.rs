@@ -64,4 +64,3 @@ pub(super) fn leading_entry(
     }
     Some(resolved)
 }
-
