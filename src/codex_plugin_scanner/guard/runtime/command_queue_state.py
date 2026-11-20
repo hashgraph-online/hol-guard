@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ...version import __version__
 from ..harness_context import HarnessContext
+from ..native_command_state import CommandStateUnavailableError, native_command_state
 from ..store import GuardStore
 from .command_capability import (
     CommandCapabilityError,
@@ -225,24 +226,27 @@ def command_queue_brief_status(store: GuardStore) -> dict[str, object]:
 
 
 def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
-    state = load_command_queue_state(store)
-    repaired: list[str] = []
-    if state.get("active_job") is not None and not isinstance(state.get("active_job"), dict):
-        state.pop("active_job", None)
-        repaired.append("active_job")
-    pending_result = state.get("pending_result")
-    if pending_result is not None:
-        pending_valid = (
-            isinstance(pending_result, dict)
-            and isinstance(pending_result.get("job"), dict)
-            and isinstance(pending_result.get("payload"), dict)
-        )
-        if not pending_valid:
-            state.pop("pending_result", None)
-            repaired.append("pending_result")
-    if repaired:
-        state.update({"state": "idle", "last_error": None})
-        save_command_queue_state(store, state)
+    """Drop the lane's damaged queue fields and report which ones went.
+
+    The runtime reads the lane's state row, drops an ``active_job`` that is not
+    an object and a ``pending_result`` without an object job and payload, and
+    writes the row back idle, all in one transaction, so a queue worker saving
+    the same row cannot lose its write. Raises ``CommandStateUnavailableError``
+    when no capable runtime answers and ``CommandStateRefusedError`` when the
+    row cannot be read.
+    """
+
+    guard_home = getattr(store, "guard_home", None)
+    if not isinstance(guard_home, Path):
+        raise CommandStateUnavailableError
+    answer = native_command_state(
+        guard_home,
+        "queue_repair",
+        now=command_queue_now(),
+        state_key=current_command_queue_lane().state_key,
+    )
+    listed = answer.get("repaired") if isinstance(answer, dict) else None
+    repaired = [field for field in listed if isinstance(field, str)] if isinstance(listed, list) else []
     return {"repaired": repaired, "repaired_count": len(repaired), "status": command_queue_status(store)}
 
 

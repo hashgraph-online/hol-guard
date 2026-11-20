@@ -1777,6 +1777,7 @@ def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, mon
     assert payload["supported_operations"] == list(command_executors.SUPPORTED_COMMAND_OPERATIONS)
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_doctor_repair_clears_malformed_command_queue_state(tmp_path: Path, capsys) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
