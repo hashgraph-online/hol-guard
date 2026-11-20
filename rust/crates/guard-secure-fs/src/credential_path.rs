@@ -4,7 +4,7 @@
 use super::{
     is_source_code_extension, sensitive_external_filename, win32_name, EXTERNAL_SENSITIVE_PARTS,
 };
-use crate::source_path::design_system_words;
+use crate::source_path::design_system_token;
 use std::path::Path;
 
 pub fn credential_named_path(path: &Path) -> bool {
@@ -128,9 +128,9 @@ fn credential_directory(part: &str) -> bool {
     }
     let words = bare.replace(['-', '.'], "_");
     let words: Vec<&str> = words.split('_').collect();
-    let marker = |word: &str| match word {
+    let marker = |at: usize, word: &str| match word {
         "secrets" | "credentials" => true,
-        "tokens" => !design_system_words(&words),
+        "tokens" => !design_system_token(&words, at),
         _ => false,
     };
     // A compound that ends on a schema or policy belongs to a feature about
@@ -144,7 +144,11 @@ fn credential_directory(part: &str) -> bool {
     // end on a store marker. Migration directories are not cleared at all —
     // `secrets-migration` and `credentials_migrations` are where an export
     // from one vault waits for its import into the next.
-    let Some(at) = words.iter().rposition(|word| marker(word)) else {
+    let Some(at) = words
+        .iter()
+        .enumerate()
+        .rposition(|(at, word)| marker(at, word))
+    else {
         return false;
     };
     at + 1 == words.len()
@@ -176,6 +180,15 @@ mod tests {
             ".env.d/local.conf",
             "fixtures/github-token.txt",
             // A token name with no design-system word is still a credential.
+            // A design term elsewhere is insufficient: these are access tokens.
+            "docs/brand-github-token.txt",
+            "docs/style_api_token.json",
+            "docs/theme-token.txt",
+            "docs/brand-token.txt",
+            "docs/.brand_npm_token.json",
+            "docs/color-api-tokens.txt",
+            "config/brand-github-tokens/spacing.json",
+            "config/theme-api-tokens/spacing.json",
             "fixtures/refresh_token.json",
             "ops/service-token-rotation.md",
             "keys/service_credentials.json",
@@ -211,6 +224,11 @@ mod tests {
             "docs/theme-tokens.md",
             "packages/ui/design-tokens.json",
             "styles/typography_tokens.yaml",
+            "docs/brands-tokens.json",
+            "docs/palettes-tokens.json",
+            "docs/designs-tokens.md",
+            "docs/typographies-tokens.yaml",
+            "packages/ui/palettes-tokens/spacing.json",
             "packages/ui/color-tokens/spacing.json",
             "guard/__pycache__/oauth_token_claims.cpython-312.pyc",
             "guard/runtime/command_tokens.py",
