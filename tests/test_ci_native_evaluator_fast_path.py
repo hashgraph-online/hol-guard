@@ -117,3 +117,10 @@ def test_dashboard_wheel_consumes_verified_linux_evaluator_artifacts() -> None:
     ]
     assert "pytest-native-command-evaluators" in downloads
     assert not any("cargo build" in step.get("run", "") for step in job["steps"])
+
+
+def test_dashboard_wheel_names_the_cached_runtime_build_sha() -> None:
+    job = _jobs()["dashboard-integration-wheel"]
+    identity = next(step["run"] for step in job["steps"] if step.get("name") == "Resolve wheel identity")
+    assert "capabilities --json | jq -r '.build_sha'" in identity
+    assert "git rev-parse HEAD" not in identity

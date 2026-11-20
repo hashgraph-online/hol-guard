@@ -970,7 +970,12 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          SOURCE_SHA=$(git rev-parse HEAD)
+          # The evaluator artifact may come from the producer's cache, which is
+          # keyed on the native sources rather than the commit. A cache hit
+          # carries the SHA of the commit that built those same sources, so the
+          # wheel names the runtime's own build SHA, as it does its rule digest.
+          SOURCE_SHA=$(rust/target/release/hol-guard-runtime capabilities --json | jq -r '.build_sha')
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Seal the native wheel
