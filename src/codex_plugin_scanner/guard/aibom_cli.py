@@ -146,6 +146,8 @@ def sync_aibom_snapshots(
 ) -> dict[str, object]:
     """Sync compatible snapshots and upload content only after cloud acknowledgment."""
     runner = _runner_module()
+    from .runtime import cloud_bundle_sync
+
     runner_native_sync = importlib.import_module(".runtime.runner_native_sync", __package__)
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
@@ -251,17 +253,12 @@ def sync_aibom_snapshots(
 
     for batch in event_batches:
         body = _inventory_events_request_body(batch)
-        request = runner._guard_sync_request(
-            resolved_auth_context,
-            request_url=sync_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
         auth_refresh_retried = False
         try:
-            payload = runner._urlopen_json_with_timeout_retry(
-                request=request,
+            payload = cloud_bundle_sync.cloud_json_request(
+                resolved_auth_context,
+                url=sync_url,
+                body=body,
                 timeout_seconds=90,
                 retry_timeout_seconds=120,
             )
@@ -269,15 +266,10 @@ def sync_aibom_snapshots(
             if error.code == 401 and not auth_refresh_retried:
                 auth_refresh_retried = True
                 resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
-                request = runner._guard_sync_request(
+                payload = cloud_bundle_sync.cloud_json_request(
                     resolved_auth_context,
-                    request_url=sync_url,
-                    method="POST",
-                    data=body,
-                    extra_headers=None,
-                )
-                payload = runner._urlopen_json_with_timeout_retry(
-                    request=request,
+                    url=sync_url,
+                    body=body,
                     timeout_seconds=90,
                     retry_timeout_seconds=120,
                 )
