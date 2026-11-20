@@ -28,7 +28,13 @@ impl Installation {
         {
             return Err(error("switch_installation_changed"));
         }
-        let (origin, producer) = if self.schema == SCHEMA {
+        let (origin, producer) = if self.schema == builtin::BUILTIN_SCHEMA {
+            (
+                builtin::origin(),
+                EvidenceUpgradeProducer::from_enrolled_runtime(runtime)
+                    .map_err(|e| error(e.code()))?,
+            )
+        } else if self.schema == SCHEMA {
             let (legacy, profile) =
                 guard_cigar_release::legacy_candidate_profile().map_err(|e| error(e.code()))?;
             (

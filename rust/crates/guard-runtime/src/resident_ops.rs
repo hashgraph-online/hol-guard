@@ -150,6 +150,21 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     source.as_deref(),
                 )
             }
+            ResidentOperationV1::HookPayloadFacts(request) => {
+                crate::hook_payload_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookReviewBinding(request) => {
+                crate::hook_review_binding_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyAdmission(request) => {
+                crate::hook_policy_admission_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookConnectorFacts(request) => {
+                crate::hook_connector_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyFenceWindow(request) => {
+                crate::hook_policy_fence_window_op::evaluate(&request)
+            }
             ResidentOperationV1::McpRelayDecide(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -346,6 +361,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 crate::network_protection_verify_op::evaluate_network_protection_verify_request(
                     &request,
                 )
+            }
+            ResidentOperationV1::CommandJobPlan(request) => {
+                crate::command_job_plan_op::evaluate_command_job_plan_request(&request)
             }
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)

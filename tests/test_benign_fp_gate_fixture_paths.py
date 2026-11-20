@@ -109,7 +109,7 @@ def test_every_benign_case_finds_the_paths_it_reads() -> None:
                 path = Path(resolved)
                 if path.exists() or path.is_symlink():
                     # Brackets are a path of their own in a dynamic route
-                    # directory such as ``app/registry/[slug]``, so the literal
+                    # directory such as ``app/items/[slug]``, so the literal
                     # name is tried before the pattern.
                     continue
                 if any(character in resolved for character in _GLOB_CHARACTERS):

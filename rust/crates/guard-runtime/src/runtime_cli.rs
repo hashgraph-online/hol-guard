@@ -207,6 +207,18 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_load::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if command_state::is_command(command) && flag == "--stdin" => {
+            let response = command_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command_result::is_command(command) && flag == "--stdin" => {
+            let response = command_result::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if auto_update_state::is_command(command) && flag == "--stdin" => {
+            let response = auto_update_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_config_update::is_command(command) && flag == "--stdin" => {
             let response = guard_config_update::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

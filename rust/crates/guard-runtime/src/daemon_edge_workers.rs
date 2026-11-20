@@ -218,15 +218,26 @@ pub(super) fn next_wait(job: &Job, answer: Option<Value>) -> Duration {
 
 /// Refreshes the artifacts Guard already manages for the active runtime
 /// (`reconcile_runtime_artifacts`). A failure leaves them for the next start.
-pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) {
+///
+/// The call names this daemon's own loopback URL. The daemon has not reported
+/// ready while the reconcile runs, so a hook artifact that records the daemon
+/// URL would otherwise ask this daemon whether it is live and wait out the
+/// health probe on every cold start.
+pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>, port: u16) {
     let Some(config) = reads.config() else {
         return;
     };
-    let (call, args) = ("worker.reconcile_artifacts", json!({ "home": user_home }));
+    let args = reconcile_args(user_home, port);
+    let call = "worker.reconcile_artifacts";
     if ticks::native(reads, &config, call, &args).is_some() {
         return;
     }
     let _ = library::call_resident_within(&config, call, args, RECONCILE_CALL_WAIT);
+}
+
+/// The reconcile call's arguments: the user's home and this daemon's own URL.
+fn reconcile_args(user_home: Option<&str>, port: u16) -> Value {
+    json!({ "home": user_home, "daemon_url": format!("http://127.0.0.1:{port}") })
 }
 
 /// A reconcile running on its own thread. The thread signals `done` once the
@@ -265,6 +276,7 @@ pub(super) fn reconcile_beside(
     reads: &Arc<NativeReads>,
     user_home: Option<String>,
     guard_home: std::path::PathBuf,
+    port: u16,
 ) -> Option<Reconcile> {
     let (worker_reads, worker_user, worker_home) =
         (Arc::clone(reads), user_home.clone(), guard_home.clone());
@@ -273,7 +285,7 @@ pub(super) fn reconcile_beside(
     let spawned = thread::Builder::new()
         .name("daemon-reconcile".into())
         .spawn(move || {
-            reconciled(&worker_reads, worker_user.as_deref(), &worker_home);
+            reconciled(&worker_reads, worker_user.as_deref(), &worker_home, port);
             let _ = done.send(());
         });
     match spawned {
@@ -282,7 +294,7 @@ pub(super) fn reconcile_beside(
             started,
         }),
         Err(_) => {
-            reconciled(reads, user_home.as_deref(), &guard_home);
+            reconciled(reads, user_home.as_deref(), &guard_home, port);
             None
         }
     }
@@ -307,8 +319,13 @@ pub(super) fn settle_before_ready(
     Some(pending)
 }
 
-fn reconciled(reads: &NativeReads, user_home: Option<&str>, guard_home: &std::path::Path) {
-    reconcile_artifacts(reads, user_home);
+fn reconciled(
+    reads: &NativeReads,
+    user_home: Option<&str>,
+    guard_home: &std::path::Path,
+    port: u16,
+) {
+    reconcile_artifacts(reads, user_home, port);
     super::super::lifecycle::record(guard_home, "reconciled", None, None, None);
 }
 

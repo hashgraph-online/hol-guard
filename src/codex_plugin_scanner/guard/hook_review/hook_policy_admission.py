@@ -6,39 +6,65 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_PERSISTENT_ERRORS
+from ..native_policy_admission import native_policy_not_ready_reason
 from ..native_policy_snapshot_resident_recovery import RESIDENT_FAIL_FAST_STREAK, is_resident_class_error
 from .hook_fail_closed import unmanaged_passthrough
-from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
-from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, policy_update_pending_reason
+from .hook_policy_fence_window import policy_update_pending_reason
+
+_NATIVE_POLICY_NOT_READY_FALLBACK = (
+    "HOL Guard could not prepare the native policy safely. This is usually temporary. Retry this action."
+)
+_NATIVE_POLICY_INSTALL_REPAIR_FALLBACK = (
+    "HOL Guard could not prepare the native policy safely. Guard's installed files disagree, so retrying will not "
+    "clear it. Ask the user to run `hol-guard doctor`."
+)
+_NATIVE_POLICY_RESIDENT_DOWN_FALLBACK = (
+    "HOL Guard could not prepare the native policy safely. The native runtime is not answering. "
+    "Retry once more; if it still fails, ask the user to run `hol-guard repair` in a terminal."
+)
 
 
-def _native_policy_not_ready_reason(daemon_server: Any) -> str:
-    reason = "HOL Guard could not prepare the native policy safely."
-    retry = "This is usually temporary. Retry this action."
-    # An install whose files disagree rejects every snapshot, so telling the
-    # agent to retry sends it around the same failure until the user repairs
-    # the install.
-    repair = "Guard's installed files disagree, so retrying will not clear it. Ask the user to run `hol-guard doctor`."
-    # The resident stopped answering and the failures have repeated: a retry
-    # may land on a recovered resident, but only the user can restart it if not.
-    resident_down = (
-        "Guard's native runtime is not answering. Retry once more; if it still fails, "
-        "ask the user to run `hol-guard repair` in a terminal."
-    )
+def _native_managed_install_unmanaged(store: Any, harness: str) -> bool:
+    """Read the resident's atomic managed-install admission answer."""
+
+    native_store_call = getattr(store, "_native_store_call", None)
+    if not callable(native_store_call):
+        return False
+    try:
+        admission = native_store_call("hook_managed_install_admission", {"harness": harness})
+    except (OSError, RuntimeError, TypeError, ValueError, AttributeError):
+        return False
+    return isinstance(admission, Mapping) and admission.get("unmanaged") is True
+
+
+def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | None = None) -> str:
     publisher = getattr(getattr(daemon_server, "hook_worker", None), "policy_snapshot_publisher", None)
     last_error = getattr(publisher, "last_error", None)
-    if isinstance(last_error, str) and last_error.strip():
-        code = last_error.strip()
-        if code in POLICY_SOURCE_FENCE_ERRORS:
-            return policy_update_pending_reason()
-        advice = repair if code in POLICY_SNAPSHOT_PERSISTENT_ERRORS else retry
-        streak_reader = getattr(publisher, "resident_failure_streak", None)
-        streak = streak_reader() if callable(streak_reader) else 0
-        if is_resident_class_error(code) and isinstance(streak, int) and streak >= RESIDENT_FAIL_FAST_STREAK:
-            advice = resident_down
-        return f"{reason} {code}. {advice}"
-    return f"{reason} {retry}"
+    streak_reader = getattr(publisher, "resident_failure_streak", None)
+    streak = streak_reader() if callable(streak_reader) else 0
+    worker = getattr(daemon_server, "hook_worker", None)
+    guard_home = getattr(worker, "guard_home", None)
+    resident_down = (
+        isinstance(last_error, str)
+        and is_resident_class_error(last_error.strip())
+        and isinstance(streak, int)
+        and not isinstance(streak, bool)
+        and streak >= RESIDENT_FAIL_FAST_STREAK
+    )
+    if resident_down:
+        return _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
+    if isinstance(guard_home, Path):
+        reason = native_policy_not_ready_reason(last_error, streak, guard_home, deadline=deadline)
+        if reason is not None:
+            return reason
+    if last_error == "native_business_source_mutation_in_progress":
+        return policy_update_pending_reason()
+    # A resident that is already down cannot answer the Rust posture query.
+    # Keep this fixed transport-outage response local so repeated failures do
+    # not send the hook back into an unproductive retry loop.
+    if last_error == "native_command_program_binding_mismatch":
+        return _NATIVE_POLICY_INSTALL_REPAIR_FALLBACK
+    return _NATIVE_POLICY_NOT_READY_FALLBACK
 
 
 def prepare_native_hook_policy(
@@ -52,8 +78,11 @@ def prepare_native_hook_policy(
 ) -> bool:
     """Apply the production native-policy barrier before hook admission."""
 
-    harness = _canonical_managed_harness(default_harness)
-    if _hook_harness_is_unmanaged(daemon_server, harness):
+    from ..native_harness_client import canonical_harness
+
+    harness = canonical_harness(default_harness)
+    store = getattr(daemon_server, "store", None)
+    if _native_managed_install_unmanaged(store, harness):
         handler._write_json(unmanaged_passthrough(harness))
         return False
     workspace_path = Path(workspace) if workspace is not None else None
@@ -69,7 +98,7 @@ def prepare_native_hook_policy(
             payload,
             params,
             default_harness=default_harness,
-            reason=_native_policy_not_ready_reason(daemon_server),
+            reason=_native_policy_not_ready_reason(daemon_server, deadline=deadline),
             reason_code="native_policy_not_ready",
         )
     )

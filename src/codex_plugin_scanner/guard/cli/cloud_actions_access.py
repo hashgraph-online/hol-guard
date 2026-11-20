@@ -277,19 +277,17 @@ def _native_unavailable() -> CloudActionsAccessError:
 def revoke_cloud_actions_access(store: GuardStore, *, ai_tool: str | None) -> list[str]:
     """End Cloud actions access for one AI tool, or all of them; returns what Guard Cloud confirmed."""
 
-    from ..runtime import runner
+    from ..runtime import cloud_bundle_sync
 
     pairing = read_cloud_actions_pairing(store)
     auth_context = _pairing_auth_context(store)
-    request = runner._guard_sync_request(  # pyright: ignore[reportPrivateUsage]
-        auth_context,
-        request_url=pairing.revoke_url,
-        method="POST",
-        data=json.dumps({} if ai_tool is None else {"ai_tool": ai_tool}).encode("utf-8"),
-    )
     try:
-        payload = runner._urlopen_json_with_timeout_retry(  # pyright: ignore[reportPrivateUsage]
-            request=request, timeout_seconds=_HTTP_TIMEOUT_SECONDS, retry_timeout_seconds=_HTTP_TIMEOUT_SECONDS
+        payload = cloud_bundle_sync.cloud_json_request(
+            auth_context,
+            url=pairing.revoke_url,
+            body=json.dumps({} if ai_tool is None else {"ai_tool": ai_tool}).encode("utf-8"),
+            timeout_seconds=_HTTP_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_HTTP_TIMEOUT_SECONDS,
         )
     except urllib.error.HTTPError as error:
         raise CloudActionsAccessError(

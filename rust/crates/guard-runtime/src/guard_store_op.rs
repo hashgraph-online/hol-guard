@@ -488,7 +488,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
-        | "cached_supply_chain_bundle" => Kind::Snapshot,
+        | "cached_supply_chain_bundle"
+        | "hook_managed_install_admission" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
@@ -608,6 +609,11 @@ fn method_kind(method: &str) -> Option<Kind> {
         _ if connect::handles(method) => Kind::Write,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+pub(crate) fn method_is_snapshot_for_test(method: &str) -> bool {
+    method_kind(method) == Some(Kind::Snapshot)
 }
 
 fn dispatch(
@@ -954,6 +960,9 @@ fn dispatch(
             crate::guard_store_managed_installs::bump(connection, args)
         }
         "list_managed_installs" => crate::guard_store_managed_installs::list(connection, args),
+        "hook_managed_install_admission" => {
+            crate::guard_store_managed_installs::hook_admission(connection, args)
+        }
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "cached_supply_chain_bundle" => {

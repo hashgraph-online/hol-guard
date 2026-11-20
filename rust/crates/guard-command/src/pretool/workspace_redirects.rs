@@ -243,7 +243,7 @@ pub(super) fn contained(
     // single command, or a chain whose only write is its first step's,
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
-    let (stripped, _, _, entered) = project_scan(command)?;
+    let (stripped, _, names_files, entered) = project_scan(command)?;
     if entered && !cd::enters_cwd(&stripped, context) {
         return None;
     }
@@ -291,16 +291,14 @@ pub(super) fn contained(
     let single = direct.is_none();
     let runs_directly = direct
         .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
+    // File-free redirects need no sandbox, so keep the extension Allow.
     let allowed = projected.minimum_action == "allow"
         && !projected.action.sensitive_target
         && !runs_directly
+        && names_files
         && stays_offline(&projected_text, single);
-    // macOS claims package, Node tool and pytest commands with narrower
-    // profiles before the workspace route runs. The redirect disqualifies
-    // those, so the workspace sandbox takes the command once it passes that
-    // route's gate.
-    // A trailing `2>&1` before bounded output filters is not such a redirect:
-    // the narrower sink peels it itself, so that command keeps its profile.
+    // The workspace route handles redirects that disqualify narrower profiles.
+    // Bounded output filters peel `2>&1` themselves and retain their profile.
     let home = context.home_dir.map(Path::new);
     let narrower = super::redirect_projection::redirected_profile(&projected.reason_code)
         && projected.minimum_action == "sandbox-required"

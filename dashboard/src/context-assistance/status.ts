@@ -32,10 +32,17 @@ function config(value: unknown): value is GuardContextAssistanceConfig {
       .every((key) => Number.isSafeInteger(limits[key]));
 }
 
+/** Plain label for the engine that ran CIGAR: the built-in engine has no Python version. */
+export function engineLabel(facts: { schema: string; version: number[] }): string {
+  return facts.schema === "guard-cigar-builtin.v1" ? "Built into Guard" : "Python " + facts.version.join(".");
+}
+
 function runtime(value: unknown): value is ContextRuntime {
   if (!record(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record(value.interpreter)) return false;
   const facts = value.interpreter;
-  return facts.schema === "guard-cigar-interpreter.v1" && version(facts.version)
+  const builtinFacts = facts.schema === "guard-cigar-builtin.v1" && facts.implementation === "guard-builtin" && facts.abi === "none"
+    && value.adapter_id === "guard-cigar-builtin-v1";
+  return (facts.schema === "guard-cigar-interpreter.v1" || builtinFacts) && version(facts.version)
     && ["implementation", "release_level", "abi", "platform"].every((key) => text(facts[key]))
     && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean"
     && isCigarProducerVersion(value.package_version) && text(value.protocol)
@@ -53,8 +60,14 @@ function runtime(value: unknown): value is ContextRuntime {
 
 function installation(value: unknown): value is ContextInstallation {
   if (!record(value) || !text(value.runtime_id, 128)
-      || !["local_candidate", "guard_qualified"].includes(String(value.qualification))
-      || !version(value.python_version) || !text(value.platform) || !digest(value.worker_fingerprint)) return false;
+      || !["local_candidate", "guard_qualified", "guard_builtin"].includes(String(value.qualification))
+      || !text(value.platform) || !digest(value.worker_fingerprint)) return false;
+  if (value.qualification === "guard_builtin") {
+    return value.runtime_id === "builtin" && value.builtin === true && value.python_version === null && value.managed === false
+      && value.build_id === null && isCigarProducerVersion(value.sdk_version) && isCigarCoreLabel(value.core_version)
+      && text(value.adapter_id, 128) && value.adapter_revision === 1;
+  }
+  if (!version(value.python_version) || (value.builtin !== undefined && value.builtin !== false)) return false;
   const metadata = ["sdk_version", "core_version", "build_id", "adapter_id", "adapter_revision", "managed"];
   if (!metadata.some((key) => value[key] !== undefined)) return value.qualification === "local_candidate";
   if (!isCigarProducerVersion(value.sdk_version) || !isCigarCoreLabel(value.core_version)
@@ -86,7 +99,7 @@ export function parseContextAssistanceStatus(value: unknown): ContextAssistanceS
         || (Array.isArray(value.execution_observations) && value.execution_observations.length <= 32
           && value.execution_observations.every(isContextExecutionObservation)))
       || !(value.installation_options === null || (Array.isArray(value.installation_options)
-        && value.installation_options.length <= 8 && value.installation_options.every(installation)))
+        && value.installation_options.length <= 9 && value.installation_options.every(installation)))
       || !(value.job === null || (record(value.job) && revision(value.job.id)
         && (value.job.operation === "activate" || value.job.operation === "recheck")
         && (value.job.phase === "verifying" || value.job.phase === "cancelling")))) {

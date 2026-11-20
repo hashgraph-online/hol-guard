@@ -60,11 +60,17 @@ fn action(home: &Path, cwd: &Path, command: &str) -> String {
     .minimum_action
 }
 
+/// Searches that read whatever an ignore rule puts back within their reach.
+const TREE_SEARCHES: [&str; 3] = ["rg -l download tests", "rg -n download .", "rg download"];
+
+/// The same work with a `-g` inclusion, which reads only what it selects.
+const GLOB_SEARCH: &str = "rg -l 'download|href' tests src --glob '*.test.ts' | head -80";
+
 const SEARCHES: [&str; 4] = [
-    "rg -l download tests",
-    "rg -n download .",
-    "rg download",
-    "rg -l 'download|href' tests src --glob '*.test.ts' | head -80",
+    TREE_SEARCHES[0],
+    TREE_SEARCHES[1],
+    TREE_SEARCHES[2],
+    GLOB_SEARCH,
 ];
 
 #[test]
@@ -94,9 +100,15 @@ fn a_reincluded_fixture_file_rg_searches_by_name_proceeds() {
     }
 }
 
-/// A `.gitignore`, the extra files it needs, and whether the fixture is
-/// replaced with a link to the root `.env`.
-type Case = (&'static str, &'static [(&'static str, &'static str)], bool);
+/// A `.gitignore`, the extra files it needs, whether the fixture is replaced
+/// with a link to the root `.env`, and what the `-g` narrowed search answers
+/// there (`None` where the case does not reach the fixture directory).
+type Case = (
+    &'static str,
+    &'static [(&'static str, &'static str)],
+    bool,
+    Option<&'static str>,
+);
 
 #[test]
 fn a_reincluded_secret_directory_or_link_keeps_review() {
@@ -106,30 +118,51 @@ fn a_reincluded_secret_directory_or_link_keeps_review() {
         std::os::unix::fs::symlink(repository.join(".env"), kit.join(".mcp.json")).unwrap();
     };
     let cases: [Case; 4] = [
-        ("!.env\n", &[], false),
+        ("!.env\n", &[], false, None),
         (
             "!tests/fixtures/kit/.envrc\n",
             &[("tests/fixtures/kit/.envrc", "export KEY=synthetic\n")],
             false,
+            // `*.test.ts` cannot select `.envrc`, so the narrowed search
+            // never reads what the re-include brought back.
+            Some("allow"),
         ),
         (
             "!tests/fixtures/kit/.settings\n",
             &[("tests/fixtures/kit/.settings/config.json", "{}\n")],
             false,
+            // A re-included directory is what the glob would have to skip,
+            // and an inclusion glob never prunes one: `rg` walks into it and
+            // the rule answers for whatever the walk finds there.
+            Some("review"),
         ),
-        ("!tests/fixtures/kit/.mcp.json\n", &[], true),
+        (
+            "!tests/fixtures/kit/.mcp.json\n",
+            &[],
+            true,
+            // The link's own name is what the glob is read against, and
+            // `*.test.ts` does not select it.
+            Some("allow"),
+        ),
     ];
-    for (gitignore, files, linked) in cases {
+    for (gitignore, files, linked, narrowed) in cases {
         let (home, repository) = repository(gitignore, files);
         if linked {
             link(&repository);
         }
-        for command in SEARCHES {
+        for command in TREE_SEARCHES {
             if gitignore == "!.env\n" && command.contains("tests") {
                 continue;
             }
             let seen = action(&home, &repository, command);
             assert_ne!(seen, "allow", "{gitignore:?}: {command}");
+        }
+        if let Some(expected) = narrowed {
+            assert_eq!(
+                action(&home, &repository, GLOB_SEARCH),
+                expected,
+                "{gitignore:?}: {GLOB_SEARCH}"
+            );
         }
     }
 }

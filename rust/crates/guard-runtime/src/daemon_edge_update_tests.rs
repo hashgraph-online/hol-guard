@@ -124,6 +124,87 @@ fn desktop_handoff() {
 }
 
 #[test]
+fn desktop_handoff_keeps_the_offered_release_when_the_recheck_loses_it() {
+    // The dashboard offered 3.61.0a5; the fresh status check could not
+    // confirm the alpha (rate limited) and fell back to the running Core.
+    let rechecked = json!({
+        "installer": "desktop",
+        "update_available": false,
+        "latest_version": "3.61.0a1",
+        "current_version": "3.61.0a1",
+    });
+    let mut recorded_args = Vec::new();
+    let mut call = |name: &str, args: Value| match name {
+        "update.status" => Ok(rechecked.clone()),
+        "update.handoff" => {
+            recorded_args.push(args);
+            Ok(json!({"recorded": true}))
+        }
+        _ => Err(CallError::Unavailable),
+    };
+    let mut host = Host {
+        call: &mut call,
+        args: Map::new(),
+    };
+    let Value::Object(payload) = json!({"handoff_to_desktop": true, "latest_version": "3.61.0a5"})
+    else {
+        unreachable!()
+    };
+    let answer = finish(update(&mut host, &payload)).unwrap_or_else(|| unreachable!());
+    assert_eq!(
+        answer,
+        (
+            200,
+            json!({"handoff_requested": true, "current_version": "3.61.0a1", "latest_version": "3.61.0a5"})
+        )
+    );
+    assert_eq!(recorded_args.len(), 1);
+    assert_eq!(recorded_args[0]["latest_version"], "3.61.0a5");
+}
+
+#[test]
+fn desktop_handoff_refuses_an_offered_version_that_is_not_newer() {
+    let rechecked = json!({
+        "installer": "desktop",
+        "update_available": false,
+        "latest_version": "3.61.0a1",
+        "current_version": "3.61.0a1",
+    });
+    for offered in [
+        json!("3.61.0a1"),
+        json!("3.60.0"),
+        json!("not a version"),
+        json!(""),
+        json!(7),
+        json!("9".repeat(80)),
+    ] {
+        let run = drive(
+            json!({"handoff_to_desktop": true, "latest_version": offered}),
+            rechecked.clone(),
+            &[("update.handoff", json!({"recorded": true}))],
+        );
+        assert_eq!(run.1, ["update.status"], "{offered}");
+        assert_eq!(reply(run).1["error"], "update_not_available", "{offered}");
+    }
+}
+
+#[test]
+fn desktop_handoff_prefers_the_checked_release_over_the_offered_one() {
+    let status = json!({
+        "installer": "desktop",
+        "update_available": true,
+        "latest_version": "3.61.0a6",
+        "current_version": "3.61.0a1",
+    });
+    let run = drive(
+        json!({"handoff_to_desktop": true, "latest_version": "3.61.0a5"}),
+        status,
+        &[("update.handoff", json!({"recorded": true}))],
+    );
+    assert_eq!(reply(run).1["latest_version"], "3.61.0a6");
+}
+
+#[test]
 fn an_unreachable_library_relays() {
     let mut call = |_: &str, _: Value| Err(CallError::Unavailable);
     let mut host = Host {

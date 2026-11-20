@@ -29,7 +29,8 @@ use std::path::{Path, PathBuf};
 
 use guard_contracts::{
     ArchiveInspectionSpecV1, ArchiveVerdictV1, EgressNeedV1, EgressOutcomeV1, EgressSuppliedV1,
-    EGRESS_MAX_HEADERS, EGRESS_MAX_NEEDS, EGRESS_MAX_NEED_BODY_BYTES, EGRESS_MAX_SUPPLIED,
+    EGRESS_MAX_HEADERS, EGRESS_MAX_IN_PROCESS_NEED_BODY_BYTES, EGRESS_MAX_NEEDS,
+    EGRESS_MAX_NEED_BODY_BYTES, EGRESS_MAX_SUPPLIED,
 };
 use sha2::{Digest, Sha256};
 
@@ -81,6 +82,8 @@ struct State {
     needs: Vec<EgressNeedV1>,
     pending: bool,
     pending_delay: f64,
+    /// Largest request body this scope records as a need.
+    need_body_limit: usize,
     /// Offline inspection verdicts the caller reported for archives it
     /// downloaded, by archive digest.
     inspections: HashMap<String, ArchiveVerdictV1>,
@@ -98,6 +101,24 @@ impl EgressScope {
     pub fn enter(
         supplied: &[EgressSuppliedV1],
         spool_dir: Option<&str>,
+    ) -> Result<Self, &'static str> {
+        Self::enter_with_limit(supplied, spool_dir, EGRESS_MAX_NEED_BODY_BYTES)
+    }
+
+    /// [`Self::enter`] for a caller that fulfils the needs in this process,
+    /// so request bodies up to [`EGRESS_MAX_IN_PROCESS_NEED_BODY_BYTES`] never
+    /// cross a resident request.
+    pub fn enter_in_process(
+        supplied: &[EgressSuppliedV1],
+        spool_dir: Option<&str>,
+    ) -> Result<Self, &'static str> {
+        Self::enter_with_limit(supplied, spool_dir, EGRESS_MAX_IN_PROCESS_NEED_BODY_BYTES)
+    }
+
+    fn enter_with_limit(
+        supplied: &[EgressSuppliedV1],
+        spool_dir: Option<&str>,
+        need_body_limit: usize,
     ) -> Result<Self, &'static str> {
         if supplied.len() > EGRESS_MAX_SUPPLIED {
             return Err("egress_supplied_too_many");
@@ -143,6 +164,7 @@ impl EgressScope {
             needs: Vec::new(),
             pending: false,
             pending_delay: 0.0,
+            need_body_limit,
             inspections: HashMap::new(),
         })
     }
@@ -158,6 +180,7 @@ impl EgressScope {
             needs: Vec::new(),
             pending: false,
             pending_delay: 0.0,
+            need_body_limit: 0,
             inspections: HashMap::new(),
         })
     }
@@ -265,7 +288,7 @@ impl State {
         }
         let body = match spec.body {
             None => None,
-            Some(bytes) if bytes.len() <= EGRESS_MAX_NEED_BODY_BYTES => {
+            Some(bytes) if bytes.len() <= self.need_body_limit => {
                 match String::from_utf8(bytes.to_vec()) {
                     Ok(text) => Some(text),
                     Err(_) => return Resolution::Unavailable("egress request body is not text"),
@@ -396,7 +419,10 @@ fn replay_outcome(
                 max_response_bytes,
             )?;
             if (200..300).contains(status) {
-                return Ok(SyncResponse { body_bytes: bytes });
+                return Ok(SyncResponse {
+                    status: *status,
+                    body_bytes: bytes,
+                });
             }
             Err(SyncHttpError::Http {
                 status: *status,

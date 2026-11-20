@@ -24,8 +24,19 @@ fn plain_operand(value: &str, context: crate::pretool::PathContext<'_>) -> Optio
         || value.contains([
             '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\', '*', '?', '[', ']', '{', '}',
         ])
-        || value.split('/').any(|part| part == "..")
         || !crate::pretool::safe_reads::verified_path_context(context.home_dir, context.cwd)
+    {
+        return None;
+    }
+    // A parent component is how a script names a file beside the directory it
+    // works in, and the kernel resolves it physically against that directory.
+    // Both callers canonicalize before they screen anything, so the resolved
+    // path, not the spelling, decides. A `~` expansion and a Windows rooted
+    // spelling are normalized lexically first, so `..` stays refused there.
+    let parent_component = value.split('/').any(|part| part == "..");
+    if parent_component
+        && (value.starts_with('~')
+            || (!cfg!(unix) && crate::pretool::read_paths::rooted(value.trim())))
     {
         return None;
     }

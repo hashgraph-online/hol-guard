@@ -342,7 +342,7 @@ fn int_equals_float(int: i128, float: f64) -> bool {
 }
 
 /// Python `==` over decoded JSON: `True == 1 == 1.0`, containers recurse.
-fn py_equal(left: &Value, right: &Value) -> bool {
+pub(crate) fn py_equal(left: &Value, right: &Value) -> bool {
     if let (Some(a), Some(b)) = (scalar(left), scalar(right)) {
         return match (a, b) {
             (Scalar::Int(a), Scalar::Int(b)) => a == b,

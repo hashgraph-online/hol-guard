@@ -31,6 +31,8 @@ mod extension_control_terminal;
 pub use extension_control_terminal::*;
 mod github_cli_classify;
 pub use github_cli_classify::*;
+mod command_job_plan;
+pub use command_job_plan::*;
 mod github_workflow_prepare;
 pub use github_workflow_prepare::*;
 mod protect_advisory_merge;

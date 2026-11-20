@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import base64
-import functools
 import os
 import secrets
-import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import ParamSpec, TypeVar
 
 from ..native_command_capability import (
     CommandCapabilityUnavailableError,
@@ -22,10 +19,14 @@ from ..native_command_envelope import (
     CommandEnvelopeUnavailableError,
     native_command_envelope,
 )
+from ..native_command_state import (
+    CommandStateRefusedError,
+    CommandStateUnavailableError,
+    native_command_state,
+)
 from ..portable_command import render_portable_command
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
-from .command_replay_rows import replay_rows_naming
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -35,7 +36,6 @@ COMMAND_REPLAY_STATE_KEY = "guard_command_replay_state_v1"
 COMMAND_QUEUE_RUNTIME_STATE_KEY = "guard_command_queue_state"
 COMMAND_CAPABILITY_VERSION = 1
 COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
-COMMAND_REPLAY_MAX_ITEMS = 512
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
 
 
@@ -76,15 +76,6 @@ def command_environment_allows_queue(environ: Mapping[str, str] | None = None) -
 
 
 _parse_timestamp = parse_utc_timestamp
-
-
-def _state_items(payload: object) -> list[dict[str, object]]:
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items")
-    if not isinstance(raw_items, list):
-        return []
-    return [{str(key): value for key, value in item.items()} for item in raw_items if isinstance(item, dict)]
 
 
 def _envelope(
@@ -213,12 +204,9 @@ def issue_command_capability(
         },
         create_key=True,
     )
-    store.set_sync_payload(COMMAND_CAPABILITY_STATE_KEY, capability, issued_at.isoformat())
-    # Never inherit a result or active lease from the historical always-on
-    # queue or from an earlier revoked capability.
-    store.delete_sync_payload(COMMAND_QUEUE_RUNTIME_STATE_KEY)
-    store.delete_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY)
+    # The runtime installs it and, in the same transaction, drops any result,
+    # lease, grant or waiting job left by an earlier queue or capability.
+    _ledger(store, "issue", now=issued_at.isoformat(), capability=capability)
     _audit(
         store,
         "cloud_command.capability_issued",
@@ -269,6 +257,18 @@ def _binding_for_resident(store: GuardStore) -> tuple[str | None, str | None, st
     return device_id, workspace_id, None
 
 
+def _replay_subject(subject: object) -> object:
+    """Send the replay lookup only the fields it filters on.
+
+    A job payload can be far larger than the ledger's request limit, and the
+    lookup reads nothing but the job id and the idempotency key.
+    """
+
+    if not isinstance(subject, Mapping):
+        return subject
+    return {key: subject[key] for key in ("id", "idempotencyKey") if key in subject}
+
+
 def _capability_verdict(
     store: GuardStore,
     *,
@@ -289,9 +289,17 @@ def _capability_verdict(
     home = _resident_home(store)
     key_b64, key_id = _signing_material_for_resident(store)
     device_id, workspace_id, oauth_error = _binding_for_resident(store)
+    current = now if now is not None else datetime.now(timezone.utc).isoformat()
     subject = job if job is not None else replay_identity
     replay_items = (
-        replay_rows_naming(_state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY)), subject)
+        _ledger_rows(
+            _ledger(
+                store,
+                "replay_rows",
+                now=current,
+                subject=_replay_subject(subject),
+            )
+        )
         if subject is not None
         else []
     )
@@ -302,7 +310,7 @@ def _capability_verdict(
         device_id=device_id,
         workspace_id=workspace_id,
         oauth_error=oauth_error,
-        now=now if now is not None else datetime.now(timezone.utc).isoformat(),
+        now=current,
         job=job,
         schema_versions=dict(schema_versions or {}),
         replay_items=replay_items,
@@ -332,9 +340,15 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
 
 
 def command_capability_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
+    try:
+        waiting = pending_command_approvals(store, now=now)
+    except CommandCapabilityError:
+        # Status and revocation still answer while the ledger does not; they
+        # just cannot list what is waiting.
+        waiting = []
     pending_status = [
         {key: item[key] for key in ("id", "operation", "issuer", "expiresAt", "approveCommand") if key in item}
-        for item in pending_command_approvals(store, now=now)
+        for item in waiting
     ]
     try:
         capability = _verified_capability(store, now=now)
@@ -385,11 +399,8 @@ def revoke_command_capability(
 ) -> dict[str, object]:
     revoked_at = _now_datetime(now).isoformat()
     previous = command_capability_status(store, now=revoked_at)
-    store.delete_sync_payload(COMMAND_CAPABILITY_STATE_KEY)
-    store.delete_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_REPLAY_STATE_KEY)
-    store.delete_sync_payload(COMMAND_QUEUE_RUNTIME_STATE_KEY)
+    # The capability and every ledger row go in one runtime transaction.
+    _ledger(store, "clear", now=revoked_at)
     _audit(
         store,
         "cloud_command.capability_revoked",
@@ -442,28 +453,43 @@ def _identity_digest(store: GuardStore, identity: Mapping[str, object]) -> str:
     return digest
 
 
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
-_COMMAND_STATE_LOCK = threading.RLock()
-
-
-def _holding_command_state_lock(function: Callable[_P, _R]) -> Callable[_P, _R]:
-    """Run ``function`` while holding the lock on the shared command state rows.
+def _ledger(
+    store: GuardStore,
+    op: str,
+    *,
+    now: str,
+    signing: bool = False,
+    **fields: object,
+) -> object:
+    """One answer from the runtime's command ledger, or its refusal raised.
 
     Pending approvals, local grants and replay rows are each read, changed and
-    written back whole. Review drain workers settle jobs on parallel threads,
-    so two writers that read the same rows would each drop the other's change.
+    written back whole. The runtime does that in one SQLite transaction, so
+    review drain threads and other processes cannot drop each other's rows.
+    ``signing`` passes the local signing secret for the operations that sign
+    or verify a grant; whether a grant is genuine is the runtime's answer.
     """
 
-    @functools.wraps(function)
-    def locked(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-        with _COMMAND_STATE_LOCK:
-            return function(*args, **kwargs)
+    if signing:
+        key_b64, key_id = _signing_material_for_resident(store, create=False)
+        fields = {**fields, "integrity_key_b64": key_b64, "integrity_key_id": key_id}
+    try:
+        return native_command_state(_resident_home(store), op, now=now, **fields)
+    except CommandStateUnavailableError as error:
+        # A ledger that gives no answer is the same fail-closed refusal as a
+        # resident that cannot sign: the queue posts it on the job result and
+        # the CLI prints it, keeping its own code.
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason) from error
+    except CommandStateRefusedError as error:
+        raise CommandCapabilityError(error.code) from error
 
-    return locked
+
+def _ledger_rows(answer: object) -> list[dict[str, object]]:
+    if not isinstance(answer, list):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return [{str(key): value for key, value in item.items()} for item in answer if isinstance(item, dict)]
 
 
-@_holding_command_state_lock
 def register_pending_command(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
@@ -472,37 +498,31 @@ def register_pending_command(
     now: str | None = None,
 ) -> dict[str, object]:
     recorded_at = _now_datetime(now).isoformat()
-    items = _state_items(store.get_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY))
     job_id = str(authorized.identity["id"])
-    items = [item for item in items if item.get("id") != job_id]
-    item = {
-        **authorized.identity,
-        "issuer": job.get("issuer") if isinstance(job.get("issuer"), str) else "Guard Cloud",
-        "recordedAt": recorded_at,
-        "approveCommand": render_portable_command(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
-    }
-    items.append(item)
-    store.set_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY, {"version": 1, "items": items[-64:]}, recorded_at)
+    issuer = job.get("issuer") if isinstance(job.get("issuer"), str) else "Guard Cloud"
+    item = _ledger(
+        store,
+        "register_pending",
+        now=recorded_at,
+        identity=dict(authorized.identity),
+        issuer=issuer,
+        approve_command=render_portable_command(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
+    )
+    if not isinstance(item, dict):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
     _audit(
         store,
         "cloud_command.local_approval_required",
-        {"job_id": job_id, "operation": authorized.operation, "issuer": item["issuer"]},
+        {"job_id": job_id, "operation": authorized.operation, "issuer": issuer},
         recorded_at,
     )
-    return item
+    return {str(key): value for key, value in item.items()}
 
 
 def pending_command_approvals(store: GuardStore, *, now: str | None = None) -> list[dict[str, object]]:
-    current = _now_datetime(now)
-    items = _state_items(store.get_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY))
-    return [
-        dict(item)
-        for item in items
-        if (expires_at := _parse_timestamp(item.get("expiresAt"))) is not None and expires_at > current
-    ]
+    return _ledger_rows(_ledger(store, "pending", now=_now_datetime(now).isoformat()))
 
 
-@_holding_command_state_lock
 def approve_pending_command(
     store: GuardStore,
     job_id: str,
@@ -510,109 +530,64 @@ def approve_pending_command(
     issuer: str = "local-cli",
     now: str | None = None,
 ) -> dict[str, object]:
-    approved_at = _now_datetime(now)
-    pending = next(
-        (item for item in pending_command_approvals(store, now=approved_at.isoformat()) if item.get("id") == job_id),
-        None,
-    )
-    if pending is None:
-        raise CommandCapabilityError("pending_command_not_found")
-    identity = {
-        key: pending[key]
-        for key in (
-            "id",
-            "operation",
-            "schemaVersion",
-            "deviceId",
-            "workspaceId",
-            "nonce",
-            "expiresAt",
-            "idempotencyKey",
-            "payloadDigest",
-        )
-    }
-    grant = _signed_payload(
-        store,
-        {
-            "version": 1,
-            "identity": identity,
-            "identityDigest": _identity_digest(store, identity),
-            "issuer": issuer,
-            "approvedAt": approved_at.isoformat(),
-        },
-        create_key=False,
-    )
-    items = _state_items(store.get_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY))
-    items = [item for item in items if item.get("identityDigest") != grant["identityDigest"]]
-    items.append(grant)
-    store.set_sync_payload(
-        COMMAND_LOCAL_APPROVALS_STATE_KEY, {"version": 1, "items": items[-64:]}, approved_at.isoformat()
-    )
+    approved_at = _now_datetime(now).isoformat()
+    approved = _ledger(store, "approve", now=approved_at, signing=True, job_id=job_id, issuer=issuer)
+    if not isinstance(approved, dict):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
     _audit(
         store,
         "cloud_command.local_approval_granted",
-        {"job_id": job_id, "operation": identity["operation"], "issuer": issuer},
-        approved_at.isoformat(),
+        {"job_id": job_id, "operation": approved.get("operation"), "issuer": issuer},
+        approved_at,
     )
-    return {"approved": True, "job_id": job_id, "operation": identity["operation"], "issuer": issuer}
+    return {str(key): value for key, value in approved.items()}
 
 
 def command_identity_digest(store: GuardStore, authorized: AuthorizedCommandJob) -> str:
     """The runtime's digest for ``authorized``, for a caller that needs it twice.
 
     Spending a grant and recording the replay row both name the job by this
-    digest. A caller that asks for it once, before it touches either, cannot
-    lose an approval to a resident that stops answering between the two.
+    digest. The ledger checks a digest it is handed against its own, so a
+    caller that names the job once cannot spend one job's grant for another.
     """
 
     return _identity_digest(store, authorized.identity)
 
 
-@_holding_command_state_lock
 def consume_local_command_approval(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
     *,
     now: str | None = None,
     identity_digest: str | None = None,
+    record_replay: bool = False,
 ) -> bool:
+    """Spend the job's local grant and, when asked, record its replay row.
+
+    The runtime spends the grant and writes the replay row in one
+    transaction, so a spent grant always has its replay row. A job that needs
+    no local approval only records the row.
+    """
+
     if not authorized.requires_local_approval:
+        if record_replay:
+            mark_command_job_consumed(store, authorized, now=now, identity_digest=identity_digest)
         return True
-    items = _state_items(store.get_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY))
-    if identity_digest is None:
-        identity_digest = _identity_digest(store, authorized.identity)
-    matched_index: int | None = None
-    for index, item in enumerate(items):
-        if item.get("identityDigest") != identity_digest:
-            continue
-        try:
-            verified = _verify_signed_payload(store, item)
-        except CommandCapabilityError as error:
-            if error.code == CommandEnvelopeUnavailableError.reason:
-                # A resident that cannot answer is not a grant that fails to
-                # match. Walking on would drop a real approval and ask the user
-                # to approve this job a second time.
-                raise
-            continue
-        if verified.get("identity") == authorized.identity:
-            matched_index = index
-            break
-    if matched_index is None:
-        return False
-    del items[matched_index]
-    timestamp = _now_datetime(now).isoformat()
-    store.set_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY, {"version": 1, "items": items}, timestamp)
-    pending_items = _state_items(store.get_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY))
-    remaining_pending = [item for item in pending_items if item.get("id") != authorized.identity["id"]]
-    store.set_sync_payload(
-        COMMAND_PENDING_APPROVALS_STATE_KEY,
-        {"version": 1, "items": remaining_pending},
-        timestamp,
+    consumed = _ledger(
+        store,
+        "consume",
+        now=_now_datetime(now).isoformat(),
+        signing=True,
+        identity=dict(authorized.identity),
+        identity_digest=identity_digest,
+        operation=authorized.operation if record_replay else None,
+        record_replay=True if record_replay else None,
     )
-    return True
+    if not isinstance(consumed, bool):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return consumed
 
 
-@_holding_command_state_lock
 def mark_command_job_consumed(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
@@ -620,27 +595,13 @@ def mark_command_job_consumed(
     now: str | None = None,
     identity_digest: str | None = None,
 ) -> None:
-    if identity_digest is None:
-        identity_digest = _identity_digest(store, authorized.identity)
-    consumed_at = _now_datetime(now)
-    raw_items = _state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY))
-    items = [
-        item
-        for item in raw_items
-        if (expires_at := _parse_timestamp(item.get("expiresAt"))) is not None and expires_at > consumed_at
-    ]
-    items.append(
-        {
-            "identityDigest": identity_digest,
-            "jobId": authorized.identity["id"],
-            "idempotencyKey": authorized.identity["idempotencyKey"],
-            "operation": authorized.operation,
-            "expiresAt": authorized.identity["expiresAt"],
-            "consumedAt": consumed_at.isoformat(),
-        }
-    )
-    store.set_sync_payload(
-        COMMAND_REPLAY_STATE_KEY, {"version": 1, "items": items[-COMMAND_REPLAY_MAX_ITEMS:]}, consumed_at.isoformat()
+    _ledger(
+        store,
+        "mark_consumed",
+        now=_now_datetime(now).isoformat(),
+        identity=dict(authorized.identity),
+        identity_digest=identity_digest,
+        operation=authorized.operation,
     )
 
 

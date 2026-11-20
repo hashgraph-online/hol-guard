@@ -257,6 +257,7 @@ fn a_hook_without_a_session_reads_no_notice_and_still_records_its_event() {
 fn a_lifecycle_op_without_its_hook_fields_is_refused() {
     let (path, connection) = fresh_store("claude-lifecycle-no-payload");
     for op in [
+        "claude_lifecycle",
         "claude_permission_request",
         "claude_permission_prompt",
         "claude_turn_stop",
@@ -277,6 +278,39 @@ fn a_lifecycle_op_without_its_hook_fields_is_refused() {
         );
     }
     assert!(super::vectors::events(&connection).is_empty());
+    drop(connection);
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn combined_lifecycle_op_selects_each_hook_response_in_rust() {
+    let (path, connection) = fresh_store("claude-lifecycle-dispatch");
+    let request = guard_contracts::HookAuthorityStateRequestV1 {
+        schema: guard_contracts::HOOK_AUTHORITY_STATE_REQUEST_SCHEMA.to_owned(),
+        store_path: path.to_string_lossy().into_owned(),
+        guard_home: std::env::temp_dir().to_string_lossy().into_owned(),
+        op: "claude_lifecycle".to_owned(),
+        now: "2026-10-28T00:00:00+00:00".to_owned(),
+        session_id: Some("session".to_owned()),
+        ..Default::default()
+    };
+    let base = Base { request: &request };
+    let hook = json!({
+        "event_name": "PermissionRequest",
+        "session_id": "session",
+        "tool_name": "Bash"
+    });
+    let answer = base.call(&path, "claude_lifecycle", json!({ "payload": hook }));
+    assert_eq!(
+        answer["harness_response"],
+        permission_request_response(hook.as_object().expect("hook"), None)
+    );
+    let unknown = base.call(
+        &path,
+        "claude_lifecycle",
+        json!({ "payload": { "event_name": "Other" } }),
+    );
+    assert_eq!(unknown, json!({}));
     drop(connection);
     let _ = std::fs::remove_file(&path);
 }

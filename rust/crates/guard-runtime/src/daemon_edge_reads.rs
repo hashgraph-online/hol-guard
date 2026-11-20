@@ -1120,7 +1120,7 @@ mod health_details;
 #[path = "daemon_edge_streams.rs"]
 mod streams;
 #[path = "daemon_edge_writes.rs"]
-mod writes;
+pub(super) mod writes;
 pub(super) use writes::record_diagnostic;
 
 #[cfg(all(test, unix))]

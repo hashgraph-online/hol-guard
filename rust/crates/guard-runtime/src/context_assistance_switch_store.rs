@@ -229,11 +229,29 @@ impl Owner {
         let lock = WriteLock::acquire(&self.home).map_err(storage_error)?;
         self.check(&lock)?;
         if let Some(record) = &self.record {
-            return if record.current == current {
-                Ok(())
-            } else {
-                Err(error("switch_selection_conflict"))
-            };
+            if record.current == current {
+                return Ok(());
+            }
+            let finished = record
+                .transaction
+                .as_ref()
+                .is_none_or(|t| t.phase.terminal());
+            if !finished || !activation::builtin_upgrade(&record.current, &current) {
+                return Err(error("switch_selection_conflict"));
+            }
+            // A Guard update re-measured the built-in engine and its data is
+            // memory-only: record the new identity so later jobs agree on it.
+            let mut next = record.clone();
+            next.revision = next
+                .revision
+                .checked_add(1)
+                .ok_or_else(|| error("switch_record_invalid"))?;
+            if next.last_good.as_ref() == Some(&next.current) {
+                next.last_good = Some(current.clone());
+            }
+            next.current = current;
+            next.transaction = None;
+            return self.publish_locked(&lock, next);
         }
         self.provision(&lock)?;
         self.publish_locked(

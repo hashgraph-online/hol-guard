@@ -89,6 +89,13 @@ def write_home_tree(home: Path) -> None:
     _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
     _write(home / "other-project" / "src" / "report.ts", "export const reportWindow = 'report-window-marker';\n")
     _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')
+    # A Next.js route group. The parentheses are part of the directory's own
+    # name -- the framework reads them, the shell never does -- so working
+    # inside one is ordinary project work.
+    _write(
+        home / "other-project" / "app" / "(group)" / "overview" / "page.tsx",
+        "export default function Overview() {\n  return null;\n}\n",
+    )
     write_sibling_documents(home / "other-project")
     # Sibling checkout's committed lockfile: the probe that globs for one has to
     # find it, or the read is allowed for naming nothing rather than for being safe.

@@ -88,6 +88,8 @@ _FIXED_TOOLS = {
     "list_dir": "list_dir",
     # Oh My Pi's hashline edit: one `input` patch plus the `path`/`paths` copies it derives.
     "edit": "edit",
+    # Oh My Pi's session-state bookkeeping: an `op` plus the objective and budget it carries.
+    "goal": "goal",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix

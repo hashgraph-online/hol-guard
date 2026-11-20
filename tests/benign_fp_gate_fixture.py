@@ -52,7 +52,7 @@ from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
-from tests.benign_fp_gate_configs import write_parent_documents
+from tests.benign_fp_gate_configs import write_parent_design_tokens, write_parent_documents
 from tests.benign_fp_gate_cursor_project import cursor_project_path, write_cursor_projects
 from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
@@ -223,8 +223,8 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)
     _write(parent / "src" / "password-reset-email.tsx", "export const Email = ({ password }) => <Field password={password} />;\n")
     _write(parent / "src" / "maintenance-auth.ts", MAINTENANCE_AUTH_SOURCE)
-    _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
-    _write(parent / "app" / "(marketing)" / "blog" / "[slug]" / "page.tsx", "export default function Post() {}\n")
+    _write(parent / "app" / "items" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
+    _write(parent / "app" / "(group)" / "blog" / "[slug]" / "page.tsx", "export default function Post() {}\n")
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
     _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)
@@ -240,6 +240,10 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / ".gitignore", "node_modules/\ndashboard/node_modules\n")
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
+    # Untracked on purpose: the credential-name screen these documents
+    # exercise is only reached for a file the walk cannot prove by its
+    # checkout.
+    write_parent_design_tokens(parent)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
     # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
     _git(parent, "branch", "feat/other-branch", home=home)

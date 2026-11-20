@@ -8,6 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.policy_delivery_status import format_policy_status, policy_status_payload
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 
 
 def test_status_names_the_inactive_devices_cloud_left_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,8 +28,8 @@ def test_status_names_the_inactive_devices_cloud_left_out(tmp_path: Path, monkey
         "_resolve_guard_sync_auth_context",
         lambda _store: {"sync_url": "https://hol.example/api/guard/receipts/sync"},
     )
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: response)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", lambda **_kwargs: response)
 
     delivery = fetch_policy_delivery(store)
     monkeypatch.setattr(

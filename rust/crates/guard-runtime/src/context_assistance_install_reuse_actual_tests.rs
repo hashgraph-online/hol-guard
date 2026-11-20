@@ -218,7 +218,7 @@ fn actual_receipt_refresh_reuses_historical_slot_and_keeps_existing_sdk_responsi
         super::super::super::super::list(&fixture.home)
             .unwrap()
             .len(),
-        1
+        2
     );
     versioned::resolve(
         &fixture.home,

@@ -28,6 +28,7 @@ fn cases() -> Vec<Value> {
 fn env(connection: &Connection) -> Env<'_> {
     Env {
         connection,
+        guard_home: None,
         key: Some(zeroize::Zeroizing::new(KEY.to_vec())),
         key_id: Some("test-key"),
         now: NOW,
@@ -98,11 +99,17 @@ fn settles_every_recorded_question() {
                     tilde_home: Some("/home/user".to_owned()),
                 })
                 .unwrap();
+                let mut comparable = reply.clone();
+                comparable
+                    .as_object_mut()
+                    .expect("save reply")
+                    .remove("pending_id");
                 assert_eq!(
-                    reply,
+                    comparable,
                     json!({
                         "outcome": "save",
                         "artifact_id": row["artifact_id"],
+                        "pending_artifact_hash": row["artifact_hash"],
                         "reason": reason,
                         "source": "claude-ask-user-question",
                         "plan": serde_json::to_value(plan).unwrap(),
@@ -191,6 +198,140 @@ fn the_pending_artifact_details_reach_the_plan() {
     })
     .unwrap();
     assert_eq!(reply["plan"], serde_json::to_value(plan).unwrap());
+    drop(connection);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn question_save_persists_the_plan_and_consumes_pending_state() {
+    let case = cases()
+        .into_iter()
+        .find(|case| case["name"] == "answers-keyed-allow-once")
+        .unwrap();
+    let (path, connection) = fresh_store("question-save");
+    connection
+        .execute_batch(
+            "create table policy_decisions (
+                decision_id integer primary key autoincrement,
+                harness text not null,
+                scope text not null,
+                artifact_id text,
+                artifact_hash text,
+                workspace text,
+                publisher text,
+                action text not null,
+                reason text,
+                owner text,
+                source text not null,
+                expires_at text,
+                updated_at text,
+                integrity_version integer,
+                integrity_generation integer,
+                payload_hash text,
+                payload_mac text,
+                integrity_key_id text,
+                signed_at text
+            )",
+        )
+        .expect("policy schema");
+    let mut row = recorded(&case["pending"]);
+    row.insert("artifact_type".into(), json!("tool_action_request"));
+    let reply = settle(&connection, &row, Some(&projection(&case)));
+    assert_eq!(reply["outcome"], "save");
+    let mut save = reply.as_object().unwrap().clone();
+    save.insert("session_id".into(), json!(SESSION));
+    save.insert("current_generation".into(), json!(0));
+    let saved = env(&connection)
+        .claude_question_save(SESSION, &save)
+        .expect("save");
+    assert_eq!(saved["valid"], true);
+    assert_eq!(saved["saved"], true);
+    assert!(saved["next_control_state"].is_object());
+    assert!(env(&connection)
+        .claude_load_single_pending(SESSION)
+        .is_some());
+    env(&connection)
+        .claude_question_consume(SESSION, &save)
+        .expect("consume");
+    assert!(env(&connection)
+        .claude_load_single_pending(SESSION)
+        .is_none());
+    let action: String = connection
+        .query_row(
+            "select action from policy_decisions where harness='claude-code' and scope='artifact'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("policy row");
+    assert_eq!(action, "allow");
+    drop(connection);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn question_save_rejects_a_plan_without_its_required_event_sequence() {
+    let (path, connection) = fresh_store("question-save-invalid-plan");
+    connection
+        .execute_batch(
+            "create table policy_decisions (
+                decision_id integer primary key autoincrement,
+                harness text not null, scope text not null, artifact_id text,
+                artifact_hash text, workspace text, publisher text, action text not null,
+                reason text, owner text, source text not null, expires_at text,
+                updated_at text, integrity_version integer, integrity_generation integer,
+                payload_hash text, payload_mac text, integrity_key_id text, signed_at text
+            )",
+        )
+        .expect("policy schema");
+    let payload = json!({
+        "artifact_id": "artifact",
+        "reason": "reason",
+        "source": "claude-ask-user-question",
+        "plan": {
+            "stored_artifact_hash": "sha256:artifact",
+            "policy_action": "allow",
+            "events": [],
+            "inventory_approved": false
+        }
+    });
+    assert_eq!(
+        env(&connection).claude_question_save(SESSION, payload.as_object().unwrap()),
+        Err(super::ERROR_INVALID)
+    );
+    assert_eq!(
+        connection
+            .query_row("select count(*) from policy_decisions", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap(),
+        0
+    );
+    drop(connection);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn question_save_rejects_a_remote_policy_source() {
+    let (path, connection) = fresh_store("question-save-remote-source");
+    let payload = json!({
+        "artifact_id": "artifact",
+        "reason": "reason",
+        "source": "cloud-sync",
+        "plan": {
+            "stored_artifact_hash": "sha256:artifact",
+            "policy_action": "allow",
+            "events": [{
+                "name": "claude/native_permission_saved",
+                "payload": {},
+                "before_policy": false
+            }],
+            "inventory_approved": false
+        }
+    });
+    assert_eq!(
+        env(&connection).claude_question_save(SESSION, payload.as_object().unwrap()),
+        Err(super::ERROR_INVALID)
+    );
     drop(connection);
     let _ = std::fs::remove_file(path);
 }

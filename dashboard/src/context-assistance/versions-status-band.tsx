@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { HiMiniArrowUpCircle, HiMiniCheckCircle, HiMiniPauseCircle, HiMiniSparkles } from "react-icons/hi2";
 import { Tag } from "../approval-center-primitives";
+import { engineLabel } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import { cigarBuildBlock } from "./versions-actions";
 import type { CigarCatalogBuild } from "./versions-catalog";
@@ -88,7 +89,7 @@ export function CigarVersionStatusBand({ status, data, loading, actions }: Props
   const standing = cigarStanding(status, data);
   const surface = standing.kind === "behind" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-dark/10 bg-white";
   const body = standingBody(standing);
-  const python = status?.runtime?.interpreter.version ?? status?.last_check?.interpreter.version;
+  const facts = status?.runtime?.interpreter ?? status?.last_check?.interpreter;
   const catalog = data?.catalog.catalog;
   return <section aria-labelledby="cigar-version-standing" className={"guard-surface-in rounded-2xl border p-4 sm:p-5 " + surface}>
     <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
@@ -107,7 +108,7 @@ export function CigarVersionStatusBand({ status, data, loading, actions }: Props
           <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75">{body}</p>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-brand-dark/60" aria-label="This computer">
             <li>{platformLabel(data?.catalog.host_platform ?? status?.runtime?.interpreter.platform)}</li>
-            {python ? <li>Python {python.join(".")}</li> : null}
+            {facts ? <li>{engineLabel(facts)}</li> : null}
             {catalog ? <li>{catalog.fresh_for_preparation ? "Version list is current" : "Version list needs a refresh"}</li> : null}
           </ul>
         </div>

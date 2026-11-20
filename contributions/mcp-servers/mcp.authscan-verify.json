@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.authscan-verify",
+  "version": "1.0.0",
+  "name": "MCP AuthScan Verify",
+  "description": "Recomputes the hash of an mcp-authscan report and reports whether a second party gets the same graded content, plus the signature state. It reads one local report file, never scans a server and makes no network requests.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "lhmisme",
+    "displayName": "Leroy H. Mason"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "mcp-authscan-verify@0.1.4"
+  },
+  "riskClasses": ["filesystem-read"],
+  "tools": [
+    {
+      "name": "verify",
+      "state": "review"
+    }
+  ],
+  "saferAlternatives": [
+    "Confirm the report path first, and point it at a copy rather than the only copy you hold."
+  ]
+}

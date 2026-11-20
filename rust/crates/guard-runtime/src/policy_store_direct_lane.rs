@@ -331,6 +331,33 @@ impl PolicySnapshotStore {
         Ok(binding)
     }
 
+    /// Read the structured-output view only while the direct-lane ACK and
+    /// admitted snapshot still cover the requested generation.
+    pub(crate) fn structured_output_binding(
+        &self,
+        generation: u64,
+        policy_digest: &str,
+        deadline: Option<Instant>,
+    ) -> Option<Option<Value>> {
+        let binding = self
+            .direct_lane
+            .lock()
+            .ok()
+            .and_then(|binding| binding.clone())?;
+        if binding.generation != generation || binding.policy_digest != policy_digest {
+            return None;
+        }
+        self.admit_binding_lease(&binding, deadline).ok()?;
+        if binding
+            .inputs
+            .iter()
+            .any(|input| observe_input(&input.path) != input.stat)
+        {
+            return None;
+        }
+        Some(binding.structured_output_config.clone())
+    }
+
     /// The admitted snapshot when `binding` matches it and the publisher's
     /// ACK lease for it is current.
     fn admit_binding_lease(

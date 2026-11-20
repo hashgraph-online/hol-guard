@@ -32,6 +32,7 @@ from ..approval_gate_nudge import approval_gate_posture
 from ..command_probes import without_command_probes
 from ..harness_version_api import compatibility_or_unknown
 from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_command_state import CommandStateRefusedError, CommandStateUnavailableError
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
@@ -411,7 +412,11 @@ def _run_guard_doctor_command(
     payload["package_shims"] = package_shims_payload
     command_queue_payload = command_queue_status(store)
     if getattr(args, "repair", False):
-        command_queue_payload["repair"] = repair_command_queue_state(store)
+        try:
+            command_queue_payload["repair"] = repair_command_queue_state(store)
+        except (CommandStateRefusedError, CommandStateUnavailableError) as error:
+            code = error.code if isinstance(error, CommandStateRefusedError) else error.reason
+            command_queue_payload["repair"] = {"repaired": [], "repaired_count": 0, "error": code}
     payload["command_queue"] = command_queue_payload
     if getattr(args, "repair", False):
         # `doctor --repair` and `hol-guard repair` share one engine. Shims and

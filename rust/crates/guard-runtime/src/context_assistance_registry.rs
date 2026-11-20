@@ -31,9 +31,12 @@ pub(crate) fn lifecycle_job_count(home: &Path) -> Result<usize, String> {
 pub(crate) fn selection_lease(home: &Path) -> Result<fs::File, String> {
     preparation::lifecycle_lease(home)
 }
+#[path = "context_assistance_installation_builtin.rs"]
+mod builtin;
 #[path = "context_assistance_installation_v2.rs"]
 mod versioned;
 use super::policy_store_validation::validate_private_directory;
+pub(crate) use builtin::BUILTIN_ID;
 #[cfg(all(test, unix))]
 pub(crate) use preparation::InstallPause;
 pub(crate) use preparation::{run_operator_command, InstallRequest, Jobs, SetupInterpreterRequest};
@@ -114,6 +117,9 @@ fn root(home: &Path, create: bool) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn load(home: &Path, runtime_id: &str) -> Result<Installation, String> {
+    if runtime_id == BUILTIN_ID {
+        return builtin::installation(home);
+    }
     if !valid_id(runtime_id) {
         return Err(error("runtime_not_selected"));
     }
@@ -171,6 +177,9 @@ pub(crate) fn load(home: &Path, runtime_id: &str) -> Result<Installation, String
 /// enrollment command whose executable/package bytes still match. This does
 /// not mint effective readiness; activation repeats the real process checks.
 pub(crate) fn validate_selection(home: &Path, runtime_id: &str) -> Result<(), String> {
+    if runtime_id == BUILTIN_ID {
+        return builtin::installation(home).map(|_| ());
+    }
     let record = load(home, runtime_id)?;
     let observed = if record.schema == SCHEMA {
         guard_context_assistance::inspect_bundle(&record.selection, &record.approval.platform)
@@ -187,7 +196,7 @@ pub(crate) fn validate_selection(home: &Path, runtime_id: &str) -> Result<(), St
 
 pub(crate) fn list(home: &Path) -> Result<Vec<Value>, String> {
     match fs::symlink_metadata(home.join("context-assistance/installations")) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![builtin::choice()]),
         Err(_) => return Err(error("registry_unavailable")),
         Ok(_) => {}
     }
@@ -241,6 +250,7 @@ pub(crate) fn list(home: &Path) -> Result<Vec<Value>, String> {
         }
     }
     choices.sort_by(|a, b| a["runtime_id"].as_str().cmp(&b["runtime_id"].as_str()));
+    choices.insert(0, builtin::choice());
     Ok(choices)
 }
 
@@ -261,7 +271,7 @@ fn enroll_with_source(
             .components()
             .any(|part| matches!(part, std::path::Component::ParentDir))
         || !request.local_candidate_approved
-        || !valid_id(&request.runtime_id)
+        || !builtin::storable_id(&request.runtime_id)
         || request.source_revision.len() != 40
         || !request
             .source_revision

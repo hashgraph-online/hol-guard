@@ -1,0 +1,14 @@
+[package]
+name = "guard-cigar-native"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+cigar-context = { package = "hol-cigar", version = "0.14.2", features = ["bpe", "broker", "broker-persistence"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -90,7 +90,7 @@ pub(crate) fn brokered<T>(mut sync: impl FnMut() -> Result<T, SyncError>) -> Res
     for round in 0..=MAX_ROUNDS {
         let spool_dir = caller.spool_dir().to_str().map(str::to_owned);
         let spool_dir = spool_dir.filter(|dir| !dir.is_empty());
-        let scope = EgressScope::enter(caller.supplied(), spool_dir.as_deref())
+        let scope = EgressScope::enter_in_process(caller.supplied(), spool_dir.as_deref())
             .map_err(|reason| SyncError::Failed(format!("Guard sync failed: {reason}")))?;
         let result = sync();
         let needs = scope.finish();

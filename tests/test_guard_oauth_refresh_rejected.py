@@ -107,7 +107,6 @@ def test_rate_limit_keeps_rejected_failure_kind(tmp_path, monkeypatch) -> None:
         store=store,
         refresh_token="refresh-token-1",
         retry_after_seconds=60,
-        now=datetime.now(timezone.utc),
     )
 
     state = _oauth_circuit_state(store)

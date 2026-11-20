@@ -220,7 +220,7 @@ def test_the_daemon_records_a_pre_tool_activity_only_when_the_edge_did_not_queue
     monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", edge)
     # Evidence is submitted behind the answer; run it in line to observe it.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.hook_review.hook_worker_native.run_hook_evidence", lambda _host, act: act()
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native.run_resident_evidence", lambda _host, act: act()
     )
     activities: list[object] = []
     writer = _ReceiptWriter()

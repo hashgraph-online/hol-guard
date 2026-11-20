@@ -51,6 +51,28 @@ export const DESKTOP_HANDOFF_GUIDANCE =
   "If the updater didn't open, choose Check for Updates from the HOL Guard menu-bar icon.";
 export const DESKTOP_HANDOFF_FAILED =
   "The request did not reach the app. Choose Check for Updates from the HOL Guard menu-bar icon.";
+export const DESKTOP_HANDOFF_ALREADY_CURRENT =
+  "Guard is already on the latest version. Choose Check for Updates from the HOL Guard menu-bar icon to look again.";
+
+/**
+ * What the banner says when the hand-off does not go through. Only a
+ * request that never got an answer "did not reach the app"; when Guard
+ * answered with a refusal, the banner names that reason instead.
+ */
+export function desktopHandoffFailureMessage(error: unknown): string {
+  if (!(error instanceof Error) || error.name !== "GuardDesktopHandoffError") {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  const code = (error as Error & { code?: unknown }).code;
+  if (code === "update_not_available") {
+    return DESKTOP_HANDOFF_ALREADY_CURRENT;
+  }
+  const reason = error.message.trim();
+  if (!reason) {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  return `${reason} You can also choose Check for Updates from the HOL Guard menu-bar icon.`;
+}
 
 export function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
   return (
