@@ -110,8 +110,19 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
     {
         return None;
     }
+    // Do not infer a script identity when the shell could select a different
+    // working directory than the one canonicalized here. Logical cd handles
+    // '..' before symlinks; searched operands can be redirected by CDPATH.
+    let operand = first.arguments[0].as_str();
+    if operand.split('/').any(|part| part == "..") {
+        return None;
+    }
+    let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");
+    if searched && request.env.keys().any(|name| name.eq_ignore_ascii_case("CDPATH")) {
+        return None;
+    }
     let directory =
-        std::fs::canonicalize(std::path::Path::new(&request.cwd).join(&first.arguments[0])).ok()?;
+        std::fs::canonicalize(std::path::Path::new(&request.cwd).join(operand)).ok()?;
     if !directory.is_dir() {
         return None;
     }
