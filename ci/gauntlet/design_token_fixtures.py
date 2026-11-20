@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 DESIGN_TOKEN_CASE = "design-token-document-reads"
 DESIGN_TOKEN_CREDENTIAL_CASE = "design-token-credential-qualified-read"
 DESIGN_TOKEN_DIRECTORY = "docs/design"
