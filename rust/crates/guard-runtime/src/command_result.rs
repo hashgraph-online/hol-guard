@@ -24,7 +24,9 @@ mod contract;
 pub(crate) const COMMAND: &str = "command-result";
 pub(crate) const FEATURE: &str = "native-command-result-v1";
 const SCHEMA: &str = "command-result.v1";
-const MAX_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
+/// Guard Cloud accepts result bodies up to 8 MiB; the request also carries
+/// the job, so this leaves room for both.
+const MAX_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
 
 const INVALID: &str = "command_result_request_invalid";
 pub(crate) const JOB_ID_MISSING: &str = "command_job_id_missing";

@@ -17,8 +17,11 @@ COMMAND_RESULT_COMMAND = "command-result"
 COMMAND_RESULT_FEATURE = "native-command-result-v1"
 COMMAND_RESULT_SCHEMA = "command-result.v1"
 COMMAND_RESULT_TIMEOUT_SECONDS = 10.0
-# A generic command posts its execution back whole.
-COMMAND_RESULT_OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024
+# A generic command posts its execution back whole, and Guard Cloud accepts
+# result bodies up to 8 MiB. The request carries the job beside it, and the
+# answer repeats the ids in its idempotency key.
+COMMAND_RESULT_REQUEST_LIMIT_BYTES = 16 * 1024 * 1024
+COMMAND_RESULT_OUTPUT_LIMIT_BYTES = COMMAND_RESULT_REQUEST_LIMIT_BYTES + 64 * 1024
 _MISSING_JOB_FIELD_MESSAGES = {
     "command_job_id_missing": "Guard command job is missing an id.",
     "command_job_lease_missing": "Guard command job is missing a lease id.",
@@ -55,6 +58,8 @@ def native_command_result(job: Mapping[str, object], execution: Mapping[str, obj
         )
     except (TypeError, ValueError) as error:
         raise CommandResultUnavailableError("command_result_request_unencodable") from error
+    if len(input_text.encode("utf-8")) > COMMAND_RESULT_REQUEST_LIMIT_BYTES:
+        raise CommandResultUnavailableError("command_result_request_too_large")
     deadline = time.monotonic() + COMMAND_RESULT_TIMEOUT_SECONDS
     status = native_runtime_status(deadline_monotonic=deadline)
     if (

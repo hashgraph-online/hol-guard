@@ -7,7 +7,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
-from ..native_command_result import native_command_result
+from ..native_command_result import CommandResultUnavailableError, native_command_result
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
+from .exact_cloud_review_transport import uses_exact_transport
 from .time_support import parse_utc_timestamp
 
 
@@ -63,9 +65,27 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
 
     The runtime checks an exact Review result against its versioned contract;
     one that fails posts as ``exact_result_contract_invalid``.
+
+    The job has already run, so a runtime that cannot answer must not lose the
+    outcome or let the job be leased and run again: the lease closes with a
+    ``native_command_result_unavailable`` failure instead.
     """
 
-    return native_command_result(job, execution)
+    lease = lease_id(job)
+    job_key = job_id(job)
+    try:
+        return native_command_result(job, execution)
+    except CommandResultUnavailableError as error:
+        payload: dict[str, object] = {
+            "leaseId": lease,
+            "idempotencyKey": f"{job_key}:{lease}:failed",
+            "status": "failed",
+            "failureCode": "native_command_result_unavailable",
+            "failureMessage": f"Guard could not build this job's result ({error.code}).",
+        }
+        if uses_exact_transport(job):
+            payload = {"protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION, **payload}
+        return payload
 
 
 __all__ = [
