@@ -372,6 +372,15 @@ pub(crate) struct RefreshedAuth {
     pub access_token: String,
 }
 
+/// The wait the circuit parks a rate limit for: the server's `Retry-After`
+/// when it is whole seconds (the circuit caps it at an hour), else the wait
+/// the exchange already settled on.
+fn rate_limit_seconds(header: Option<&str>, wait_seconds: f64) -> i64 {
+    header
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .unwrap_or(wait_seconds.ceil() as i64)
+}
+
 /// `runner.py:_refresh_guard_oauth_access_token` (:4350) — the circuit-checked,
 /// invalid-grant-retried, rotation-persisted refresh. Returns the fresh access
 /// token on success; `Err(Validation)` on dead grant or reauthorizable failure.
@@ -386,8 +395,13 @@ pub(crate) fn refresh_oauth_access_token(
 ) -> Result<RefreshedAuth, EvalError> {
     use EvalError;
 
-    // Circuit fast-fail before touching the endpoint.
-    match circuit::check(store, refresh_token, now_timestamp()) {
+    // Circuit fast-fail before touching the endpoint. A circuit that cannot be
+    // read fails closed rather than letting every caller probe the endpoint.
+    let breaker = circuit::Circuit::new(store.guard_home(), circuit::Backoff::from_env());
+    match breaker
+        .check(refresh_token, now_timestamp())
+        .map_err(EvalError::Internal)?
+    {
         circuit::Check::Open => {}
         circuit::Check::Parked { rejected } => {
             return Err(EvalError::Validation(
@@ -472,7 +486,8 @@ pub(crate) fn refresh_oauth_access_token(
                     Some(&access_token),
                     access_token_expires_at.as_deref(),
                 )?;
-                circuit::clear(store, now_timestamp());
+                // Recording is best effort: the refresh already succeeded.
+                let _ = breaker.clear(now_timestamp());
                 return Ok(RefreshedAuth { access_token });
             }
             OAuthRefreshOutcome::NonceChallenge(challenge) => {
@@ -485,12 +500,11 @@ pub(crate) fn refresh_oauth_access_token(
             }
             OAuthRefreshOutcome::RateLimited {
                 wait_seconds: retry_after,
-                ..
+                retry_after: header,
             } => {
-                circuit::record_rate_limit(
-                    store,
+                let _ = breaker.record_rate_limit(
                     &attempt_refresh_token,
-                    retry_after as i64,
+                    rate_limit_seconds(header.as_deref(), retry_after),
                     now_timestamp(),
                 );
                 return Err(EvalError::Validation(format!(
@@ -536,12 +550,7 @@ pub(crate) fn refresh_oauth_access_token(
     }
     // Second invalid_grant post-rotation = genuinely revoked: record the
     // breaker and demand reauthorization.
-    circuit::record_dead_grant(
-        store,
-        &attempt_refresh_token,
-        circuit::REVOKED,
-        now_timestamp(),
-    );
+    let _ = breaker.record_dead_grant(&attempt_refresh_token, circuit::REVOKED, now_timestamp());
     Err(EvalError::Validation(RECONNECT_AFTER_REVOKED.to_owned()))
 }
 
@@ -593,6 +602,17 @@ mod tests {
             }
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_rate_limit_parks_for_the_server_retry_after() {
+        assert_eq!(rate_limit_seconds(Some("1800"), 120.0), 1800);
+        assert_eq!(rate_limit_seconds(Some(" 45 "), 120.0), 45);
+        assert_eq!(
+            rate_limit_seconds(Some("Wed, 21 Oct 2015 07:28:00 GMT"), 120.0),
+            120
+        );
+        assert_eq!(rate_limit_seconds(None, 12.5), 13);
     }
 
     #[test]

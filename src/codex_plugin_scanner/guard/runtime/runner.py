@@ -1706,8 +1706,9 @@ def _oauth_refresh_circuit_check(*, store: GuardStore, refresh_token: str) -> No
     try:
         answer = _oauth_refresh_circuit(store, {"op": "check", "refreshToken": refresh_token})
     except RuntimeError as error:
+        # Keep the native reason: an older runtime says to run `hol-guard update`.
         raise GuardSyncNotAvailableError(
-            "Guard could not read its sign-in refresh state. Try again shortly.",
+            str(error) or "Guard could not read its sign-in refresh state. Try again shortly.",
             retryable=True,
         ) from error
     state = answer.get("state")

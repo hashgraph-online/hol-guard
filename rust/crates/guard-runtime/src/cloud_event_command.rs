@@ -92,12 +92,19 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
                 "The Guard OAuth refresh request is missing.".to_owned(),
             )),
         },
-        // The circuit is local state; it never reaches Guard Cloud.
+        // The circuit is local state; it never reaches Guard Cloud. It runs
+        // under the storage gate the other store writers hold.
         Action::OauthRefreshCircuit => match &request.oauth_refresh_circuit {
             Some(call) => {
                 let guard_home = PathBuf::from(&request.guard_home);
                 let bundle = store_for(&guard_home, None);
-                circuit::dispatch(&bundle.resident, call).map_err(SyncError::Failed)
+                event_store(&guard_home, &bundle)
+                    .hold_gate()
+                    .and_then(|_gate| {
+                        let breaker =
+                            circuit::Circuit::new(&guard_home, circuit::Backoff::from_env());
+                        circuit::dispatch(&breaker, call).map_err(SyncError::Failed)
+                    })
             }
             None => Err(SyncError::Failed(
                 "The Guard OAuth refresh circuit call is missing.".to_owned(),
