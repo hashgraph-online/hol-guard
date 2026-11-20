@@ -411,3 +411,40 @@ fn inclusion_globs_that_cannot_reach_a_re_included_secret_keep_rg_allowed() {
         "review",
     );
 }
+
+#[test]
+fn a_path_glob_with_explicit_rg_root_cannot_hide_reincluded_secrets() {
+    let fixture = fixture(&[(
+        "explicit-root",
+        &[
+            ("src/.gitignore", "!.env.test.ts\n"),
+            ("src/.env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\n"),
+            ("src/app.ts", "const KEY = 1;\n"),
+        ],
+    )]);
+    // Ripgrep matches 'src/*.ts' against paths from the cwd, even when
+    // 'src' is the explicit search operand. The hidden filename is reached.
+    assert_actions(
+        &fixture,
+        "explicit-root",
+        &[
+            "rg -n KEY src --glob 'src/*.ts'",
+            "rg -n KEY --glob 'src/*.ts'",
+        ],
+        "review",
+    );
+    // A basename-only inclusion can be matched from either root safely.
+    assert_actions(
+        &fixture,
+        "explicit-root",
+        &["rg -n KEY src --glob '*.rs'"],
+        "allow",
+    );
+    // An unrelated path-shaped glob is still safely narrow from the cwd.
+    assert_actions(
+        &fixture,
+        "explicit-root",
+        &["rg -n KEY --glob 'docs/**'"],
+        "allow",
+    );
+}
