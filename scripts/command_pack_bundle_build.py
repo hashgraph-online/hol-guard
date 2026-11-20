@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -101,9 +102,7 @@ def prepare(root: Path, *, source_archive: bool):
         compiler = Path(os.environ.get("HOL_GUARD_BUILD_SOURCE_COMPILER", str(default_compiler)))
         if not compiler.is_absolute():
             compiler = root / compiler
-        source = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
-        ).stdout.strip()
+        source = _bundle_source_sha(root)
         arguments = []
         asset_output = os.environ.get("HOL_GUARD_BUNDLE_ASSET_OUTPUT")
         if asset_output:
@@ -131,3 +130,21 @@ def prepare(root: Path, *, source_archive: bool):
     except BaseException:
         owner.cleanup()
         raise
+
+
+def _bundle_source_sha(root: Path) -> str:
+    """The commit the bundle names: ``HEAD``, unless the build pins another.
+
+    CI's dashboard wheel reuses native evaluators cached from an earlier commit
+    with the same native sources, and seals the bundle to that commit so it
+    matches the runtime's build SHA.
+    """
+
+    pinned = os.environ.get("HOL_GUARD_BUNDLE_SOURCE_SHA")
+    if pinned is not None:
+        if re.fullmatch(r"[0-9a-f]{40}", pinned) is None:
+            raise ValueError("HOL_GUARD_BUNDLE_SOURCE_SHA must be a full commit SHA")
+        return pinned
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()

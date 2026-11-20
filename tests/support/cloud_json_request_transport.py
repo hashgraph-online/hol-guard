@@ -13,7 +13,45 @@ The native request is tested in
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
+
+import pytest
+
+
+def cloud_json_request_via(runner: Any) -> Callable[..., dict[str, object]]:
+    """Return a native-request double that sends through ``runner``'s request functions."""
+
+    def send(
+        auth_context: Mapping[str, object],
+        *,
+        url: str,
+        body: bytes | None,
+        timeout_seconds: float,
+        retry_timeout_seconds: float,
+    ) -> dict[str, object]:
+        request = runner._guard_sync_request(
+            auth_context,
+            request_url=url,
+            method="GET" if body is None else "POST",
+            data=body,
+            extra_headers=None,
+        )
+        return runner._urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=timeout_seconds,
+            retry_timeout_seconds=retry_timeout_seconds,
+        )
+
+    return send
+
+
+def use_runner_transport(monkeypatch: pytest.MonkeyPatch, runner: Any) -> None:
+    """Send native Guard Cloud requests through a fake runner a test passes in."""
+
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+
+    monkeypatch.setattr(cloud_bundle_sync, "cloud_json_request", cloud_json_request_via(runner))
 
 
 def cloud_json_request_over_urllib(
@@ -28,15 +66,10 @@ def cloud_json_request_over_urllib(
 
     from codex_plugin_scanner.guard.runtime import runner
 
-    request = runner._guard_sync_request(
+    return cloud_json_request_via(runner)(
         auth_context,
-        request_url=url,
-        method="GET" if body is None else "POST",
-        data=body,
-        extra_headers=None,
-    )
-    return runner._urlopen_json_with_timeout_retry(
-        request=request,
+        url=url,
+        body=body,
         timeout_seconds=timeout_seconds,
         retry_timeout_seconds=retry_timeout_seconds,
     )

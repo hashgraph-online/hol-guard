@@ -32079,6 +32079,54 @@
       "expect": "allow"
     },
     {
+      "id": "cd-into-a-route-group-directory",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd \"${HOME}/other-project/app/(marketing)/challenge\" && pwd"
+      },
+      "cwd": "home_sibling",
+      "expect": "allow"
+    },
+    {
+      "id": "read-below-a-route-group-directory",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd \"app/(marketing)/challenge\" && head -40 page.tsx"
+      },
+      "cwd": "home_sibling",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-unquoted-parenthesis-is-not-a-directory-name",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app/(marketing)/challenge && pwd"
+      },
+      "cwd": "home_sibling",
+      "expect": "not_allow"
+    },
+    {
       "id": "dns-dig-batch-file",
       "fix_area": "negative",
       "harnesses": [

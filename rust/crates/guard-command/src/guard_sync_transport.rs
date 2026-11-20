@@ -67,7 +67,9 @@ const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 #[path = "guard_sync_transport_detailed.rs"]
 mod detailed;
-pub use detailed::{urlopen_detailed, urlopen_json_detailed, SyncFetchError, SyncHttpFailure};
+pub use detailed::{
+    urlopen_detailed, urlopen_json_detailed, urlopen_raw_detailed, SyncFetchError, SyncHttpFailure,
+};
 
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
@@ -789,6 +791,33 @@ fn sync_retries(
     nonce_fast_path: bool,
     budget: Option<&SyncBudget>,
 ) -> Result<Option<Value>, SyncFetchError> {
+    let response = sync_exchange(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        nonce_fast_path,
+        budget,
+    )?;
+    if !parse_json_response {
+        return Ok(None);
+    }
+    serde_json::from_slice::<Value>(&response.body_bytes)
+        .map(Some)
+        .map_err(|_| {
+            EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
+                .into()
+        })
+}
+
+/// The retry loop behind [`sync_retries`]: the successful response as it came
+/// back, status and body unread.
+fn sync_exchange(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    nonce_fast_path: bool,
+    budget: Option<&SyncBudget>,
+) -> Result<SyncResponse, SyncFetchError> {
     let mut current_request = request.clone();
     let mut current_timeout = timeout_seconds;
     let mut retried_timeout = false;
@@ -812,20 +841,7 @@ fn sync_retries(
             }
         };
         match execute_request(EgressClass::Cloud, &current_request, attempt_timeout) {
-            Ok(resp) => {
-                if parse_json_response {
-                    let body = resp.body_bytes;
-                    return serde_json::from_slice::<Value>(&body)
-                        .map(Some)
-                        .map_err(|_| {
-                            EvalError::Internal(
-                                "Guard Cloud sync returned an invalid response payload.".to_owned(),
-                            )
-                            .into()
-                        });
-                }
-                return Ok(None);
-            }
+            Ok(resp) => return Ok(resp),
             Err(SyncHttpError::Http {
                 status,
                 headers,
@@ -1055,6 +1071,7 @@ fn http_error_reason_message(
 
 #[derive(Debug)]
 pub(crate) struct SyncResponse {
+    pub(crate) status: u16,
     pub(crate) body_bytes: Vec<u8>,
 }
 
@@ -1128,7 +1145,10 @@ pub(crate) fn execute_request_following(
         .read_to_vec()
         .map_err(|e| SyncHttpError::Other(format!("read body: {e}")))?;
     if (200..300).contains(&status) {
-        return Ok(SyncResponse { body_bytes: body });
+        return Ok(SyncResponse {
+            status,
+            body_bytes: body,
+        });
     }
     Err(SyncHttpError::Http {
         status,

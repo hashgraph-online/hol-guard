@@ -2,7 +2,7 @@
 //! POST to Guard Cloud for a caller that already resolved the sign-in and built
 //! the endpoint and body (the command queue, the Cloud Review event batches,
 //! the workspace-review enrollment, Cloud exception requests, the insights
-//! share and the policy delivery status).
+//! share, the policy delivery status and the machine health lease channel).
 //!
 //! The runtime signs the request (DPoP included), runs the shared retry
 //! machine under the machine's managed network policy and reports what came
@@ -62,11 +62,33 @@ pub(crate) struct JsonRequest {
     body_file: Option<String>,
     timeout_seconds: f64,
     retry_timeout_seconds: f64,
+    /// How the success is reported: Guard Cloud's object answer, or the status
+    /// and body as they came back.
+    #[serde(default)]
+    answer: Answer,
+    /// The largest raw body the caller reads. A longer body is reported as
+    /// oversized instead of returned, so a small channel keeps its own limit.
+    #[serde(default)]
+    max_response_bytes: Option<u64>,
+}
+
+/// What the caller reads from a successful exchange.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Answer {
+    /// `{"response": ...}`: the body parsed as a JSON object.
+    #[default]
+    Json,
+    /// `{"raw": {"status", "body"}}`: the 2xx status and the UTF-8 body
+    /// unread, for an endpoint that may answer `204 No Content` or whose body
+    /// the caller parses under its own limits.
+    Raw,
 }
 
 /// `_urlopen_json_with_timeout_retry(_guard_sync_request(...))`, one round.
 ///
-/// `{"response": ...}` is Guard Cloud's object answer, `{"refusal": ...}` an
+/// `{"response": ...}` is Guard Cloud's object answer (`{"raw": ...}` when the
+/// caller asked for the status and body unread), `{"refusal": ...}` an
 /// HTTP error that survived the retries, and `{"transport": ...}` a failure
 /// with no HTTP answer.
 pub(crate) fn send(
@@ -88,17 +110,28 @@ pub(crate) fn send(
     )
     .map_err(|error| SyncError::Failed(error.to_string()))?;
     let budget = SyncBudget::new(REQUEST_BUDGET_SECONDS);
-    let answer = gst::urlopen_json_detailed(
-        &signed,
-        request.timeout_seconds,
-        request.retry_timeout_seconds,
-        &budget,
-    );
+    let answer = match request.answer {
+        Answer::Json => gst::urlopen_json_detailed(
+            &signed,
+            request.timeout_seconds,
+            request.retry_timeout_seconds,
+            &budget,
+        )
+        .map(Answered::Json),
+        Answer::Raw => gst::urlopen_raw_detailed(
+            &signed,
+            request.timeout_seconds,
+            request.retry_timeout_seconds,
+            &budget,
+        )
+        .map(|(status, body)| Answered::Raw(status, body)),
+    };
     if answer.is_err() && egress_broker::needs_pending() {
         return Err(SyncError::Pending);
     }
     match answer {
-        Ok(answer) => accepted(answer),
+        Ok(Answered::Json(answer)) => accepted(answer),
+        Ok(Answered::Raw(status, body)) => raw(status, body, request.max_response_bytes),
         Err(SyncFetchError::Http(failure)) => Ok(json!({"refusal": {
             "status": failure.status,
             "headers": failure.headers,
@@ -193,6 +226,22 @@ fn accepted(answer: Value) -> Result<Value, SyncError> {
         return Err(SyncError::Failed(INVALID_RESPONSE.to_owned()));
     }
     Ok(json!({"response": answer}))
+}
+
+/// A successful exchange, in the form the caller asked for.
+enum Answered {
+    Json(Value),
+    Raw(u16, Vec<u8>),
+}
+
+/// The status and body as they came back; the body must be UTF-8.
+fn raw(status: u16, body: Vec<u8>, max_bytes: Option<u64>) -> Result<Value, SyncError> {
+    if max_bytes.is_some_and(|max| body.len() as u64 > max) {
+        return Ok(json!({"raw": {"status": status, "oversized": true}}));
+    }
+    let body =
+        String::from_utf8(body).map_err(|_| SyncError::Failed(INVALID_RESPONSE.to_owned()))?;
+    Ok(json!({"raw": {"status": status, "body": body}}))
 }
 
 /// A failure with no HTTP answer, classed the way `_is_timeout_error` and
