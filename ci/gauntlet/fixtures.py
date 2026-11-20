@@ -30,7 +30,11 @@ from .output_cases import add_output_fixture
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
     LOCAL_BIN,
+    IGNORE_NEGATION_CONSUMED_IGLOB_CASE,
+    IGNORE_NEGATION_BROAD_GLOB_CASE,
+    IGNORE_NEGATION_PROTECTED_CASE,
     add_home_tools,
+    add_ignore_negation_template,
     add_main_shapes,
     add_worktree_venv,
     borrow_main_modules,
@@ -354,6 +358,11 @@ def create_fixture(
         # A linked worktree's .git is a pointer file, so it has no config to fingerprint.
         protected_names = (".env", "deletion-target/keep.txt")
     else:
+        # Blocked-command Gauntlet cases use this minimal checkout, not the
+        # realistic one. Seed their synthetic re-included hidden file here too
+        # so a non-Allow verdict cannot pass without exercising the file.
+        if scenario_id in {IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE, IGNORE_NEGATION_BROAD_GLOB_CASE}:
+            add_ignore_negation_template(workspace, scenario_id)
         add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
         add_git_allow_shape(workspace, environment, scenario_id)
         add_sibling_checkout(home, environment, scenario_id)
@@ -778,6 +787,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "app/registry/[slug]").mkdir(parents=True)
     (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
+    tracked = (*tracked, *add_ignore_negation_template(main, scenario_id))
     if scenario_id == BUN_TEST_CASE:
         (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")
         tracked = (*tracked, "calc.test.ts")

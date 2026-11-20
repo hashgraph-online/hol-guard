@@ -41203,6 +41203,58 @@
       "expect": "allow"
     },
     {
+      "id": "rg-include-glob-past-a-re-included-template",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n route --glob 'src/**'"
+      },
+      "cwd": "ignore_negation",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-include-glob-names-only-past-a-re-included-template",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l route --glob 'src/**'"
+      },
+      "cwd": "ignore_negation",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-include-glob-selecting-an-ignored-env-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n TOKEN -g '.env*'"
+      },
+      "cwd": "ignore_negation",
+      "expect": "not_allow",
+      "sandbox_does_not_protect": true
+    },
+    {
       "id": "lanectl-status",
       "fix_area": "connector-setup",
       "harnesses": [
