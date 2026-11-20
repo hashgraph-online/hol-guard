@@ -176,6 +176,37 @@ def test_a_review_that_names_no_changed_script_moves_nothing(writes: tuple[Guard
     assert seen.calls == []
 
 
+
+def test_a_concurrent_block_cannot_be_reallowed_from_its_newer_revision(
+    writes: tuple[GuardStore, _Writes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, seen = writes
+    revision = [7]
+    monkeypatch.setattr(store, "read_local_cli_revision", lambda: revision[0])
+
+    def snapshot_during_block(_cli_id: str) -> dict[str, str]:
+        # Another request blocks the CLI after this request's eligibility read.
+        # The write must not use the revision produced by that newer decision.
+        revision[0] += 1
+        return dict(_STATES)
+
+    monkeypatch.setattr(store, "read_local_cli_command_states", snapshot_during_block)
+
+    def compare_and_write(_store: object, **kwargs: object) -> int:
+        seen.calls.append(kwargs)
+        if kwargs["expected_revision"] != revision[0]:
+            raise ValueError("local_cli_revision_conflict")
+        return 9
+
+    monkeypatch.setattr(custom_extension_continuity, "record_local_custom_extension_mutation", compare_and_write)
+
+    result = reallow.reallow_changed_cli(store, request_id="req-1", approval_gate_input=None, now="t")
+
+    assert result == {"status": "failed", "error": "ValueError"}
+    assert seen.calls[0]["expected_revision"] == 7
+    assert seen.bulk == []
+
+
 def test_a_failed_write_reports_without_raising(
     writes: tuple[GuardStore, _Writes], monkeypatch: pytest.MonkeyPatch
 ) -> None:
