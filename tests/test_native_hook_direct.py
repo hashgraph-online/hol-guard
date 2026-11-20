@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard import native_hook_direct as direct
 
 _EDGE = {
@@ -121,3 +123,33 @@ def test_native_hook_direct_records_health_after_invalid_answer(monkeypatch, tmp
         is None
     )
     assert recorded == ["failure"]
+
+
+def test_resident_request_accepts_a_direct_union_without_a_status_field(monkeypatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.write_bytes(b"runtime")
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=runtime, sha256="a" * 64),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "hook-direct-v1")),
+    )
+    monkeypatch.setattr(
+        native_execution,
+        "native_resident_client_request",
+        lambda **_kwargs: json.dumps(
+            {"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": _EDGE}
+        ).encode(),
+    )
+
+    result = native_execution._resident_request(
+        operation="hook_direct",
+        request={},
+        guard_home=tmp_path,
+        timeout_seconds=1.0,
+        required_feature="hook-direct-v1",
+        record_success=False,
+        status=status,
+    )
+
+    assert result == {"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": _EDGE}

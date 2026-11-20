@@ -27,16 +27,21 @@ def native_or_daemon_edge(
     recording_only: bool,
     defer_accepted_recording: bool,
     probe: tuple[object, str] | None,
+    claim_saved_approval: bool,
 ) -> tuple[dict[str, object] | None, bool]:
     """Return a direct Rust edge, or the established daemon edge fallback."""
 
-    direct_edge = native_hook_direct(
-        harness=harness,
-        guard_home=guard_home,
-        payload=payload,
-        workspace=workspace,
-        home_dir=home_dir,
-        deadline=deadline,
+    direct_edge = (
+        native_hook_direct(
+            harness=harness,
+            guard_home=guard_home,
+            payload=payload,
+            workspace=workspace,
+            home_dir=home_dir,
+            deadline=deadline,
+        )
+        if claim_saved_approval
+        else None
     )
     if direct_edge is not None and direct_edge.get("outcome") != "defer":
         return direct_edge, True

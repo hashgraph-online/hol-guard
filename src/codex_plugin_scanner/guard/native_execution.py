@@ -152,10 +152,11 @@ def _resident_request(
         "hook_policy_fence_window": "guard-hook-policy-fence-window-result.v1",
         "hook_review_binding": "guard-hook-review-binding-result.v1",
     }.get(operation)
-    if operation == "hook_direct" and not is_valid_direct_result(decoded):
-        if record_resilience:
-            native_record_resident_failure(status.identity.sha256, guard_home, reason="native_hook_direct_schema")
-        return None
+    if operation == "hook_direct":
+        if not is_valid_direct_result(decoded):
+            if record_resilience:
+                native_record_resident_failure(status.identity.sha256, guard_home, reason="native_hook_direct_schema")
+            return None
     elif operation == "cloud_catalog":
         # Producer/completion replies use a strict payload/error union, with
         # no status field. Keep native validation refusals intact.

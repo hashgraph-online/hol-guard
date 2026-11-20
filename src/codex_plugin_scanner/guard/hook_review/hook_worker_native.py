@@ -314,10 +314,16 @@ class HookWorkerNativeMixin:
                 recording_only=recording_only,
                 defer_accepted_recording=defer_accepted_recording,
                 probe=probe,
+                claim_saved_approval=claim_saved_approval,
             )
             if direct_answer:
                 if edge is None:
                     break
+                receipt = self._record_native_decision_receipt(edge.get("receipt"))
+                if receipt is not None and defer_accepted_recording and deferred_receipts is not None:
+                    deferred_receipts.append(receipt)
+                if receipt is not None and capture_receipts is not None and edge.get("harness") == "codex":
+                    capture_receipts.append(receipt)
                 return _edge_harness_response(edge), True
             refreshed = (
                 None

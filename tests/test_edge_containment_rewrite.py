@@ -9,6 +9,7 @@ daemon answers an unmarked sink route in a workspace with the host outage.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -255,18 +256,32 @@ class _SinkRouteFixture(HookWorkerNativeMixin):
         raise AssertionError("a PreToolUse sink route reads no structured view")
 
 
-def _review(fixture: _SinkRouteFixture, tmp_path: Path, *, workspace: Path | None) -> tuple[dict[str, object], bool]:
+def _review(
+    fixture: _SinkRouteFixture,
+    tmp_path: Path,
+    *,
+    workspace: Path | None,
+    harness: str = "claude-code",
+    capture_receipts: list[Mapping[str, object]] | None = None,
+    deferred_receipts: list[Mapping[str, object]] | None = None,
+    defer_accepted_recording: bool = False,
+    claim_saved_approval: bool = True,
+) -> tuple[dict[str, object], bool]:
     return fixture._review_native_edge_with_snapshot(
         payload=dict(_PAYLOAD),
-        harness="claude-code",
+        harness=harness,
         event_name="PreToolUse",
-        default_harness="claude-code",
+        default_harness=harness,
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard",
         workspace=workspace,
         deadline=None,
         policy_snapshot={"mode": "enforce"},
         recording_only=False,
+        capture_receipts=capture_receipts,
+        deferred_receipts=deferred_receipts,
+        defer_accepted_recording=defer_accepted_recording,
+        claim_saved_approval=claim_saved_approval,
     )
 
 
@@ -313,6 +328,32 @@ def test_a_direct_saved_allow_does_not_reenter_python_approval(tmp_path: Path, m
     assert fixture.captured == []
 
 
+def test_a_direct_receipt_reaches_capture_and_deferred_callers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    edge = _edge(
+        result={"decision": "review", "minimum_action": "review", "policy_action": "review"},
+        harness_response={"policy_action": "allow", "permissionDecision": "allow"},
+        containment_route="none",
+    )
+    edge["harness"] = "codex"
+    fixture = _SinkRouteFixture(edge=edge)
+    monkeypatch.setattr(native_hook_direct_route, "native_hook_direct", lambda **_kwargs: edge)
+    capture: list[Mapping[str, object]] = []
+    deferred: list[Mapping[str, object]] = []
+
+    _review(
+        fixture,
+        tmp_path,
+        workspace=tmp_path,
+        harness="codex",
+        capture_receipts=capture,
+        deferred_receipts=deferred,
+        defer_accepted_recording=True,
+    )
+
+    assert capture == [edge["receipt"]]
+    assert deferred == [edge["receipt"]]
+
+
 def test_a_direct_resident_defer_keeps_the_daemon_edge_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -324,6 +365,19 @@ def test_a_direct_resident_defer_keeps_the_daemon_edge_fallback(
     )
 
     _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert [call["containment_sink"] for call in fixture.captured] == [True]
+
+
+def test_unclaimed_saved_approval_uses_the_daemon_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(containment_rewrite="routed"))
+    monkeypatch.setattr(
+        native_hook_direct_route,
+        "native_hook_direct",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unclaimed direct route")),
+    )
+
+    _review(fixture, tmp_path, workspace=tmp_path, claim_saved_approval=False)
 
     assert [call["containment_sink"] for call in fixture.captured] == [True]
 
