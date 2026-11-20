@@ -94,3 +94,10 @@ pub(crate) fn write_payload(
     .map(drop)
     .map_err(drop)
 }
+
+/// `GuardStore.delete_sync_payload(key)`.
+pub(crate) fn delete_payload(conn: &Connection, key: &str) -> Result<(), ()> {
+    conn.execute("DELETE FROM sync_state WHERE state_key = ?1", [key])
+        .map(drop)
+        .map_err(drop)
+}
