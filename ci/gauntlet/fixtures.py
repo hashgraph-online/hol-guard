@@ -627,7 +627,7 @@ def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
 ROUTE_GROUP_CASE = "route-group-directory-reads"
 ROUTE_GROUP_DIRECTORY = "app/(group)/overview"
 ROUTE_GROUP_FILE = f"{ROUTE_GROUP_DIRECTORY}/page.tsx"
-ROUTE_GROUP_TEXT = "export default function Challenge() {\n  return null;\n}\n"
+ROUTE_GROUP_TEXT = "export default function Overview() {\n  return null;\n}\n"
 
 
 def add_route_group_directory(workspace: Path, scenario_id: str | None) -> None:
@@ -643,7 +643,7 @@ def add_route_group_directory(workspace: Path, scenario_id: str | None) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(ROUTE_GROUP_TEXT, encoding="utf-8", newline="\n")
     # The second listing requires the sibling route to exist.
-    (workspace / "app/(group)/challenge").mkdir(parents=True, exist_ok=True)
+    (workspace / "app/(group)/pricing").mkdir(parents=True, exist_ok=True)
 
 
 def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: str | None) -> None:

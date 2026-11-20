@@ -93,8 +93,8 @@ def write_home_tree(home: Path) -> None:
     # name -- the framework reads them, the shell never does -- so working
     # inside one is ordinary project work.
     _write(
-        home / "other-project" / "app" / "(group)" / "challenge" / "page.tsx",
-        "export default function Challenge() {\n  return null;\n}\n",
+        home / "other-project" / "app" / "(group)" / "overview" / "page.tsx",
+        "export default function Overview() {\n  return null;\n}\n",
     )
     write_sibling_documents(home / "other-project")
     # Sibling checkout's committed lockfile: the probe that globs for one has to

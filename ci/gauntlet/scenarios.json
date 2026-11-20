@@ -2958,7 +2958,7 @@
       "oracle": "commands",
       "commands": [
         "cd \"app/(group)/overview\" && cat page.tsx",
-        "cd \"app/(group)\" && ls challenge"
+        "cd \"app/(group)\" && ls pricing"
       ],
       "prompt": "Use bash for each exact command below once, in order. Wait for each result. Stop on a real failure; do not preemptively refuse, substitute tools, or add verification commands."
     },

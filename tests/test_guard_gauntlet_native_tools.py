@@ -70,7 +70,7 @@ def test_realistic_fixture_has_lfs_config_nested_repo_and_linked_worktree(tmp_pa
 def test_route_group_fixture_creates_both_directories_used_by_the_scenario(tmp_path) -> None:
     fixture = create_fixture(tmp_path / "fx", scenario_id="route-group-directory-reads")
     assert (fixture.workspace / "app/(group)/overview/page.tsx").is_file()
-    assert (fixture.workspace / "app/(group)/challenge").is_dir()
+    assert (fixture.workspace / "app/(group)/pricing").is_dir()
 
 
 def test_default_fixture_stays_minimal(tmp_path) -> None:
