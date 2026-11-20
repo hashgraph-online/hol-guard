@@ -8,10 +8,10 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
     local_cli_publication_status,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import record_composio_discovery
 from tests.python_oracles.composio_discovery import ComposioActionSchema
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 from .native_policy_snapshot_test_fixtures import _ack, _status
 

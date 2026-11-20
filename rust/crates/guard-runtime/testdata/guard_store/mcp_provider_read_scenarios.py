@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 from hashlib import sha256
 
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import OBSERVED_MCP_PREFIX, observed_mcp_tool
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import OBSERVED_MCP_PREFIX
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 NOW = "2026-03-04T12:00:00+00:00"
 

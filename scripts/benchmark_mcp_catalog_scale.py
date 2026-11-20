@@ -36,10 +36,11 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provisio
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tests.python_oracles.observed_mcp_tools import observed_command_id, observed_mcp_tool
 
 
 def p95(samples: list[float]) -> float:
@@ -99,7 +100,10 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch, isolated
         tools = [tool for tool in observed if tool is not None]
         server, identity = tools[0].server_identity, tools[0].identity
         commands = (
-            *(LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Fixture tool") for tool in tools),
+            *(
+                LocalCliCommand(observed_command_id(tool), tool.name, tool.qualified_name, "Fixture tool")
+                for tool in tools
+            ),
             LocalCliCommand("other", "Other tools", "fixture ...", "Unknown tools need review"),
         )
         catalog = McpCatalogResult(
@@ -131,7 +135,7 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch, isolated
             expected_revision=store.read_local_cli_revision(),
             updated_at=seen_at,
             command_states={
-                tool.command_id: "allow" if tool_index % 2 == 0 else "block"
+                observed_command_id(tool): "allow" if tool_index % 2 == 0 else "block"
                 for tool_index, tool in enumerate(tools[: options.permissions_per_connection])
             },
         )

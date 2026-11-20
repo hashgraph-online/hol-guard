@@ -12,10 +12,10 @@ from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact, 
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import record_local_custom_extension_mutation
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import record_composio_discovery
 from tests.python_oracles.composio_discovery import ComposioActionSchema
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 _TIME = "2026-09-27T12:00:00Z"
 _TOOL = "mcp__codex_apps__composio__composio_search_tools"

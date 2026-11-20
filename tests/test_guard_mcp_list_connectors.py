@@ -19,8 +19,8 @@ from codex_plugin_scanner.guard.mcp_discovery_client import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.connector_setup_items import connector_setup_href, connector_setup_status
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 pytestmark = [pytest.mark.usefixtures("native_hook_force")]
 

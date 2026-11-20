@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
@@ -18,9 +19,12 @@ if TYPE_CHECKING:
 
 _OBSERVED_MCP_ACTIONS = frozenset({"allow", "review", "block"})
 _CONNECTOR_KEYS = frozenset({"harness", "namespace", "server_name", "seen_at", "tools"})
+_TOOL_KEYS = frozenset({"command_id", "name", "qualified_name"})
+_TOOL_COMMAND_ID = re.compile(r"tool-[0-9a-f]{24}\Z")
 
 
 class ObservedMcpConnectorTool(TypedDict):
+    command_id: str
     name: str
     qualified_name: str
 
@@ -33,6 +37,18 @@ class ObservedMcpConnector(TypedDict):
     tools: list[ObservedMcpConnectorTool]
 
 
+def _valid_connector_tool(item: object) -> bool:
+    if not isinstance(item, dict) or set(item) != _TOOL_KEYS:
+        return False
+    tool = cast("dict[str, object]", item)
+    command_id = tool["command_id"]
+    return (
+        all(isinstance(value, str) for value in tool.values())
+        and isinstance(command_id, str)
+        and _TOOL_COMMAND_ID.match(command_id) is not None
+    )
+
+
 def _valid_connector(item: object) -> bool:
     if not isinstance(item, dict) or set(item) != _CONNECTOR_KEYS:
         return False
@@ -42,12 +58,7 @@ def _valid_connector(item: object) -> bool:
         all(isinstance(connector[key], str) for key in ("harness", "namespace", "server_name"))
         and (connector["seen_at"] is None or isinstance(connector["seen_at"], str))
         and isinstance(tools, list)
-        and all(
-            isinstance(tool, dict)
-            and set(tool) == {"name", "qualified_name"}
-            and all(isinstance(value, str) for value in cast("dict[str, object]", tool).values())
-            for tool in cast("list[object]", tools)
-        )
+        and all(_valid_connector_tool(tool) for tool in cast("list[object]", tools))
     )
 
 
