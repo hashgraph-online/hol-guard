@@ -109,9 +109,7 @@ fn a_symlinked_leading_entry_never_proves_a_different_checkout() {
     // It must not inherit proof that examined a different checkout.
     for harness in ["omp", "zcode", "claude-code", "codex"] {
         for target in ["~/alias".to_owned(), alias.display().to_string()] {
-            let command = format!(
-                "cd {target} && {ADD} && cd ../app-review && git status --short"
-            );
+            let command = format!("cd {target} && {ADD} && cd ../app-review && git status --short");
             let verdict = evaluate(&home, &elsewhere, harness, &command, &controls);
             assert_ne!(
                 verdict.minimum_action, "allow",
