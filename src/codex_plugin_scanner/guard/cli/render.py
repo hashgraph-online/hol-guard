@@ -1486,7 +1486,11 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
     if isinstance(approval_url, str) and approval_url:
         body = Table.grid(padding=(0, 1))
         body.add_row("Request", str(payload.get("request_id", "")))
-        body.add_row("URL", f"[bold]{approval_url}[/bold]")
+        signed_url = payload.get("signed_approval_url")
+        if isinstance(signed_url, str) and signed_url:
+            body.add_row("Signed link", f"[bold]{signed_url}[/bold]")
+            body.add_row("", "Opens this request signed in on this device. Share this one, not the URL below.")
+        body.add_row("URL", f"[bold]{approval_url}[/bold]" if not signed_url else approval_url)
         opened_in = payload.get("opened_in")
         if opened_in == "desktop":
             body.add_row("Opened", "In HOL Guard Desktop")

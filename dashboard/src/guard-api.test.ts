@@ -12,6 +12,7 @@ import {
   GuardOperationTimeoutError,
   GuardProtectionRepairError,
   GuardSessionUnavailableError,
+  GuardDecisionSignInRequiredError,
   fetchQueueSummary,
 	  fetchResumeStatus,
 	  formatHarnessCommand,
@@ -1817,15 +1818,14 @@ try {
     scope: "global",
     reason: "reviewed"
   });
-  throw new Error("expected malformed token refresh to preserve the 401 failure");
+  throw new Error("expected a refused tab without a session to ask for sign-in");
 } catch (error) {
-  assert(error instanceof Error, "L077c: malformed refresh returns an Error");
-  if (!(error instanceof Error)) {
-    throw error;
-  }
-  assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
+  assert(
+    error instanceof GuardDecisionSignInRequiredError && error.reason === "no_session",
+    "L077c: a 401 to a tab without a session asks for sign-in instead of a bare failure",
+  );
 }
-assert(malformedRefreshCalls.length === 1, "L077c: malformed refresh does not retry or bootstrap without a token");
+assert(malformedRefreshCalls.length === 1, "L077c: a tab without a session sends once and does not retry or bootstrap");
 
 installGuardWindow("?guard-token=token-codex-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchCodexResolveCalls = installFetchStub({

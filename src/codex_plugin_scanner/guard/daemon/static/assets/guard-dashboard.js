@@ -18803,6 +18803,200 @@ function loadCurrentDashboardBuild(href) {
   }
   return true;
 }
+const SESSION_PART = /^[A-Za-z0-9_-]+$/;
+const REQUEST_ID$1 = /^[0-9a-f]{32}$/;
+function decodeBase64Url(part) {
+  if (!SESSION_PART.test(part)) {
+    return null;
+  }
+  const padded = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
+  try {
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+function dashboardSessionScope(token) {
+  if (typeof token !== "string") {
+    return null;
+  }
+  const parts = token.trim().split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+  const decoded = decodeBase64Url(parts[1] ?? "");
+  if (decoded === null) {
+    return null;
+  }
+  let claims;
+  try {
+    claims = JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+  if (typeof claims !== "object" || claims === null || Array.isArray(claims)) {
+    return null;
+  }
+  const record2 = claims;
+  const expires = typeof record2["expires_at"] === "string" ? Date.parse(record2["expires_at"]) : Number.NaN;
+  const expiresAtMs = Number.isFinite(expires) ? expires : null;
+  const bound = record2["request_id"];
+  if (typeof bound === "string" && REQUEST_ID$1.test(bound)) {
+    return { kind: "request", requestId: bound, expiresAtMs };
+  }
+  if (bound !== void 0 && bound !== null) {
+    return { kind: "request", requestId: "", expiresAtMs };
+  }
+  return { kind: "full", expiresAtMs };
+}
+function dashboardSessionExpired(scope, nowMs) {
+  return scope.expiresAtMs !== null && scope.expiresAtMs <= nowMs;
+}
+const SESSION_KEY = "guard-token";
+const tabStorage = () => window.sessionStorage;
+const browserStorage = () => window.localStorage;
+function readFrom(getStorage, key) {
+  try {
+    return getStorage().getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeTo(getStorage, key, value) {
+  try {
+    if (getStorage().getItem(key) !== value) {
+      getStorage().setItem(key, value);
+    }
+  } catch {
+  }
+}
+function writeBoth(key, value) {
+  writeTo(tabStorage, key, value);
+  writeTo(browserStorage, key, value);
+}
+function requestSessionStorageKey(requestId) {
+  return `${SESSION_KEY}:request:${requestId}`;
+}
+const refusedSessions = /* @__PURE__ */ new Set();
+function markSessionRefused(token) {
+  refusedSessions.add(token);
+}
+function sessionRefused(token) {
+  return refusedSessions.has(token);
+}
+let anonymousDecisionRefused = false;
+function markAnonymousDecisionRefused() {
+  anonymousDecisionRefused = true;
+}
+function liveFullSession(token, nowMs) {
+  const scope = dashboardSessionScope(token);
+  return token !== null && scope?.kind === "full" && !dashboardSessionExpired(scope, nowMs) && !sessionRefused(token);
+}
+let lastLinkedSession = null;
+function rememberLinkedGuardSession(guardToken) {
+  const now2 = Date.now();
+  const scope = dashboardSessionScope(guardToken);
+  const ended = scope?.kind === "request" && dashboardSessionExpired(scope, now2);
+  const firstSeen = lastLinkedSession !== guardToken && !ended;
+  lastLinkedSession = guardToken;
+  if (scope?.kind === "request" && scope.requestId) {
+    if (firstSeen) {
+      forgetExpiredRequestSessions(now2);
+      writeBoth(requestSessionStorageKey(scope.requestId), guardToken);
+    }
+    for (const stored of [readFrom(browserStorage, SESSION_KEY), readFrom(tabStorage, SESSION_KEY)]) {
+      if (stored !== guardToken && liveFullSession(stored, now2)) {
+        if (firstSeen) writeTo(tabStorage, SESSION_KEY, stored);
+        return stored;
+      }
+    }
+  }
+  if (ended) return readFrom(tabStorage, SESSION_KEY) ?? readFrom(browserStorage, SESSION_KEY) ?? guardToken;
+  if (firstSeen) writeBoth(SESSION_KEY, guardToken);
+  return guardToken;
+}
+function forgetExpiredRequestSessions(nowMs) {
+  const prefix = requestSessionStorageKey("");
+  for (const getStorage of [tabStorage, browserStorage]) {
+    try {
+      const storage2 = getStorage();
+      const expired = [];
+      for (let index = 0; index < storage2.length; index += 1) {
+        const key = storage2.key(index);
+        if (key === null || !key.startsWith(prefix)) continue;
+        const scope = dashboardSessionScope(storage2.getItem(key));
+        if (scope === null || dashboardSessionExpired(scope, nowMs)) expired.push(key);
+      }
+      for (const key of expired) storage2.removeItem(key);
+    } catch {
+    }
+  }
+}
+class GuardDecisionSignInRequiredError extends Error {
+  requestId;
+  reason;
+  constructor(requestId, reason) {
+    super("Sign in to decide this request.");
+    this.name = "GuardDecisionSignInRequiredError";
+    this.requestId = requestId;
+    this.reason = reason;
+  }
+}
+function decisionSessionCandidates(requestId, current) {
+  const now2 = Date.now();
+  const seen2 = /* @__PURE__ */ new Set();
+  const live = [];
+  const lapsed = [];
+  const tokens = [
+    current,
+    readFrom(browserStorage, SESSION_KEY),
+    readFrom(tabStorage, requestSessionStorageKey(requestId)),
+    readFrom(browserStorage, requestSessionStorageKey(requestId))
+  ];
+  for (const token of tokens) {
+    if (token === null || token === "" || seen2.has(token) || sessionRefused(token)) continue;
+    seen2.add(token);
+    const scope = dashboardSessionScope(token);
+    if (scope === null) {
+      live.push({ token, scope });
+      continue;
+    }
+    if (scope.kind === "request" && scope.requestId !== requestId) continue;
+    if (!dashboardSessionExpired(scope, now2)) {
+      live.push({ token, scope });
+    } else if (scope.kind === "full") {
+      lapsed.push({ token, scope });
+    }
+  }
+  return [...live, ...lapsed].map((candidate) => candidate.token);
+}
+function decisionSessionVerdict(requestId, current) {
+  const candidates = decisionSessionCandidates(requestId, current);
+  if (candidates.length > 0) {
+    return { kind: "ready", token: candidates[0] ?? null };
+  }
+  if (current === null) {
+    return anonymousDecisionRefused ? { kind: "sign_in", reason: "no_session" } : { kind: "ready", token: null };
+  }
+  const scope = dashboardSessionScope(current);
+  if (sessionRefused(current) || scope === null || dashboardSessionExpired(scope, Date.now())) {
+    return { kind: "sign_in", reason: "expired" };
+  }
+  return { kind: "sign_in", reason: "other_request" };
+}
+async function decisionRefusedSession(response) {
+  if (response.status !== 401) return false;
+  try {
+    const payload = await response.clone().json();
+    if (typeof payload !== "object" || payload === null) return true;
+    const error = payload["error"];
+    return error === void 0 || error === "unauthorized";
+  } catch {
+    return true;
+  }
+}
 const PROTECTION_POSTURE_COPY = {
   protected: {
     label: "Protected",
@@ -19515,10 +19709,37 @@ function readGuardToken() {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-    return guardToken;
+    return rememberLinkedGuardSession(guardToken);
   }
   return readGuardStorage(GUARD_TOKEN_PARAM);
+}
+function guardDecisionSession(requestId) {
+  if (isGuardDemoMode()) {
+    return { kind: "ready", token: null };
+  }
+  return decisionSessionVerdict(requestId, readGuardToken());
+}
+async function fetchDecisionWithSession(requestId, input, init) {
+  const verdict = guardDecisionSession(requestId);
+  if (verdict.kind === "sign_in") {
+    throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
+  }
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput, sendInit) => tabSession ? fetchWithGuardAuthOnce(sendInput, sendInit) : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!await decisionRefusedSession(response)) {
+      return response;
+    }
+    if (token === null) {
+      markAnonymousDecisionRefused();
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
+    }
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
@@ -21701,7 +21922,7 @@ async function resolveRequestWithQueueResult(input) {
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (guardToken = readGuardToken()) => ({
+  const init = (guardToken) => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -21724,7 +21945,7 @@ async function resolveRequestWithQueueResult(input) {
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
     })
   });
-  const response = await fetchGuardApi(path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload2 = null;
     try {
@@ -22042,15 +22263,22 @@ async function retryResume(requestId) {
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const init = (guardToken = readGuardToken()) => ({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
-  const response = await fetchGuardApi(path, init());
+  let response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -22667,9 +22895,10 @@ async function fetchMcpPolicyRequest(requestId) {
   return normalizeMcpPolicyRequest(payload);
 }
 async function resolveMcpPolicyRequest(input) {
-  const response = await fetchGuardApi(
+  const response = await fetchDecisionWithSession(
+    input.requestId,
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -22677,7 +22906,7 @@ async function resolveMcpPolicyRequest(input) {
         ...input.approval_password ? { approval_password: input.approval_password } : {},
         ...input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}
       })
-    }
+    })
   );
   const payloadBody = await response.json().catch(() => null);
   if (!response.ok) {
@@ -37336,6 +37565,36 @@ function useReviewDecisionResolve(params) {
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
+  const [signInReason, setSignInReason] = reactExports.useState(null);
+  const shownRequestId = item?.request_id ?? null;
+  const recheckSignIn = reactExports.useCallback(() => {
+    if (shownRequestId === null) {
+      setSignInReason(null);
+      return true;
+    }
+    const verdict = guardDecisionSession(shownRequestId);
+    if (verdict.kind === "ready") {
+      setSignInReason(null);
+      return true;
+    }
+    setSignInReason(verdict.reason);
+    setErrorMessage(null);
+    setPendingAction(null);
+    setPendingContractKey(null);
+    return false;
+  }, [shownRequestId]);
+  reactExports.useEffect(() => {
+    recheckSignIn();
+    const handleStorage = () => {
+      recheckSignIn();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleStorage);
+    };
+  }, [recheckSignIn]);
   reactExports.useEffect(() => {
     setEffectiveApprovalGate(params.approvalGate);
   }, [params.approvalGate]);
@@ -37414,6 +37673,13 @@ function useReviewDecisionResolve(params) {
         }
       } catch (err) {
         if (!isStillShown(requestId)) return;
+        if (err instanceof GuardDecisionSignInRequiredError) {
+          setErrorMessage(null);
+          setPendingAction(null);
+          setPendingContractKey(null);
+          setSignInReason(err.reason);
+          return;
+        }
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
         if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
@@ -37451,6 +37717,7 @@ function useReviewDecisionResolve(params) {
   const handleRequestResolve = reactExports.useCallback(
     (action2) => {
       if (resolutionBlockReason !== null || decisionBusy) return;
+      if (!recheckSignIn()) return;
       if (action2 === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
@@ -37537,6 +37804,7 @@ function useReviewDecisionResolve(params) {
       isStillShown,
       item,
       approvalGate,
+      recheckSignIn,
       resolutionBlockReason
     ]
   );
@@ -37598,6 +37866,11 @@ function useReviewDecisionResolve(params) {
     setApprovalTotpCode("");
     setCooldownOptOut(false);
   }, []);
+  const handleSignInRecheck = reactExports.useCallback(() => {
+    if (recheckSignIn()) {
+      setErrorMessage(null);
+    }
+  }, [recheckSignIn]);
   const handleRetryLastAction = reactExports.useCallback(() => {
     setErrorMessage(null);
     if (lastAction !== null) {
@@ -37626,13 +37899,115 @@ function useReviewDecisionResolve(params) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown
   };
+}
+const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
+const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
+const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
+const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
+const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
+const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
+const REQUEST_ID = /^[0-9a-f]{32}$/;
+function desktopRequestUrl(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+}
+function approvalsOpenCommand(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+}
+function queueErrorIsUnauthorizedSession(message) {
+  const lower = message.trim().toLowerCase();
+  if (!lower) {
+    return false;
+  }
+  if (lower.includes("unauthorized")) {
+    return true;
+  }
+  return /request failed with 401(?:\D|$)/.test(lower);
+}
+function decisionSignInCopy(reason) {
+  switch (reason) {
+    case "other_request":
+      return {
+        headline: "This tab is signed in for a different request",
+        detail: "The link you opened earlier lets this tab decide only that request. Open this one from Guard on this device to approve or block it."
+      };
+    case "expired":
+      return {
+        headline: "Your session for this request has ended",
+        detail: "Guard sessions last a limited time and end when Guard restarts. Open the request from Guard on this device again to get a new one."
+      };
+    case "no_session":
+      return {
+        headline: "Sign in to approve or block this request",
+        detail: "You can read the request here, but Guard saves a decision only from a signed local session. Open the request from Guard on this device to sign in."
+      };
+  }
+}
+const DECISION_SIGN_IN_RECHECK_HINT = "Once it opens signed in, this tab picks up the session. If it does not, check again.";
+function ReviewDecisionSignIn(props) {
+  const headingId = reactExports.useId();
+  const { headline, detail } = decisionSignInCopy(props.reason);
+  const desktopUrl = desktopRequestUrl(props.requestId);
+  const openCommand = approvalsOpenCommand(props.requestId);
+  const [copied, setCopied] = reactExports.useState(false);
+  const copiedTimer = reactExports.useRef(null);
+  reactExports.useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    },
+    []
+  );
+  const handleCopy = reactExports.useCallback(() => {
+    if (openCommand === null || navigator.clipboard === void 0) return;
+    void navigator.clipboard.writeText(openCommand).then(
+      () => {
+        setCopied(true);
+        if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+        copiedTimer.current = window.setTimeout(() => setCopied(false), 2e3);
+      },
+      () => {
+      }
+    );
+  }, [openCommand]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      "aria-labelledby": headingId,
+      "aria-live": "polite",
+      className: "guard-fade-in mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5",
+      "data-testid": "review-decision-sign-in",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: headingId, className: "text-sm font-semibold text-brand-dark", children: headline }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose text-sm text-slate-600", children: detail }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
+            desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRecheck, children: "Check again" })
+          ] }),
+          openCommand !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Or run this in a terminal on this device:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex items-stretch gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "flex min-h-10 min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark select-all", children: openCommand }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleCopy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-live": "polite", children: copied ? "Copied" : "Copy" }) })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: DECISION_SIGN_IN_RECHECK_HINT })
+        ] })
+      ] })
+    }
+  );
 }
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function ContextReviewPanel({ item }) {
@@ -37876,10 +38251,12 @@ function ReviewDecisionCard(props) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown
   } = useReviewDecisionResolve({
@@ -38032,7 +38409,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
           item,
@@ -38093,7 +38470,8 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
+      resolutionBlockReason === null && resolved === null && signInReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewDecisionSignIn, { requestId: item.request_id, reason: signInReason, onRecheck: handleSignInRecheck }),
+      resolutionBlockReason === null && resolved === null && signInReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
           {
@@ -40565,32 +40943,6 @@ function ReviewWorkspace(props) {
       )
     ] })
   ] });
-}
-const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
-const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
-const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
-const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
-const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
-const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
-const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
-const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
-const REQUEST_ID = /^[0-9a-f]{32}$/;
-function desktopRequestUrl(requestId) {
-  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
-}
-function approvalsOpenCommand(requestId) {
-  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
-}
-function queueErrorIsUnauthorizedSession(message) {
-  const lower = message.trim().toLowerCase();
-  if (!lower) {
-    return false;
-  }
-  if (lower.includes("unauthorized")) {
-    return true;
-  }
-  return /request failed with 401(?:\D|$)/.test(lower);
 }
 const DESKTOP_REQUESTS_META = "guard-desktop-requests";
 const HANDOFF_KEY_PREFIX = "guard-desktop-handoff:";
