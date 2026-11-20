@@ -3,8 +3,8 @@
 //! A Claude-native approval becomes a saved policy in two steps. The resident
 //! decides what is saved: the stored hash a later lookup matches, the policy
 //! action, the audit events and whether the inventory row counts as approved.
-//! The Python transport then performs the store writes the plan names, in the
-//! order it names them, and decides nothing.
+//! The resident transaction performs the store writes the plan names, in the
+//! order it names them, and decides nothing in the transport layer.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

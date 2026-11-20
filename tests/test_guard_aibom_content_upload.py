@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.support.cloud_json_request_transport import use_runner_transport
 
 
 def _source(skills_root: Path, index: int) -> GuardAibomPrimaryContentSource:
@@ -101,7 +102,9 @@ def test_primary_content_sources_include_skill_bodies_for_every_harness(
     assert sources[0].path == skill_path
 
 
-def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path: Path) -> None:
+def test_gemini_directory_identity_still_has_uploadable_primary_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -140,6 +143,7 @@ def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path
             "failedCount": 0,
         },
     )
+    use_runner_transport(monkeypatch, runner)
     summary, _auth_context = upload_primary_content_sources(
         object(),
         runner,

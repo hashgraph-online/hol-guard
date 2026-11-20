@@ -14,10 +14,10 @@ use serde_json::{json, Map, Value};
 use crate::cloud_bundle_fetch::{resolve_auth, unreachable_message, SyncError};
 use crate::cloud_event_sync::{
     answer_text, post, route_url, screen_supplied, synced_at, trusted_base, EventStore, Refusal,
-    EVENTS_BODY_LIMIT, EVENT_TIMEOUTS,
+    EVENT_TIMEOUTS,
 };
 use crate::cloud_receipt_upload_rows::{
-    advance_marker, cursor_backfill, plan, rowid, sized_batches, Plan, CURSOR_KEY,
+    advance_marker, cursor_backfill, fit_to_broker, plan, rowid, Plan, CURSOR_KEY,
     DETAIL_BACKFILL_MARKER,
 };
 
@@ -53,6 +53,10 @@ pub(crate) struct UploadRequest {
     /// sign-in itself.
     #[serde(default)]
     pub(crate) allow_auth_refresh: bool,
+    /// One request with no receipts, sending only the context: the policy
+    /// acknowledgement follow-up. No cursor or marker moves.
+    #[serde(default)]
+    pub(crate) context_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -110,13 +114,17 @@ pub(crate) fn upload_receipts(
     }
     if state.plan.is_none() {
         let call = |method: &str, args: Value| store.call(method, args);
-        let plan = plan(
-            &call,
-            store.payload(CURSOR_KEY)?.as_ref(),
-            store.payload(DETAIL_BACKFILL_MARKER)?.as_ref(),
-            &request.redaction_level,
-            &request.now,
-        )?;
+        let plan = if request.context_only {
+            Plan::default()
+        } else {
+            plan(
+                &call,
+                store.payload(CURSOR_KEY)?.as_ref(),
+                store.payload(DETAIL_BACKFILL_MARKER)?.as_ref(),
+                &request.redaction_level,
+                &request.now,
+            )?
+        };
         let plan = fit_to_broker(request, plan)?;
         state.marker = plan.marker.clone();
         state.workspace_pending = request.workspace_assessments.clone();
@@ -142,51 +150,6 @@ pub(crate) fn upload_receipts(
         state.processed += 1;
     }
     finish(store, state, &plan)
-}
-
-/// The receipts' upload payloads, and batches whose bodies fit through the
-/// egress broker. A receipt too large for a request of its own is left out
-/// of every body.
-pub(crate) fn fit_to_broker(request: &UploadRequest, mut plan: Plan) -> Result<Plan, SyncError> {
-    let projected = crate::cloud_receipt_payload::cloud_sync_receipt_payloads(&json!({
-        "receipts": plan.rows,
-        "device_id": request.device_id,
-        "device_name": request.device_name,
-        "redaction_level": request.redaction_level,
-        "now": request.now,
-    }))
-    .map_err(|error| SyncError::Failed(format!("Guard receipts could not be prepared: {error}")))?;
-    let payloads = match projected.get("payloads") {
-        Some(Value::Array(payloads)) if payloads.len() == plan.rows.len() => payloads.clone(),
-        _ => {
-            return Err(SyncError::Failed(
-                "Guard receipts could not be prepared.".to_owned(),
-            ))
-        }
-    };
-    let body_size = |context: &Map<String, Value>| {
-        json!({"receipts": [], "syncContext": context})
-            .to_string()
-            .len()
-    };
-    let overhead = body_size(&request.sync_context);
-    // The first request also carries the posture.
-    let first_overhead = request.fleet_posture.as_ref().map_or(overhead, |posture| {
-        let mut context = request.sync_context.clone();
-        context.insert("fleetPosture".to_owned(), posture.payload.clone());
-        body_size(&context)
-    });
-    let (projected, sizes): (Vec<Option<Value>>, Vec<Option<usize>>) = payloads
-        .into_iter()
-        .map(|payload| {
-            let size = payload.to_string().len();
-            let fits = overhead + size <= EVENTS_BODY_LIMIT;
-            (fits.then_some(payload), fits.then_some(size))
-        })
-        .unzip();
-    plan.batches = sized_batches(&sizes, first_overhead, overhead, EVENTS_BODY_LIMIT);
-    plan.projected = projected;
-    Ok(plan)
 }
 
 /// The request body for one batch, and the summary it carries.

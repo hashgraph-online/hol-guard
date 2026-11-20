@@ -1,4 +1,7 @@
-use super::{missing_header_reason, missing_tagged_header};
+use super::{
+    missing_header_reason, missing_tagged_header, unparseable_first_header,
+    unparseable_header_reason,
+};
 
 struct Workspace(std::path::PathBuf);
 
@@ -106,4 +109,67 @@ fn the_reason_shows_the_header_and_how_to_write_it() {
     let reason = missing_header_reason(&header);
     assert!(reason.contains("...`"), "{reason}");
     assert!(reason.contains("as a file that does not exist"), "{reason}");
+}
+
+// First header lines from Oh My Pi edits that Oh My Pi 18.22 rejects with
+// "Input header must be [PATH#TAG]", writing nothing.
+#[test]
+fn first_headers_oh_my_pi_cannot_read_are_named() {
+    for line in [
+        "[assistant/analysis code] *** Begin Patch [tool_error] Invalid input: expected header line, got: '[src/jinja2/environment.py#D7FC]",
+        "[{\"?\":\"\"}*** End Patch?]We need proper tool syntax. [path#8A65]",
+        "[tool_error] Tool input must be provided as a plain string, not JSON.",
+        "[{\"path\":\"src/tomli/_parser.py\",\"content\":\"x\"}] lower: [PATH#0A4F]",
+        "[x] [src/a.py#1A2B]",
+        "[src/a.py#1A2B] trailing",
+        "[src/a.py#1A2B]]",
+        "[a]b#1A2B]",
+        "[]",
+        "[ ]",
+        "[src/a.py#1A2B",
+    ] {
+        let input = format!("*** Begin Patch\n{line}\nPUT 1.=1:\n+x\n*** End Patch\n");
+        assert!(unparseable_first_header(&input).is_some(), "{line}");
+        assert!(unparseable_first_header(&format!("\n{line}\nPUT 1.=1:\n+x\n")).is_some(), "{line}");
+    }
+}
+
+// Headers Oh My Pi reads, rightly or as a missing file, and lines it treats
+// some other way, stay with the other checks.
+#[test]
+fn first_headers_oh_my_pi_reads_are_left_alone() {
+    for line in [
+        "[src/a.py#1A2B]",
+        "[src/a.py#1A2B]   ",
+        "[src/a.py#1A2B]\r",
+        "[src/a.py]",
+        "[src/[a].py#1A2B]",
+        "[[src/a.py#1A2B]",
+        "[{\"path\":\"src/a.py\"}]",
+        "[Update File: src/a.py#1A2B]",
+        "[*** Begin Patch][src/a.py#1A2B]",
+        "[ *** End Patch ][src/a.py#1A2B]",
+        "[*** Begin Patch]",
+        "*** Update File: src/a.py",
+        "\t[x] [src/a.py#1A2B]",
+        "[x\u{7}] [src/a.py#1A2B]",
+    ] {
+        let input = format!("*** Begin Patch\n{line}\nPUT 1.=1:\n+x\n*** End Patch\n");
+        assert_eq!(unparseable_first_header(&input), None, "{line:?}");
+    }
+    // Only the first header counts; a later one is left to the other checks.
+    assert_eq!(
+        unparseable_first_header("*** Begin Patch\n[src/a.py#1A2B]\nPUT 1.=1:\n+x\n[x] y\n"),
+        None
+    );
+    assert_eq!(unparseable_first_header("*** Begin Patch\n"), None);
+}
+
+#[test]
+fn unreadable_header_reason_shows_the_line() {
+    let input = "*** Begin Patch\n[tool_error] `bad` input\nPUT 1.=1:\n+x\n";
+    let line = unparseable_first_header(input).unwrap();
+    let reason = unparseable_header_reason(&line);
+    assert!(reason.contains("`[tool_error] bad input`"), "{reason}");
+    assert!(reason.contains("[src/app.py#1A2B]"), "{reason}");
 }

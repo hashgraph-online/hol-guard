@@ -16,6 +16,7 @@
 //! skips links and hidden directories other than benign ones, which `rg`
 //! does not enter, and prunes directories a plain ignore rule names unless
 //! some negation re-includes that name.
+use super::super::search_scope_filter::SearchFilter;
 use super::tree;
 use super::ReadContext;
 use std::io::Read;
@@ -124,10 +125,22 @@ impl Rule {
 /// checked from the directory before its first wildcard, which holds every
 /// expansion. A context-free classification has no tree to read, as with
 /// path operands.
-pub(super) fn roots_proven(roots: &[&str], context: ReadContext<'_>) -> bool {
+pub(super) fn roots_proven(roots: &[&str], globs: &[&str], context: ReadContext<'_>) -> bool {
+    // An all-files override reopens ignored, hidden, and Git-internal paths.
+    // It cannot prove a quiet recursive search even without an ignore negation.
+    if globs.iter().any(|glob| matches!(*glob, "**" | "**/*")) {
+        return false;
+    }
     if context.home_dir.is_none() && context.cwd.is_none() {
         return true;
     }
+    // `-g` inclusions are a whitelist: with one of them ripgrep searches
+    // only what they select, so a negation that re-includes an entry they
+    // cannot select re-includes nothing this search reads. Globs the filter
+    // cannot model narrow nothing, and neither does an empty set.
+    let selected = (!globs.is_empty())
+        .then(|| SearchFilter::from_rg_inclusions(globs))
+        .flatten();
     let roots = if roots.is_empty() { &["."][..] } else { roots };
     roots.iter().all(|root| {
         let prefix: Vec<&str> = root
@@ -139,14 +152,39 @@ pub(super) fn roots_proven(roots: &[&str], context: ReadContext<'_>) -> bool {
             prefix if prefix.is_empty() => ".".to_owned(),
             prefix => prefix,
         };
-        tree::expanded_operand(&prefix, context)
-            .is_some_and(|path| no_hidden_whitelist(&path, context))
+        tree::expanded_operand(&prefix, context).is_some_and(|path| {
+            // A path-shaped -g glob is matched from rg's working directory,
+            // not from an explicit path operand such as src/. Reusing the
+            // search root as its match base could hide a re-included secret.
+            let at_cwd = context.cwd.is_some_and(|cwd| {
+                match (std::fs::canonicalize(&path), std::fs::canonicalize(cwd)) {
+                    (Ok(root), Ok(cwd)) => root == cwd,
+                    _ => false,
+                }
+            });
+            let narrowing = selected
+                .as_ref()
+                .filter(|filter| !filter.is_path_shaped() || at_cwd);
+            no_hidden_whitelist(&path, narrowing, context)
+        })
     })
 }
 
+#[path = "rg_whitelist_globs.rs"]
+mod globs;
+#[path = "rg_whitelist_negations.rs"]
+mod negations_source;
+
+use globs::selected_by_globs;
+use negations_source::ignore_rules;
+
 /// True when no ignore file `rg` honors for a search of `root` can
 /// re-include a hidden entry. A root that is not a directory has no walk.
-fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
+fn no_hidden_whitelist(
+    root: &Path,
+    selected: Option<&SearchFilter>,
+    context: ReadContext<'_>,
+) -> bool {
     let Ok(root) = std::fs::canonicalize(root) else {
         return true;
     };
@@ -156,7 +194,17 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
     // The marker keeps this walk apart from the recursive-read walks sharing
     // the per-evaluation memo, and names the working directory it screened.
     let marker = super::rg_whitelist_file::memo_marker(context);
-    super::walk_memo::memoized(&root, &[marker.as_str()], &[], false, false, false, || {
+    // The inclusions narrow which re-inclusions count, so the answer belongs
+    // to them as much as to the root.
+    let mut key: Vec<&str> = vec![marker.as_str()];
+    key.extend(
+        selected
+            .map(SearchFilter::inclusions)
+            .unwrap_or_default()
+            .iter()
+            .map(String::as_str),
+    );
+    super::walk_memo::memoized(&root, &key, &[], false, false, false, || {
         let mut negations = Negations::default();
         let Some((repository, rules)) = outer_sources_safe(&root, context, &mut negations) else {
             return false;
@@ -178,6 +226,7 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
             && !negations.risky.iter().any(|risk| {
                 hidden.iter().any(|path| {
                     risk.re_includes(path)
+                        && selected_by_globs(selected, &root, path)
                         && !super::rg_whitelist_file::searchable_file(path, context)
                 })
             })
@@ -366,102 +415,6 @@ fn walk(
         }
     }
     Some((pruned, hidden))
-}
-
-/// Records the negations in one ignore file and returns the plain rules
-/// that prune directories, relative to `base`. A missing file has no rules;
-/// an unreadable or oversized one fails.
-fn ignore_rules(
-    path: &Path,
-    base: &Path,
-    git: bool,
-    negations: &mut Negations,
-) -> Option<Vec<Rule>> {
-    let Some(lines) = ignore_lines(path)? else {
-        return Some(Vec::new());
-    };
-    let mut rules = Vec::new();
-    for line in &lines {
-        let line = line.trim_end();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some(pattern) = line.strip_prefix('!') {
-            record_negation(pattern, base, negations);
-            continue;
-        }
-        let line = line.strip_suffix('/').unwrap_or(line);
-        let line = line.strip_prefix("**/").unwrap_or(line);
-        // A slash at the start or in the middle anchors the rule to the
-        // ignore file's directory.
-        let (relative, anchored) = match line.strip_prefix('/') {
-            Some(relative) => (relative, true),
-            None => (line, line.contains('/')),
-        };
-        if !relative.split('/').all(plain_name) {
-            continue;
-        }
-        let target = if anchored {
-            Target::Path(base.join(relative))
-        } else {
-            Target::Name(relative.to_owned())
-        };
-        rules.push(Rule { target, git });
-    }
-    Some(rules)
-}
-
-/// Records a negated pattern, with the directory its ignore file applies to
-/// and whether each component could name a hidden secret. An escape or empty
-/// component matches anything.
-fn record_negation(pattern: &str, base: &Path, negations: &mut Negations) {
-    let pattern = pattern.strip_suffix('/').unwrap_or(pattern);
-    // Git anchors a pattern to its ignore file's directory as soon as it
-    // carries a slash anywhere but the end, so only a bare name re-includes
-    // entries deeper down. `**` is the exception: it stands for any run of
-    // directories, so `!**/.env` and `!src/**/.env` re-include that name
-    // however deep it sits, and the anchored reading would miss it.
-    let anchored = (pattern.starts_with('/') || pattern.contains('/'))
-        && !pattern.split('/').any(|component| component.contains("**"));
-    let pattern = pattern.strip_prefix('/').unwrap_or(pattern);
-    let mut components = Vec::new();
-    let spelled: Vec<&str> = pattern.split('/').collect();
-    for (index, component) in spelled.iter().copied().enumerate() {
-        if component.is_empty() || component.contains('\\') {
-            negations.all.push("*".to_owned());
-            components.push(("*".to_owned(), true));
-            continue;
-        }
-        // A `**` that a name follows stands for the run of directories above
-        // that name, which is pushed here in its own turn, and names no entry
-        // itself. Pushed as a pattern it would match every pruned directory,
-        // so `dist/` beside `!**/notes.md` would read as a re-included
-        // `dist`. A trailing `**` is the opposite: `!**` re-includes every
-        // entry there is, pruned directories among them, so it keeps the
-        // pattern that matches them.
-        if component != "**" || index + 1 == spelled.len() {
-            negations.all.push(component.to_owned());
-        }
-        let screened = !super::sensitive_path_argument(component)
-            && !super::glob_can_select_sensitive_path(component);
-        // A wildcard such as `.c[a]rgo` can re-include a whole hidden
-        // directory, so it counts whenever it matches a hidden name.
-        let harmless = plain_name(component)
-            && (!component.starts_with('.') || (screened && benign_hidden(component)));
-        components.push((component.to_owned(), !harmless));
-    }
-    // A `**` pattern is held by its last component at any depth, which
-    // re-includes at least what Git does: `!src/**/.env` holds every `.env`
-    // below the ignore file rather than only the ones below `src`.
-    if !anchored && components.len() > 1 {
-        let last = components.pop().expect("components is not empty");
-        components = vec![last];
-    }
-    negations.risky.push(Risk {
-        base: base.to_path_buf(),
-        components,
-        anywhere: !anchored,
-    });
 }
 
 fn benign_hidden(name: &str) -> bool {

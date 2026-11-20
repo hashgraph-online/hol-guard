@@ -253,6 +253,7 @@ fn request(posture: bool, workspace: Option<Value>) -> UploadRequest {
         }),
         workspace_assessments: workspace,
         allow_auth_refresh: true,
+        context_only: false,
     }
 }
 
@@ -375,4 +376,18 @@ fn a_receipt_that_does_not_fit_beside_the_posture_waits_for_the_next_request() {
     // only in a request without it.
     let sizes = [Some(25), Some(4)];
     assert_eq!(sized_batches(&sizes, 30, 10, 40), vec![0..0, 0..2]);
+}
+
+#[test]
+fn a_context_only_request_is_one_body_without_receipts() {
+    let mut request = request(true, None);
+    request.context_only = true;
+    let plan = fit_to_broker(&request, Plan::default()).unwrap();
+    assert_eq!(plan.batches, one(0..0));
+    let (body, _) = batch_body(&request, &plan.projected[0..0], 0, &UploadState::default());
+    assert_eq!(body["receipts"], json!([]));
+    assert_eq!(
+        body["syncContext"]["fleetPosture"],
+        json!({"mode": "delta"})
+    );
 }

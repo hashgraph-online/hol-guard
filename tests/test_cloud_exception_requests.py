@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.cloud_exception_requests import (
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 
 
 def test_normalized_cloud_exception_requests_url_from_sync_url() -> None:
@@ -148,7 +149,7 @@ def _hermetic_sync_context(monkeypatch: pytest.MonkeyPatch, response: object) ->
             raise response
         return response
 
-    monkeypatch.setattr(guard_runner_module, "_urlopen_json_with_timeout_retry", _fake_urlopen_json)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", _fake_urlopen_json)
     return captured
 
 

@@ -33,7 +33,7 @@ harness launcher or managed hook
         -> Rust output traversal, source I/O, hashing, scanning, effective-policy floors, decision
         -> Python harness response rendering
      -> retired off/shadow values: resolve to the product default, select nothing
-  -> Python bounded asynchronous evidence handoff (non-authoritative)
+  -> Python bounded cursor transport for evidence already written by Rust
 ```
 
 Native approval path (when a hook requires approval):
@@ -59,7 +59,7 @@ Rust raw envelope
 | Python reference oracle | Python semantic | Differential tests only; never production authority |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
 | Policy and approval control | Python control | Snapshot publication and approval presentation only; Rust owns approval challenge, validation, replay, and consume |
-| Evidence persistence | Persistence-only | Non-blocking receipt consumption |
+| Evidence persistence | Rust persistence with Python cursor transport | Rust records receipts, activity, fence windows, captures, notices, and relay evidence. Python only fetches bounded pages, observes counters, and acknowledges cursors. |
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
 

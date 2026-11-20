@@ -7,17 +7,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..evidence_drains.hook_evidence_dispatch import run_hook_evidence
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_render import native_recording_only_for_binding
+from ..native_payload_facts import native_hook_facts
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
 )
 from ..native_resident_revival import native_unavailable_reason
 from ..native_runtime import NativeRuntimeStatus
+from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_availability_policy import availability_harness_response
 from .hook_fail_closed import render_recording_only_pre_tool
 from .hook_native_review_approval import (
@@ -25,7 +26,6 @@ from .hook_native_review_approval import (
 )
 from .hook_native_saved_approval import native_exact_command_block_response
 from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
-from .hook_request_parsing import pre_tool_command
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -86,7 +86,7 @@ class _HookWorkerNativeHost(Protocol):
     _last_native_decision_receipt: dict[str, object] | None
     _native_policy_snapshot: Callable[..., dict[str, object] | None]
     _native_runtime_status: Callable[[], NativeRuntimeStatus]
-    _hook_event_name: Callable[[Mapping[str, object]], str]
+    _hook_event_name: Callable[..., str | None]
     _review_raw_hook_native: Callable[..., dict[str, object] | None]
     _review_native_edge_with_snapshot: Callable[..., tuple[dict[str, object], bool]]
     _record_post_tool_activity: Callable[..., None]
@@ -119,7 +119,7 @@ def _record_native_pre_activity(
         # The hook has its verdict; the activity row records it. The writer
         # lives in the resident, so submitting here would spend a round trip
         # in front of the response rather than behind it.
-        run_hook_evidence(
+        run_resident_evidence(
             host,
             lambda: submit(
                 harness=harness,
@@ -197,7 +197,7 @@ def _record_unavailable_native(
         writer = host.activity_writer
         submit = getattr(writer, "submit_command_activity", None)
         if callable(submit):
-            run_hook_evidence(
+            run_resident_evidence(
                 host,
                 lambda: submit(
                     harness=harness,
@@ -289,6 +289,8 @@ class HookWorkerNativeMixin:
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
         capture_receipts: list[Mapping[str, object]] | None = None,
+        defer_accepted_recording: bool = False,
+        deferred_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
         from ..runtime_transition_hook_probe import transition_hook_probe
 
@@ -319,7 +321,10 @@ class HookWorkerNativeMixin:
                 **({"request_id": probe[1]} if probe is not None else {}),
                 local_cli_rules=True,
                 observe_local_cli=True,
-                record_receipt=callable(getattr(self.activity_writer, "submit_native_decision_receipt", None)),
+                record_receipt=(
+                    not defer_accepted_recording
+                    and callable(getattr(self.activity_writer, "submit_native_decision_receipt", None))
+                ),
                 # The edge rewrites a call it routes to the contained sink in
                 # the same answer.
                 containment_sink=True,
@@ -390,11 +395,18 @@ class HookWorkerNativeMixin:
         native_result = cast("Mapping[str, object]", edge["result"])
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
+        if accepted_receipt is not None and defer_accepted_recording and deferred_receipts is not None:
+            deferred_receipts.append(accepted_receipt)
         submit = getattr(self.activity_writer, "submit_native_decision_receipt", None)
-        if accepted_receipt is not None and callable(submit) and edge.get("receipt_recorded") is not True:
+        if (
+            accepted_receipt is not None
+            and not defer_accepted_recording
+            and callable(submit)
+            and edge.get("receipt_recorded") is not True
+        ):
             # Ordered in front of this hook's activity row, which links to the
             # receipt by its decision id. An edge that queued it says so.
-            run_hook_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
+            run_resident_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
         if accepted_receipt is not None and capture_receipts is not None and native_harness == "codex":
             capture_receipts.append(accepted_receipt)
         if native_event == "UserPromptSubmit":
@@ -420,7 +432,9 @@ class HookWorkerNativeMixin:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
                     return (
-                        _record_native_pre_activity(
+                        _edge_harness_response(edge)
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
                             self,
                             native_harness,
                             payload,
@@ -452,36 +466,76 @@ class HookWorkerNativeMixin:
                     exact_command_block=edge.get("exact_command_block"),
                     review_evidence=cast("Mapping[str, object] | None", edge.get("review_evidence")),
                 )
+                if defer_accepted_recording:
+                    return response, True
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
             # The edge settled the custom extension rules; a block it found
             # answers an allowed call (in Watch, as a recorded continue).
             custom_block = edge.get("local_cli_rule")
             if isinstance(custom_block, dict) and custom_block["blocked"] is True:
                 return (
-                    _record_native_pre_activity(
-                        self,
-                        native_harness,
-                        payload,
-                        dict(cast("Mapping[str, object]", custom_block["harness_response"])),
-                        accepted_receipt,
-                        recorded=recorded,
+                    (
+                        dict(cast("Mapping[str, object]", custom_block["harness_response"]))
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
+                            self,
+                            native_harness,
+                            payload,
+                            dict(cast("Mapping[str, object]", custom_block["harness_response"])),
+                            accepted_receipt,
+                            recorded=recorded,
+                        )
                     ),
                     True,
                 )
             # A saved or Guard Cloud block on this exact command outranks the
             # edge's allow; Watch records the call and lets it run.
             if not recording_only:
+                edge_hint = edge.get("exact_command_block")
+                facts = native_hook_facts(payload, guard_home, deadline=deadline) if edge_hint is not False else None
+                if facts is None and edge_hint is not False:
+                    return (
+                        _record_unavailable_native(
+                            self,
+                            payload,
+                            harness=native_harness,
+                            event_name="PreToolUse",
+                            reason_code="native_payload_facts_unavailable",
+                            reason="HOL Guard could not identify this command safely.",
+                            guard_home=guard_home,
+                            deadline=deadline,
+                        ),
+                        False,
+                    )
+                if edge_hint is True and (facts is None or facts.command is None):
+                    return (
+                        _record_unavailable_native(
+                            self,
+                            payload,
+                            harness=native_harness,
+                            event_name="PreToolUse",
+                            reason_code="native_command_facts_unavailable",
+                            reason="HOL Guard could not identify this command safely.",
+                            guard_home=guard_home,
+                            deadline=deadline,
+                        ),
+                        False,
+                    )
                 command_block = native_exact_command_block_response(
                     self.store,
                     harness=native_harness,
-                    command=pre_tool_command(payload),
+                    command=facts.command if facts is not None else None,
                     native_result=native_result,
                     workspace=workspace,
-                    edge_hint=edge.get("exact_command_block"),
+                    edge_hint=edge_hint,
                 )
                 if command_block is not None:
                     return (
-                        _record_native_pre_activity(self, native_harness, payload, command_block, accepted_receipt),
+                        command_block
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
+                            self, native_harness, payload, command_block, accepted_receipt
+                        ),
                         True,
                     )
             rendered = _edge_harness_response(edge)
@@ -497,13 +551,10 @@ class HookWorkerNativeMixin:
                 error = NativeHookDecisionError(_EDGE_REWRITE_UNAVAILABLE)
                 return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             return (
-                _record_native_pre_activity(
-                    self,
-                    native_harness,
-                    payload,
-                    rendered,
-                    accepted_receipt,
-                    recorded=recorded,
+                rendered
+                if defer_accepted_recording
+                else _record_native_pre_activity(
+                    self, native_harness, payload, rendered, accepted_receipt, recorded=recorded
                 ),
                 True,
             )

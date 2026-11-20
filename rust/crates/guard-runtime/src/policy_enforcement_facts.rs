@@ -269,6 +269,34 @@ fn codex_command_budget_input<'a>(
     Some(input)
 }
 
+/// Borrow only the top-level arguments of an Oh My Pi `goal` envelope. `goal`
+/// keeps the session's own objective and an optional integer budget counting
+/// the tokens it may spend; that count is metadata, not a credential. Other
+/// harness names, tools and input shapes retain ordinary sensitive-key checks.
+fn omp_goal_budget_input<'a>(payload: &'a Value, harness: &str) -> Option<&'a Map<String, Value>> {
+    if harness != "omp" {
+        return None;
+    }
+    let envelope = payload.as_object()?;
+    if envelope.get("tool_name").and_then(Value::as_str) != Some("goal") {
+        return None;
+    }
+    let input = envelope.get("tool_input")?.as_object()?;
+    let published_shape = |key: &str, value: &Value| match key {
+        "op" => matches!(
+            value.as_str(),
+            Some("complete" | "create" | "drop" | "get" | "resume")
+        ),
+        "objective" => value.is_string(),
+        "token_budget" => value.as_u64().is_some(),
+        _ => false,
+    };
+    if !input.contains_key("op") || !input.iter().all(|(key, value)| published_shape(key, value)) {
+        return None;
+    }
+    Some(input)
+}
+
 /// `maps` carries every map of the payload and supplies the path selectors and
 /// the native `sensitive_target` verdict. `key_maps` is the subset whose key
 /// names are selectors rather than labels, so a filtered map keeps its path
@@ -278,6 +306,7 @@ pub(super) fn payload_sensitive_target(
     key_maps: &[&Map<String, Value>],
     codex_budget_input: Option<&Map<String, Value>>,
     codex_wait_process: Option<&Map<String, Value>>,
+    omp_goal_input: Option<&Map<String, Value>>,
 ) -> Result<bool, String> {
     let mut sensitive = path_values_sensitive(maps)?;
     // A native verdict is read wherever it appears, including inside a map
@@ -301,11 +330,15 @@ pub(super) fn payload_sensitive_target(
                     && value.as_u64().is_some()
                     && codex_budget_input.is_some_and(|input| std::ptr::eq(*record, input)))
                     || (key == "startToken"
-                        && codex_wait_process.is_some_and(|input| std::ptr::eq(*record, input))))
+                        && codex_wait_process.is_some_and(|input| std::ptr::eq(*record, input)))
+                    || (key == "token_budget"
+                        && value.as_u64().is_some()
+                        && omp_goal_input.is_some_and(|input| std::ptr::eq(*record, input))))
             {
-                // Only the numeric output budget in this exact Codex command
-                // argument object is metadata. Credential-shaped strings,
-                // nested data and every other sensitive selector still count.
+                // Only the numeric budget in this exact Codex command or
+                // Oh My Pi goal argument object is metadata. Credential-shaped
+                // strings, nested data and every other sensitive selector
+                // still count.
                 sensitive = true;
             }
         }
@@ -511,10 +544,14 @@ pub(super) fn payload_facts(
         harness,
         reason_code,
     );
-    let sensitive_target = payload_sensitive_target(&scanned, &named, budget_input, wait_process)?
-        || reason_code.contains("secret")
-        || reason_code.contains("credential")
-        || reason_code.contains("exfiltration");
+    // An Oh My Pi goal input whose every field matches the tool's published
+    // shape carries a token count, not a credential.
+    let goal_input = omp_goal_budget_input(payload, harness);
+    let sensitive_target =
+        payload_sensitive_target(&scanned, &named, budget_input, wait_process, goal_input)?
+            || reason_code.contains("secret")
+            || reason_code.contains("credential")
+            || reason_code.contains("exfiltration");
     // A harness code tool proven to run only a constant has no effect a
     // publisher could make worse; a declared publisher still counts.
     let publisher_relevant = publisher.is_some()

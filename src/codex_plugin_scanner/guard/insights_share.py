@@ -79,12 +79,11 @@ def publish_insights_share(
     display_name: str | None = None,
     auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
     from codex_plugin_scanner.guard.runtime.runner import (
-        _guard_sync_request,
         _resolve_guard_sync_auth_context,
         _sync_http_error_message,
         _sync_url_error_message,
-        _urlopen_json_with_timeout_retry,
         prepare_guard_cloud_connect_authorization,
     )
 
@@ -105,15 +104,14 @@ def publish_insights_share(
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     request_url = normalized_insights_share_url(str(resolved_auth_context["sync_url"]))
     body = json.dumps({"payload": payload}).encode("utf-8")
-    request = _guard_sync_request(
-        resolved_auth_context,
-        request_url=request_url,
-        method="POST",
-        data=body,
-        extra_headers=None,
-    )
     try:
-        response = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=30, retry_timeout_seconds=45)
+        response = cloud_bundle_sync.cloud_json_request(
+            resolved_auth_context,
+            url=request_url,
+            body=body,
+            timeout_seconds=30,
+            retry_timeout_seconds=45,
+        )
     except urllib.error.HTTPError as error:
         raise RuntimeError(_sync_http_error_message(error)) from error
     except OSError as error:

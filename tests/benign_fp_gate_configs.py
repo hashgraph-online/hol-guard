@@ -110,6 +110,30 @@ def write_parent_documents(parent: Path) -> None:
         target.write_bytes(data)
 
 
+# A design system's token documents. A design token is a named style value --
+# a colour, a spacing step, a type ramp -- so a file named for one carries
+# styles rather than credentials. These stay out of the baseline commit: a
+# tracked file is already proven by the checkout that holds it, and the
+# credential-name screen these exercise is only reached for a file the walk
+# cannot prove that way.
+PARENT_DESIGN_TOKENS = {
+    "docs/design/color-tokens.md": (
+        "# Color tokens\n\n- `--surface-raised`: #f7f7f8\n- `--text-muted`: #6b7280\n"
+    ),
+    "docs/design/spacing-token-drift.generated.md": (
+        "# Spacing token drift\n\n- `space-2`: 8px (was 6px)\n"
+    ),
+}
+
+
+def write_parent_design_tokens(parent: Path) -> None:
+    """Write the parent's design-token documents, untracked, after its commit."""
+    for relative, text in PARENT_DESIGN_TOKENS.items():
+        target = parent / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+
+
 def write_sibling_documents(sibling: Path) -> None:
     """Write the home sibling checkout's committed catalog entry and empty marker."""
     (sibling / ".keep").parent.mkdir(parents=True, exist_ok=True)

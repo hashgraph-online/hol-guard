@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import native_workspace_review_enrollment as enrollment
 from tests.guard_exact_cloud_review_support import connected_exact_review_store
+from tests.support import cloud_sync_transport
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 AUTH: dict[str, object] = {
@@ -84,15 +85,15 @@ def test_missing_base_enrollment_or_local_consent_makes_no_network_call(
 
 
 def test_authority_response_accepts_only_exact_v2_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(enrollment, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
-        enrollment,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {"authority": RECORD, "protocolVersion": 2},
     )
     assert enrollment._fetch_authority(AUTH) == ENCODED
     monkeypatch.setattr(
-        enrollment,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {"authority": RECORD, "protocolVersion": 2, "privateKey": "never"},
     )

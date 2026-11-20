@@ -131,3 +131,7 @@ def write_ignore_rule_repos(home: Path) -> None:
             _write(repository / relative, text)
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
+        if name == "billing-api":
+            # Untracked, gitignored synthetic secret for rg glob override controls.
+            # Plain source globs cannot reach it; an explicit -g "**" can.
+            _write(repository / ".env", "TOKEN=SYNTHETIC_MARKER_ONLY\n")

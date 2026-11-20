@@ -96,18 +96,16 @@ def _guard_cloud_exception_sync_request(
     store: GuardStore,
     *,
     auth_context: dict[str, object] | None,
-    method: str,
     data: bytes | None,
     invalid_response_message: str,
 ) -> dict[str, object]:
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
     from codex_plugin_scanner.guard.runtime.runner import (
         GuardSyncAuthorizationExpiredError,
         GuardSyncNotConfiguredError,
-        _guard_sync_request,
         _resolve_guard_sync_auth_context,
         _sync_http_error_message,
         _sync_url_error_message,
-        _urlopen_json_with_timeout_retry,
         prepare_guard_cloud_connect_authorization,
     )
 
@@ -119,15 +117,14 @@ def _guard_cloud_exception_sync_request(
     except GuardSyncNotConfiguredError as error:
         raise CloudExceptionRequestError(str(error), status=401) from error
     request_url = normalized_cloud_exception_requests_url(str(resolved_auth_context["sync_url"]))
-    request = _guard_sync_request(
-        resolved_auth_context,
-        request_url=request_url,
-        method=method,
-        data=data,
-        extra_headers=None,
-    )
     try:
-        response = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=30, retry_timeout_seconds=45)
+        response = cloud_bundle_sync.cloud_json_request(
+            resolved_auth_context,
+            url=request_url,
+            body=data,
+            timeout_seconds=30,
+            retry_timeout_seconds=45,
+        )
     except urllib.error.HTTPError as error:
         status = error.code if error.code in {400, 401, 403, 409, 422} else 502
         raise CloudExceptionRequestError(_sync_http_error_message(error), status=status) from error
@@ -148,7 +145,6 @@ def submit_cloud_exception_request(
     return _guard_cloud_exception_sync_request(
         store,
         auth_context=auth_context,
-        method="POST",
         data=json.dumps(normalized).encode("utf-8"),
         invalid_response_message="Guard Cloud exception request returned an invalid response.",
     )
@@ -162,7 +158,6 @@ def fetch_cloud_exception_requests(
     return _guard_cloud_exception_sync_request(
         store,
         auth_context=auth_context,
-        method="GET",
         data=None,
         invalid_response_message="Guard Cloud exception request list returned an invalid response.",
     )

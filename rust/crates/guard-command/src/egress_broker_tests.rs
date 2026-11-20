@@ -47,6 +47,7 @@ fn supplied(
 }
 
 const REGISTRY_URL: &str = "https://registry.npmjs.org/left-pad";
+const CLOUD_URL: &str = "https://hol.org/api/guard/extensions/catalog";
 
 #[test]
 fn unanswered_exchange_is_recorded_not_dialed() {
@@ -368,4 +369,31 @@ fn archive_need_asks_for_inspection_and_the_reported_verdict_is_kept() {
     assert!(supplied_inspection(&sha).is_none());
     exchange_archive(url, 10, 3, 5.0);
     assert_eq!(supplied_inspection(&sha), Some(verdict));
+}
+
+#[test]
+fn a_resident_scope_refuses_a_body_over_the_request_limit() {
+    let body = vec![b'x'; EGRESS_MAX_NEED_BODY_BYTES + 1];
+    let scope = EgressScope::enter(&[], None).unwrap();
+    let result = exchange(EgressClass::Cloud, &post(CLOUD_URL, &body), 1.0, 0, 1024);
+    assert!(
+        matches!(&result, Err(SyncHttpError::Other(reason)) if reason == "egress request body too large"),
+        "{result:?}"
+    );
+    assert!(scope.finish().is_empty());
+}
+
+#[test]
+fn an_in_process_scope_sends_a_body_up_to_its_own_limit() {
+    let body = vec![b'x'; EGRESS_MAX_NEED_BODY_BYTES + 1];
+    let scope = EgressScope::enter_in_process(&[], None).unwrap();
+    let _ = exchange(EgressClass::Cloud, &post(CLOUD_URL, &body), 1.0, 0, 1024);
+    let needs = scope.finish();
+    assert_eq!(needs.len(), 1);
+    assert_eq!(needs[0].body.as_deref().map(str::len), Some(body.len()));
+
+    let body = vec![b'x'; EGRESS_MAX_IN_PROCESS_NEED_BODY_BYTES + 1];
+    let scope = EgressScope::enter_in_process(&[], None).unwrap();
+    let _ = exchange(EgressClass::Cloud, &post(CLOUD_URL, &body), 1.0, 0, 1024);
+    assert!(scope.finish().is_empty());
 }

@@ -83,7 +83,11 @@ pub(crate) fn git(args: &[&str], hooks: Hooks, state: &State, found: &mut Breaks
     }
     match *subcommand {
         "commit" => commit(rest, moved, found),
-        "add" => add(rest, moved, found),
+        // `git-stage(1)` is Git's own second name for `git-add(1)`: the same
+        // builtin, the same options, the same whole-tree staging. Reading the
+        // word literally let `git stage -A` past a user rule that stopped
+        // `git add -A`.
+        "add" | "stage" => add(rest, moved, found),
         "rm" => {
             let (flags, paths) = split_options(rest, &[]);
             let preview = flags.iter().any(|flag| {

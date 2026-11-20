@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
     post_review_events,
 )
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
+from tests.support import cloud_sync_transport
 from tests.test_guard_cloud_review_sync_worker import Store
 
 
@@ -428,7 +429,6 @@ class TestPendingRequestAgeConnectivity:
 def test_canonical_transport_posts_structured_event_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime import runner
 
     captured_body: dict[str, object] = {}
 
@@ -441,9 +441,9 @@ def test_canonical_transport_posts_structured_event_content(
         captured_body.update(json_loads(data))
         return object()
 
-    monkeypatch.setattr(runner, "_guard_sync_request", capture_request)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", capture_request)
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {
             "protocolVersion": 2,

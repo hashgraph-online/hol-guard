@@ -76,6 +76,20 @@ def _render(
     return dict(rendered) if isinstance(rendered, dict) else None
 
 
+def native_hook_availability(
+    payload: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Read event outage posture from the Rust renderer."""
+
+    rendered = _render_payload(
+        {"kind": "availability", "harness": "hook", "cli": {"payload": dict(payload)}},
+        guard_home,
+        deadline,
+    )
+    response = rendered.get("response") if rendered is not None else None
+    return dict(response) if isinstance(response, dict) else None
+
+
 def native_render_cli(
     kind: str,
     harness: str,
@@ -278,6 +292,7 @@ __all__ = [
     "HOOK_RENDER_FEATURE",
     "native_cli_hook_emit",
     "native_evaluation_has_terminal_policy_action",
+    "native_hook_availability",
     "native_recording_only_for_binding",
     "native_render_cli",
     "native_render_pre_tool",

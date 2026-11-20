@@ -31,6 +31,7 @@ pytest_plugins = [
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
     "tests.network_trust_fixtures",
+    "tests.cloud_json_request_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -174,6 +175,18 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
+
+
+@pytest.fixture(autouse=True)
+def _fresh_resident_health_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start each test with a closed resident circuit.
+
+    Health is keyed by runtime digest and Guard home, and tests that share the
+    default home would otherwise inherit failures an earlier test recorded.
+    """
+    from codex_plugin_scanner.guard import native_runtime_resilience
+
+    monkeypatch.setattr(native_runtime_resilience, "_STATES", type(native_runtime_resilience._STATES)())
 
 
 @pytest.fixture(autouse=True)

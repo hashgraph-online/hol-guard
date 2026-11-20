@@ -3,6 +3,11 @@
  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
+  "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
   "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
@@ -135,6 +140,34 @@
   "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_hook_direct_counters.py::test_harness_slots_match_the_direct_harnesses",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_counters_tests.rs::every_harness_name_has_its_own_slot"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_evidence_dispatch.py::test_evidence_is_submitted_in_the_order_the_hooks_left_it",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/hook_evidence_writer_tests.rs::receipt_handoffs_preserve_submission_order"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_direct_evidence_drain.py::test_a_drained_answer_is_recorded_like_a_daemon_allow",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_drain_tests.rs::an_answer_queues_the_evidence_the_daemon_records"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_direct_evidence_drain_connector_notice.py::test_a_queued_connector_review_raises_its_notice_from_the_stored_row",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_notice_reads_as_the_daemon_writes_it"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "tests/test_guard_command_backup_extensions.py::test_backup_option_parse_limit_fails_secure",
    "source_sha256": "0b192edbae47d6dcc96aa9d27e9ad516b5b62be81239fd1b445a58ef3b31fc12",
