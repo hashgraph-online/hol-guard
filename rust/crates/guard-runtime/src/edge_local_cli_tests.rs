@@ -1,31 +1,6 @@
 use super::{exact_command_block, read_by_daemon};
-use guard_contracts::GuardHookEnvelopeV2 as Envelope;
-use serde_json::Map;
-
-/// No step of a chained command passes alone in these tests.
-fn no_step(_payload: &Value, _budget_ms: u64) -> Option<Map<String, Value>> {
-    None
-}
-
-fn settle(
-    envelope: &Envelope,
-    harness: &str,
-    event_name: &str,
-    result: &Value,
-) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
-    super::settle(envelope, harness, event_name, result, &no_step)
-}
-
-fn settle_within(
-    envelope: &Envelope,
-    harness: &str,
-    event_name: &str,
-    result: &Value,
-    wait: Duration,
-) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
-    super::settle_within(envelope, harness, event_name, result, &no_step, wait)
-}
 use crate::context_digest_package_scripts::package_json_scripts;
+use compound::{settle_alone as settle, settle_alone_within as settle_within};
 use guard_contracts::{
     GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, GuardHookLocalCliRulesV1,
     GuardHookSourceMetadataV2, GUARD_HOOK_ENVELOPE_V2_SCHEMA,

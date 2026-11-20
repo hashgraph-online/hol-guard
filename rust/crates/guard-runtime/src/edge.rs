@@ -5,7 +5,6 @@ use crate::native_hook_receipt::{
     receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
 };
 use crate::policy_enforcement::AdmittedPolicySnapshot;
-use crate::{git_rules, runtime_known_vulnerable as runtime_risk};
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, PreToolResultV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
@@ -13,7 +12,7 @@ use guard_contracts::{
 };
 use guard_hook_core::review_post_tool;
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[path = "edge_identity.rs"]
 mod edge_identity;
@@ -29,6 +28,9 @@ pub(crate) use edge_identity::{
 mod edge_containment;
 #[path = "edge_local_cli.rs"]
 mod edge_local_cli;
+#[path = "edge_pre_tool_chain.rs"]
+mod pre_tool_chain;
+use pre_tool_chain::evaluate_pre_tool_chain;
 #[path = "edge_result_check.rs"]
 mod edge_result_check;
 pub(crate) use edge_result_check::standalone_receipt;
@@ -266,62 +268,6 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     Ok(())
 }
 
-/// The `PreToolUse` and `UserPromptSubmit` verdict before the per-session
-/// stop: the native review, then every policy layer joined over it. It holds
-/// no session state, so it also judges one step of a chained command alone
-/// (`edge_local_cli_compound.rs`).
-fn evaluate_pre_tool_chain(
-    envelope: &GuardHookEnvelopeV2,
-    harness: &str,
-    event_name: &str,
-    policy_snapshot: Option<&AdmittedPolicySnapshot>,
-) -> Result<PreToolResultV1, String> {
-    let unavailable_environment = guard_contracts::GuardExecutionEnvironmentV1::unavailable();
-    crate::edge_git_push::install();
-    let native = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
-        harness,
-        event_name,
-        &envelope.raw_payload,
-        policy_snapshot.and_then(|snapshot| snapshot.command_extensions.as_ref()),
-        Some(
-            Instant::now()
-                + Duration::from_millis(envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000)),
-        ),
-        // The envelope carries only the roots. Every proof a context
-        // holds is set by a caller with the command, so all stay false.
-        guard_command::pretool::PathContext {
-            home_dir: Some(envelope.source.home_dir.as_str()),
-            guard_home: Some(envelope.source.guard_home.as_str()),
-            cwd: envelope.source.cwd.as_deref(),
-            ..Default::default()
-        },
-        Some(
-            envelope
-                .source
-                .execution_environment
-                .as_ref()
-                .unwrap_or(&unavailable_environment),
-        ),
-    );
-    let native = crate::omp_yield_input_scan::scan(
-        &envelope.raw_payload,
-        envelope.deadline_budget_ms,
-        native,
-    )?;
-    let evaluated = if let Some(snapshot) = policy_snapshot {
-        crate::policy_enforcement::apply_pre_tool_policy_for_hook(snapshot, envelope, native)?
-    } else {
-        native
-    };
-    let evaluated =
-        crate::native_exact_action_op::require_bash_owner(envelope, policy_snapshot, evaluated);
-    let evaluated = crate::network_protection::apply_to_envelope(envelope, evaluated);
-    let evaluated = runtime_risk::apply_to_envelope(envelope, policy_snapshot, evaluated);
-    let evaluated = git_rules::after_exact_review(envelope, policy_snapshot, evaluated);
-    let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
-    Ok(evaluated)
-}
-
 /// `lease` is held until the verdict and its evidence are settled, and
 /// released before any prompt context lookup waits on CIGAR.
 fn evaluate_validated_envelope<Lease>(
@@ -435,18 +381,15 @@ fn evaluate_validated_envelope<Lease>(
         &receipt,
         guard_home,
         || {
-            // One step of a chained command, judged as a command of its own.
             let step = |payload: &Value, budget_ms: u64| {
-                let mut alone = envelope.clone();
-                alone.raw_payload = payload.clone();
-                alone.deadline_budget_ms = Some(budget_ms);
-                match evaluate_pre_tool_chain(&alone, &harness, &event_name, policy_snapshot)
-                    .ok()
-                    .and_then(|verdict| serde_json::to_value(verdict).ok())
-                {
-                    Some(Value::Object(verdict)) => Some(verdict),
-                    _ => None,
-                }
+                pre_tool_chain::step(
+                    &envelope,
+                    &harness,
+                    &event_name,
+                    policy_snapshot,
+                    payload,
+                    budget_ms,
+                )
             };
             edge_local_cli::settle(&envelope, &harness, &event_name, &result, &step)
         },

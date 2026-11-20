@@ -2,12 +2,36 @@
 //! other step passes on its own.
 
 use super::{allowed, case, review};
-use guard_contracts::GuardHookEnvelopeV2;
+use guard_contracts::{GuardHookEnvelopeV2, GuardHookLocalCliRuleV1};
 use serde_json::{json, Map, Value};
 use std::time::Duration;
 
 const WAIT: Duration = Duration::from_secs(4);
 const SCRIPT: &str = "npm run build";
+
+/// No step of a chained command passes alone: the parent tests' settle.
+fn no_step(_payload: &Value, _budget_ms: u64) -> Option<Map<String, Value>> {
+    None
+}
+
+pub(super) fn settle_alone(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event_name: &str,
+    result: &Value,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
+    super::super::settle(envelope, harness, event_name, result, &no_step)
+}
+
+pub(super) fn settle_alone_within(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event_name: &str,
+    result: &Value,
+    wait: Duration,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
+    super::super::settle_within(envelope, harness, event_name, result, &no_step, wait)
+}
 
 /// `envelope` asking about `command` instead of the fixture's own.
 fn asking(mut envelope: GuardHookEnvelopeV2, command: &str) -> GuardHookEnvelopeV2 {

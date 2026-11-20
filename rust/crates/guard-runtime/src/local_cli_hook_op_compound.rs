@@ -1,7 +1,33 @@
 //! Narrow changed-script connector lookup for compound shell commands.
 use super::*;
 
-pub(super) fn changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
+/// `refined` naming the changed script a reviewed compound command waits on.
+/// Only a review with no single CLI launch, no package script and no
+/// connector of its own takes one.
+pub(super) fn with_changed_connector(
+    request: &LocalCliHookRequestV1,
+    package: &Package,
+    no_single_launch: bool,
+    mut refined: Refined,
+) -> Refined {
+    if no_single_launch
+        && refined.action == "review"
+        && refined.connector.is_none()
+        && matches!(package, Ok(None))
+    {
+        refined.connector = changed_connector(request);
+    }
+    refined
+}
+
+/// The connector a reviewed compound command waits on: the one CLI it
+/// launches, when the user allowed only an earlier version of that CLI. The
+/// grant step reads a single invocation alone, so without this a changed
+/// script run as `cd dir && ./script` or `./script | tail` was an ordinary
+/// review whose Always allow saved only that exact text. Naming the connector
+/// changes no action: the review stays a review, and only its card offers the
+/// new version. A command that launches more than one CLI names none.
+fn changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
     // A changed-script card must not obscure a review for an independent risk.
     // The already-Review action is unchanged regardless of this proof.
     if !crate::connector_setup::grant_lifts(request.current_reason_code.as_deref()) {

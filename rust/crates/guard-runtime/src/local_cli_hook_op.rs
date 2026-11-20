@@ -160,28 +160,10 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
     let answer = grant(request, package);
     // No single CLI launch: a compound command, or one that launches none.
     let no_single_launch = matches!(answer, Ok((None, None, _)));
-    let mut refined = contained::refine(request, answer, || {
+    let refined = contained::refine(request, answer, || {
         contained::unverified_action(request).to_owned()
     });
-    if no_single_launch
-        && refined.action == "review"
-        && refined.connector.is_none()
-        && matches!(package, Ok(None))
-    {
-        refined.connector = compound_changed_connector(request);
-    }
-    refined
-}
-
-/// The connector a reviewed compound command waits on: the one CLI it
-/// launches, when the user allowed only an earlier version of that CLI. The
-/// grant step reads a single invocation alone, so without this a changed
-/// script run as `cd dir && ./script` or `./script | tail` was an ordinary
-/// review whose Always allow saved only that exact text. Naming the connector
-/// changes no action: the review stays a review, and only its card offers the
-/// new version. A command that launches more than one CLI names none.
-fn compound_changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
-    compound::changed_connector(request)
+    compound::with_changed_connector(request, package, no_single_launch, refined)
 }
 
 /// The launch observation: the package script identity, else every CLI a
