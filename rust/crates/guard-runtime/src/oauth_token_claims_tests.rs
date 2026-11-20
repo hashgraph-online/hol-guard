@@ -175,7 +175,7 @@ fn no_usable_lifetime_has_no_expiry() {
 
 #[test]
 fn malformed_requests_are_refused() {
-    assert!(dispatch(&json!({"op": "identity"})).is_err());
+    assert!(dispatch(&json!({"op": "identity", "claims": "not-an-object"})).is_err());
     assert!(dispatch(&json!({"op": "binding", "claims": [], "issuer": null})).is_err());
     assert!(dispatch(&json!({"op": "identity", "claims": null, "token": "x"})).is_err());
 }
