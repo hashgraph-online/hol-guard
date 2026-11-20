@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "lienzo-ui-mcp@1.7.3"
+    "package": "lienzo-ui-mcp@1.7.4"
   },
   "riskClasses": [
     "external-filesystem-read",

@@ -113,7 +113,7 @@ def test_lienzo_ui_launch_package_is_version_pinned() -> None:
     assert payload["launch"] == {
         "kind": "package-launcher",
         "command": "npx",
-        "package": "lienzo-ui-mcp@1.7.3",
+        "package": "lienzo-ui-mcp@1.7.4",
     }
 
 
