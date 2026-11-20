@@ -119,3 +119,29 @@ fn a_symlinked_leading_entry_never_proves_a_different_checkout() {
         }
     }
 }
+
+#[test]
+fn semicolon_after_leading_entry_must_not_inherit_proved_checkout() {
+    let (_cleanup, home, repository) = repository("leading-entry-sequenced-fallback");
+    let elsewhere = home.join("org/app-taken");
+    let controls = git_github("enabled", &[]);
+    let absolute = repository.display().to_string();
+    // A failed first cd must not allow later steps after ';' to run under
+    // permission proved for a different checkout.
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for command in [
+            format!("cd {absolute} && {ADD} && cd ../app-review; git diff"),
+            format!("cd {absolute} && {ADD}; cd ../app-review && git status --short"),
+            format!(
+                "cd {absolute} && git fetch origin main; {ADD} && cd ../app-review && git diff"
+            ),
+        ] {
+            let verdict = evaluate(&home, &elsewhere, harness, &command, &controls);
+            assert_ne!(
+                verdict.minimum_action, "allow",
+                "{harness}: {command}: {}",
+                verdict.reason_code
+            );
+        }
+    }
+}
