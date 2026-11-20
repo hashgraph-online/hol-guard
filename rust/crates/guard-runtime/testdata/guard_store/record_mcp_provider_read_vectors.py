@@ -27,6 +27,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The scenarios build their records with the test oracle under tests/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
 
 from codex_plugin_scanner.guard import store_local_mcp
 from codex_plugin_scanner.guard.store_local_cli_schema import ensure_local_cli_schema

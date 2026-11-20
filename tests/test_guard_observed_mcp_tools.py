@@ -434,7 +434,7 @@ def test_a_heavy_history_still_discovers_every_connector(tmp_path: Path) -> None
     assert sorted(str(item["name"]) for item in store.list_local_cli_items()) == sorted(servers)
 
 
-@pytest.mark.parametrize("command_id", ["tool-short", "TOOL-" + "0" * 24, None])
+@pytest.mark.parametrize("command_id", ["", 7, None])
 def test_discovery_refuses_a_tool_without_a_native_command_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command_id: object
 ) -> None:

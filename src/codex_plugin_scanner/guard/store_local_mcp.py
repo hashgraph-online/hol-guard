@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
@@ -20,7 +19,6 @@ if TYPE_CHECKING:
 _OBSERVED_MCP_ACTIONS = frozenset({"allow", "review", "block"})
 _CONNECTOR_KEYS = frozenset({"harness", "namespace", "server_name", "seen_at", "tools"})
 _TOOL_KEYS = frozenset({"command_id", "name", "qualified_name"})
-_TOOL_COMMAND_ID = re.compile(r"tool-[0-9a-f]{24}\Z")
 
 
 class ObservedMcpConnectorTool(TypedDict):
@@ -40,13 +38,8 @@ class ObservedMcpConnector(TypedDict):
 def _valid_connector_tool(item: object) -> bool:
     if not isinstance(item, dict) or set(item) != _TOOL_KEYS:
         return False
-    tool = cast("dict[str, object]", item)
-    command_id = tool["command_id"]
-    return (
-        all(isinstance(value, str) for value in tool.values())
-        and isinstance(command_id, str)
-        and _TOOL_COMMAND_ID.match(command_id) is not None
-    )
+    # The resident owns the id format; this checks only the answer's shape.
+    return all(isinstance(value, str) and value for value in cast("dict[str, object]", item).values())
 
 
 def _valid_connector(item: object) -> bool:

@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
@@ -36,11 +37,22 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provisio
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import ObservedMcpTool
 from codex_plugin_scanner.guard.store import GuardStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tests.python_oracles.observed_mcp_tools import observed_command_id, observed_mcp_tool
+
+def fixture_tool(index: int, name: str) -> ObservedMcpTool:
+    server = f"fixture_{index:03}"
+    namespace = f"mcp__{server}__"
+    return ObservedMcpTool("codex", namespace, name, namespace + name, server)
+
+
+def observed_command_id(tool: ObservedMcpTool) -> str:
+    """The command id the native discovery gives an observed tool."""
+
+    return "tool-" + sha256(tool.qualified_name.encode()).hexdigest()[:24]
 
 
 def p95(samples: list[float]) -> float:
@@ -95,9 +107,7 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch, isolated
     servers = []
     setup_start = time.perf_counter()
     for index in range(connection_count):
-        observed = [observed_mcp_tool("codex", f"mcp__fixture_{index:03}__{name}") for name in names]
-        assert all(tool is not None for tool in observed)
-        tools = [tool for tool in observed if tool is not None]
+        tools = [fixture_tool(index, name) for name in names]
         server, identity = tools[0].server_identity, tools[0].identity
         commands = (
             *(
