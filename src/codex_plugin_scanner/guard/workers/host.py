@@ -184,14 +184,12 @@ class WorkerHost:
         self._threads.append(thread)
 
     def start(self, on_phase: Callable[[str], None] | None = None) -> None:
-        from ..browser_opener import open_browser_url
-        from ..cloud_control.command_queue_worker import start_command_queue_worker
-        from ..native_resident_watchdog import start_native_resident_watchdog
-        from ..runtime.approval_attention import ApprovalAttentionCoordinator
-        from ..runtime.cloud_review_sync import start_cloud_sync_sync_worker
-        from ..runtime.surface_server import GuardSurfaceRuntime
-        from ..runtime_health import repair_self_check
-        from ..workspace_assessment_worker import start_workspace_assessment_worker
+        """Admits the installed release and starts policy publication.
+
+        Only these steps stand between the daemon and its first hook. The
+        other workers start in ``start_background_workers``, after the host
+        reports ready.
+        """
 
         # Admit the installed release before the first publication, as the
         # Python daemon did at startup. A snapshot bound to packs an older
@@ -204,6 +202,26 @@ class WorkerHost:
         report("publishing")
         if not self._installed_authority_admitted:
             self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
+
+    def start_background_workers(self) -> None:
+        """Starts the workers no hook waits on.
+
+        Approval attention, the cloud queues, the repair self-check, the
+        resident watchdog and workspace assessment each poll or wait on their
+        own schedule. Starting them before the host reported ready held every
+        cold start for their imports and threads, while the first policy
+        publication competed with them for the interpreter.
+        """
+
+        from ..browser_opener import open_browser_url
+        from ..cloud_control.command_queue_worker import start_command_queue_worker
+        from ..native_resident_watchdog import start_native_resident_watchdog
+        from ..runtime.approval_attention import ApprovalAttentionCoordinator
+        from ..runtime.cloud_review_sync import start_cloud_sync_sync_worker
+        from ..runtime.surface_server import GuardSurfaceRuntime
+        from ..runtime_health import repair_self_check
+        from ..workspace_assessment_worker import start_workspace_assessment_worker
+
         attention = ApprovalAttentionCoordinator(
             store=self.store,
             runtime=GuardSurfaceRuntime(self.store),
@@ -341,6 +359,15 @@ def _report_phase(step: str) -> None:
     sys.stdout.flush()
 
 
+def _wait_for_daemon_to_close() -> None:
+    try:
+        # The daemon holds the other end; end of file means it has gone.
+        while sys.stdin.buffer.read(4096):
+            pass
+    except (OSError, ValueError, KeyboardInterrupt):
+        pass
+
+
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
@@ -364,11 +391,8 @@ def run_worker_host(guard_home: Path) -> int:
         _ = sys.stdout.write("ready\n")
         sys.stdout.flush()
         try:
-            # The daemon holds the other end; end of file means it has gone.
-            while sys.stdin.buffer.read(4096):
-                pass
-        except (OSError, ValueError, KeyboardInterrupt):
-            pass
+            host.start_background_workers()
+            _wait_for_daemon_to_close()
         finally:
             host.shutdown()
     finally:
