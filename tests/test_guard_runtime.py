@@ -19344,15 +19344,19 @@ def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavai
     tmp_path,
     monkeypatch,
 ):
-    for canonical in (True, False):
+    for canonical, step in (
+        (True, "policy_shadow_mismatch"),
+        (False, "policy_shadow_mismatch"),
+        (True, "policy_shadow_source"),
+    ):
         store, legacy = _prepare_shadow_candidate_sync(
-            tmp_path / f"canonical-{canonical}", monkeypatch, canonical=canonical
+            tmp_path / f"canonical-{canonical}-{step}", monkeypatch, canonical=canonical
         )
 
-        def _unavailable(_legacy, _canonical):
+        def _unavailable(*_args, **_kwargs):
             raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-        monkeypatch.setattr(guard_runner_module._authority, "policy_shadow_mismatch", _unavailable)
+        monkeypatch.setattr(guard_runner_module._authority, step, _unavailable)
 
         guard_runner_module.sync_receipts(store)
 

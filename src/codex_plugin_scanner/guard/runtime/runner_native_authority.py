@@ -406,6 +406,34 @@ def authority_error(evaluation: Mapping[str, object], *, require_launch_permitte
     return _typed(payload, "authority_error", str, nullable=True)
 
 
+def policy_shadow_source(
+    candidate: Mapping[str, object],
+    *,
+    stored_legacy: object,
+    existing: object,
+) -> tuple[str | None, bool]:
+    """Which stored bundle shadows a v2 candidate, and whether it only evaluates.
+
+    Answers ``"stored"``, ``"existing"`` or ``None`` for the shadow. Only the
+    stored bundles' version and issue time travel: two more whole bundles
+    would not fit one request.
+    """
+
+    def header(bundle: object) -> dict[str, object] | None:
+        if not isinstance(bundle, dict):
+            return None
+        return {key: bundle[key] for key in ("contractVersion", "issuedAt") if key in bundle}
+
+    payload = native_runner_authority(
+        "policy_shadow_source",
+        {"candidate": dict(candidate), "stored_legacy": header(stored_legacy), "existing": header(existing)},
+    )
+    source = _typed(payload, "legacy", str, nullable=True)
+    if source not in (None, "stored", "existing"):
+        raise _malformed()
+    return source, _typed(payload, "evaluating", bool)
+
+
 def policy_shadow_mismatch(legacy: Sequence[PolicyDecision], canonical: Sequence[PolicyDecision]) -> tuple[str, ...]:
     """Reason codes where the legacy and canonical policy rows disagree."""
 
