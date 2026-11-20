@@ -71,3 +71,19 @@ def test_credential_recovery_reads_no_binding_and_expiry_lookup_raises() -> None
     assert oauth_token_claims.oauth_binding_from_credentials({"access_token": token, "issuer": "x"}) == {}
     with pytest.raises(NativeRunnerAuthorityError):
         oauth_token_claims.oauth_access_token_expires_at(token, expires_in=60, now=connect_flow.datetime.now())
+
+
+def test_a_new_connection_keeps_its_identity_when_only_the_expiry_lookup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def answer(_kind: str, args: dict[str, object]) -> dict[str, object]:
+        if args["op"] == "expires_at":
+            raise OSError("guard home unreadable")
+        return {"identity": {"grant_id": "grant-1", "machine_id": "machine-1", "workspace_id": "ws-1"}}
+
+    monkeypatch.setattr(oauth_token_claims, "native_runner_authority", answer)
+    monkeypatch.setattr(connect_flow, "build_oauth_package_firewall_entitlement", lambda *_a, **_k: None)
+    payload = {"access_token": _token({}), "token_type": "Bearer", "expires_in": 60}
+    result = connect_flow._parse_guard_token_exchange_payload(payload)
+    assert (result.grant_id, result.machine_id, result.workspace_id) == ("grant-1", "machine-1", "ws-1")
+    assert result.access_token_expires_at is None

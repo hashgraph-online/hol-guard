@@ -134,7 +134,7 @@ class GuardOAuthTokenExchangeResult:
                 expires_in=self.expires_in,
                 now=datetime.now(timezone.utc),
             )
-        except NativeRunnerAuthorityError:
+        except (NativeRunnerAuthorityError, OSError):
             # No saved expiry only means the token is refreshed before reuse.
             expires_at = None
         object.__setattr__(self, "access_token_expires_at", expires_at)
@@ -524,17 +524,20 @@ def _parse_guard_token_exchange_payload(
     expires_in = _int_payload_value(payload, "expires_in", 0)
     try:
         identity = oauth_token_identity(access_token)
-        access_token_expires_at = oauth_access_token_expires_at(access_token, expires_in=expires_in, now=now)
     except NativeRunnerAuthorityError as error:
         if require_entitlement:
-            # Saving a new connection without its grant, machine and workspace
-            # would leave a row no later sync can tell apart from an unbound one.
+            # A new connection saved before its claims were read would leave a
+            # row no later sync can tell apart from an unbound one.
             raise RuntimeError(
                 "Guard OAuth token exchange failed: Guard's local runtime could not read the access token."
             ) from error
         # A refresh keeps the binding already saved with the credential; the
         # rotated refresh token must still reach the store.
         identity: dict[str, str | None] = dict.fromkeys(("grant_id", "machine_id", "workspace_id", "device_id"))
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(access_token, expires_in=expires_in, now=now)
+    except (NativeRunnerAuthorityError, OSError):
+        # No saved expiry only means the token is refreshed before reuse.
         access_token_expires_at = None
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,

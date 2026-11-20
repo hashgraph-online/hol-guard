@@ -1638,7 +1638,7 @@ def _refresh_guard_oauth_access_token_once(
             expires_in=payload.get("expires_in"),
             now=datetime.now(timezone.utc),
         )
-    except NativeRunnerAuthorityError:
+    except (NativeRunnerAuthorityError, OSError):
         # The refreshed token still works; without an expiry it is only
         # refreshed again before reuse instead of being served from cache.
         access_token_expires_at = None
