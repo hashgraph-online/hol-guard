@@ -277,7 +277,13 @@ class WorkerHost:
         """Builds the hook worker on a thread of its own, without starting it."""
 
         def build() -> None:
-            self._prepared_hook_worker = self._build_hook_worker()
+            hook_worker = self._build_hook_worker()
+            # The first publication's policy compiles read only config files
+            # and the store, so they run here too; publishing still waits.
+            warm = getattr(getattr(hook_worker, "policy_snapshot_publisher", None), "warm_first_publication", None)
+            if callable(warm):
+                warm()
+            self._prepared_hook_worker = hook_worker
 
         thread = threading.Thread(target=build, daemon=True, name="guard-worker-policy-prepare")
         try:

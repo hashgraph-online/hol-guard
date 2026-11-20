@@ -40,10 +40,14 @@ def run_library_call(guard_home: Path) -> int:
     """Answer the call on stdin; 2 when there is none to answer."""
 
     from ..library_calls import run_library_call as run
+    from .desktop_daemon_workers import wait_for_early_runtime_status
 
     request = sys.stdin.buffer.read(_REQUEST_LIMIT_BYTES + 1)
     if not request or len(request) > _REQUEST_LIMIT_BYTES:
         return 2
+    # The call opens a store, whose first native call needs the runtime status
+    # this process started resolving beside its imports.
+    wait_for_early_runtime_status()
     result = run(guard_home, request)
     out = sys.stdout.buffer
     out.write(json.dumps(result, separators=(",", ":"), default=str).encode("utf-8"))
@@ -63,7 +67,10 @@ def answer_line(guard_home: Path, request: bytes) -> bytes:
     """The answer line for one resident call line, with the call's ``id``."""
 
     from ..library_calls import run_library_call as run
+    from .desktop_daemon_workers import wait_for_early_runtime_status
 
+    # As in run_library_call: the store this call opens needs the runtime status.
+    wait_for_early_runtime_status()
     result = run(guard_home, request)
     try:
         call_id = json.loads(request.decode("utf-8")).get("id")
