@@ -119,14 +119,14 @@ def cloud_json_request(
         "retryTimeoutSeconds": float(retry_timeout_seconds),
     }
     body_file: str | None = None
-    if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
-        descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(body)
-        request["bodyFile"] = body_file
-    elif body is not None:
-        request["body"] = body.decode("utf-8")
     try:
+        if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
+            descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(body)
+            request["bodyFile"] = body_file
+        elif body is not None:
+            request["body"] = body.decode("utf-8")
         answer = run_native_cloud_sync(
             CLOUD_EVENT_SYNC_COMMAND,
             CLOUD_JSON_REQUEST_FEATURE,
