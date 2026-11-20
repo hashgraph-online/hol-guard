@@ -36,13 +36,14 @@ pub(super) fn leading_entry(
     {
         return None;
     }
-    // A semicolon anywhere after the leading entry breaks its success
-    // dependency: later commands can run in the original cwd if that cd
-    // fails. Those reads must not inherit proof for the entered repository.
+    // Only success-dependent steps follow a leading entry. A ';' or '||'
+    // can run later Git reads in the original cwd if the first cd fails,
+    // so neither can inherit proof for the entered repository. Preserve
+    // pipe stages, whose input still comes from the preceding command.
     if (2..model.segments.len()).any(|index| {
-        super::super::separator_between(model, index - 1, index)
+        !super::super::separator_between(model, index - 1, index)
             .as_deref()
-            .is_some_and(|separator| separator.trim() == ";")
+            .is_some_and(|separator| matches!(separator.trim(), "&&" | "|"))
     }) {
         return None;
     }
