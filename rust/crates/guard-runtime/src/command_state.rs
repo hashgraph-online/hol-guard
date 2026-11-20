@@ -111,6 +111,9 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
     let now = utc_timestamp_micros(request.now.trim()).ok_or("invalid_current_time")?;
     let ledger = Ledger::new(&request.guard_home);
     match request.op.as_str() {
+        // A home whose store was never created has nothing waiting. Only the
+        // read answers that way; every write still needs the store.
+        "pending" if !ledger.store_exists() => Ok(Value::Array(Vec::new())),
         "pending" => ledger.transact(|tx| Ok(Value::Array(pending(tx, now)?))),
         "register_pending" => ledger.transact(|tx| register_pending(tx, request)),
         "approve" => ledger.transact(|tx| approve(tx, request, now)),
@@ -129,6 +132,10 @@ impl Ledger {
         Self {
             home: guard_home.to_path_buf(),
         }
+    }
+
+    fn store_exists(&self) -> bool {
+        self.home.join(STORE_FILE_NAME).is_file()
     }
 
     /// Runs `update` in one immediate transaction while holding the shared

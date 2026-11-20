@@ -327,10 +327,11 @@ fn unreadable_rows_are_an_error_not_an_empty_ledger() {
 }
 
 #[test]
-fn a_missing_store_is_unavailable_and_not_created() {
+fn a_missing_store_has_nothing_pending_and_refuses_writes() {
     let home = tempfile::tempdir().unwrap();
+    assert_eq!(call(home.path(), "pending", NOW, json!({})), Ok(json!([])));
     assert_eq!(
-        call(home.path(), "pending", NOW, json!({})),
+        call(home.path(), "mark_consumed", NOW, json!({})),
         Err(UNAVAILABLE.to_owned())
     );
     assert!(!home.path().join(STORE_FILE_NAME).exists());
