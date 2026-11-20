@@ -2832,9 +2832,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         version=__version__,
     )
     updated_at = str(payload["updatedAt"])
-    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    payload["localIdentity"] = local_identity
-    payload["localIdentitySource"] = _cloud_local_identity_source_payload(local_identity)
+    payload["localIdentity"], payload["localIdentitySource"] = _cloud_local_identity(observed_at=updated_at)
     payload["packageManagerCoverage"] = _cloud_package_manager_coverage(
         store,
         workspace=str(payload["workspace"]),
@@ -2956,67 +2954,21 @@ def _sync_extension_catalog_from_runtime_handshake(
     return summary if unverified is None else unverified
 
 
-def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
-    hostname = _safe_hostname()
-    private_ip = _safe_private_ip()
-    if private_ip is None:
-        private_ip = _safe_private_ipv6()
-    payload: dict[str, object] = {"lastSyncedAt": observed_at}
-    if hostname is not None:
-        payload["hostname"] = hostname
-    if private_ip is not None:
-        payload["ipAddress"] = private_ip
-        payload["privateIpAddress"] = private_ip
-    return payload
+def _cloud_local_identity(*, observed_at: str) -> tuple[dict[str, object], dict[str, str]]:
+    """The host name and private address the session reports, and their source.
 
-
-def _cloud_local_identity_source_payload(local_identity: dict[str, object]) -> dict[str, str]:
-    source: dict[str, str] = {
-        "daemonId": "local-guard",
-        "daemonVersion": "local-guard",
-        "daemonStatus": "local-guard",
-        "relayState": "local-guard",
-    }
-    if "hostname" in local_identity:
-        source["hostname"] = "local-guard"
-    if "ipAddress" in local_identity:
-        source["ipAddress"] = "local-guard"
-    if "privateIpAddress" in local_identity:
-        source["privateIpAddress"] = "local-guard"
-    if "publicIpAddress" in local_identity:
-        source["publicIpAddress"] = "local-guard"
-    return source
-
-
-def _safe_hostname() -> str | None:
-    with suppress(OSError):
-        hostname = socket.gethostname().strip()
-        if hostname:
-            return hostname[:255]
-    return None
-
-
-def _safe_private_ip() -> str | None:
-    with suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.connect(("8.8.8.8", 80))
-        address = sock.getsockname()[0]
-        if isinstance(address, str) and address and not address.startswith("127."):
-            return address[:128]
-    with suppress(OSError):
-        address = socket.gethostbyname(socket.gethostname())
-        if address and not address.startswith("127."):
-            return address[:128]
-    return None
-
-
-def _safe_private_ipv6() -> str | None:
-    with suppress(OSError):
-        addresses = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)
-        for entry in addresses:
-            candidate = entry[4][0]
-            if isinstance(candidate, str) and candidate and candidate != "::1":
-                return candidate[:128]
-    return None
+    The runtime reads both. Without an answer the session still syncs with
+    only its sync time, which every field's absence already means.
+    """
+    try:
+        return _authority.local_identity(observed_at)
+    except NativeRunnerAuthorityError:
+        return {"lastSyncedAt": observed_at}, {
+            "daemonId": "local-guard",
+            "daemonVersion": "local-guard",
+            "daemonStatus": "local-guard",
+            "relayState": "local-guard",
+        }
 
 
 def _cloud_package_manager_coverage(

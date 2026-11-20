@@ -267,6 +267,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "user_command_lookup" => crate::user_command_lookup::dispatch(args),
         "local_cli_script_source" => crate::local_cli_script_source::dispatch(args),
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
+        "local_identity" => crate::local_identity::dispatch(args),
         "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),

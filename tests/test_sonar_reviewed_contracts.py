@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from typing import get_args
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.package_execution_context import (
     PackageExecutionContext,
     build_package_execution_context,
 )
-from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store_workflow_capability_secret_control import (
     StoreWorkflowCapabilitySecretControlMixin,
 )
@@ -142,14 +141,3 @@ def test_identity_timeout_default_is_exact_not_approximate(
         loader.assert_called_once_with(tmp_path)
     else:
         loader.assert_called_once_with(tmp_path, health_timeout=timeout)
-
-
-def test_route_probe_does_not_transmit_application_data(monkeypatch: pytest.MonkeyPatch) -> None:
-    socket = MagicMock()
-    socket.__enter__.return_value = socket
-    socket.getsockname.return_value = ("10.0.0.2", 12345)
-    monkeypatch.setattr(runner.socket, "socket", Mock(return_value=socket))
-    assert runner._safe_private_ip() == "10.0.0.2"
-    socket.send.assert_not_called()
-    socket.sendto.assert_not_called()
-    socket.sendall.assert_not_called()

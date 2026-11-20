@@ -451,6 +451,13 @@ def policy_shadow_mismatch(legacy: Sequence[PolicyDecision], canonical: Sequence
     return tuple(_typed(payload, "reason_codes", list))
 
 
+def local_identity(observed_at: str) -> tuple[dict[str, object], dict[str, str]]:
+    """The host name and private address a runtime session reports, with their source."""
+
+    payload = native_runner_authority("local_identity", {"observed_at": observed_at})
+    return _typed(payload, "identity", dict), _typed(payload, "source", dict)
+
+
 def receipt_evidence_updates(
     rows: Sequence[Mapping[str, object]],
     *,
