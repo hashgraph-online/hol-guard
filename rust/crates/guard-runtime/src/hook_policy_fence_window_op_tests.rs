@@ -10,7 +10,57 @@ fn request(home: &str, action: &str) -> HookPolicyFenceWindowRequestV1 {
         admitted: None,
         waited_ms: None,
         attempt_until_micros: None,
+        persist_events: false,
     }
+}
+
+#[test]
+fn resident_persists_completed_windows_once_after_write_contention() {
+    let dir = tempfile::tempdir().unwrap();
+    let guard_home = dir.path().to_str().unwrap();
+    let connection =
+        rusqlite::Connection::open(dir.path().join(crate::local_store_read::STORE_FILE_NAME))
+            .unwrap();
+    connection
+        .execute_batch(
+            "create table guard_events (event_name text, payload_json text, occurred_at text);
+             begin immediate;",
+        )
+        .unwrap();
+    let mut enter = request(guard_home, "enter");
+    enter.persist_events = true;
+    evaluate(&enter).unwrap();
+    let mut leave = request(guard_home, "leave");
+    leave.persist_events = true;
+    leave.request_id.clone_from(&enter.request_id);
+    leave.admitted = Some(false);
+    assert_eq!(
+        evaluate(&leave).unwrap_err(),
+        "hook_policy_fence_window_write_failed"
+    );
+    connection.execute_batch("rollback;").unwrap();
+
+    let result: Value = serde_json::from_slice(&evaluate(&leave).unwrap()).unwrap();
+    assert!(result["result"]["window_event"].is_null());
+    assert_eq!(result["result"]["window_events"], json!([]));
+    evaluate(&leave).unwrap();
+
+    let (name, payload, occurred_at): (String, String, String) = connection
+        .query_row(
+            "select event_name, payload_json, occurred_at from guard_events",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    let count: i64 = connection
+        .query_row("select count(*) from guard_events", [], |row| row.get(0))
+        .unwrap();
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(name, EVENT_NAME);
+    assert_eq!(payload["ended_at"], occurred_at);
+    assert_eq!(payload["absorbed_calls"], 0);
+    assert_eq!(payload["exhausted_calls"], 1);
 }
 
 #[test]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import math
 import time
 import uuid
@@ -10,8 +9,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..native_policy_fence_window import record_policy_fence_window
-
-_LOGGER = logging.getLogger(__name__)
 
 POLICY_SOURCE_FENCE_ERRORS = frozenset({"native_business_source_mutation_in_progress"})
 POLICY_UPDATE_PENDING_REASON_CODE = "native_policy_update_in_progress"
@@ -46,31 +43,6 @@ def fence_wait_until(started: float, deadline: float | None) -> float:
     return min(started + REBUILD_WAIT_SECONDS, deadline - DEADLINE_MARGIN_SECONDS - ATTEMPT_MARGIN_SECONDS)
 
 
-def _guard_home(store: object) -> Path | None:
-    value = getattr(store, "guard_home", None)
-    if isinstance(value, Path):
-        return value
-    if isinstance(value, str) and value:
-        return Path(value)
-    return None
-
-
-def _record_event(store: object, event: object) -> None:
-    if isinstance(event, list):
-        for item in event:
-            _record_event(store, item)
-        return
-    if not isinstance(event, dict):
-        return
-    add_event = getattr(store, "add_event", None)
-    if not callable(add_event):
-        return
-    try:
-        add_event(event["event_name"], event["payload"], event["occurred_at"])
-    except Exception:
-        _LOGGER.warning("policy source fence window event was not recorded", exc_info=True)
-
-
 class PolicySourceFenceWait:
     """One hook's bounded poll through the resident-owned fence."""
 
@@ -78,13 +50,12 @@ class PolicySourceFenceWait:
         self,
         deadline: float | None,
         *,
-        store: object,
+        guard_home: Path,
         monotonic: Callable[[], float] | None = None,
         sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._deadline = deadline
-        self._store = store
-        self._guard_home = _guard_home(store)
+        self._guard_home = guard_home
         self._monotonic = monotonic or time.monotonic
         self._sleep = sleep or time.sleep
         self._until: float | None = None
@@ -98,16 +69,13 @@ class PolicySourceFenceWait:
         now = self._monotonic()
         if self._until is None:
             self._until = fence_wait_until(now, self._deadline)
-            if self._guard_home is not None:
-                result = record_policy_fence_window(
-                    self._guard_home,
-                    action="enter",
-                    request_id=self._request_id,
-                    deadline=self._deadline,
-                )
-                if result:
-                    _record_event(self._store, result)
-                now = self._monotonic()
+            record_policy_fence_window(
+                self._guard_home,
+                action="enter",
+                request_id=self._request_id,
+                deadline=self._deadline,
+            )
+            now = self._monotonic()
         if now + POLL_SECONDS > self._until:
             self._exhausted = True
             return False
@@ -122,19 +90,17 @@ class PolicySourceFenceWait:
         if self._until is None or self._deadline is None:
             return self._deadline
         deadline = self._deadline - DEADLINE_MARGIN_SECONDS
-        if not self._attempt_registered and self._guard_home is not None:
+        if not self._attempt_registered:
             self._attempt_registered = True
             remaining = max(0.0, deadline - self._monotonic())
             attempt_until_micros = max(0, int((time.time() + remaining) * 1_000_000))
-            event = record_policy_fence_window(
+            record_policy_fence_window(
                 self._guard_home,
                 action="attempt",
                 attempt_until_micros=attempt_until_micros,
                 request_id=self._request_id,
                 deadline=deadline,
             )
-            if event:
-                _record_event(self._store, event)
         return deadline
 
     def finish(self) -> None:
@@ -143,17 +109,13 @@ class PolicySourceFenceWait:
         if self._until is None:
             return
         self._until = None
-        if self._guard_home is None:
-            return
-        event = record_policy_fence_window(
+        record_policy_fence_window(
             self._guard_home,
             action="leave",
             request_id=self._request_id,
             admitted=not self._exhausted,
             deadline=self._deadline,
         )
-        if event:
-            _record_event(self._store, event)
 
 
 __all__ = [

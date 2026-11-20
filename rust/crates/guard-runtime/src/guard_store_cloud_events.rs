@@ -35,7 +35,25 @@ const READ_BYTES_BUDGET: usize = EVENT_BYTES_LIMIT;
 /// wrote. With `once`, an entry the log already holds is not added again, so
 /// the hook evidence writer can replay its journal after a crash.
 pub(crate) fn add_event(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
-    let sql = if args.flag("once")? {
+    let once = args.flag("once")?;
+    append_event(
+        connection,
+        args.str("event_name")?,
+        args.str("payload_json")?,
+        args.str("occurred_at")?,
+        once,
+    )?;
+    Ok(Value::Null)
+}
+
+pub(crate) fn append_event(
+    connection: &rusqlite::Connection,
+    event_name: &str,
+    payload_json: &str,
+    occurred_at: &str,
+    once: bool,
+) -> StoreResult<()> {
+    let sql = if once {
         "insert into guard_events (event_name, payload_json, occurred_at) \
          select ?1, ?2, ?3 where not exists (select 1 from guard_events \
          where event_name = ?1 and payload_json = ?2 and occurred_at = ?3)"
@@ -46,12 +64,12 @@ pub(crate) fn add_event(connection: &rusqlite::Connection, args: &Args<'_>) -> S
         connection,
         sql,
         &[
-            Value::from(args.str("event_name")?),
-            Value::from(args.str("payload_json")?),
-            Value::from(args.str("occurred_at")?),
+            Value::from(event_name),
+            Value::from(payload_json),
+            Value::from(occurred_at),
         ],
     )?;
-    Ok(Value::Null)
+    Ok(())
 }
 
 /// `list_events_after`: the local event log past `event_id`, oldest first.

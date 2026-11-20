@@ -4,13 +4,14 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::resident_protocol::encode_response;
 
 pub(crate) const HOOK_POLICY_FENCE_WINDOW_FEATURE: &str = "hook-policy-fence-window-v1";
+pub(crate) const HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE: &str = "hook-policy-fence-window-write-v1";
 const REQUEST_SCHEMA: &str = "guard-hook-policy-fence-window-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-policy-fence-window-result.v1";
 const EVENT_NAME: &str = "policy_source_fence_window";
@@ -31,6 +32,15 @@ pub(crate) struct HookPolicyFenceWindowRequestV1 {
     pub(crate) waited_ms: Option<u64>,
     #[serde(default)]
     pub(crate) attempt_until_micros: Option<i64>,
+    #[serde(default)]
+    pub(crate) persist_events: bool,
+}
+
+#[derive(Serialize)]
+struct FenceEvent {
+    event_name: &'static str,
+    payload: Value,
+    occurred_at: String,
 }
 
 struct Waiter {
@@ -44,7 +54,7 @@ struct WindowState {
     waiters: HashMap<String, Waiter>,
     absorbed: u64,
     exhausted: u64,
-    pending_events: VecDeque<Value>,
+    pending_events: VecDeque<FenceEvent>,
 }
 
 static WINDOWS: OnceLock<Mutex<HashMap<String, WindowState>>> = OnceLock::new();
@@ -67,20 +77,21 @@ fn event(
     ended_micros: i64,
     absorbed: u64,
     exhausted: u64,
-) -> Result<Value, String> {
-    Ok(json!({
-        "event_name": EVENT_NAME,
-        "payload": {
+) -> Result<FenceEvent, String> {
+    let ended_at = timestamp(ended_micros)?;
+    Ok(FenceEvent {
+        event_name: EVENT_NAME,
+        payload: json!({
             "started_at": timestamp(started_micros)?,
-            "ended_at": timestamp(ended_micros)?,
+            "ended_at": ended_at,
             "absorbed_calls": absorbed,
             "exhausted_calls": exhausted,
-        },
-        "occurred_at": timestamp(ended_micros)?,
-    }))
+        }),
+        occurred_at: ended_at,
+    })
 }
 
-fn queue_event(state: &mut WindowState, value: Value) {
+fn queue_event(state: &mut WindowState, value: FenceEvent) {
     if state.pending_events.len() < MAX_PENDING_EVENTS {
         state.pending_events.push_back(value);
     }
@@ -100,8 +111,8 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         return Err("hook_policy_fence_window_payload_invalid".to_owned());
     }
     let now = now_micros()?;
-    let windows = WINDOWS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut windows = windows
+    let window_state = WINDOWS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut windows = window_state
         .lock()
         .map_err(|_| "hook_policy_fence_window_state_poisoned".to_owned())?;
     let state = windows.entry(request.guard_home.clone()).or_default();
@@ -211,6 +222,22 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         };
         window_events.push(event);
     }
+    drop(windows);
+    if request.persist_events && !window_events.is_empty() {
+        if persistence::write(&request.guard_home, &window_events).is_err() {
+            if let Ok(mut windows) = window_state.lock() {
+                let state = windows.entry(request.guard_home.clone()).or_default();
+                // Retry these completed windows on the next call. The write
+                // either committed the entire batch or left it untouched.
+                for event in window_events.into_iter().rev() {
+                    state.pending_events.push_front(event);
+                }
+                state.pending_events.truncate(MAX_PENDING_EVENTS);
+            }
+            return Err("hook_policy_fence_window_write_failed".to_owned());
+        }
+        window_events.clear();
+    }
     encode_response(&json!({
         "schema": RESULT_SCHEMA,
         "result": {
@@ -220,6 +247,9 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         },
     }))
 }
+
+#[path = "hook_policy_fence_window_persistence.rs"]
+mod persistence;
 
 #[cfg(test)]
 #[path = "hook_policy_fence_window_op_tests.rs"]
