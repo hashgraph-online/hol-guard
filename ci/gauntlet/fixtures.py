@@ -362,6 +362,7 @@ def create_fixture(
     add_route_group_directory(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
+    add_design_token_documents(workspace, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
@@ -640,6 +641,25 @@ def add_route_group_directory(workspace: Path, scenario_id: str | None) -> None:
     target = workspace / ROUTE_GROUP_FILE
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(ROUTE_GROUP_TEXT, encoding="utf-8", newline="\n")
+
+
+DESIGN_TOKEN_CASE = "design-token-document-reads"
+DESIGN_TOKEN_DIRECTORY = "docs/design"
+DESIGN_TOKEN_FILES = {
+    "color-tokens.md": "# Color tokens\n\n- `--surface-raised`: #f7f7f8\n- `--text-muted`: #6b7280\n",
+    "spacing-token-drift.generated.md": "# Spacing token drift\n\n- `space-2`: 8px (was 6px)\n",
+}
+
+
+def add_design_token_documents(workspace: Path, scenario_id: str | None) -> None:
+    """Seed a design system's token documents."""
+
+    if scenario_id != DESIGN_TOKEN_CASE:
+        return
+    directory = workspace / DESIGN_TOKEN_DIRECTORY
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, text in DESIGN_TOKEN_FILES.items():
+        (directory / name).write_text(text, encoding="utf-8", newline="\n")
 
 
 def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: str | None) -> None:

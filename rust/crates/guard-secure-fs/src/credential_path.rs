@@ -4,6 +4,7 @@
 use super::{
     is_source_code_extension, sensitive_external_filename, win32_name, EXTERNAL_SENSITIVE_PARTS,
 };
+use crate::source_path::design_system_words;
 use std::path::Path;
 
 pub fn credential_named_path(path: &Path) -> bool {
@@ -101,7 +102,9 @@ pub fn credential_directory_path(path: &Path) -> bool {
 /// names a feature rather than a store, and so do design tokens
 /// (`design-tokens`), which hold styles rather than credentials, and
 /// compounds that end on a schema or policy
-/// (`programmable-secrets-policy-schema`).
+/// (`programmable-secrets-policy-schema`). A design system names its token
+/// directories for the part of the system they hold, so `design-tokens`,
+/// `color-tokens` and `theme_tokens` all read as styles.
 fn credential_directory(part: &str) -> bool {
     let lower = part.to_ascii_lowercase();
     let bare = lower.trim_start_matches('.');
@@ -127,7 +130,7 @@ fn credential_directory(part: &str) -> bool {
     let words: Vec<&str> = words.split('_').collect();
     let marker = |word: &str| match word {
         "secrets" | "credentials" => true,
-        "tokens" => !words.contains(&"design"),
+        "tokens" => !design_system_words(&words),
         _ => false,
     };
     // A compound that ends on a schema or policy belongs to a feature about
@@ -172,6 +175,9 @@ mod tests {
             "playwright/.auth/user.json",
             ".env.d/local.conf",
             "fixtures/github-token.txt",
+            // A token name with no design-system word is still a credential.
+            "fixtures/refresh_token.json",
+            "ops/service-token-rotation.md",
             "keys/service_credentials.json",
             "config/api-tokens/github.json",
             "auth/oauth_tokens/session.json",
@@ -199,6 +205,13 @@ mod tests {
             "services/auth-service/config.json",
             "design-tokens/colors.json",
             "packages/ui/design_tokens/spacing.json",
+            // A design token is a named style value, so the documents and
+            // data files that carry them are ordinary project content.
+            "docs/color-token-drift.generated.md",
+            "docs/theme-tokens.md",
+            "packages/ui/design-tokens.json",
+            "styles/typography_tokens.yaml",
+            "packages/ui/color-tokens/spacing.json",
             "guard/__pycache__/oauth_token_claims.cpython-312.pyc",
             "guard/runtime/command_tokens.py",
             "docs/notes.md",
