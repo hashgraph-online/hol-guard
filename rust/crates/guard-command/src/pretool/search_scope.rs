@@ -93,9 +93,10 @@ pub(super) fn rg_glob_scope_proven(
                 // match base, the working directory, so the walk renders each
                 // entry under the root's own path from there.
                 let Some(base) = super::search_scope_glob::glob_match_base(
+                    target,
                     &root,
                     filter.is_path_shaped(),
-                    working_directory_root(home_dir, cwd).as_deref(),
+                    verified_directory_root(".", home_dir, cwd).as_deref(),
                 ) else {
                     return false;
                 };
@@ -489,11 +490,6 @@ fn verified_directory_root(
     }
     let canonical = std::fs::canonicalize(candidate).ok()?;
     canonical.is_dir().then_some(canonical)
-}
-
-/// The directory ripgrep matches a path-shaped glob against.
-fn working_directory_root(home_dir: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
-    verified_directory_root(".", home_dir, cwd)
 }
 
 #[cfg(test)]

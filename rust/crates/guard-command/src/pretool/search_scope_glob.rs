@@ -187,11 +187,14 @@ pub(super) fn expand_braces(pattern: &str) -> Result<Vec<String>, GlobError> {
     Ok(expanded)
 }
 
-/// The path `root` carries from `working`, as a `/`-separated relative path
-/// and empty when they are the same directory. `None` when `root` is not a
-/// plain descendant, or when `path_shaped` is false, in which case the
-/// caller needs no base at all and `Some("")` is returned instead.
+/// The path a walk of `target` must start its entries at, so that they read
+/// the way ripgrep prints them. ripgrep builds a printed path from the target
+/// as it was typed, so a relative target supplies that prefix directly and an
+/// absolute one is measured from `working`, the directory ripgrep matches a
+/// path-shaped inclusion against. `None` when the target carries no such path,
+/// and `Some("")` when `path_shaped` is false and the caller needs no prefix.
 pub(super) fn glob_match_base(
+    target: &str,
     root: &std::path::Path,
     path_shaped: bool,
     working: Option<&std::path::Path>,
@@ -199,9 +202,17 @@ pub(super) fn glob_match_base(
     if !path_shaped {
         return Some(String::new());
     }
-    root.strip_prefix(working?)
-        .ok()?
-        .components()
+    let typed = std::path::Path::new(target);
+    // A relative target is the prefix ripgrep prints, down to its spelling:
+    // a filesystem that ignores case hands the walk a differently spelled
+    // canonical root, and rendering that one would model another search.
+    let components = if typed.is_absolute() {
+        root.strip_prefix(working?).ok()?.components()
+    } else {
+        typed.components()
+    };
+    components
+        .filter(|component| !matches!(component, std::path::Component::CurDir))
         .map(|component| match component {
             std::path::Component::Normal(name) => name.to_str(),
             _ => None,
