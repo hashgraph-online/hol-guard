@@ -17,7 +17,9 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::guard_store_json::{epoch_micros, py_str};
+use crate::cloud_request_text::py_truthy;
+use crate::guard_store_json::py_str;
+use crate::policy_bundle_time::from_isoformat;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -63,22 +65,12 @@ fn predates(legacy: &Map<String, Value>, candidate: &Map<String, Value>) -> bool
 }
 
 /// `_parse_iso_timestamp(str(bundle.get("issuedAt") or ""))` in UTC
-/// microseconds; an instant without an offset reads as UTC.
-fn issued(bundle: &Map<String, Value>) -> Option<i128> {
-    let value = bundle.get("issuedAt").filter(|value| truthy(value))?;
-    epoch_micros(&py_str(value)?)
-}
-
-/// Python truthiness of a decoded JSON value.
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(fields) => !fields.is_empty(),
-    }
+/// microseconds: `Z` reads as `+00:00`, then `datetime.fromisoformat` (which
+/// also takes the compact `20261120T100000` form), and an instant without an
+/// offset reads as UTC.
+fn issued(bundle: &Map<String, Value>) -> Option<i64> {
+    let value = bundle.get("issuedAt").filter(|value| py_truthy(value))?;
+    from_isoformat(&py_str(value)?.replace('Z', "+00:00"))?.utc_micros()
 }
 
 /// `_policy_bundle_is_evaluating`: an Evaluate bundle compiles to no rows on

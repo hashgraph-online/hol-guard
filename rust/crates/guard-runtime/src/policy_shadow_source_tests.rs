@@ -65,6 +65,12 @@ fn a_shadow_issued_before_the_candidate_is_dropped() {
         json!(null),
     );
     assert_eq!(naive_is_utc["legacy"], json!("stored"));
+    let compact = ask(
+        v2(json!("20261120T100000Z")),
+        v1(json!("20261119T100000Z")),
+        json!(null),
+    );
+    assert_eq!(compact["legacy"], Value::Null);
 }
 
 #[test]
