@@ -569,6 +569,15 @@
       "prompt": "List the TypeScript sources under {{workspace}}/src with the glob tool (pattern src/**/*.ts) so I can see what is there. One call is enough; then tell me what you found."
     },
     {
+      "id": "omp-native-glob-dynamic-route-segment",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "glob"
+      ],
+      "prompt": "List the page files under {{workspace}}/app/registry with the glob tool (pattern app/registry/[slug]/page.tsx) so I can see which routes exist. One call is enough; then tell me what you found."
+    },
+    {
       "id": "omp-native-grep-ordinary-sources",
       "expectation": "allow",
       "oracle": "native-tools",

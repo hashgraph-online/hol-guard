@@ -43,7 +43,7 @@ pub(super) fn glob_directory(target: &str) -> Option<&str> {
         || target.starts_with("//")
         || selector.contains("..")
         || selector.contains(|c: char| c == '\\' && !separators.contains(&c))
-        || selector.contains(['[', ']', '{', '}', '(', ')'])
+        || !literal_groups_only(selector)
         // A colon after a drive names an alternate data stream.
         || (drive && selector.contains(':'))
     {
@@ -56,6 +56,58 @@ pub(super) fn glob_directory(target: &str) -> Option<&str> {
         Some((directory, _)) => Some(directory),
         None => Some("."),
     }
+}
+
+/// Whether every bracket class and parenthesised group in `selector` names
+/// characters of one path segment and nothing more.
+///
+/// Next.js spells a dynamic route segment `[slug]` and a route group
+/// `(marketing)`, so an ordinary project puts both in directory names that a
+/// glob then walks through. A class of plain name characters can only ever
+/// select a single character of one segment, which the fixed folder above the
+/// first glob character already bounds. What this proof cannot accept is a
+/// group that could synthesize a parent segment or a separator the literal
+/// input does not show: a class holding a dot or a slash, a negated class, an
+/// extended-glob group (`@(a|b)`) whose alternatives behave like a brace
+/// expansion, or a brace expansion itself.
+fn literal_groups_only(selector: &str) -> bool {
+    if selector.contains(['{', '}', '|']) {
+        return false;
+    }
+    let mut rest = selector;
+    while let Some(index) = rest.find(['[', '(', ']', ')']) {
+        let opener = rest.as_bytes()[index];
+        let closer = match opener {
+            b'[' => b']',
+            b'(' => b')',
+            // A closing character with no opener before it is not a group.
+            _ => return false,
+        };
+        // An extended-glob group repeats or negates its alternatives, so the
+        // character before `(` decides whether this is a plain parenthesis.
+        if opener == b'('
+            && matches!(
+                rest[..index].chars().next_back(),
+                Some('?' | '*' | '+' | '@' | '!')
+            )
+        {
+            return false;
+        }
+        let after = &rest[index + 1..];
+        let Some(end) = after.find(closer as char) else {
+            return false;
+        };
+        let body = &after[..end];
+        if body.is_empty()
+            || body.contains(|c: char| {
+                !(c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ' ' | ','))
+            })
+        {
+            return false;
+        }
+        rest = &after[end + 1..];
+    }
+    true
 }
 
 /// The proof of each glob entry's fixed folder within one `grep` call, so
@@ -101,6 +153,42 @@ impl EntryProofs {
 #[cfg(test)]
 mod tests {
     use super::glob_directory;
+
+    #[test]
+    fn route_segment_directories_prove_their_fixed_directory() {
+        // Next.js dynamic segments and route groups are ordinary directory
+        // names an agent globs through every day.
+        assert_eq!(
+            glob_directory("app/registry/[slug]/page.*"),
+            Some("app/registry")
+        );
+        assert_eq!(
+            glob_directory("app/(marketing)/blog/*/page.tsx"),
+            Some("app/(marketing)/blog")
+        );
+        assert_eq!(glob_directory("src/[abc]*.ts"), Some("src"));
+    }
+
+    #[test]
+    fn groups_that_could_name_another_directory_are_not_proven() {
+        for escape in [
+            // A class holding a dot or a separator can spell a parent segment.
+            "app/[.][.]/*/secrets",
+            "app/[/]etc/*",
+            // A negated class matches a leading dot the walk did not prove.
+            "app/[!a]*/key",
+            // Extended globs and brace expansions behave like alternatives.
+            "app/@(one|two)/*.ts",
+            "app/+(a)/*.ts",
+            "app/{one,two}/*.ts",
+            // An unbalanced or empty group is not a name.
+            "app/[slug/*.ts",
+            "app/[]/*.ts",
+            "app/x]/*.ts",
+        ] {
+            assert_eq!(glob_directory(escape), None, "{escape:?}");
+        }
+    }
 
     #[test]
     fn drive_rooted_globs_prove_their_fixed_directory() {
