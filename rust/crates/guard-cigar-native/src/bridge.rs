@@ -6,7 +6,7 @@
 //! hands every document over the pipe.
 
 use crate::broker_host::Broker;
-use crate::frames::{member, or_empty, serve, text, REQUEST_FAILED};
+use crate::frames::{member, null_to_empty, or_empty, serve, text, REQUEST_FAILED};
 use crate::graph::{self, Graph};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -105,10 +105,10 @@ impl Bridge {
         let key = text(request, "domain")?;
         if op == "broker_open" {
             let limits = [
-                falsy_empty(member(request, "graph_limits")?),
-                falsy_empty(member(request, "retention")?),
-                falsy_empty(member(request, "queues")?),
-                falsy_empty(member(request, "transport")?),
+                null_to_empty(member(request, "graph_limits")?),
+                null_to_empty(member(request, "retention")?),
+                null_to_empty(member(request, "queues")?),
+                null_to_empty(member(request, "transport")?),
             ];
             let storage = request
                 .get("storage")
@@ -145,8 +145,8 @@ impl Bridge {
             })),
             "broker_grant" => broker.grant(
                 field("view")?,
-                falsy_empty(field("limits")?),
-                falsy_empty(field("queue")?),
+                null_to_empty(field("limits")?),
+                null_to_empty(field("queue")?),
                 field("lease_ms")?,
             ),
             "broker_revoke" => {
@@ -173,7 +173,7 @@ impl Bridge {
                 "ticket": field("ticket")?,
                 "submission_id": field("submission_id")?,
                 "reviews": field("reviews")?,
-                "policy": falsy_empty(field("policy")?),
+                "policy": null_to_empty(field("policy")?),
             })),
             "broker_bind_execution" => broker.handoff_call(json!({
                 "op": "bind_execution",
@@ -199,14 +199,5 @@ impl Bridge {
         for broker in self.brokers.values_mut() {
             broker.close();
         }
-    }
-}
-
-/// `null` becomes `{}`, as the Python adapters sent `value or {}`.
-fn falsy_empty(value: Value) -> Value {
-    if value.is_null() {
-        json!({})
-    } else {
-        value
     }
 }

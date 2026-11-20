@@ -1,4 +1,4 @@
-import { er as GuardHarnessActionError } from "../guard-dashboard.js";
+import { es as GuardHarnessActionError } from "../guard-dashboard.js";
 const APPROVAL_GATE_REQUIRED_CODES = /* @__PURE__ */ new Set([
   "approval_gate_required",
   "approval_gate_password_required",

@@ -235,7 +235,7 @@ impl Owner {
             let finished = record
                 .transaction
                 .as_ref()
-                .is_none_or(|t| t.phase == SelectionPhase::Completed);
+                .is_none_or(|t| t.phase.terminal());
             if !finished || !activation::builtin_upgrade(&record.current, &current) {
                 return Err(error("switch_selection_conflict"));
             }

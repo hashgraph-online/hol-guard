@@ -292,3 +292,32 @@ fn updated_builtin_engine_replaces_the_saved_memory_selection() {
     assert!(owner.initialize(saved).is_err());
     assert!(owner.initialize(pointer("other")).is_err());
 }
+
+#[test]
+fn updated_builtin_engine_replaces_selection_after_a_cancelled_switch() {
+    let fixture = Fixture::new(false);
+    let settings = SwitchSettings::capture(&fixture.home, &fixture.source, "new").unwrap();
+    let mut owner = Owner::acquire(&fixture.home).unwrap();
+    owner.initialize(builtin('a')).unwrap();
+    owner
+        .begin(SelectionTransaction {
+            request_id: "switch-test".into(),
+            expected_service_generation: 4,
+            before_settings_sha256: settings.before_sha256(),
+            after_settings_sha256: settings.after_sha256(),
+            source_semantic_sha256: "4".repeat(64),
+            from: builtin('a'),
+            to: pointer("new"),
+            was_enabled: false,
+            activate_target: false,
+            reconnect_acknowledged: true,
+            cancel_requested: false,
+            phase: SelectionPhase::Prepared,
+        })
+        .unwrap();
+    owner.advance(SelectionPhase::Cancelled).unwrap();
+    owner.initialize(builtin('b')).unwrap();
+    let record = owner.record().unwrap();
+    assert_eq!(record.current, builtin('b'));
+    assert!(record.transaction.is_none());
+}

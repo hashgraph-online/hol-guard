@@ -32,10 +32,16 @@ function config(value: unknown): value is GuardContextAssistanceConfig {
       .every((key) => Number.isSafeInteger(limits[key]));
 }
 
+/** Plain label for the engine that ran CIGAR: the built-in engine has no Python version. */
+export function engineLabel(facts: { schema: string; version: number[] }): string {
+  return facts.schema === "guard-cigar-builtin.v1" ? "Built into Guard" : "Python " + facts.version.join(".");
+}
+
 function runtime(value: unknown): value is ContextRuntime {
   if (!record(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record(value.interpreter)) return false;
   const facts = value.interpreter;
-  const builtinFacts = facts.schema === "guard-cigar-builtin.v1" && facts.implementation === "guard-builtin" && facts.abi === "none";
+  const builtinFacts = facts.schema === "guard-cigar-builtin.v1" && facts.implementation === "guard-builtin" && facts.abi === "none"
+    && value.adapter_id === "guard-cigar-builtin-v1";
   return (facts.schema === "guard-cigar-interpreter.v1" || builtinFacts) && version(facts.version)
     && ["implementation", "release_level", "abi", "platform"].every((key) => text(facts[key]))
     && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean"

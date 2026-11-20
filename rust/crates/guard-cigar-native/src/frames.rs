@@ -88,8 +88,14 @@ pub(crate) fn member(request: &Value, key: &str) -> Result<Value, &'static str> 
 
 /// A member that may be absent or null, sent to the worker as `{}`.
 pub(crate) fn or_empty(request: &Value, key: &str) -> Value {
-    match request.get(key) {
-        None | Some(Value::Null) => json!({}),
-        Some(value) => value.clone(),
+    null_to_empty(request.get(key).cloned().unwrap_or(Value::Null))
+}
+
+/// `null` becomes `{}`, as the Python adapters sent `value or {}`.
+pub(crate) fn null_to_empty(value: Value) -> Value {
+    if value.is_null() {
+        json!({})
+    } else {
+        value
     }
 }

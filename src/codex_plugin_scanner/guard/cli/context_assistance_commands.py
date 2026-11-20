@@ -122,9 +122,12 @@ def run_context_command(
         print(f"Diagnostic: {state['diagnostic']}", file=output)
     if state["installation_options"] is not None:
         for option in state["installation_options"]:
-            version = ".".join(str(part) for part in option["python_version"])
+            if option["python_version"] is None:
+                host = "Built into Guard"
+            else:
+                host = "Python " + ".".join(str(part) for part in option["python_version"])
             print(
-                f"  {option['runtime_id']}: Python {version} · {option['platform']} · {option['qualification']}",
+                f"  {option['runtime_id']}: {host} · {option['platform']} · {option['qualification']}",
                 file=output,
             )
         if not state["installation_options"]:

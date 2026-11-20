@@ -3,7 +3,7 @@ import { HiMiniArrowPath, HiMiniCheckCircle, HiMiniChevronRight, HiMiniExclamati
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { SelectMenu } from "../select-menu";
 import { SettingsFormSection, SettingsMenuRow, SettingsToggleRow } from "../settings/settings-row-primitives";
-import { contextStatusCopy } from "./status";
+import { contextStatusCopy, engineLabel } from "./status";
 import { withContextProfile } from "./settings-model";
 import type { ContextAssistanceStatus, ContextControlAction, ContextInstallation } from "./types";
 import { ContextExecutionPanel } from "./execution-panel";
@@ -220,7 +220,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                   <Fact term="Storage">{value.storage.mode === "memory" ? "Memory only" : "Private persistence requested"}</Fact>
                   {runtimeId ? <Fact term="Runtime ID"><span className="break-all font-mono text-xs">{runtimeId}</span></Fact> : null}
                   {runtime ? <>
-                    <Fact term="Last verified Python">{runtime.interpreter.version.join(".")} · {runtime.interpreter.platform}</Fact>
+                    <Fact term="Last verified engine">{engineLabel(runtime.interpreter)} · {runtime.interpreter.platform}</Fact>
                     <Fact term="Qualification">Local development candidate</Fact>
                     {value.features.shared_agents ? <Fact term="Shared context check">{runtime.shared_compile_verified ? "Verified with an independent local client" : "Check and start the selected runtime"}</Fact> : null}
                     {value.storage.mode === "sqlite" ? <Fact term="Saved evidence check">{runtime.persistence_compile_verified ? "Verified write, restart and fresh-grant recovery" : "Check and start the selected runtime"}</Fact> : null}

@@ -119,16 +119,13 @@ mod tests {
 
     #[test]
     fn work_dir_is_created_on_a_fresh_home() {
-        let root = std::env::temp_dir().join(format!("guard-builtin-work-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir(&root).unwrap();
-        let home = fs::canonicalize(&root).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let home = fs::canonicalize(root.path()).unwrap();
         let work = work_dir(&home).unwrap();
         assert!(!home.join("context-assistance").exists());
         ensure_work_dir(&home, &work).unwrap();
         assert!(work.is_dir());
         ensure_work_dir(&home, &work).unwrap();
-        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
