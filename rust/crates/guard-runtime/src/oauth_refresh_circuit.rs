@@ -144,10 +144,13 @@ fn write_payload(conn: &Connection, key: &str, payload: &Value) -> Result<(), St
     .map_err(store_error)
 }
 
-fn state_of(payload: Option<Value>) -> Map<String, Value> {
+/// The stored record, or empty when there is none. A stored value that is not
+/// an object is unusable, so it is an error rather than an open circuit.
+fn state_of(payload: Option<Value>) -> Result<Map<String, Value>, String> {
     match payload {
-        Some(Value::Object(state)) => state,
-        _ => Map::new(),
+        None => Ok(Map::new()),
+        Some(Value::Object(state)) => Ok(state),
+        Some(_) => Err("The Guard OAuth refresh circuit state is not readable.".to_owned()),
     }
 }
 
@@ -162,11 +165,19 @@ fn truthy(state: &Map<String, Value>, key: &str) -> bool {
     state.get(key).and_then(Value::as_bool).unwrap_or(false)
 }
 
-fn decoded_salt(payload: Option<Value>) -> Option<Vec<u8>> {
-    let encoded = payload?.get("salt")?.as_str()?.to_owned();
-    Base64::decode_vec(&encoded)
-        .ok()
+/// The stored salt, or `None` when none was minted yet. A stored salt that
+/// does not decode is an error: replacing it would orphan the parked record.
+fn decoded_salt(payload: Option<Value>) -> Result<Option<Vec<u8>>, String> {
+    let Some(payload) = payload else {
+        return Ok(None);
+    };
+    payload
+        .get("salt")
+        .and_then(Value::as_str)
+        .and_then(|encoded| Base64::decode_vec(encoded).ok())
         .filter(|salt| !salt.is_empty())
+        .map(Some)
+        .ok_or_else(|| "The Guard OAuth refresh circuit salt is not readable.".to_owned())
 }
 
 /// The circuit of one Guard home.
@@ -206,11 +217,11 @@ impl Circuit {
     /// The persisted per-installation salt. The first caller mints it inside
     /// a transaction, so racing callers all read the one salt that was kept.
     fn salt(&self) -> Result<Vec<u8>, String> {
-        if let Some(salt) = decoded_salt(read_payload(&self.connect()?, SALT_KEY)?) {
+        if let Some(salt) = decoded_salt(read_payload(&self.connect()?, SALT_KEY)?)? {
             return Ok(salt);
         }
         self.transact(|conn| {
-            if let Some(salt) = decoded_salt(read_payload(conn, SALT_KEY)?) {
+            if let Some(salt) = decoded_salt(read_payload(conn, SALT_KEY)?)? {
                 return Ok(salt);
             }
             let mut fresh = [0u8; 32];
@@ -234,13 +245,13 @@ impl Circuit {
     /// for another grant belongs to a grant that was replaced, so it is
     /// cleared; one probe passes each time the backoff window elapses.
     pub(crate) fn check(&self, refresh_grant: &str, now: Timestamp) -> Result<Check, String> {
-        let state = state_of(read_payload(&self.connect()?, STATE_KEY)?);
+        let state = state_of(read_payload(&self.connect()?, STATE_KEY)?)?;
         let Some(recorded) = stored_fingerprint(&state).map(str::to_owned) else {
             return Ok(Check::Open);
         };
         if recorded != self.fingerprint(refresh_grant)? {
             self.transact(|conn| {
-                let current = state_of(read_payload(conn, STATE_KEY)?);
+                let current = state_of(read_payload(conn, STATE_KEY)?)?;
                 if stored_fingerprint(&current) == Some(recorded.as_str()) {
                     write_payload(conn, STATE_KEY, &json!({"cleared_at": now.isoformat()}))?;
                 }
@@ -349,7 +360,7 @@ impl Circuit {
     /// Forget any parked failure after a refresh succeeded.
     pub(crate) fn clear(&self, now: Timestamp) -> Result<(), String> {
         self.transact(|conn| {
-            if state_of(read_payload(conn, STATE_KEY)?).is_empty() {
+            if state_of(read_payload(conn, STATE_KEY)?)?.is_empty() {
                 return Ok(());
             }
             write_payload(conn, STATE_KEY, &json!({"cleared_at": now.isoformat()}))
@@ -359,7 +370,7 @@ impl Circuit {
 
 /// The record for this fingerprint, or empty when it is for another grant.
 fn matching(conn: &Connection, fingerprint: &str) -> Result<Map<String, Value>, String> {
-    let state = state_of(read_payload(conn, STATE_KEY)?);
+    let state = state_of(read_payload(conn, STATE_KEY)?)?;
     Ok(if stored_fingerprint(&state) == Some(fingerprint) {
         state
     } else {

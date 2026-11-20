@@ -20,7 +20,7 @@ fn at(seconds: i64) -> Timestamp {
 }
 
 fn state(store: &Circuit) -> Map<String, Value> {
-    state_of(read_payload(&store.connect().unwrap(), STATE_KEY).unwrap())
+    state_of(read_payload(&store.connect().unwrap(), STATE_KEY).unwrap()).unwrap()
 }
 
 #[test]
@@ -110,6 +110,37 @@ fn an_unreadable_state_is_an_error_not_an_open_circuit() {
         .unwrap();
     assert!(store.check(GRANT, at(1)).is_err());
     assert!(store.record_rate_limit(GRANT, 60, at(1)).is_err());
+}
+
+#[test]
+fn a_stored_state_that_is_not_an_object_is_an_error() {
+    let (_home, store) = store();
+    store
+        .connect()
+        .unwrap()
+        .execute(
+            "INSERT INTO sync_state (state_key, payload_json, updated_at) VALUES (?1, '[]', 'x')",
+            [STATE_KEY],
+        )
+        .unwrap();
+    assert!(store.check(GRANT, at(0)).is_err());
+}
+
+#[test]
+fn an_unreadable_salt_is_an_error_not_a_new_salt() {
+    let (_home, store) = store();
+    store
+        .connect()
+        .unwrap()
+        .execute(
+            "INSERT INTO sync_state (state_key, payload_json, updated_at) \
+             VALUES (?1, '{\"salt\": \"%%%\"}', 'x')",
+            [SALT_KEY],
+        )
+        .unwrap();
+    assert!(store.record_dead_grant(GRANT, REVOKED, at(0)).is_err());
+    let kept = read_payload(&store.connect().unwrap(), SALT_KEY).unwrap();
+    assert_eq!(kept, Some(json!({"salt": "%%%"})));
 }
 
 #[test]
