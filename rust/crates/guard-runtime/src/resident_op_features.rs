@@ -342,5 +342,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-guard-shim-profile-v1",
     "native-durable-runtime-collapse-v1",
     "native-exact-cloud-review-v1",
-    "native-verified-github-read-v1",
+    "native-verified-github-read-v2",
 ];

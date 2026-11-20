@@ -5,15 +5,14 @@ from __future__ import annotations
 import argparse
 import inspect
 import io
-import json
 import os
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
-from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
@@ -215,108 +214,74 @@ def test_local_executor_accepts_a_bound_git_worktree_identity(tmp_path: Path, mo
     assert result.stdout == f"{cwd}\n"
 
 
-def _github_payloads(owner: str = "public-owner", repository: str = "public-repo") -> tuple[dict[str, object], ...]:
-    full_name = f"{owner}/{repository}"
-    return (
-        {"private": False, "full_name": full_name},
-        {
-            "number": 17,
-            "state": "open",
-            "mergeable": True,
-            "base": {"repo": {"full_name": full_name}},
-        },
-    )
+_BINDING = "ab" * 32
 
 
-def _public_get(payloads: tuple[dict[str, object], ...], urls: list[str] | None = None) -> Callable[..., bytes]:
-    responses = iter(payloads)
+def _native(answer: object, requests: list[tuple[dict[str, object], float]] | None = None) -> Callable[..., object]:
+    def runtime_answer(feature: str, command: str, request: dict[str, object], **kwargs: object) -> object:
+        assert (feature, command) == ("native-verified-github-read-v2", "verified-github-read")
+        if requests is not None:
+            requests.append((request, cast(float, kwargs["timeout_seconds"])))
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
 
-    def public_get(url: str, *, timeout_seconds: float, opener: object) -> bytes:
-        assert timeout_seconds == 15.0
-        assert opener is not None
-        if urls is not None:
-            urls.append(url)
-        return json.dumps(next(responses)).encode("utf-8")
-
-    return public_get
+    return runtime_answer
 
 
-def test_owned_public_github_get_returns_silent_verified(monkeypatch: pytest.MonkeyPatch) -> None:
-    urls: list[str] = []
-    monkeypatch.setattr(github_reads, "_public_get", _public_get(_github_payloads(), urls))
+def test_owned_public_github_read_returns_silent_verified(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[tuple[dict[str, object], float]] = []
+    stdout = '{"mergeable":true,"number":17,"state":"open"}\n'
+    answer = {"stdout": stdout, "binding_digest": _BINDING}
+    monkeypatch.setattr(github_reads, "runtime_answer", _native(answer, requests))
     result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
 
     assert result is not None
-    assert result.stdout == '{"mergeable":true,"number":17,"state":"open"}\n'
-    assert urls == [
-        "https://api.github.com/repos/public-owner/public-repo",
-        "https://api.github.com/repos/public-owner/public-repo/pulls/17",
+    assert result.stdout == stdout
+    assert requests == [
+        (
+            {
+                "op": "read",
+                "owner": "public-owner",
+                "repository": "public-repo",
+                "pull_number": 17,
+                "fields": ["number", "state", "mergeable"],
+                "timeout_seconds": 15.0,
+            },
+            40.0,
+        )
     ]
     assert result.proof.route is ProofRoute.VERIFIED
+    assert result.proof.binding_digest == _BINDING
     assert result.decision.action == "allow"
     assert result.decision.disposition is FinalDisposition.SILENT_VERIFIED
 
 
-def test_github_executor_rejects_private_dynamic_and_drifted_reads(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    private, pull = _github_payloads()
-    private["private"] = True
-    monkeypatch.setattr(github_reads, "_public_get", _public_get((private, pull)))
-    assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
-    assert try_read_verified_public_github_pull_request("owner/value", "repo", 17) is None
-    assert try_read_verified_public_github_pull_request("owner", "repo", 0) is None
-    assert try_read_verified_public_github_pull_request("owner", "repo", 17, fields=("body",)) is None
-
-    ca_bundle = tmp_path / "managed-ca.pem"
-    ca_bundle.write_bytes(b"first-managed-ca")
-    policy = ManagedNetworkPolicy(proxy_mode="none", ca_bundle_path=str(ca_bundle))
-    monkeypatch.setattr(github_reads, "resolved_network_policy", lambda _policy: (policy, True))
-    monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
-    drifting = _public_get(_github_payloads())
-
-    def drift_get(url: str, *, timeout_seconds: float, opener: object) -> bytes:
-        # The managed CA bundle changes while the read is in flight.
-        ca_bundle.write_bytes(b"second-managed-ca")
-        return drifting(url, timeout_seconds=timeout_seconds, opener=opener)
-
-    monkeypatch.setattr(github_reads, "_public_get", drift_get)
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"verified": False},
+        {"stdout": "x\n"},
+        {"stdout": 1, "binding_digest": _BINDING},
+        OSError("runtime unavailable"),
+    ],
+)
+def test_github_read_without_a_native_proof_is_unverified(answer: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(github_reads, "runtime_answer", _native(answer))
     assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
 
 
-def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ca_bundle = tmp_path / "managed-ca.pem"
-    ca_bundle.write_bytes(b"first-managed-ca")
-    ca_bundle.chmod(0o600)
-    policy = ManagedNetworkPolicy(proxy_mode="none", ca_bundle_path=str(ca_bundle))
-    monkeypatch.setattr(github_reads, "resolved_network_policy", lambda _policy: (policy, True))
-    monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
-
-    def read_once() -> github_reads.VerifiedGitHubReadResult:
-        monkeypatch.setattr(github_reads, "_public_get", _public_get(_github_payloads()))
-        result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
-        assert result is not None
-        return result
-
-    first = read_once()
-    ca_bundle.write_bytes(b"second-managed-ca")
-    second = read_once()
-
-    assert first.proof.binding_digest != second.proof.binding_digest
-
-
-def test_github_verified_read_keeps_the_direct_fallback_without_a_managed_policy(
+def test_github_read_refuses_an_unbounded_timeout_or_untyped_request_before_the_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    openers: list[object] = []
-    monkeypatch.setattr(github_reads, "resolved_network_policy", lambda _policy: (ManagedNetworkPolicy(), False))
-    monkeypatch.setattr(
-        github_reads,
-        "managed_opener",
-        lambda policy, **_kwargs: openers.append(policy) or object(),
-    )
-    monkeypatch.setattr(github_reads, "_public_get", _public_get(_github_payloads()))
-    try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
-
-    # An unmanaged default policy is not passed on, so a failed proxy lookup still goes direct.
-    assert openers == [None]
+    requests: list[tuple[dict[str, object], float]] = []
+    monkeypatch.setattr(github_reads, "runtime_answer", _native(None, requests))
+    read = try_read_verified_public_github_pull_request
+    assert read("owner", "repo", 17, timeout_seconds=0) is None
+    assert read("owner", "repo", 17, timeout_seconds=31) is None
+    assert read("owner", "repo", 17, timeout_seconds=float("nan")) is None
+    assert read("owner", "repo", 17, timeout_seconds=cast(float, "15")) is None
+    assert read("owner", "repo", cast(int, True)) is None
+    assert read("owner", "repo", 17, fields=cast(tuple[str, ...], ["state"])) is None
+    assert requests == []
