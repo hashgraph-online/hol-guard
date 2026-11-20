@@ -12,6 +12,8 @@ import {
   GuardOperationTimeoutError,
   GuardProtectionRepairError,
   GuardSessionUnavailableError,
+  GuardDecisionSignInRequiredError,
+  guardDecisionSession,
   fetchQueueSummary,
 	  fetchResumeStatus,
 	  formatHarnessCommand,
@@ -1817,15 +1819,14 @@ try {
     scope: "global",
     reason: "reviewed"
   });
-  throw new Error("expected malformed token refresh to preserve the 401 failure");
+  throw new Error("expected a tab without a session to ask for sign-in");
 } catch (error) {
-  assert(error instanceof Error, "L077c: malformed refresh returns an Error");
-  if (!(error instanceof Error)) {
-    throw error;
-  }
-  assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
+  assert(
+    error instanceof GuardDecisionSignInRequiredError && error.reason === "no_session",
+    "L077c: a tab without a session asks for sign-in instead of failing with 401",
+  );
 }
-assert(malformedRefreshCalls.length === 1, "L077c: malformed refresh does not retry or bootstrap without a token");
+assert(malformedRefreshCalls.length === 0, "L077c: a tab without a session does not send the decision");
 
 installGuardWindow("?guard-token=token-codex-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchCodexResolveCalls = installFetchStub({
@@ -2126,5 +2127,132 @@ assert(
     handoffRefusal.status === 400,
   "a daemon refusal keeps its code",
 );
+
+// A link an agent relays opens a session bound to one request. It must never
+// take the place of a broader session, and a tab must be able to tell, before
+// the user clicks, when it cannot decide the request on screen.
+function signedSessionToken(claims: Record<string, unknown>, label: string): string {
+  const body = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  return `gld1.${body}.${label}`;
+}
+const linkedRequestA = "a".repeat(32);
+const linkedRequestB = "b".repeat(32);
+const laterExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+const fullSession = signedSessionToken({ surface: "approval-center", expires_at: laterExpiry }, "full");
+const boundToA = signedSessionToken(
+  { surface: "approval-center", request_id: linkedRequestA, expires_at: laterExpiry },
+  "bound-a",
+);
+const boundToB = signedSessionToken(
+  { surface: "approval-center", request_id: linkedRequestB, expires_at: laterExpiry },
+  "bound-b",
+);
+const expiredBoundToA = signedSessionToken(
+  { surface: "approval-center", request_id: linkedRequestA, expires_at: new Date(Date.now() - 1000).toISOString() },
+  "expired-a",
+);
+
+{
+  const shared = new Map<string, string>([["guard-token", fullSession]]);
+  installGuardWindow(`?guard-token=${encodeURIComponent(boundToA)}`, { localStorage: shared });
+  assert(readGuardToken() === fullSession, "linked session: a bound link keeps the full session as the tab's session");
+  assert(shared.get("guard-token") === fullSession, "linked session: a bound link never overwrites the full session");
+  assert(shared.get(`guard-token:request:${linkedRequestA}`) === boundToA, "linked session: the bound session is kept for its request");
+  const verdict = guardDecisionSession(linkedRequestB);
+  assert(verdict.kind === "ready" && verdict.token === fullSession, "linked session: the full session decides other requests");
+}
+
+{
+  const shared = new Map<string, string>();
+  installGuardWindow(`?guard-token=${encodeURIComponent(boundToA)}`, { localStorage: shared });
+  assert(readGuardToken() === boundToA, "linked session: with no full session the bound session is the tab's session");
+  installGuardWindow("", { localStorage: shared });
+  const other = guardDecisionSession(linkedRequestB);
+  assert(
+    other.kind === "sign_in" && other.reason === "other_request",
+    "linked session: a session bound to another request asks for sign-in",
+  );
+  const own = guardDecisionSession(linkedRequestA);
+  assert(own.kind === "ready" && own.token === boundToA, "linked session: the bound session decides its own request");
+
+  installGuardWindow(`?guard-token=${encodeURIComponent(boundToB)}`, { localStorage: shared });
+  assert(readGuardToken() === boundToB, "linked session: a second link opens its own request");
+  installGuardWindow("", { localStorage: shared });
+  const first = guardDecisionSession(linkedRequestA);
+  assert(
+    first.kind === "ready" && first.token === boundToA,
+    "linked session: the first request still decides with its own bound session",
+  );
+
+  const calls: RecordedFetch[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    calls.push({ url: input instanceof Request ? input.url : String(input), init });
+    return new Response(JSON.stringify({ resolved: true, remaining_pending_count: 0 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  await resolveRequestWithQueueResult({ requestId: linkedRequestA, action: "allow", scope: "once", reason: "reviewed" });
+  assert(calls.length === 1, "linked session: the decision is sent once");
+  assert(
+    headerValue(calls[0].init, "X-Guard-Dashboard-Session") === boundToA,
+    "linked session: the decision is sent with the session bound to its request",
+  );
+
+  const refused: RecordedFetch[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    refused.push({ url: input instanceof Request ? input.url : String(input), init });
+    return new Response("{}", { status: 200 });
+  };
+  let signIn: unknown = null;
+  try {
+    await resolveRequestWithQueueResult({
+      requestId: "c".repeat(32),
+      action: "allow",
+      scope: "once",
+      reason: "reviewed",
+    });
+  } catch (error) {
+    signIn = error;
+  }
+  assert(
+    signIn instanceof GuardDecisionSignInRequiredError && signIn.reason === "other_request",
+    "linked session: a request no session can decide asks for sign-in",
+  );
+  assert(refused.length === 0, "linked session: a decision no session can make is never sent");
+}
+
+{
+  const shared = new Map<string, string>([["guard-token", expiredBoundToA]]);
+  installGuardWindow("", { localStorage: shared });
+  const verdict = guardDecisionSession(linkedRequestA);
+  assert(verdict.kind === "sign_in" && verdict.reason === "expired", "linked session: an ended session asks to sign in again");
+}
+
+{
+  const shared = new Map<string, string>([
+    ["guard-token", fullSession],
+    [`guard-token:request:${linkedRequestB}`, expiredBoundToA],
+  ]);
+  installGuardWindow(`?guard-token=${encodeURIComponent(boundToA)}`, { localStorage: shared });
+  readGuardToken();
+  assert(!shared.has(`guard-token:request:${linkedRequestB}`), "linked session: ended request sessions are forgotten");
+}
+
+{
+  installGuardWindow("", { localStorage: new Map([["guard-token", fullSession]]) });
+  globalThis.fetch = async (): Promise<Response> =>
+    new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+  let ended: unknown = null;
+  try {
+    await resolveRequestWithQueueResult({ requestId: linkedRequestA, action: "block", scope: "once", reason: "reviewed" });
+  } catch (error) {
+    ended = error;
+  }
+  assert(
+    ended instanceof GuardDecisionSignInRequiredError && ended.reason === "expired",
+    "linked session: a session the daemon refuses asks to sign in again",
+  );
+}
 
 console.log("guard-api.test.ts: all tests passed");
