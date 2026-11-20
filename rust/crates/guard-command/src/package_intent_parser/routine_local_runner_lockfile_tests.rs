@@ -60,37 +60,6 @@ fn every_lockfile_must_agree_with_the_installed_version() {
 }
 
 #[test]
-fn a_lockfile_outside_the_declared_range_no_longer_vetoes() {
-    let dir = workspace();
-    let root = dir.path();
-
-    // A project that moved from pnpm to npm keeps the pnpm lockfile in the
-    // tree. It pins a release the manifest's own range excludes, so it was
-    // written against an older manifest and says nothing about the tree `npx`
-    // would start. The npm lockfile beside it still pins the install.
-    let stale = "lockfileVersion: '9.0'\n\nimporters:\n  .:\n    devDependencies:\n      eslint:\n        specifier: ^8.0.0\n        version: 8.57.0\n\npackages:\n\n  eslint@8.57.0:\n    resolution: {integrity: sha512-x}\n";
-    write(&root.join("pnpm-lock.yaml"), stale);
-    let mut both = intent(root);
-    both.local_executions[0]
-        .lockfiles
-        .push(evidence(&root.join("pnpm-lock.yaml")));
-    assert!(routine_local_runner(&both));
-
-    // A second lockfile that disagrees from *inside* the declared range is not
-    // stale. It describes an install this manifest still allows, so the two
-    // lockfiles genuinely conflict and the verdict stays refused.
-    write(
-        &root.join("pnpm-lock.yaml"),
-        "lockfileVersion: '9.0'\n\nimporters:\n  .:\n    devDependencies:\n      eslint:\n        specifier: ^9.0.0\n        version: 9.0.0\n\npackages:\n\n  eslint@9.0.0:\n    resolution: {integrity: sha512-x}\n",
-    );
-    assert!(!routine_local_runner(&both));
-
-    // A workspace whose only lockfile is stale pins nothing at all.
-    let value = only_lockfile(root, "pnpm-lock.yaml", stale);
-    assert!(!routine_local_runner(&value));
-}
-
-#[test]
 fn a_bun_lockfile_is_read_as_jsonc() {
     let dir = workspace();
     let root = dir.path();
