@@ -149,6 +149,9 @@ mod observed_mcp;
 #[path = "policy_enforcement_codex_budget_tests.rs"]
 mod codex_budget;
 
+#[path = "policy_enforcement_omp_goal_tests.rs"]
+mod omp_goal;
+
 pub(super) fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
         schema: "guard-pre-tool-result.v1".into(),
