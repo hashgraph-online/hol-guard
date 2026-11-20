@@ -476,25 +476,28 @@ fn proven_absent_root(value: &str, context: ReadContext<'_>, allow_absent: bool)
 /// carrying one narrows nothing. Exclusions only take files away, so leaving
 /// them out keeps the modeled selection at least as wide as ripgrep's.
 fn narrowing_globs(arguments: &[String]) -> Vec<&str> {
-    let case_blind = arguments
-        .iter()
-        .take_while(|argument| *argument != "--")
-        .any(|argument| argument == "--iglob" || argument.starts_with("--iglob="));
+    // Parse option values using the same rules as the inclusions. A bare
+    // `--` may itself be the value of `--context-separator` rather than
+    // ending the option list; an `--iglob` after it is still case-blind.
+    let (globs, case_blind) = parsed_inclusion_globs(arguments);
     if case_blind {
-        return Vec::new();
+        Vec::new()
+    } else {
+        globs
     }
-    inclusion_globs(arguments)
 }
 
 /// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.
-///
-/// A short cluster ends at its first option that takes a value, which is the
-/// rest of the argument or the next one. Every other long option that takes
-/// a value consumes the next argument too, as `rg` parses it, so a `--`
-/// spelled as that value (`--context-separator --`) never ends the scan
-/// before a later `-g`.
 fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
+    parsed_inclusion_globs(arguments).0
+}
+
+/// Share the option/value scan between the inclusion list and the
+/// case-blind guard. A short cluster ends at its first value-taking option;
+/// long options consume a separate value when no `=` value was attached.
+fn parsed_inclusion_globs(arguments: &[String]) -> (Vec<&str>, bool) {
     let mut globs = Vec::new();
+    let mut case_blind = false;
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         if argument == "--" {
@@ -502,9 +505,17 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
         }
         let value = if let Some(long) = argument.strip_prefix("--") {
             match long.split_once('=') {
-                Some(("glob" | "iglob", value)) => Some(value),
+                Some(("glob", value)) => Some(value),
+                Some(("iglob", value)) => {
+                    case_blind = true;
+                    Some(value)
+                }
                 Some(_) => None,
-                None if matches!(long, "glob" | "iglob") => arguments.next().map(String::as_str),
+                None if long == "glob" => arguments.next().map(String::as_str),
+                None if long == "iglob" => {
+                    case_blind = true;
+                    arguments.next().map(String::as_str)
+                }
                 None if options::rg_value_role(argument).is_some() => {
                     arguments.next();
                     None
@@ -534,7 +545,7 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
             globs.push(value);
         }
     }
-    globs
+    (globs, case_blind)
 }
 
 #[cfg(test)]
