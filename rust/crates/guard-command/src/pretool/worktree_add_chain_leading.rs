@@ -36,6 +36,16 @@ pub(super) fn leading_entry(
     {
         return None;
     }
+    // A semicolon anywhere after the leading entry breaks its success
+    // dependency: later commands can run in the original cwd if that cd
+    // fails. Those reads must not inherit proof for the entered repository.
+    if (2..model.segments.len()).any(|index| {
+        super::super::separator_between(model, index - 1, index)
+            .as_deref()
+            .is_some_and(|separator| separator.trim() == ";")
+    }) {
+        return None;
+    }
     // A redirection reaches the parser as an argument, so a `cd` that also
     // writes a file is not the single-target step this proves.
     let [target] = first.arguments.as_slice() else {
