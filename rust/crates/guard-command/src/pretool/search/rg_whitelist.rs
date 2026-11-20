@@ -147,8 +147,21 @@ pub(super) fn roots_proven(roots: &[&str], globs: &[&str], context: ReadContext<
             prefix if prefix.is_empty() => ".".to_owned(),
             prefix => prefix,
         };
-        tree::expanded_operand(&prefix, context)
-            .is_some_and(|path| no_hidden_whitelist(&path, selected.as_ref(), context))
+        tree::expanded_operand(&prefix, context).is_some_and(|path| {
+            // A path-shaped -g glob is matched from rg's working directory,
+            // not from an explicit path operand such as src/. Reusing the
+            // search root as its match base could hide a re-included secret.
+            let at_cwd = context.cwd.is_some_and(|cwd| {
+                match (std::fs::canonicalize(&path), std::fs::canonicalize(cwd)) {
+                    (Ok(root), Ok(cwd)) => root == cwd,
+                    _ => false,
+                }
+            });
+            let narrowing = selected
+                .as_ref()
+                .filter(|filter| !filter.is_path_shaped() || at_cwd);
+            no_hidden_whitelist(&path, narrowing, context)
+        })
     })
 }
 
