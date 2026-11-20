@@ -147,37 +147,26 @@ def test_scope_judge_requires_the_dynamic_route_glob_to_use_its_bracket_director
         assert native_tools_scope_error(scenario, [call], {}) is not None, path
         assert native_tools_scope_error(scenario, [call], {}, guard_denied=True) is not None, path
     assert native_tools_scope_error(scenario, [_call("glob", path=None)], {}) is not None
-    # OMP normally supplies the route selector as `pattern`, with no `path`.
-    # These calls must exercise the same scenario as the explicit path form.
-    assert native_tools_scope_error(scenario, [_call("glob", pattern="app/items/[slug]/page.tsx")], {}) is None
-    for root in (".", "{{workspace}}"):
-        assert native_tools_scope_error(
-            scenario, [_call("glob", path=root, pattern="app/items/[slug]/page.tsx")], {}
-        ) is None
+    # A pattern-only glob does not prove it selected the bracketed route.
+    # OMP's native glob uses `path` as its full selector; the scenario prompt
+    # now asks for that argument explicitly.
     assert native_tools_scope_error(
-        scenario, [_call("glob", path="", pattern="app/items/[slug]/page.tsx")], {}
-    ) is None
-    for pattern in ("src/**/*.ts", "app/items", "src/[slug].ts", "app/items/[slug]/../.ssh/*"):
-        assert native_tools_scope_error(scenario, [_call("glob", pattern=pattern)], {}) is not None, pattern
-        assert native_tools_scope_error(
-            scenario, [_call("glob", pattern=pattern)], {}, guard_denied=True
-        ) is not None, pattern
-    assert native_tools_scope_error(
-        scenario, [_call("glob", pattern="app/items/[slug]/page.tsx", path="app/items")], {}
+        scenario, [_call("glob", pattern="app/items/[slug]/page.tsx")], {}
     ) is not None
-    # An in-scope pattern cannot excuse a denied out-of-scope pattern.
-    selected_pattern = _call("glob", pattern="app/items/[slug]/page.tsx")
-    unrelated_pattern = _call("glob", pattern="src/**/*.ts")
     assert native_tools_scope_error(
-        scenario, [selected_pattern, unrelated_pattern], {}, guard_denied=True
+        scenario, [_call("glob", pattern="app/items/[slug]/page.tsx")], {}, guard_denied=True
     ) is not None
-    # Absolute roots with wildcard prefixes do not prove one fixed directory.
+    assert native_tools_scope_error(
+        scenario, [_call("glob", path="app/items", pattern="app/items/[slug]/page.tsx")], {}
+    ) is not None
+    # A wildcard before the route in an absolute selector can escape the
+    # exact checkout and is not proof that this scenario ran.
     for path in (
         "/tmp/*/app/items/[slug]/page.tsx",
         "/tmp/?/app/items/[slug]/page.tsx",
         "/tmp/[variable]/app/items/[slug]/page.tsx",
         "/tmp/{first,second}/app/items/[slug]/page.tsx",
-        r"C:\\Users\\*\\project\\app\\items\\[slug]\\page.tsx",
+        r"C:\Users\*\project\app\items\[slug]\page.tsx",
     ):
         assert native_tools_scope_error(scenario, [_call("glob", path=path)], {}) is not None, path
         assert native_tools_scope_error(
