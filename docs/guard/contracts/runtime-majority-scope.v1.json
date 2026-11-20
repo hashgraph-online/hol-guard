@@ -790,12 +790,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py"
-        ],
-        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported this at load, so it counted as eager. It is now reached lazily: package_evidence_common reads a package manifest through a verified descriptor for the contained Node tool lane. It runs while Guard prepares a contained run, so it stays counted as runtime. The bounded JSONC decoder it once carried is gone; the Rust guard-command jsonc module owns JSONC parsing."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/durable_io.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity and repair writers, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."

@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ..native_restricted_pytest import decode_native_plan, native_launch_plan, restricted_native
-from .package_evidence_common import read_json_with_integrity
-from .restricted_node_test import nearest_project_root
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -183,7 +181,6 @@ class _ToolRoute(NamedTuple):
 
 def _native_route(
     command: Sequence[str],
-    script_body: Sequence[str] | None,
     *,
     cwd: Path,
 ) -> _ScriptRoute | _ToolRoute:
@@ -202,7 +199,7 @@ def _native_route(
         "node_tool_route",
         {
             "command": list(command),
-            "script_body": None if script_body is None else list(script_body),
+            "script_body": None,
             "windows": sys.platform == "win32",
             "cwd": str(cwd),
         },
@@ -231,24 +228,6 @@ def _native_route(
     )
 
 
-def _script_body(task: str, *, workspace: Path, cwd: Path | None) -> tuple[str, ...]:
-    """The words of the named script, read from the nearest project's manifest."""
-    package = nearest_project_root(cwd or workspace, workspace, "package.json")
-    manifest, _digest = read_json_with_integrity(package / "package.json")
-    scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
-    if isinstance(scripts, dict) and any(scripts.get(phase + task) for phase in ("pre", "post")):
-        raise RestrictedPytestError(
-            "node_tool_invalid_command", "This script has lifecycle actions that need separate evaluation."
-        )
-    script = scripts.get(task) if isinstance(scripts, dict) else None
-    if not isinstance(script, str):
-        raise RestrictedPytestError("node_tool_invalid_command", "The requested local script is unavailable.")
-    # Reading a script into the words a run will execute is a reading of a
-    # command, so the sink asks native authority for it rather than splitting
-    # the text a second way.
-    return tuple(restricted_native("script_words", {"script": script}, list))
-
-
 def prepare_restricted_node_tool(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
@@ -271,13 +250,13 @@ def prepare_restricted_node_tool(
 
 def _prepare_windows_route(command: Sequence[str], *, workspace: Path, cwd: Path) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
-    route = _native_route(argv, None, cwd=cwd)
+    route = _native_route(argv, cwd=cwd)
     if isinstance(route, _ScriptRoute):
-        # Only the manifest read is this side's work: the script's own words go
-        # back to the classifier, which gates them as the run they spell.
-        route = _native_route(argv, _script_body(route.task, workspace=workspace, cwd=cwd), cwd=cwd)
-    if isinstance(route, _ScriptRoute):
-        raise RestrictedPytestError("node_tool_invalid_command", "Only a single named package script is supported.")
+        # Windows admission keeps a package script on the review prompt and
+        # never routes it here, so this sink runs only a direct tool command.
+        raise RestrictedPytestError(
+            "node_tool_invalid_command", "A package script is not a contained tool run on this platform."
+        )
     expected_entry = None if route.expected_entry is None else Path(route.expected_entry)
     return _prepare_windows_tool(
         route.name,
