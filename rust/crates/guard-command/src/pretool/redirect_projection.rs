@@ -42,6 +42,11 @@ pub(super) struct RedirectProjection {
     init_chain: bool,
     /// The literal targets the removed redirects write.
     written: Vec<String>,
+    /// Every redirect removed was an inert sink: a descriptor copy (`2>&1`)
+    /// or a write to `/dev/null`. No file is opened and no standard input is
+    /// supplied, so the projected text runs exactly the programs the raw text
+    /// runs.
+    pub(super) inert_sinks: bool,
 }
 
 impl RedirectProjection {
@@ -294,6 +299,7 @@ pub(super) fn project(
     };
     Some(RedirectProjection {
         command,
+        inert_sinks: !writes_file && !saw_stdin_data && input_source.is_none(),
         writes_file,
         bounded_writes,
         git_chain,
@@ -426,9 +432,16 @@ pub(super) fn join(
     // discharges that route the same way it discharges the generic review.
     let contained_fallback =
         bounded_writes && raw.reason_code == "native_workspace_containment_required";
+    // Removing an inert sink -- `2>&1`, `2>/dev/null`, `>/dev/null` -- leaves
+    // the same programs with the same arguments and opens no file, so the
+    // projection is the whole command. The raw pass beside it is evaluated
+    // without the caller's command extensions and fails closed on the redirect
+    // text the parser leaves in place, so letting it outrank the projection
+    // cost a Git step the Allow it keeps when the quiet redirect is absent.
     if raw.reason_code != "native_command_review_required"
         && raw.reason_code != "native_command_extension_evaluation_failed"
         && !contained_fallback
+        && !projection.inert_sinks
         && rank(&raw.minimum_action) > rank(&projected.minimum_action)
     {
         projected.minimum_action = raw.minimum_action;
