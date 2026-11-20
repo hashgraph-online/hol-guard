@@ -8,7 +8,12 @@ is the exact payload or `ValueError` the Python store produced.
 from __future__ import annotations
 
 import json
+import sys
 from hashlib import sha256
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
 
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import OBSERVED_MCP_PREFIX
 from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
