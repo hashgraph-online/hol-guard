@@ -3673,7 +3673,22 @@ export type GuardDesktopHandoffResult = {
  * Desktop watches for the request and opens its own visible update flow,
  * which re-verifies the release before installing anything.
  */
-export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+/** A refusal or failure answered by the daemon: the request reached Guard. */
+export class GuardDesktopHandoffError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, code: string | null, status: number) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export async function requestGuardDesktopHandoff(
+  offeredVersion: string | null = null,
+): Promise<GuardDesktopHandoffResult> {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -3687,7 +3702,14 @@ export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffR
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion
+          ? { handoff_to_desktop: true, latest_version: offeredVersion }
+          : { handoff_to_desktop: true },
+      ),
       signal: controller.signal,
     });
   } finally {
@@ -3699,7 +3721,7 @@ export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffR
       stringValue(payload.message) ??
       stringValue(payload.error) ??
       `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,

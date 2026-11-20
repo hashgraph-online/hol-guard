@@ -21935,7 +21935,17 @@ async function scheduleGuardUpdate(options) {
     error: stringValue$1(payload.error) ?? void 0
   };
 }
-async function requestGuardDesktopHandoff() {
+class GuardDesktopHandoffError extends Error {
+  code;
+  status;
+  constructor(message, code, status) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+async function requestGuardDesktopHandoff(offeredVersion = null) {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -21947,7 +21957,12 @@ async function requestGuardDesktopHandoff() {
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion ? { handoff_to_desktop: true, latest_version: offeredVersion } : { handoff_to_desktop: true }
+      ),
       signal: controller.signal
     });
   } finally {
@@ -21956,7 +21971,7 @@ async function requestGuardDesktopHandoff() {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = stringValue$1(payload.message) ?? stringValue$1(payload.error) ?? `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue$1(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,
@@ -24046,6 +24061,21 @@ function desktopUpdateBannerModel(status, embeddedInDesktop, dismissedVersion) {
 const DESKTOP_HANDOFF_OPENING_LABEL = "Opening the app updater…";
 const DESKTOP_HANDOFF_GUIDANCE = "If the updater didn't open, choose Check for Updates from the HOL Guard menu-bar icon.";
 const DESKTOP_HANDOFF_FAILED = "The request did not reach the app. Choose Check for Updates from the HOL Guard menu-bar icon.";
+const DESKTOP_HANDOFF_ALREADY_CURRENT = "Guard is already on the latest version. Choose Check for Updates from the HOL Guard menu-bar icon to look again.";
+function desktopHandoffFailureMessage(error) {
+  if (!(error instanceof Error) || error.name !== "GuardDesktopHandoffError") {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  const code = error.code;
+  if (code === "update_not_available") {
+    return DESKTOP_HANDOFF_ALREADY_CURRENT;
+  }
+  const reason = error.message.trim();
+  if (!reason) {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  return `${reason} You can also choose Check for Updates from the HOL Guard menu-bar icon.`;
+}
 function shouldPromptRecoveryReinstall(status) {
   return status?.recovery_reinstall_available === true && status?.auto_updatable !== true && status?.version_check?.update_available === true;
 }
@@ -40889,6 +40919,7 @@ function rememberDismissedDesktopUpdateVersion(version2) {
 function GuardUpdateBanner(props) {
   const { model, onDismiss } = props;
   const [phase, setPhase] = reactExports.useState("idle");
+  const [failureMessage, setFailureMessage] = reactExports.useState(DESKTOP_HANDOFF_FAILED);
   const guidanceTimer = reactExports.useRef(null);
   const attemptRef = reactExports.useRef(0);
   reactExports.useEffect(() => {
@@ -40914,11 +40945,12 @@ function GuardUpdateBanner(props) {
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     setPhase("requesting");
-    void requestGuardDesktopHandoff().then((result) => {
+    void requestGuardDesktopHandoff(model.latestVersion).then((result) => {
       if (attemptRef.current !== attempt) {
         return;
       }
       if (!result.handoff_requested) {
+        setFailureMessage(DESKTOP_HANDOFF_FAILED);
         setPhase("failed");
         return;
       }
@@ -40928,12 +40960,13 @@ function GuardUpdateBanner(props) {
           setPhase("guidance");
         }
       }, HANDOFF_GUIDANCE_DELAY_MS);
-    }).catch(() => {
+    }).catch((error) => {
       if (attemptRef.current === attempt) {
+        setFailureMessage(desktopHandoffFailureMessage(error));
         setPhase("failed");
       }
     });
-  }, [phase]);
+  }, [model.latestVersion, phase]);
   const handleDismiss = reactExports.useCallback(() => {
     rememberDismissedDesktopUpdateVersion(model.latestVersion);
     onDismiss(model.latestVersion);
@@ -40957,7 +40990,7 @@ function GuardUpdateBanner(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: model.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: model.body }),
             phase === "guidance" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: DESKTOP_HANDOFF_GUIDANCE }) : null,
-            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: DESKTOP_HANDOFF_FAILED }) : null
+            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: failureMessage }) : null
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
