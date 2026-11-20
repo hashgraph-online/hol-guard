@@ -105,6 +105,22 @@ fn literal_groups_only(selector: &str) -> bool {
         {
             return false;
         }
+        // A hyphen between two class members is a glob range, not a literal.
+        // A range such as [--0] includes '.' and '/', even though its written
+        // endpoints are individually permitted above. Only same-kind ASCII
+        // ranges can prove that every matched character stays in this segment.
+        if opener == b'['
+            && body.as_bytes().windows(3).any(|window| {
+                window[1] == b'-'
+                    && !((window[0].is_ascii_digit() && window[2].is_ascii_digit())
+                        || (window[0].is_ascii_lowercase()
+                            && window[2].is_ascii_lowercase())
+                        || (window[0].is_ascii_uppercase()
+                            && window[2].is_ascii_uppercase()))
+            })
+        {
+            return false;
+        }
         rest = &after[end + 1..];
     }
     true
@@ -167,6 +183,9 @@ mod tests {
             Some("app/(marketing)/blog")
         );
         assert_eq!(glob_directory("src/[abc]*.ts"), Some("src"));
+        assert_eq!(glob_directory("src/[a-z]*.ts"), Some("src"));
+        assert_eq!(glob_directory("src/[0-9]*.ts"), Some("src"));
+        assert_eq!(glob_directory("src/[-a]*.ts"), Some("src"));
     }
 
     #[test]
@@ -175,6 +194,11 @@ mod tests {
             // A class holding a dot or a separator can spell a parent segment.
             "app/[.][.]/*/secrets",
             "app/[/]etc/*",
+            // Ranges can hide a dot or separator between innocent endpoints.
+            "app/[--0][--0]/*",
+            "app/[ -z]/*",
+            "app/[A-z]/*",
+            "app/[0-A]/*",
             // A negated class matches a leading dot the walk did not prove.
             "app/[!a]*/key",
             // Extended globs and brace expansions behave like alternatives.
