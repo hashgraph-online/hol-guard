@@ -228,14 +228,22 @@ fn a_script_too_long_to_read_is_screened_for_the_second_name() {
     // Past the inline-code limit the reader gives up and the whole script is
     // screened as text, so both spellings have to appear in that screen.
     let padding = "pass  # ".repeat(2_200);
-    for tail in ["git stage -A", "git stage .", "git stage -u", "git stage --all"] {
+    for tail in [
+        "git stage -A",
+        "git stage .",
+        "git stage -u",
+        "git stage --all",
+    ] {
         let command = format!("python3 -c 'import os\n{padding}os.system(\"{tail}\")'");
         assert!(
             command.len() > 16_384,
             "script is short enough to read: {}",
             command.len()
         );
-        assert!(breaks(&command, None).stage_all, "missed long script: {tail}");
+        assert!(
+            breaks(&command, None).stage_all,
+            "missed long script: {tail}"
+        );
     }
 }
 
