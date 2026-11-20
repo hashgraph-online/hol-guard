@@ -28175,6 +28175,45 @@
       "expect": "allow"
     },
     {
+      "id": "omp-glob-dynamic-route-segment",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${PARENT}/app/items/[slug]/page.tsx"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-glob-route-group-directory",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${PARENT}/app/(group)/blog/*/page.tsx"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-glob-class-spelling-a-parent",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${PARENT}/app/[.][.]/[.][.]/.ssh/*"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-omp-grep-semicolon-env",
       "fix_area": "negative",
       "harnesses": [
