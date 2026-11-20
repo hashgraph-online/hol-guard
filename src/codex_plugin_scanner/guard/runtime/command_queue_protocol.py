@@ -7,8 +7,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
-from .exact_cloud_review import EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-from .exact_cloud_review_transport import exact_result, uses_exact_transport
+from ..native_command_result import native_command_result
 from .time_support import parse_utc_timestamp
 
 
@@ -60,48 +59,13 @@ def redacted_error(error: BaseException, *, http_formatter, os_formatter) -> str
 
 
 def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
-    protocol = {"protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION} if uses_exact_transport(job) else {}
-    if execution.get("waitingLocalConfirm") is True:
-        sanitized = dict(execution)
-        sanitized.pop("waitingLocalConfirm", None)
-        return {
-            **protocol,
-            "leaseId": lease_id(job),
-            "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:waiting_local_confirm",
-            "status": "waiting_local_confirm",
-            "result": sanitized,
-        }
-    failure_code = execution.get("failureCode")
-    if isinstance(failure_code, str) and failure_code:
-        return {
-            **protocol,
-            "leaseId": lease_id(job),
-            "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:failed",
-            "status": "failed",
-            "failureCode": failure_code,
-            "failureMessage": str(execution.get("failureMessage") or failure_code),
-        }
-    if uses_exact_transport(job):
-        try:
-            result = exact_result(job, execution)
-        except ValueError:
-            return {
-                **protocol,
-                "leaseId": lease_id(job),
-                "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:failed",
-                "status": "failed",
-                "failureCode": "exact_result_contract_invalid",
-                "failureMessage": "The exact Guard Review result did not satisfy the canonical contract.",
-            }
-    else:
-        result = execution
-    return {
-        **protocol,
-        "leaseId": lease_id(job),
-        "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:succeeded",
-        "status": "succeeded",
-        "result": result,
-    }
+    """The payload Guard Cloud records for one settled job, built by the runtime.
+
+    The runtime checks an exact Review result against its versioned contract;
+    one that fails posts as ``exact_result_contract_invalid``.
+    """
+
+    return native_command_result(job, execution)
 
 
 __all__ = [

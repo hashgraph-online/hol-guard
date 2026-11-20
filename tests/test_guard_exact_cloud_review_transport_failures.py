@@ -15,10 +15,11 @@ from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_diagnostics import _outbox_status
-from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_result, exact_transport_job
+from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_transport_job
 from tests.guard_exact_cloud_review_support import (
     add_review_request,
     connected_exact_review_store,
+    exact_result,
     exact_review_job,
     remote_approval,
     review_request,
@@ -121,6 +122,7 @@ def test_exact_transport_rejects_cross_queue_operations_and_fails_closed_when_ro
         command_queue._lease_next_job(store, {"sync_url": "https://guard.example", "access_token": "token"})
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_pending_exact_result_retries_on_versioned_result_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -175,6 +177,7 @@ def test_pending_exact_result_retries_on_versioned_result_route(
     assert calls == [f"/{job['id']}/result"]
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_exact_result_validates_unsupported_continuation_status(tmp_path: Path) -> None:
     _store, job = _exact_job(tmp_path)
 
@@ -199,6 +202,7 @@ def test_exact_result_validates_unsupported_continuation_status(tmp_path: Path) 
     validate_exact_command_result(result)
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     (

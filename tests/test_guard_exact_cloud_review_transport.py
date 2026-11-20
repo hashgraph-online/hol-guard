@@ -32,7 +32,6 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
     EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
-    exact_result,
     lease_next_job,
 )
 from tests.guard_exact_cloud_review_support import (
@@ -40,6 +39,7 @@ from tests.guard_exact_cloud_review_support import (
 )
 from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
+    exact_result,
 )
 from tests.guard_exact_cloud_review_support import (
     exact_review_job as _job,
@@ -116,6 +116,7 @@ def test_exact_lease_rejects_missing_or_downgraded_protocol(
         )
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_signature(tmp_path: Path) -> None:
     fixture = _transport_fixture()
     lease_request = fixture["leaseRequest"]
