@@ -1,7 +1,7 @@
 #![cfg(unix)]
 
 //! Searches of quoted Next.js route paths that hold both a route group and a
-//! dynamic segment, such as `"app/(marketing)/blog/[slug]/page.tsx"`.
+//! dynamic segment, such as `"app/(group)/blog/[slug]/page.tsx"`.
 //!
 //! A quoted word is never glob-expanded, in any shell, so the program receives
 //! the brackets and parentheses exactly as typed. The path it names is then
@@ -49,17 +49,17 @@ fn fixture() -> Fixture {
     let site = home.join("site");
     std::fs::create_dir_all(site.join(".git")).unwrap();
     for file in [
-        "app/(marketing)/blog/[slug]/page.tsx",
+        "app/(group)/blog/[slug]/page.tsx",
         // A directory spelled like zsh's "not" pattern, so the literal name
         // holds only a component.
-        "app/(marketing)/blog/^[slug]/page.tsx",
+        "app/(group)/blog/^[slug]/page.tsx",
         "app/(shop)/s/[id]/page.tsx",
     ] {
         write(site.join(file), "export default function Page() {}\n");
     }
     // A one-letter sibling the class `[slug]` matches once the shell expands
     // it, holding an environment file.
-    write(site.join("app/(marketing)/blog/s/.env"), "KEY=fixture\n");
+    write(site.join("app/(group)/blog/s/.env"), "KEY=fixture\n");
     // A route that keeps a local environment file beside its component.
     write(
         site.join("app/(admin)/[id]/page.tsx"),
@@ -95,9 +95,9 @@ fn quoted_route_group_paths_are_searched_as_written() {
     let site = f.home.join("site");
     let site = site.display();
     for command in [
-        format!("grep -n export \"{site}/app/(marketing)/blog/[slug]/page.tsx\""),
+        format!("grep -n export \"{site}/app/(group)/blog/[slug]/page.tsx\""),
         format!("grep -n -A8 export '{site}/app/(shop)/s/[id]/page.tsx' | head -14"),
-        format!("rg -n export \"{site}/app/(marketing)/blog/[slug]/page.tsx\""),
+        format!("rg -n export \"{site}/app/(group)/blog/[slug]/page.tsx\""),
         format!("rg -n export \"{site}/app/(shop)/s/[id]\""),
     ] {
         check(&f, &command, true);
@@ -116,11 +116,11 @@ fn route_group_searches_that_could_reach_more_keep_their_review() {
         format!("grep -n KEY \"{site}/app/(admin)/[id]/.env\""),
         // The class sits outside the quotes, so the shell expands it to the
         // sibling `s`, whose environment file keeps the review.
-        format!("rg -n KEY \"{site}/app/(marketing)/blog/\"[slug]"),
+        format!("rg -n KEY \"{site}/app/(group)/blog/\"[slug]"),
         // With zsh's `EXTENDED_GLOB`, an unquoted `^` means "every entry but
         // this one", so the search reaches the sibling `s` and its
         // environment file, even though every bracket is quoted.
-        format!("rg -n KEY \"{site}/app/(marketing)/blog/\"^\"[slug]\""),
+        format!("rg -n KEY \"{site}/app/(group)/blog/\"^\"[slug]\""),
     ] {
         check(&f, &command, false);
     }

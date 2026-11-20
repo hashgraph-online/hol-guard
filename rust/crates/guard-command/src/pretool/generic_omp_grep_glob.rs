@@ -62,7 +62,7 @@ pub(super) fn glob_directory(target: &str) -> Option<&str> {
 /// characters of one path segment and nothing more.
 ///
 /// Next.js spells a dynamic route segment `[slug]` and a route group
-/// `(marketing)`, so an ordinary project puts both in directory names that a
+/// `(group)`, so an ordinary project puts both in directory names that a
 /// glob then walks through. A class of plain name characters can only ever
 /// select a single character of one segment, which the fixed folder above the
 /// first glob character already bounds. What this proof cannot accept is a
@@ -173,12 +173,12 @@ mod tests {
         // Next.js dynamic segments and route groups are ordinary directory
         // names an agent globs through every day.
         assert_eq!(
-            glob_directory("app/registry/[slug]/page.*"),
-            Some("app/registry")
+            glob_directory("app/items/[slug]/page.*"),
+            Some("app/items")
         );
         assert_eq!(
-            glob_directory("app/(marketing)/blog/*/page.tsx"),
-            Some("app/(marketing)/blog")
+            glob_directory("app/(group)/blog/*/page.tsx"),
+            Some("app/(group)/blog")
         );
         assert_eq!(glob_directory("src/[abc]*.ts"), Some("src"));
         assert_eq!(glob_directory("src/[a-z]*.ts"), Some("src"));

@@ -60,7 +60,7 @@ def test_realistic_fixture_has_lfs_config_nested_repo_and_linked_worktree(tmp_pa
     assert (fixture.home / ".agent/artifacts/report.md").is_file()
     assert "retry" in (fixture.home / "other-project/notes.md").read_text(encoding="utf-8")
     assert (fixture.workspace / ".agents/skills/x/SKILL.md").is_file()
-    assert (fixture.workspace / "app/registry/[slug]/page.tsx").is_file()
+    assert (fixture.workspace / "app/items/[slug]/page.tsx").is_file()
     tracked = subprocess.run(
         ["git", "-C", str(fixture.workspace), "ls-files"], capture_output=True, text=True, check=True
     ).stdout
@@ -108,7 +108,7 @@ def test_scope_judge_requires_the_dynamic_route_glob_to_use_its_bracket_director
     from ci.gauntlet.native_tools import native_tools_scope_error
 
     scenario = _scenario("omp-native-glob-dynamic-route-segment")
-    selected = _call("glob", path="app/registry/[slug]/page.tsx")
+    selected = _call("glob", path="app/items/[slug]/page.tsx")
     assert native_tools_scope_error(scenario, [selected], {}) is None
     elsewhere = _call("glob", path="src/**/*.ts")
     assert native_tools_scope_error(scenario, [elsewhere], {}) is not None

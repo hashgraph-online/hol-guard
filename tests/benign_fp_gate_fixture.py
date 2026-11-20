@@ -224,7 +224,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / "src" / "password-reset-email.tsx", "export const Email = ({ password }) => <Field password={password} />;\n")
     _write(parent / "src" / "maintenance-auth.ts", MAINTENANCE_AUTH_SOURCE)
     _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
-    _write(parent / "app" / "(marketing)" / "blog" / "[slug]" / "page.tsx", "export default function Post() {}\n")
+    _write(parent / "app" / "(group)" / "blog" / "[slug]" / "page.tsx", "export default function Post() {}\n")
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
     _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)

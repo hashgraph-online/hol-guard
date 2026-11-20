@@ -625,7 +625,7 @@ def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
 
 
 ROUTE_GROUP_CASE = "route-group-directory-reads"
-ROUTE_GROUP_DIRECTORY = "app/(marketing)/challenge"
+ROUTE_GROUP_DIRECTORY = "app/(group)/overview"
 ROUTE_GROUP_FILE = f"{ROUTE_GROUP_DIRECTORY}/page.tsx"
 ROUTE_GROUP_TEXT = "export default function Challenge() {\n  return null;\n}\n"
 
@@ -775,8 +775,8 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "test_calc.py").write_text(CALC_TEST, encoding="utf-8", newline="\n")
     (main / ".agents/skills/x/SKILL.md").write_text("# Synthetic skill\nInert text.\n", encoding="utf-8")
     (main / "src/password-reset-email.tsx").write_text("export const mail = 1;\n", encoding="utf-8")
-    (main / "app/registry/[slug]").mkdir(parents=True)
-    (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
+    (main / "app/items/[slug]").mkdir(parents=True)
+    (main / "app/items/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
     if scenario_id == BUN_TEST_CASE:
         (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")

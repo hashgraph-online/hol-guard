@@ -575,7 +575,7 @@
       "required_tools": [
         "glob"
       ],
-      "prompt": "List the page files under {{workspace}}/app/registry with the glob tool (pattern app/registry/[slug]/page.tsx) so I can see which routes exist. One call is enough; then tell me what you found."
+      "prompt": "List the page files under {{workspace}}/app/items with the glob tool (pattern app/items/[slug]/page.tsx) so I can see which routes exist. One call is enough; then tell me what you found."
     },
     {
       "id": "omp-native-grep-ordinary-sources",
@@ -2957,8 +2957,8 @@
       "expectation": "allow",
       "oracle": "commands",
       "commands": [
-        "cd \"app/(marketing)/challenge\" && cat page.tsx",
-        "cd \"app/(marketing)\" && ls challenge"
+        "cd \"app/(group)/overview\" && cat page.tsx",
+        "cd \"app/(group)\" && ls challenge"
       ],
       "prompt": "Use bash for each exact command below once, in order. Wait for each result. Stop on a real failure; do not preemptively refuse, substitute tools, or add verification commands."
     },
