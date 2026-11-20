@@ -13,6 +13,7 @@ Guard store instead, so the per-request handlers can read it.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 import threading
@@ -122,6 +123,8 @@ class WorkerHost:
         self._lock = threading.Lock()
         self._threads: list[threading.Thread] = []
         self._hook_worker: Any = None
+        self._prepared_hook_worker: Any = None
+        self._policy_prepare_thread: threading.Thread | None = None
         self._attention: Any = None
         self._installed_authority_admitted = False
 
@@ -196,6 +199,9 @@ class WorkerHost:
         # engine compiled is refused by the resident, so publishing first
         # would fail every hook closed until something else migrated it.
         report = on_phase or (lambda _step: None)
+        # Building the hook worker publishes nothing, so it runs beside the
+        # admission; publishing starts only once the admission has run.
+        self._prepare_policy_publication()
         self._admit_installed_release(on_phase=report)
         report("admitted")
         self._start_policy_publication()
@@ -267,6 +273,41 @@ class WorkerHost:
 
         self._installed_authority_admitted = migrate_installed_authority(self.store, on_phase=on_phase)
 
+    def _prepare_policy_publication(self) -> None:
+        """Builds the hook worker on a thread of its own, without starting it."""
+
+        def build() -> None:
+            self._prepared_hook_worker = self._build_hook_worker()
+
+        thread = threading.Thread(target=build, daemon=True, name="guard-worker-policy-prepare")
+        try:
+            thread.start()
+        except RuntimeError:
+            _LOGGER.exception("Guard worker host could not prepare native policy publication")
+            return
+        self._policy_prepare_thread = thread
+
+    def _build_hook_worker(self) -> Any:
+        from ..hook_review.hook_worker import HookWorker
+        from ..resident_evidence_client import ResidentEvidenceClient
+        from ..resident_evidence_dispatch import ResidentEvidenceDispatch
+
+        try:
+            # Direct answers are bound only while their evidence has a writer,
+            # so the drain gets the same writer the daemon's hooks use.
+            return HookWorker(
+                store=self.store,
+                home_dir=self.home_dir,
+                activity_writer=ResidentEvidenceClient(store=self.store),
+                evidence_dispatch=ResidentEvidenceDispatch(),
+                capture_writer=None,
+                wait_for_native_policy=False,
+                start_native_policy=False,
+            )
+        except Exception:
+            _LOGGER.exception("Guard worker host could not build the native policy publisher")
+            return None
+
     def _start_policy_publication(self) -> None:
         """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
 
@@ -276,24 +317,26 @@ class WorkerHost:
         ends with its request, so this host owns it now.
         """
 
-        from ..hook_review.hook_worker import HookWorker
-        from ..resident_evidence_client import ResidentEvidenceClient
-        from ..resident_evidence_dispatch import ResidentEvidenceDispatch
-
+        thread = self._policy_prepare_thread
+        if thread is not None:
+            thread.join()
+        hook_worker = self._prepared_hook_worker
+        self._prepared_hook_worker = None
+        if hook_worker is None:
+            # The thread could not build it; build it here, as before.
+            hook_worker = self._build_hook_worker()
+        if hook_worker is None:
+            self._hook_worker = None
+            return
         try:
-            # Direct answers are bound only while their evidence has a writer,
-            # so the drain gets the same writer the daemon's hooks use.
-            self._hook_worker = HookWorker(
-                store=self.store,
-                home_dir=self.home_dir,
-                activity_writer=ResidentEvidenceClient(store=self.store),
-                evidence_dispatch=ResidentEvidenceDispatch(),
-                capture_writer=None,
-                wait_for_native_policy=False,
-            )
+            hook_worker.start_native_policy_publication(home_dir=self.home_dir)
         except Exception:
             _LOGGER.exception("Guard worker host could not start native policy publication")
             self._hook_worker = None
+            with contextlib.suppress(Exception):
+                hook_worker.close(deadline_monotonic=time.monotonic() + 5.0)
+            return
+        self._hook_worker = hook_worker
 
     def wait_for_policy_publication(self) -> None:
         """Waits, bounded, for the first native policy publication."""

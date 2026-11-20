@@ -20,6 +20,13 @@ from codex_plugin_scanner.guard.runtime_health.diagnostics import BackgroundLogW
 from codex_plugin_scanner.guard.workers import host as worker_host
 
 
+@pytest.fixture(autouse=True)
+def _no_real_hook_worker(monkeypatch):
+    """Keeps the real hook worker out of these tests; a test can set its own build."""
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_build_hook_worker", lambda self: None)
+
+
 class _StopError(Exception):
     """Ends ``WorkerHost.start`` once the step under test has run."""
 
@@ -249,3 +256,55 @@ def test_a_background_worker_that_fails_to_start_is_not_swallowed(tmp_path, monk
         worker_host.run_worker_host(tmp_path)
 
     assert stopped == [True]
+
+
+class _PreparedWorker:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def start_native_policy_publication(self, *, home_dir=None, workspace=None) -> None:
+        self.calls.append("publish")
+
+
+def test_worker_host_builds_the_publisher_beside_admission_and_publishes_after_it(tmp_path, monkeypatch):
+    store = _Store(tmp_path)
+    built = threading.Event()
+    migrate = store.migrate_installed_command_pack_authority
+
+    def build(self):
+        store.calls.append("build")
+        built.set()
+        return _PreparedWorker(store.calls)
+
+    def slow_migrate():
+        # The build runs while the admission still holds the start.
+        assert built.wait(timeout=5)
+        migrate()
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_build_hook_worker", build)
+    monkeypatch.setattr(store, "migrate_installed_command_pack_authority", slow_migrate)
+    host = worker_host.WorkerHost(store, home_dir=tmp_path)  # pyright: ignore[reportArgumentType]
+
+    host.start()
+
+    assert store.calls == ["build", "migrate", "publish"]
+    assert isinstance(host._hook_worker, _PreparedWorker)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_worker_host_builds_the_publisher_again_when_the_early_build_failed(tmp_path, monkeypatch):
+    store = _Store(tmp_path)
+    attempts: list[str] = []
+
+    def build(self):
+        attempts.append(threading.current_thread().name)
+        if len(attempts) == 1:
+            return None
+        return _PreparedWorker(store.calls)
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_build_hook_worker", build)
+    host = worker_host.WorkerHost(store, home_dir=tmp_path)  # pyright: ignore[reportArgumentType]
+
+    host.start()
+
+    assert attempts == ["guard-worker-policy-prepare", threading.current_thread().name]
+    assert store.calls == ["migrate", "publish"]
