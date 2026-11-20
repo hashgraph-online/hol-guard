@@ -119,6 +119,17 @@ const lapsedA = sessionToken({ surface: "approval-center", request_id: requestA,
 }
 
 {
+  // A reloaded tab still holds an older full session; another tab saved a newer one.
+  const { tab, browser } = installWindow(boundA, {
+    tab: new Map([["guard-token", otherFull]]),
+    browser: new Map([["guard-token", full]]),
+  });
+  assert(readGuardToken() === full, "a request link prefers the browser-wide full session");
+  assert(browser.map.get("guard-token") === full, "a tab's own copy never overwrites the browser-wide session");
+  assert(tab.map.get("guard-token") === full, "the tab picks up the browser-wide session");
+}
+
+{
   const shared = new Map<string, string>();
   installWindow(boundA, { browser: shared });
   assert(readGuardToken() === boundA, "with no full session the link's session is the tab's session");

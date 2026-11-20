@@ -93,9 +93,11 @@ export function rememberLinkedGuardSession(guardToken: string): string {
       forgetExpiredRequestSessions(now);
       writeBoth(requestSessionStorageKey(scope.requestId), guardToken);
     }
-    for (const stored of [readFrom(tabStorage, SESSION_KEY), readFrom(browserStorage, SESSION_KEY)]) {
+    // The browser-wide session is the newest one any tab saved. A tab's own
+    // copy may predate a Guard restart, so it is never copied back over it.
+    for (const stored of [readFrom(browserStorage, SESSION_KEY), readFrom(tabStorage, SESSION_KEY)]) {
       if (stored !== guardToken && liveFullSession(stored, now)) {
-        if (firstSeen) writeBoth(SESSION_KEY, stored);
+        if (firstSeen) writeTo(tabStorage, SESSION_KEY, stored);
         return stored;
       }
     }

@@ -18901,9 +18901,9 @@ function rememberLinkedGuardSession(guardToken) {
       forgetExpiredRequestSessions(now2);
       writeBoth(requestSessionStorageKey(scope.requestId), guardToken);
     }
-    for (const stored of [readFrom(tabStorage, SESSION_KEY), readFrom(browserStorage, SESSION_KEY)]) {
+    for (const stored of [readFrom(browserStorage, SESSION_KEY), readFrom(tabStorage, SESSION_KEY)]) {
       if (stored !== guardToken && liveFullSession(stored, now2)) {
-        if (firstSeen) writeBoth(SESSION_KEY, stored);
+        if (firstSeen) writeTo(tabStorage, SESSION_KEY, stored);
         return stored;
       }
     }
