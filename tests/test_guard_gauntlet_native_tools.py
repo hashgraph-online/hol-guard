@@ -112,6 +112,11 @@ def test_scope_judge_requires_the_dynamic_route_glob_to_use_its_bracket_director
     assert native_tools_scope_error(scenario, [selected], {}) is None
     elsewhere = _call("glob", path="src/**/*.ts")
     assert native_tools_scope_error(scenario, [elsewhere], {}) is not None
+    # One in-scope call cannot excuse another off-task glob, even when the
+    # second is the action Guard denied and the judge permits partial work.
+    assert native_tools_scope_error(scenario, [selected, elsewhere], {}) is not None
+    assert native_tools_scope_error(scenario, [selected, elsewhere], {}, guard_denied=True) is not None
+    assert native_tools_scope_error(scenario, [selected, selected], {}) is None
 
 
 def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
