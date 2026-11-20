@@ -16,6 +16,7 @@
 //! skips links and hidden directories other than benign ones, which `rg`
 //! does not enter, and prunes directories a plain ignore rule names unless
 //! some negation re-includes that name.
+use super::super::search_scope_filter::{Override, SearchFilter};
 use super::tree;
 use super::ReadContext;
 use std::io::Read;
@@ -124,10 +125,17 @@ impl Rule {
 /// checked from the directory before its first wildcard, which holds every
 /// expansion. A context-free classification has no tree to read, as with
 /// path operands.
-pub(super) fn roots_proven(roots: &[&str], context: ReadContext<'_>) -> bool {
+pub(super) fn roots_proven(roots: &[&str], globs: &[&str], context: ReadContext<'_>) -> bool {
     if context.home_dir.is_none() && context.cwd.is_none() {
         return true;
     }
+    // `-g` inclusions are a whitelist: with one of them ripgrep searches
+    // only what they select, so a negation that re-includes an entry they
+    // cannot select re-includes nothing this search reads. Globs the filter
+    // cannot model narrow nothing, and neither does an empty set.
+    let selected = (!globs.is_empty())
+        .then(|| SearchFilter::from_rg_inclusions(globs))
+        .flatten();
     let roots = if roots.is_empty() { &["."][..] } else { roots };
     roots.iter().all(|root| {
         let prefix: Vec<&str> = root
@@ -140,13 +148,46 @@ pub(super) fn roots_proven(roots: &[&str], context: ReadContext<'_>) -> bool {
             prefix => prefix,
         };
         tree::expanded_operand(&prefix, context)
-            .is_some_and(|path| no_hidden_whitelist(&path, context))
+            .is_some_and(|path| no_hidden_whitelist(&path, selected.as_ref(), context))
     })
+}
+
+/// Whether the search's `-g` inclusions can select `path`, or anything below
+/// it when it is a directory. Without inclusions every entry is selected.
+///
+/// A path the walk cannot describe, or an entry it cannot stat, counts as
+/// selected: the question then falls back to the negation screen itself.
+fn selected_by_globs(filter: Option<&SearchFilter>, root: &Path, path: &Path) -> bool {
+    let Some(filter) = filter else {
+        return true;
+    };
+    let (Some(name), Ok(relative)) = (
+        path.file_name().and_then(std::ffi::OsStr::to_str),
+        path.strip_prefix(root),
+    ) else {
+        return true;
+    };
+    let Some(components) = relative
+        .iter()
+        .map(std::ffi::OsStr::to_str)
+        .collect::<Option<Vec<&str>>>()
+    else {
+        return true;
+    };
+    let directory = std::fs::symlink_metadata(path).map_or(true, |metadata| metadata.is_dir());
+    !matches!(
+        filter.override_for(name, &components.join("/"), directory),
+        Override::Skipped
+    )
 }
 
 /// True when no ignore file `rg` honors for a search of `root` can
 /// re-include a hidden entry. A root that is not a directory has no walk.
-fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
+fn no_hidden_whitelist(
+    root: &Path,
+    selected: Option<&SearchFilter>,
+    context: ReadContext<'_>,
+) -> bool {
     let Ok(root) = std::fs::canonicalize(root) else {
         return true;
     };
@@ -156,7 +197,17 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
     // The marker keeps this walk apart from the recursive-read walks sharing
     // the per-evaluation memo, and names the working directory it screened.
     let marker = super::rg_whitelist_file::memo_marker(context);
-    super::walk_memo::memoized(&root, &[marker.as_str()], &[], false, false, false, || {
+    // The inclusions narrow which re-inclusions count, so the answer belongs
+    // to them as much as to the root.
+    let mut key: Vec<&str> = vec![marker.as_str()];
+    key.extend(
+        selected
+            .map(SearchFilter::inclusions)
+            .unwrap_or_default()
+            .iter()
+            .map(String::as_str),
+    );
+    super::walk_memo::memoized(&root, &key, &[], false, false, false, || {
         let mut negations = Negations::default();
         let Some((repository, rules)) = outer_sources_safe(&root, context, &mut negations) else {
             return false;
@@ -178,6 +229,7 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
             && !negations.risky.iter().any(|risk| {
                 hidden.iter().any(|path| {
                     risk.re_includes(path)
+                        && selected_by_globs(selected, &root, path)
                         && !super::rg_whitelist_file::searchable_file(path, context)
                 })
             })

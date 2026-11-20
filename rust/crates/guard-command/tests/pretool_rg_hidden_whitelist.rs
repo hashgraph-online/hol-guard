@@ -364,3 +364,50 @@ fn a_pipe_into_rg_reads_the_previous_step_rather_than_the_tree() {
         "review",
     );
 }
+
+#[test]
+fn inclusion_globs_that_cannot_reach_a_re_included_secret_keep_rg_allowed() {
+    let fixture = fixture(&[(
+        "template",
+        &[
+            (".gitignore", ".env*\n!.env.example\n"),
+            (".env.example", "KEY=\n"),
+        ],
+    )]);
+    // The negation re-includes a hidden file, so a whole-tree search is
+    // unproved however narrow its pattern.
+    assert_actions(&fixture, "template", &["rg -n foo"], "review");
+    // A `-g` inclusion is a whitelist: with one of them `rg` reads only what
+    // it selects, and `src/**` cannot select the re-included template.
+    assert_actions(
+        &fixture,
+        "template",
+        &[
+            "rg -n foo --glob 'src/**'",
+            "rg -n foo -g 'src/**'",
+            "rg -l foo --glob 'src/**'",
+            "rg --files-with-matches foo --glob 'src/**'",
+        ],
+        "allow",
+    );
+    // An inclusion that does reach the re-included file proves nothing, and
+    // neither does one whose case folding the scope filter cannot model.
+    assert_actions(
+        &fixture,
+        "template",
+        &[
+            "rg -n foo --glob '**'",
+            "rg -n foo --glob '.env*'",
+            "rg -n foo --iglob 'src/**'",
+            "rg -n foo --glob 'src/**' --iglob '.ENV*'",
+        ],
+        "review",
+    );
+    // An exclusion only takes files away, so it narrows nothing on its own.
+    assert_actions(
+        &fixture,
+        "template",
+        &["rg -n foo --glob '!.env.example'"],
+        "review",
+    );
+}

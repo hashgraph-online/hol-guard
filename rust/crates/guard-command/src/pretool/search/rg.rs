@@ -415,7 +415,10 @@ fn rg_arguments_pass(
                 && names_only_globs_proven(arguments, &unproven_roots, context)))
         && (!stdin_only || pattern_supplied)
         && (stdin_only || config_disabled || context.ripgrep_config_absent)
-        && (stdin_only || paths_only || !prove_roots || rg_whitelist::roots_proven(&roots, context))
+        && (stdin_only
+            || paths_only
+            || !prove_roots
+            || rg_whitelist::roots_proven(&roots, &narrowing_globs(arguments), context))
         && (unscreened_globs.is_empty()
             || super::super::search_scope::rg_glob_scope_proven(
                 scope,
@@ -464,6 +467,23 @@ fn names_only_globs_proven(arguments: &[String], roots: &[&str], context: ReadCo
 /// holds, so a command that creates the root pays nothing for the check.
 fn proven_absent_root(value: &str, context: ReadContext<'_>, allow_absent: bool) -> bool {
     allow_absent && super::grep::absent_target(value, context)
+}
+
+/// The inclusions that may narrow which re-included entries a search can
+/// reach, empty when they cannot be read that way.
+///
+/// `--iglob` folds case and the scope filter's matcher does not, so a search
+/// carrying one narrows nothing. Exclusions only take files away, so leaving
+/// them out keeps the modeled selection at least as wide as ripgrep's.
+fn narrowing_globs(arguments: &[String]) -> Vec<&str> {
+    let case_blind = arguments
+        .iter()
+        .take_while(|argument| *argument != "--")
+        .any(|argument| argument == "--iglob" || argument.starts_with("--iglob="));
+    if case_blind {
+        return Vec::new();
+    }
+    inclusion_globs(arguments)
 }
 
 /// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.

@@ -30,6 +30,7 @@ from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
     LOCAL_BIN,
     add_home_tools,
+    add_ignore_negation_template,
     add_main_shapes,
     add_worktree_venv,
     borrow_main_modules,
@@ -776,6 +777,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "app/registry/[slug]").mkdir(parents=True)
     (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
+    tracked = (*tracked, *add_ignore_negation_template(main, scenario_id))
     if scenario_id == BUN_TEST_CASE:
         (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")
         tracked = (*tracked, "calc.test.ts")
