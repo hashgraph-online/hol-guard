@@ -107,3 +107,37 @@ fn every_write_moves_the_revision_and_a_bump_moves_it_too() {
     assert_eq!(bumped, json!(2));
     assert_eq!(call(&connection, revision, json!({})), json!(2));
 }
+
+#[test]
+fn hook_admission_uses_one_snapshot_for_direct_and_fallback_rows() {
+    let connection = store();
+    call(
+        &connection,
+        set,
+        json!({"harness": "codex", "active": true, "workspace": null,
+               "manifest_json": "{}", "now": "t"}),
+    );
+    assert_eq!(
+        call(&connection, hook_admission, json!({"harness": "codex"}),),
+        json!({"unmanaged": false, "revision": 1}),
+    );
+    assert_eq!(
+        call(&connection, hook_admission, json!({"harness": "pi"}),),
+        json!({"unmanaged": true, "revision": 1}),
+    );
+}
+
+#[test]
+fn hook_admission_holds_an_inactive_direct_row() {
+    let connection = store();
+    call(
+        &connection,
+        set,
+        json!({"harness": "pi", "active": false, "workspace": null,
+               "manifest_json": "{}", "now": "t"}),
+    );
+    assert_eq!(
+        call(&connection, hook_admission, json!({"harness": "pi"}))["unmanaged"],
+        true
+    );
+}

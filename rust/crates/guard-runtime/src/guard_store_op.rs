@@ -412,6 +412,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_managed_install"
         | "get_managed_install_revision"
         | "list_managed_installs"
+        | "hook_managed_install_admission"
         | "list_cloud_exceptions"
         | "get_guard_operation"
         | "list_guard_operations"
@@ -954,6 +955,9 @@ fn dispatch(
             crate::guard_store_managed_installs::bump(connection, args)
         }
         "list_managed_installs" => crate::guard_store_managed_installs::list(connection, args),
+        "hook_managed_install_admission" => {
+            crate::guard_store_managed_installs::hook_admission(connection, args)
+        }
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "cached_supply_chain_bundle" => {

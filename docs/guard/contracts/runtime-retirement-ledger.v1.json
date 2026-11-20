@@ -9,6 +9,7 @@
   "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
   "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
@@ -8730,6 +8731,16 @@
    ],
    "base_commit": "647fb01f6455b97b6fb15ebc296ecc1fd363cb3c",
    "remaining_role": "Applies the resident's review settlement to the native verdict and renders it; which evaluator verdict lets a planned install continue, stops it with guidance, or blocks it is decided in Rust."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
+   "source_sha256": "b0ed04428be6e5d8f210cfb33671db7556a4be365bab0de66a87a31c96658b27",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_managed_installs.rs",
+    "rust/crates/guard-runtime/src/guard_store_op.rs"
+   ],
+   "base_commit": "570b7ebc46",
+   "remaining_role": "The Python cache and fallback scan are retired; hook admission asks the resident for one transactional managed-install answer."
   },
   {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
