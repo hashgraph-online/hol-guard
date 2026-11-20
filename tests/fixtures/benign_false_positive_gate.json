@@ -7264,6 +7264,38 @@
       "expect": "allow"
     },
     {
+      "id": "write-metric-window-names",
+      "fix_area": "write",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/connectors/metrics.ts",
+        "content": "export const metrics = [\n  {\n    metricKey: 'downloads_30d',\n    windowKey: 'window_7d',\n    bucketKey: 'top_100_items',\n  },\n];\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-write-lowercase-api-key-literal",
+      "fix_area": "secrets",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/connectors/metrics.ts",
+        "content": "export const client = { apiKey: 'k7m2q9x4vb3n' };\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "write-dollar-route-file",
       "fix_area": "write",
       "harnesses": [

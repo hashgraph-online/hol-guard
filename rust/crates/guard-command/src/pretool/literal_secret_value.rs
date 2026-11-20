@@ -166,6 +166,15 @@ fn has_word_chunk(value: &str) -> bool {
         .any(|chunk| chunk.len() >= 4 && pair_score(&chunk.to_ascii_lowercase()) > -3.0)
 }
 
+/// A letter run that does not read as random on its own is a word. This uses
+/// the same bar `random_letters` applies, so a chunk only fails it when the
+/// value would have been called random on its letters alone.
+fn has_readable_chunk(value: &str) -> bool {
+    case_chunks(value, false)
+        .iter()
+        .any(|chunk| chunk.len() >= 4 && pair_score(&chunk.to_ascii_lowercase()) >= -3.9)
+}
+
 /// A GitHub token whose last six characters are not the CRC32 of its body is
 /// a made-up example, not a token GitHub issued.
 fn github_checksum_fails(value: &str) -> bool {
@@ -375,7 +384,19 @@ pub(super) fn looks_random(value: &str) -> bool {
             return true;
         }
     }
-    if length >= 10 && classes >= 2 && has_digit && (has_lower || has_upper) {
+    // The weakest randomness signal left is a value of one letter case with a
+    // few digits in it. An identifier reaches that shape whenever a plain
+    // English word carries a count or a window (`downloads_30d`, `window_7d`,
+    // `top_100_items`), so a value that still reads as a word is not called
+    // random on this signal alone. A generated key has no such word in it,
+    // and the stronger checks above keep the ones that mix a word with a
+    // random run.
+    if length >= 10
+        && classes >= 2
+        && has_digit
+        && (has_lower || has_upper)
+        && !has_readable_chunk(value)
+    {
         let ratio = value.bytes().filter(u8::is_ascii_digit).count() as f64 / length as f64;
         if ratio > 0.15 && ratio < 0.85 {
             return true;
