@@ -177,7 +177,9 @@ jobs:
           python3 -m venv --copies "$RUNNER_TEMP/wheel-venv"
           # Harden lane-owned copies; the runner's shared interpreter may be group-writable.
           chmod go-w "$RUNNER_TEMP/wheel-venv"/bin/python*
-          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --no-compile \
+          # Compile bytecode as `pipx install hol-guard` does. Without it the first
+          # harness in each venv pays a one-off compile inside its cold-start timing.
+          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install \
             --index-url https://pypi.org/simple "$WHEEL"
           python3 -m ci.gauntlet installed \
             --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
@@ -344,7 +346,8 @@ jobs:
           set -euo pipefail
           python -m venv --copies "$RUNNER_TEMP/wheel-venv"
           if [[ -n "$EXE" ]]; then bin="$RUNNER_TEMP/wheel-venv/Scripts"; else bin="$RUNNER_TEMP/wheel-venv/bin"; fi
-          PYTHONPATH= "$bin/python$EXE" -m pip install --no-compile \
+          # Compile bytecode as `pipx install hol-guard` does; see the Linux step.
+          PYTHONPATH= "$bin/python$EXE" -m pip install \
             --index-url https://pypi.org/simple "$WHEEL"
           python -m ci.gauntlet installed \
             --runtime "$bin/hol-guard$EXE" \

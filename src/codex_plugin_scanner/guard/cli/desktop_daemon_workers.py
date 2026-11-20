@@ -7,15 +7,24 @@ the daemon reports ready, so both sit on every cold start. Building the Guard
 command parser, importing the command hub and constructing the router's store
 and context first added seconds before either ran, and none of them uses that
 work. No lifecycle approval gate applies to these subcommands.
+
+The worker host's first step after its imports is the installed-bundle check.
+It starts here on a thread of its own, before those imports and the store
+open, and the host waits for it instead of running it again. It runs the
+packaged runtime, so it mostly waits on child processes and hashing, which
+leave the interpreter free for the imports.
 """
 
 from __future__ import annotations
 
 import sys
+import threading
 from collections.abc import Callable, Sequence
+from contextlib import suppress
 from pathlib import Path
 
 _FAST_PATH_COMMANDS = frozenset({"daemon-workers", "library-serve", "library-call"})
+_bundle_check: threading.Thread | None = None
 
 
 def _launch_tokens(argv: Sequence[str]) -> list[str]:
@@ -43,6 +52,41 @@ def is_daemon_workers_fast_path_argv(argv: Sequence[str]) -> bool:
     )
 
 
+def _check_installed_bundle() -> None:
+    from ..catalog_delivery.preparation_authority import load_installed_bundle
+
+    # A failure is left for the migration's own load to raise and record.
+    with suppress(Exception):
+        load_installed_bundle()
+
+
+def _start_bundle_check(guard_home: Path) -> None:
+    global _bundle_check
+    from ..extension_builder.native_executable_root import use_guard_home
+
+    # The store registers the same folder when it opens; the check runs
+    # before that, and its copy belongs in the same place.
+    use_guard_home(guard_home)
+    thread = threading.Thread(target=_check_installed_bundle, name="installed-bundle-check", daemon=True)
+    thread.start()
+    _bundle_check = thread
+
+
+def wait_for_early_bundle_check() -> bool:
+    """Wait for the bundle check this process started early.
+
+    Only the first caller waits for it. False when none was started or it was
+    already waited for, so a later migration attempt checks for itself.
+    """
+
+    global _bundle_check
+    thread, _bundle_check = _bundle_check, None
+    if thread is None:
+        return False
+    thread.join()
+    return True
+
+
 def _child(command: str) -> Callable[[Path], int]:
     if command == "daemon-workers":
         from ..workers.host import run_worker_host
@@ -67,7 +111,9 @@ def run_daemon_workers_cli(argv: Sequence[str]) -> int:
     # The command router binds this for every subcommand; the child's digest
     # calls resolve against the same home.
     bind_context_digest_home(guard_home)
+    if tokens[1] == "daemon-workers":
+        _start_bundle_check(guard_home)
     return _child(tokens[1])(guard_home)
 
 
-__all__ = ["is_daemon_workers_fast_path_argv", "run_daemon_workers_cli"]
+__all__ = ["is_daemon_workers_fast_path_argv", "run_daemon_workers_cli", "wait_for_early_bundle_check"]

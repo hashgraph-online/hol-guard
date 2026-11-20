@@ -813,6 +813,12 @@
           "src/codex_plugin_scanner/guard/cli/command_inspection_client.py"
         ],
         "reason": "Reviewed and retained in runtime scope: `command test` and `command explain` reach it lazily from cli/commands_dispatch_local. It is transport only -- it starts or waits for the daemon within a fixed warm-up budget and returns the daemon's inspection, or a typed unavailable answer when the daemon cannot answer. The native runtime still owns the classification; nothing here derives a verdict, and an outage is never reported as no_match."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/schemas/consumer_mode.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the schemas package loads it on first use of build_consumer_mode_contract, so the import graph counts it as lazy. Before, every Guard store import pulled it in eagerly through the package, and the daemon's worker host paid for the plugin scanner on each cold start. It runs the install-time scan and hands the result to the native runtime, which owns the guard-consumer.v2 contract; nothing here derives a verdict."
       }
     ],
     "tests": {
