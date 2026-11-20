@@ -8,6 +8,7 @@ from ci.gauntlet.fixtures import create_fixture
 from ci.gauntlet.realism_fixtures import (
     IGNORE_NEGATION_CASE,
     IGNORE_NEGATION_CONSUMED_IGLOB_CASE,
+    IGNORE_NEGATION_BROAD_GLOB_CASE,
     IGNORE_NEGATION_PROTECTED_CASE,
     add_ignore_negation_template,
 )
@@ -15,7 +16,7 @@ from ci.gauntlet.realism_fixtures import (
 
 @pytest.mark.parametrize(
     "scenario_id",
-    [IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE],
+    [IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE, IGNORE_NEGATION_BROAD_GLOB_CASE],
 )
 def test_blocked_rg_cases_seed_hidden_target_in_minimal_checkout(tmp_path, scenario_id):
     fixture = create_fixture(tmp_path / "case", scenario_id=scenario_id)
