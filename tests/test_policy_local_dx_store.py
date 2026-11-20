@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.policy_document_compile import compile_policy_do
 from codex_plugin_scanner.guard.policy_document_yaml import parse_policy_document_yaml
 from codex_plugin_scanner.guard.policy_starters import LEGACY_POLICY_MODELINES, POLICY_MODELINE
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 
 FIXTURES = Path(__file__).resolve().parents[1] / "spec" / "guard-policy" / "v1alpha1" / "fixtures"
 SCOPES = FIXTURES / "valid" / "enforceable-scopes.yaml"
@@ -256,10 +257,12 @@ def test_status_counts_the_whole_fleet_beyond_the_listed_devices(
         "stateCounts": {"applied": 600, "pending": 18, "rejected": 2},
     }
     monkeypatch.setattr(
-        runner, "_resolve_guard_sync_auth_context", lambda _store: {"sync_url": "https://hol.example/api/guard/receipts/sync"}
+        runner,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: {"sync_url": "https://hol.example/api/guard/receipts/sync"},
     )
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: response)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", lambda **_kwargs: response)
 
     delivery = fetch_policy_delivery(store)
     monkeypatch.setattr(
