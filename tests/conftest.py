@@ -178,6 +178,18 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_resident_health_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start each test with a closed resident circuit.
+
+    Health is keyed by runtime digest and Guard home, and tests that share the
+    default home would otherwise inherit failures an earlier test recorded.
+    """
+    from codex_plugin_scanner.guard import native_runtime_resilience
+
+    monkeypatch.setattr(native_runtime_resilience, "_STATES", type(native_runtime_resilience._STATES)())
+
+
+@pytest.fixture(autouse=True)
 def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """Send the runtime session upload through the urllib a test fakes.
 
