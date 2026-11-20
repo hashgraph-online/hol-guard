@@ -16,6 +16,7 @@
 use std::collections::BTreeMap;
 
 use guard_command::egress_caller::policy_get_with_headers;
+use guard_contracts::EgressOutcomeV1;
 use serde_json::{json, Value};
 
 use crate::managed_policy_load::ManagedPolicySource;
@@ -42,8 +43,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         return Ok(error("invalid_registry_search"));
     };
     Ok(match fetch(&search_url(query)) {
-        Some((status, headers, body)) => answer(status, &headers, &body),
-        None => error("registry_unavailable"),
+        Ok((status, headers, body)) => answer(status, &headers, &body),
+        Err(code) => error(code),
     })
 }
 
@@ -70,18 +71,30 @@ fn search_url(query: &str) -> String {
 
 type Page = (u16, BTreeMap<String, String>, Vec<u8>);
 
-/// The exchange under the machine's managed network policy. One byte over
-/// the cap is read so an oversize page is told apart from a failed one.
-fn fetch(url: &str) -> Option<Page> {
-    let policy = CallerEgressFulfilment::resolve_policy(&ManagedPolicySource::native()).ok()?;
+/// The exchange under the machine's managed network policy, or the error
+/// code a failed one answers. The egress layer enforces the byte cap.
+fn fetch(url: &str) -> Result<Page, &'static str> {
+    let policy = CallerEgressFulfilment::resolve_policy(&ManagedPolicySource::native())
+        .map_err(|_| "registry_unavailable")?;
     let headers = BTreeMap::from([
         ("Accept".to_owned(), "application/json".to_owned()),
         // Identity encoding keeps the byte bound equal to the decoded bound.
         ("Accept-Encoding".to_owned(), "identity".to_owned()),
         ("User-Agent".to_owned(), crate::daemon_edge::user_agent()),
     ]);
-    let cap = u64::try_from(MAX_BODY_BYTES + 1).unwrap_or(u64::MAX);
-    policy_get_with_headers(url, headers, TIMEOUT_SECONDS, 0, cap, &policy).ok()
+    let cap = u64::try_from(MAX_BODY_BYTES).unwrap_or(u64::MAX);
+    policy_get_with_headers(url, headers, TIMEOUT_SECONDS, 0, cap, &policy)
+        .map_err(|outcome| failure_code(&outcome))
+}
+
+/// An oversize page keeps its own code; every other failure is an outage.
+fn failure_code(outcome: &EgressOutcomeV1) -> &'static str {
+    match outcome {
+        EgressOutcomeV1::Error { message } if message == "response too large" => {
+            "registry_response_too_large"
+        }
+        _ => "registry_unavailable",
+    }
 }
 
 /// What one fetched page answers. `headers` names are lowercased.

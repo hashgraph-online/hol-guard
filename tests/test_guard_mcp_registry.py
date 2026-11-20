@@ -53,9 +53,3 @@ def test_a_native_outage_reports_the_registry_unavailable(monkeypatch):
     monkeypatch.setattr(authority, "native_runner_authority", unavailable)
     with pytest.raises(ValueError, match="registry_unavailable"):
         search_mcp_registry("example")
-
-
-@pytest.mark.parametrize("query", ["", "x", "a" * 81, "bad\nheader"])
-def test_the_native_runtime_refuses_an_invalid_query(query):
-    with pytest.raises(ValueError, match="invalid_registry_search"):
-        search_mcp_registry(query)

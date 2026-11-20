@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use serde_json::json;
 
-use super::{answer, dispatch, search_url, valid_query};
+use guard_contracts::EgressOutcomeV1;
+
+use super::{answer, dispatch, failure_code, search_url, valid_query};
 
 fn json_headers(value: &str) -> BTreeMap<String, String> {
     BTreeMap::from([("content-type".to_owned(), value.to_owned())])
@@ -96,5 +98,21 @@ fn an_oversize_or_malformed_body_is_refused() {
     assert_eq!(
         answer(200, &headers, br#"{"metadata":{},"servers":[{}]}"#),
         invalid
+    );
+}
+
+#[test]
+fn an_oversize_exchange_keeps_its_code_and_other_failures_are_outages() {
+    let oversize = EgressOutcomeV1::Error {
+        message: "response too large".to_owned(),
+    };
+    assert_eq!(failure_code(&oversize), "registry_response_too_large");
+    let transport = EgressOutcomeV1::Error {
+        message: "transport".to_owned(),
+    };
+    assert_eq!(failure_code(&transport), "registry_unavailable");
+    assert_eq!(
+        failure_code(&EgressOutcomeV1::Timeout),
+        "registry_unavailable"
     );
 }
