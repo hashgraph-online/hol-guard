@@ -122,7 +122,15 @@ impl SearchFilter {
         let mut include = Vec::new();
         let mut path_shaped = false;
         for glob in globs {
-            if glob.starts_with('!') || glob.contains('\\') || !single_width_wildcards_absent(glob)
+            // A comment-shaped glob can be ignored, and some ripgrep
+            // versions trim trailing whitespace before matching. The
+            // bounded matcher does neither, so these inputs cannot narrow
+            // a hidden-file proof across supported ripgrep versions.
+            if glob.starts_with('!')
+                || glob.starts_with('#')
+                || glob.trim_end() != *glob
+                || glob.contains('\\')
+                || !single_width_wildcards_absent(glob)
             {
                 return None;
             }
