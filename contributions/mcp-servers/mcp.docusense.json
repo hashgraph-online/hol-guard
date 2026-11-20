@@ -56,7 +56,7 @@
   ],
   "saferAlternatives": [
     "Keep add_document on review: it reads local files or whole folders into the store under DOCUSENSE_HOME (default ~/.docusense).",
-    "Set DOCUSENSE_ADD_ROOTS to a dedicated documents folder; agents cannot add files outside it (default is the home directory).",
+    "Set DOCUSENSE_ADD_ROOTS to a dedicated documents folder that contains no symlinks (default is the home directory). The root check applies to the requested path only, so folder ingestion can read files outside the root through symlinks inside it.",
     "Leave LLM provider keys (GROQ_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY) unset so extracted passages stay on the local machine; when set, they are sent to that provider.",
     "First ingestion downloads a local search model (~130 MB) once; pre-run it on a connected host if the machine will later be offline.",
     "Use the CLI (docusense add) to ingest documents yourself and keep the agent to the read-only tools."
