@@ -77,8 +77,12 @@ def enroll_installed(store, authority):
     write(store, result["record"])
 
 
+@lifecycle.one_runtime
 def migrate_installed(store, authority):
     """Startup/installation only, under EX; never a preview repair path.
+
+    The migration and the write that follows it both reach the runtime, so
+    they share one verified copy instead of checking it once each.
 
     Stamp first: an interrupted protected write fails closed on next startup.
     Older native-phase floors may predate the stamp; authenticate and retain

@@ -13,6 +13,10 @@ It starts here on a thread of its own, before those imports and the store
 open, and the host waits for it instead of running it again. It runs the
 packaged runtime, so it mostly waits on child processes and hashing, which
 leave the interpreter free for the imports.
+
+The store's first native call needs the runtime status: a hash of the packaged
+runtime and a capability probe that starts it. That also starts here, on a
+thread beside the imports, and the host waits for it before opening the store.
 """
 
 from __future__ import annotations
@@ -25,6 +29,9 @@ from pathlib import Path
 
 _FAST_PATH_COMMANDS = frozenset({"daemon-workers", "library-serve", "library-call"})
 _bundle_check: threading.Thread | None = None
+_runtime_status: threading.Thread | None = None
+# The status probe has its own deadlines; this only bounds a wait on a stuck one.
+_RUNTIME_STATUS_WAIT_SECONDS = 30.0
 
 
 def _launch_tokens(argv: Sequence[str]) -> list[str]:
@@ -87,6 +94,37 @@ def wait_for_early_bundle_check() -> bool:
     return True
 
 
+def _resolve_runtime_status() -> None:
+    from ..native_runtime import native_runtime_status
+
+    # The status is remembered for the process; a failure is left for the
+    # store's own call to meet and report.
+    with suppress(Exception):
+        native_runtime_status()
+
+
+def _start_runtime_status() -> None:
+    global _runtime_status
+    thread = threading.Thread(target=_resolve_runtime_status, name="native-runtime-status", daemon=True)
+    thread.start()
+    _runtime_status = thread
+
+
+def wait_for_early_runtime_status() -> bool:
+    """Wait for the runtime status this process started resolving early.
+
+    Only the first caller waits. False when none was started or it was already
+    waited for.
+    """
+
+    global _runtime_status
+    thread, _runtime_status = _runtime_status, None
+    if thread is None:
+        return False
+    thread.join(_RUNTIME_STATUS_WAIT_SECONDS)
+    return True
+
+
 def _child(command: str) -> Callable[[Path], int]:
     if command == "daemon-workers":
         from ..workers.host import run_worker_host
@@ -100,13 +138,16 @@ def _child(command: str) -> Callable[[Path], int]:
 def run_daemon_workers_cli(argv: Sequence[str]) -> int:
     """Run the daemon child the launch names, for the guard home it names."""
 
-    from ..config import resolve_guard_home
-    from ..native_context import bind_context_digest_home
-
     tokens = _launch_tokens(argv)
     if not is_daemon_workers_fast_path_argv(tokens):
         print("Guard daemon children require --guard-home.", file=sys.stderr)
         return 2
+    if tokens[1] == "daemon-workers":
+        _start_runtime_status()
+
+    from ..config import resolve_guard_home
+    from ..native_context import bind_context_digest_home
+
     guard_home: Path = resolve_guard_home(tokens[3])
     # The command router binds this for every subcommand; the child's digest
     # calls resolve against the same home.
@@ -116,4 +157,9 @@ def run_daemon_workers_cli(argv: Sequence[str]) -> int:
     return _child(tokens[1])(guard_home)
 
 
-__all__ = ["is_daemon_workers_fast_path_argv", "run_daemon_workers_cli", "wait_for_early_bundle_check"]
+__all__ = [
+    "is_daemon_workers_fast_path_argv",
+    "run_daemon_workers_cli",
+    "wait_for_early_bundle_check",
+    "wait_for_early_runtime_status",
+]
