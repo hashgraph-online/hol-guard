@@ -107,7 +107,7 @@ def review_native_edge(
 
     snapshot = policy_snapshot
     refreshed_once = False
-    fence_wait = PolicySourceFenceWait(deadline, store=getattr(worker, "store", None))
+    fence_wait = PolicySourceFenceWait(deadline, guard_home=guard_home)
     try:
         while True:
             try:

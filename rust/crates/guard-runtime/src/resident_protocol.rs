@@ -80,6 +80,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_policy_admission_op::HOOK_POLICY_ADMISSION_FEATURE.into(),
         crate::hook_connector_facts_op::HOOK_CONNECTOR_FACTS_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE.into(),
         crate::directory_trust::DIRECTORY_TRUST_FEATURE.into(),
         crate::directory_trust::HOOK_PATH_RULES_FEATURE.into(),
         crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
