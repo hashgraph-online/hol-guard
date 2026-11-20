@@ -441,14 +441,39 @@ def policy_shadow_source(
     return source, _typed(payload, "evaluating", bool)
 
 
-def policy_shadow_mismatch(legacy: Sequence[PolicyDecision], canonical: Sequence[PolicyDecision]) -> tuple[str, ...]:
-    """Reason codes where the legacy and canonical policy rows disagree."""
+def policy_shadow_verdict(
+    legacy: Sequence[PolicyDecision],
+    canonical: Sequence[PolicyDecision],
+    *,
+    evaluating: bool,
+    canonical_enforcement: bool,
+) -> tuple[tuple[str, ...], str | None]:
+    """Where the legacy and canonical rows disagree, and the refusal that follows.
+
+    Rust answers both: the reason codes to record, and
+    ``"canonical_shadow_mismatch"`` when a rollout device must keep the policy
+    it already has, else ``None``.
+    """
 
     def rows(decisions: Sequence[PolicyDecision]) -> list[dict[str, object]]:
         return [{key: getattr(decision, key) for key in _SHADOW_KEYS} for decision in decisions]
 
-    payload = native_runner_authority("policy_shadow_mismatch", {"legacy": rows(legacy), "canonical": rows(canonical)})
-    return tuple(_typed(payload, "reason_codes", list))
+    payload = native_runner_authority(
+        "policy_shadow_verdict",
+        {
+            "legacy": rows(legacy),
+            "canonical": rows(canonical),
+            "evaluating": evaluating,
+            "canonical_enforcement": canonical_enforcement,
+        },
+    )
+    reasons = _typed(payload, "reason_codes", list)
+    if not all(isinstance(reason, str) for reason in reasons):
+        raise _malformed()
+    rejection = _typed(payload, "rejection", str, nullable=True)
+    if rejection not in (None, "canonical_shadow_mismatch"):
+        raise _malformed()
+    return tuple(reasons), rejection
 
 
 def receipt_evidence_updates(

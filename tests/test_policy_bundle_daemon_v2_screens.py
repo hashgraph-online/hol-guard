@@ -59,10 +59,10 @@ def test_daemon_refuses_a_candidate_the_resident_cannot_shadow(
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
 
-    def _no_verdict(*_args: object, **_kwargs: object) -> tuple[str, ...]:
+    def _no_verdict(*_args: object, **_kwargs: object) -> tuple[tuple[str, ...], str | None]:
         raise NativeRunnerAuthorityError("unavailable")
 
-    monkeypatch.setattr(authority, "policy_shadow_mismatch", _no_verdict)
+    monkeypatch.setattr(authority, "policy_shadow_verdict", _no_verdict)
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
     assert status == 400, response
@@ -80,8 +80,8 @@ def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
     bundle, delivery = _fixture(store)
     monkeypatch.setattr(
         authority,
-        "policy_shadow_mismatch",
-        lambda *_args, **_kwargs: ("decision_rows_differ",),
+        "policy_shadow_verdict",
+        lambda *_args, **_kwargs: (("decision_rows_differ",), "canonical_shadow_mismatch"),
     )
     monkeypatch.setattr(native_sync, "canonical_policy_enforcement_enabled", lambda **_kwargs: True)
     status, response = _sync(store, bundle=bundle, delivery=delivery)

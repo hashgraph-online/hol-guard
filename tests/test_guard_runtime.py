@@ -19343,8 +19343,8 @@ def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
 @pytest.mark.parametrize(
     ("canonical", "step"),
     [
-        (True, "policy_shadow_mismatch"),
-        (False, "policy_shadow_mismatch"),
+        (True, "policy_shadow_verdict"),
+        (False, "policy_shadow_verdict"),
         (True, "policy_shadow_source"),
     ],
 )

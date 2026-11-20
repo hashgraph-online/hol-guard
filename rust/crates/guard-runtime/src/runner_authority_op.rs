@@ -177,6 +177,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "authority_signature" => signature::authority_signature(args),
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
+        "policy_shadow_verdict" => crate::policy_shadow_verdict::dispatch(args),
         "policy_shadow_source" => crate::policy_shadow_source::dispatch(args),
         "sync_url" => sync_url::sync_url(args),
         "insights_share_payload" => crate::insights_share_payload::dispatch(args),

@@ -774,13 +774,18 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         ),
     ]
 
-    assert guard_runner._authority.policy_shadow_mismatch([], equivalent) == ("legacy_unavailable",)
-    assert guard_runner._authority.policy_shadow_mismatch(legacy, equivalent) == ()
-    assert guard_runner._authority.policy_shadow_mismatch(legacy, changed) == (
-        "row_count",
-        "selector_set",
-        "action",
+    verdict = guard_runner._authority.policy_shadow_verdict
+    assert verdict([], equivalent, evaluating=False, canonical_enforcement=True) == (("legacy_unavailable",), None)
+    assert verdict(legacy, equivalent, evaluating=False, canonical_enforcement=True) == ((), None)
+    assert verdict(legacy, changed, evaluating=False, canonical_enforcement=True) == (
+        ("row_count", "selector_set", "action"),
+        "canonical_shadow_mismatch",
     )
+    assert verdict(legacy, changed, evaluating=False, canonical_enforcement=False) == (
+        ("row_count", "selector_set", "action"),
+        None,
+    )
+    assert verdict(legacy, [], evaluating=True, canonical_enforcement=True) == ((), None)
 
 
 @pytest.mark.parametrize(
