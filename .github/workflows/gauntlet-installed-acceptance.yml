@@ -30,8 +30,10 @@ concurrency:
 env:
   REPEAT: ${{ inputs.repeat || '5' }}
   REPORT_ONLY: ${{ inputs.report_only && '--report-only' || '' }}
-  # The development profile the Gauntlet already builds with: no LTO, 16 codegen units. The lane
-  # tests install and hook behaviour, which the optimisation level does not change.
+  # No LTO and 16 codegen units keep the build short. The workspace keeps its shipped
+  # optimisation level: verdicts do not depend on it, but the cold-start timings this lane
+  # reports do. An unoptimised runtime made first starts on Linux and macOS look 1.5 s or
+  # more slower than a release build.
   CARGO_PROFILE_RELEASE_LTO: 'false'
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
 
@@ -39,7 +41,7 @@ jobs:
   installed-acceptance:
     name: Installed acceptance (wheel and frozen bundle)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       TARGET: x86_64-unknown-linux-musl
       PLATFORM_TAG: manylinux_2_17_x86_64
