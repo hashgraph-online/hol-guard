@@ -333,15 +333,6 @@ def _build_canonical_policy_bundle_decisions(
     ]
 
 
-def _policy_bundle_is_evaluating(policy_bundle: dict[str, object]) -> bool:
-    """Whether the bundle rolls its rules out to watch them, not to enforce them."""
-
-    payload = policy_bundle.get("payload")
-    spec = payload.get("spec") if isinstance(payload, dict) else None
-    defaults = spec.get("defaults") if isinstance(spec, dict) else None
-    return isinstance(defaults, dict) and defaults.get("mode") == "observe"
-
-
 def _build_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -362,19 +353,6 @@ def _build_policy_bundle_decisions(
         device_id=device_id,
         device_name=device_name,
     )
-
-
-def _legacy_shadow_predates_candidate(legacy: Mapping[str, object], candidate: Mapping[str, object]) -> bool:
-    """Whether the stored v1 bundle was issued for an older publication than the candidate.
-
-    Cloud issues a publication's v1 bundle at or after the publication itself,
-    so one issued earlier carries a different policy and cannot show whether
-    the candidate's compiler agrees. Unreadable times keep the comparison.
-    """
-
-    legacy_issued = _parse_iso_timestamp(str(legacy.get("issuedAt") or ""))
-    candidate_issued = _parse_iso_timestamp(str(candidate.get("issuedAt") or ""))
-    return legacy_issued is not None and candidate_issued is not None and legacy_issued < candidate_issued
 
 
 def policy_bundle_candidate_decisions(
@@ -420,16 +398,20 @@ def policy_bundle_candidate_decisions(
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
-    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
-    if not isinstance(legacy_payload, dict):
-        legacy_payload = (
-            existing_policy_bundle
-            if isinstance(existing_policy_bundle, dict)
-            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
-            else None
+    stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
+    try:
+        shadow_source, evaluating = _authority.policy_shadow_source(
+            policy_bundle,
+            stored_legacy=stored_legacy,
+            existing=existing_policy_bundle,
         )
-    if isinstance(legacy_payload, dict) and _legacy_shadow_predates_candidate(legacy_payload, policy_bundle):
-        legacy_payload = None
+    except NativeRunnerAuthorityError:
+        # Rust picks the shadow. Without that choice the candidate cannot be
+        # proven equivalent, so it is held like a missing comparison below.
+        shadow_source, evaluating, native_shadow_unavailable = None, False, True
+    else:
+        native_shadow_unavailable = False
+    legacy_payload = {"stored": stored_legacy, "existing": existing_policy_bundle}.get(shadow_source or "")
     try:
         legacy_decisions = (
             _build_policy_bundle_decisions(
@@ -448,24 +430,24 @@ def policy_bundle_candidate_decisions(
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
-    native_shadow_unavailable = False
-    try:
-        # An Evaluate bundle compiles to no rows on purpose, so an older
-        # bundle's rows say nothing about its drift.
-        mismatch_reasons = (
-            ()
-            if _policy_bundle_is_evaluating(policy_bundle)
-            else _authority.policy_shadow_mismatch(
-                legacy_decisions,
-                canonical_decisions,
+    mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
+    if not native_shadow_unavailable:
+        try:
+            # An Evaluate bundle compiles to no rows on purpose, so an older
+            # bundle's rows say nothing about its drift.
+            mismatch_reasons = (
+                ()
+                if evaluating
+                else _authority.policy_shadow_mismatch(
+                    legacy_decisions,
+                    canonical_decisions,
+                )
             )
-        )
-    except NativeRunnerAuthorityError:
-        # Rust owns the shadow comparison. Without its verdict the candidate
-        # cannot be proven equivalent, so treat it as a blocking mismatch: keep
-        # the existing policy and never activate the new bundle.
-        native_shadow_unavailable = True
-        mismatch_reasons = ("native_shadow_unavailable",)
+        except NativeRunnerAuthorityError:
+            # Rust owns the shadow comparison. Without its verdict the candidate
+            # cannot be proven equivalent, so treat it as a blocking mismatch:
+            # keep the existing policy and never activate the new bundle.
+            native_shadow_unavailable = True
     blocking_mismatch_reasons = tuple(reason for reason in mismatch_reasons if reason != "legacy_unavailable")
     if mismatch_reasons:
         store.add_event(
