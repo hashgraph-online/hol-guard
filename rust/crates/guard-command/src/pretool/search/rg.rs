@@ -770,6 +770,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn case_blind_globs_after_consumed_option_values_cannot_narrow() {
+        use super::{inclusion_globs, narrowing_globs};
+        let arguments = arguments("KEY --context-separator -- --iglob *.TS -g src/**");
+        assert_eq!(inclusion_globs(&arguments), vec!["*.TS", "src/**"]);
+        assert!(narrowing_globs(&arguments).is_empty());
+
+        for line in ["KEY --iglob=*.TS -g src/**", "KEY --iglob *.TS -g src/**"] {
+            assert!(narrowing_globs(&arguments(line)).is_empty(), "{line}");
+        }
+
+        // An option's operand, or a positional operand after the real
+        // delimiter, is not an actual case-insensitive glob.
+        assert_eq!(
+            narrowing_globs(&arguments("KEY -e --iglob -g src/**")),
+            vec!["src/**"]
+        );
+        assert!(inclusion_globs(&arguments("KEY -- --iglob *.TS -g src/**")).is_empty());
+    }
+
     /// The pattern a piped `rg` matches is text, but the shell expands the
     /// word first: `.env{,.local}` leaves a second operand `rg` would open,
     /// so the stdin proof refuses it while an ordinary pattern keeps it.
