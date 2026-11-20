@@ -148,7 +148,21 @@ def _serialize_approval_resolution(function: Callable[_P, _R]) -> Callable[_P, _
         digest = hashlib.sha256(request_id.encode("utf-8")).digest()
         lock = _APPROVAL_RESOLUTION_LOCKS[int.from_bytes(digest[:2], "big") % len(_APPROVAL_RESOLUTION_LOCKS)]
         with lock:
-            return function(*args, **kwargs)
+            result = function(*args, **kwargs)
+        # Release the origin stripe before resolving any sibling request, which
+        # can acquire a different stripe through bulk_allow_read_only_once.
+        changed_cli = result.get("changed_cli") if isinstance(result, dict) else None
+        if isinstance(changed_cli, dict) and changed_cli.get("status") == "allowed":
+            from .local_clis.local_cli_reallow import finalize_reallow_siblings
+
+            finalize_reallow_siblings(
+                store=kwargs["store"],
+                request_id=request_id,
+                changed_cli=changed_cli,
+                approval_gate_input=kwargs.get("approval_gate_input"),
+                now=kwargs.get("now") or _now(),
+            )
+        return result
 
     return serialized
 

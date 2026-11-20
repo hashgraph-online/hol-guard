@@ -136,8 +136,38 @@ def reallow_changed_cli(
         "revision": revision,
         "held_allowed_once": 0,
     }
+    # The origin approval's stripe is still locked. Siblings must be resolved
+    # by the outer approval wrapper after that stripe has been released.
+    return result
+
+
+def finalize_reallow_siblings(
+    store: GuardStore,
+    *,
+    request_id: str,
+    changed_cli: dict[str, object],
+    approval_gate_input: ApprovalGateInput | None,
+    now: str,
+) -> None:
+    """Attempt held sibling approvals after the origin's approval lock exits."""
+
+    cli_id = changed_cli.get("cli_id")
+    identity_hash = changed_cli.get("identity_hash")
+    revision = changed_cli.get("revision")
+    if (
+        changed_cli.get("status") != "allowed"
+        or not isinstance(cli_id, str)
+        or not isinstance(identity_hash, str)
+        or not isinstance(revision, int)
+    ):
+        return
     try:
-        result["held_allowed_once"] = _allow_held_siblings(
+        # A newer policy edit, particularly a Block, makes this receipt stale.
+        # Never carry its sibling once-allows across that revision boundary.
+        if store.read_local_cli_revision() != revision:
+            changed_cli["siblings_skipped"] = "local_cli_revision_changed"
+            return
+        changed_cli["held_allowed_once"] = _allow_held_siblings(
             store,
             cli_id=cli_id,
             identity_hash=identity_hash,
@@ -146,9 +176,8 @@ def reallow_changed_cli(
             now=now,
         )
     except (ApprovalGateError, OSError, RuntimeError, ValueError, sqlite3.Error) as error:
-        # The new version is allowed; held calls still run when the agent retries.
+        # A failed sibling approval never rolls back the origin's resolution.
         _LOGGER.warning("Held calls on the changed CLI stay pending (%s)", type(error).__name__)
-    return result
 
 
-__all__ = ["reallow_changed_cli"]
+__all__ = ["reallow_changed_cli", "finalize_reallow_siblings"]

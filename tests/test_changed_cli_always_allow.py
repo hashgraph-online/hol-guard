@@ -115,7 +115,7 @@ def writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[GuardStore,
 
 
 def test_always_allow_moves_the_allow_to_the_new_version_keeping_command_choices(
-    writes: tuple[GuardStore, _Writes],
+    writes: tuple[GuardStore, _Writes], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store, seen = writes
 
@@ -128,8 +128,20 @@ def test_always_allow_moves_the_allow_to_the_new_version_keeping_command_choices
         "cli_id": _CLI_ID,
         "identity_hash": _HASH,
         "revision": 8,
-        "held_allowed_once": 1,
+        "held_allowed_once": 0,
     }
+    # The grant update returns before any sibling is resolved. The outer
+    # approval wrapper resolves siblings after releasing its origin stripe.
+    assert seen.bulk == []
+    monkeypatch.setattr(store, "read_local_cli_revision", lambda: 8)
+    reallow.finalize_reallow_siblings(
+        store,
+        request_id="req-1",
+        changed_cli=result,
+        approval_gate_input=None,
+        now="2026-11-20T10:01:00Z",
+    )
+    assert result["held_allowed_once"] == 1
     (call,) = seen.calls
     identity = call["identity"]
     assert identity.cli_id == _CLI_ID  # type: ignore[attr-defined]
@@ -207,6 +219,81 @@ def test_a_concurrent_block_cannot_be_reallowed_from_its_newer_revision(
     assert seen.bulk == []
 
 
+def test_sibling_approval_runs_after_the_origin_stripe_is_released(
+    writes: tuple[GuardStore, _Writes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+    import threading
+
+    store, seen = writes
+    request_id = "req-1"
+    digest = hashlib.sha256(request_id.encode("utf-8")).digest()
+    stripe = approvals._APPROVAL_RESOLUTION_LOCKS[
+        int.from_bytes(digest[:2], "big") % len(approvals._APPROVAL_RESOLUTION_LOCKS)
+    ]
+
+    def bulk_after_release(**kwargs: object) -> dict[str, object]:
+        acquired: list[bool] = []
+
+        def check_from_another_thread() -> None:
+            did_acquire = stripe.acquire(timeout=0.3)
+            acquired.append(did_acquire)
+            if did_acquire:
+                stripe.release()
+
+        t = threading.Thread(target=check_from_another_thread)
+        t.start()
+        t.join(timeout=2)
+        assert acquired == [True], "Sibling resolution ran while the origin stripe was held"
+        seen.bulk.append(list(kwargs["request_ids"]))  # type: ignore[arg-type]
+        return {"resolved_count": 1, "failed": []}
+
+    monkeypatch.setattr(approvals, "bulk_allow_read_only_once", bulk_after_release)
+    monkeypatch.setattr(store, "read_local_cli_revision", lambda: 8)
+
+    @approvals._serialize_approval_resolution
+    def mock_origin(*, store: GuardStore, request_id: str, now: str) -> dict[str, object]:
+        # The production inner function writes the grant under the lock before
+        # resolving the origin. This stub exercises only stripe sequencing.
+        return {
+            "changed_cli": {
+                "status": "allowed",
+                "cli_id": _CLI_ID,
+                "identity_hash": _HASH,
+                "revision": 8,
+                "held_allowed_once": 0,
+            }
+        }
+
+    result = mock_origin(store=store, request_id=request_id, now="2026-11-20T10:01:00Z")
+    assert result["changed_cli"]["held_allowed_once"] == 1  # type: ignore[index]
+    assert seen.bulk == [["req-2"]]
+
+
+def test_changed_revision_skips_deferred_siblings(
+    writes: tuple[GuardStore, _Writes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, seen = writes
+    changed_cli: dict[str, object] = {
+        "status": "allowed",
+        "cli_id": _CLI_ID,
+        "identity_hash": _HASH,
+        "revision": 8,
+        "held_allowed_once": 0,
+    }
+    monkeypatch.setattr(store, "read_local_cli_revision", lambda: 9)
+    reallow.finalize_reallow_siblings(
+        store,
+        request_id="req-1",
+        changed_cli=changed_cli,
+        approval_gate_input=None,
+        now="2026-11-20T10:01:00Z",
+    )
+    assert changed_cli["held_allowed_once"] == 0
+    assert changed_cli["siblings_skipped"] == "local_cli_revision_changed"
+    assert seen.bulk == []
+
+
 def test_a_failed_write_reports_without_raising(
     writes: tuple[GuardStore, _Writes], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -238,6 +325,11 @@ def test_held_calls_that_cannot_be_allowed_leave_the_new_version_allowed(
     result = reallow.reallow_changed_cli(store, request_id="req-1", approval_gate_input=None, now="t")
 
     assert result is not None and result["status"] == "allowed"
+    assert result["held_allowed_once"] == 0
+    monkeypatch.setattr(store, "read_local_cli_revision", lambda: 8)
+    reallow.finalize_reallow_siblings(
+        store, request_id="req-1", changed_cli=result, approval_gate_input=None, now="t"
+    )
     assert result["held_allowed_once"] == 0
 
 
