@@ -219,15 +219,16 @@ fn verdict(
         deadline,
         execution_environment,
     );
-    if !entered && git_after_later_cd(model) {
+    if entered.is_none() && git_after_later_cd(model) {
         return Verdict::Review(ReviewCause::Other);
     }
     // `cd ../app && git status` runs the read in `../app`, so it is probed
     // there. The `cd` itself writes nothing a later read could pick up.
-    let destination = if entered {
-        None
-    } else {
-        super::segment_proof::git_read_cwd_compound_context(model, context)
+    // An entered-checkout chain carries its own directory: the one a proven
+    // leading `cd` moved it into, or the shell's own.
+    let destination = match &entered {
+        Some(reads) => reads.cwd.clone(),
+        None => super::segment_proof::git_read_cwd_compound_context(model, context),
     };
     let read_context = super::PathContext {
         cwd: destination.as_deref().or(context.cwd),

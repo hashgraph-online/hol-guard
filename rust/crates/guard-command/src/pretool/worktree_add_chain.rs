@@ -79,6 +79,48 @@ fn after_creation(model: &CanonicalCommandV1, add: usize) -> usize {
     index
 }
 
+/// The directory a leading `cd <dir> && ...` enters, when the whole chain
+/// runs there.
+///
+/// An agent that keeps one checkout open writes the whole setup as
+/// `cd <repository> && git worktree add ... && cd <checkout> && ...`. The
+/// `cd` names a directory and stops: it reads nothing and creates nothing,
+/// and `&&` means no step after it runs unless it succeeded. So the chain
+/// runs in the directory it names, and every proof below reads the
+/// repository that is actually there. A `;` or `||` would leave the rest
+/// running in the directory the command started in, which no proof here
+/// looked at, and a target the `cd` cannot be proved to reach leaves the
+/// same doubt.
+fn leading_entry(
+    model: &CanonicalCommandV1,
+    context: super::super::PathContext<'_>,
+) -> Option<String> {
+    let first = model.segments.first()?;
+    if first.executable.as_deref() != Some("cd")
+        || first.pipeline_index != 0
+        || !first.environment_names.is_empty()
+        || !first.wrapper_chain.is_empty()
+        || first.path_overridden
+        || !super::super::directory_targets::drive_targets_quoted(first)
+        || !super::super::directory_targets::home_targets_unquoted(first)
+    {
+        return None;
+    }
+    if super::separator_between(model, 0, 1)
+        .as_deref()
+        .map(str::trim)
+        != Some("&&")
+    {
+        return None;
+    }
+    // A redirection reaches the parser as an argument, so a `cd` that also
+    // writes a file is not the single-target step this proves.
+    let [target] = first.arguments.as_slice() else {
+        return None;
+    };
+    super::super::directory_targets::verified_cwd_target(target, context)
+}
+
 fn prove(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
@@ -89,11 +131,20 @@ fn prove(
         return false;
     };
     let segments = &model.segments;
+    let entry = leading_entry(model, context);
+    let start = usize::from(entry.is_some());
+    if add < start {
+        return false;
+    }
+    let context = super::super::PathContext {
+        cwd: entry.as_deref().or(context.cwd),
+        ..context
+    };
     // `git fetch origin main && git worktree add ... origin/main` refreshes
     // the start point first; the worktree proof then admits only the
     // standard LFS filter, since the fetched tree is not the one it read.
     let mut fetch_before = false;
-    for segment in &segments[..add] {
+    for segment in &segments[start..add] {
         let proven = if segment.pipeline_index == 0 {
             super::super::git_remote_ops::proven_fetch(
                 segment,
@@ -349,7 +400,8 @@ pub(crate) fn entered_checkouts(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     permitted: &dyn Fn(usize) -> bool,
 ) -> Vec<usize> {
-    let Some((_, cd)) = entered_checkout(model, context, execution_environment, permitted) else {
+    let Some((_, cd, _)) = entered_checkout(model, context, execution_environment, permitted)
+    else {
         return Vec::new();
     };
     // A `git` or `gh` stage keeps its own permission; only the stages that
@@ -384,25 +436,35 @@ pub(in super::super) fn reads_in_entered_checkout(
     context: super::super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> bool {
+) -> Option<EnteredReads> {
     let left_to_the_allow = |_: usize| true;
-    let Some((add, _)) =
-        entered_checkout(model, context, execution_environment, &left_to_the_allow)
-    else {
-        return false;
+    let (add, _, entry) =
+        entered_checkout(model, context, execution_environment, &left_to_the_allow)?;
+    let start = usize::from(entry.is_some());
+    let context = super::super::PathContext {
+        cwd: entry.as_deref().or(context.cwd),
+        ..context
     };
     // Anything before the add may move the start point, so the proof then
-    // admits only the standard LFS filter.
+    // admits only the standard LFS filter. A proven leading `cd` moves
+    // nothing: it names a directory and stops.
     matches!(
         super::proven_checkout(
             &model.segments[add],
-            add > 0,
+            add > start,
             context,
             deadline,
             execution_environment,
         ),
         Some((_, None, _))
     )
+    .then_some(EnteredReads { cwd: entry })
+}
+
+/// An entered-checkout chain whose Git reads this floor may probe, and the
+/// directory a proven leading `cd` moved them into.
+pub(in super::super) struct EnteredReads {
+    pub(in super::super) cwd: Option<String>,
 }
 
 /// The `git worktree add` and the `cd` into the checkout it creates, as
@@ -412,17 +474,27 @@ fn entered_checkout(
     context: super::super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     permitted: &dyn Fn(usize) -> bool,
-) -> Option<(usize, usize)> {
+) -> Option<(usize, usize, Option<String>)> {
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
     }
+    // `cd <repository> && git worktree add ...` sets the new checkout up
+    // from another one. The leading `cd` names a directory and stops, and
+    // `&&` carries the add only once it succeeded, so the add resolves its
+    // destination there.
+    let entry = leading_entry(model, context);
+    let start = usize::from(entry.is_some());
+    let context = super::super::PathContext {
+        cwd: entry.as_deref().or(context.cwd),
+        ..context
+    };
     let is = |segment: &CommandSegmentV1, names: &[&str]| {
         segment.executable.as_deref().is_some_and(|value| {
             let basename = super::super::executable_basename(value);
             names.contains(&basename)
         })
     };
-    for (add, segment) in model.segments.iter().enumerate() {
+    for (add, segment) in model.segments.iter().enumerate().skip(start) {
         // The add resolves its destination against the reported cwd, which
         // is the shell's directory only until something changes it.
         if is(segment, &["cd", "pushd", "popd"]) {
@@ -465,7 +537,7 @@ fn entered_checkout(
             if names.is_empty() {
                 return true;
             }
-            add == 0
+            add == start
                 && model.segments[after + 1..index]
                     .iter()
                     .all(|step| !super::super::tree_writers::may_rewrite_tree(step))
@@ -509,7 +581,7 @@ fn entered_checkout(
             && rest_is_git
             && sequenced
             && super::chain_route::cd_target(next, context).as_ref() == Some(&destination))
-        .then_some((add, after));
+        .then_some((add, after, entry.clone()));
     }
     None
 }
