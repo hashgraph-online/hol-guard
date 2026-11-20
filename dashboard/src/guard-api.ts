@@ -101,11 +101,14 @@ import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverag
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
 import {
-  dashboardSessionExpired,
-  dashboardSessionScope,
-  sessionScopeCanDecide,
-  type DecisionSignInReason,
-} from "./dashboard-session-scope";
+  decisionRefusedSession,
+  decisionSessionCandidates,
+  decisionSessionVerdict,
+  GuardDecisionSignInRequiredError,
+  markSessionRefused,
+  rememberLinkedGuardSession,
+  type GuardDecisionSessionVerdict,
+} from "./dashboard-decision-session";
 import { applyHarnessCigarPatch } from "./fleet-app-modes";
 import {
   pulseEnrollmentBody,
@@ -424,141 +427,48 @@ export function readGuardToken(): string | null {
   return readGuardStorage(GUARD_TOKEN_PARAM);
 }
 
-function requestSessionStorageKey(requestId: string): string {
-  return `${GUARD_TOKEN_PARAM}:request:${requestId}`;
-}
+export { GuardDecisionSignInRequiredError, type GuardDecisionSessionVerdict } from "./dashboard-decision-session";
 
-function usableFullSession(token: string | null): boolean {
-  const scope = dashboardSessionScope(token);
-  return scope !== null && scope.kind === "full" && !dashboardSessionExpired(scope, Date.now());
-}
-
-/**
- * Keep the session a link carried without losing a broader one. A link an
- * agent relays opens a session bound to one request; saving it over the
- * dashboard's own session used to leave every later tab able to read the
- * queue but unable to decide anything else. The bound session is kept for
- * its own request, and a live full session stays the tab's session.
- */
-function rememberLinkedGuardSession(guardToken: string): string {
-  const scope = dashboardSessionScope(guardToken);
-  if (scope?.kind === "request" && scope.requestId) {
-    forgetExpiredRequestSessions();
-    saveGuardStorage(requestSessionStorageKey(scope.requestId), guardToken);
-    const stored = readGuardStorage(GUARD_TOKEN_PARAM);
-    if (stored !== null && stored !== guardToken && usableFullSession(stored)) {
-      return stored;
-    }
-  }
-  saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-  return guardToken;
-}
-
-function forgetExpiredRequestSessions(): void {
-  const prefix = requestSessionStorageKey("");
-  const now = Date.now();
-  for (const getStorage of [() => window.sessionStorage, () => window.localStorage]) {
-    try {
-      const storage = getStorage();
-      const expired: string[] = [];
-      for (let index = 0; index < storage.length; index += 1) {
-        const key = storage.key(index);
-        if (key === null || !key.startsWith(prefix)) {
-          continue;
-        }
-        const scope = dashboardSessionScope(storage.getItem(key));
-        if (scope === null || dashboardSessionExpired(scope, now)) {
-          expired.push(key);
-        }
-      }
-      for (const key of expired) {
-        storage.removeItem(key);
-      }
-    } catch {
-      // Storage the browser refuses is left as it is.
-    }
-  }
-}
-
-/** Raised before or instead of a decision this tab's session cannot make. */
-export class GuardDecisionSignInRequiredError extends Error {
-  readonly requestId: string;
-  readonly reason: DecisionSignInReason;
-
-  constructor(requestId: string, reason: DecisionSignInReason) {
-    super("Sign in to decide this request.");
-    this.name = "GuardDecisionSignInRequiredError";
-    this.requestId = requestId;
-    this.reason = reason;
-  }
-}
-
-export type GuardDecisionSessionVerdict =
-  | { kind: "ready"; token: string | null }
-  | { kind: "sign_in"; reason: DecisionSignInReason };
-
-/**
- * The session this tab should decide `requestId` with. A session the tab
- * cannot read is left for the daemon to judge; one whose claims say it
- * cannot decide the request asks the user to sign in instead of failing.
- */
+/** The session this tab should decide `requestId` with, or why it cannot. */
 export function guardDecisionSession(requestId: string): GuardDecisionSessionVerdict {
   if (isGuardDemoMode()) {
     return { kind: "ready", token: null };
   }
-  const now = Date.now();
-  const current = readGuardToken();
-  const scope = dashboardSessionScope(current);
-  if (current !== null && (scope === null || sessionScopeCanDecide(scope, requestId, now))) {
-    return { kind: "ready", token: current };
-  }
-  // This tab's own storage may hold a narrower session than the one another
-  // tab saved for the whole browser, and a link may have left one for this request.
-  const candidates = [
-    readBrowserStorage(() => window.localStorage, GUARD_TOKEN_PARAM),
-    readGuardStorage(requestSessionStorageKey(requestId)),
-  ];
-  for (const candidate of candidates) {
-    if (candidate !== null && sessionScopeCanDecide(dashboardSessionScope(candidate), requestId, now)) {
-      return { kind: "ready", token: candidate };
-    }
-  }
-  if (current === null) {
-    return { kind: "sign_in", reason: "no_session" };
-  }
-  if (scope !== null && dashboardSessionExpired(scope, now)) {
-    return { kind: "sign_in", reason: "expired" };
-  }
-  return { kind: "sign_in", reason: "other_request" };
+  return decisionSessionVerdict(requestId, readGuardToken());
 }
 
-function decisionSessionOrThrow(requestId: string): string | null {
+/**
+ * A decision call sent with each session that may decide its request in
+ * turn. A session the daemon refuses is remembered and the next one is
+ * tried; when none is left the card asks the user to sign in. A 401 that
+ * carries an approval-gate code is the gate's answer and is returned as is.
+ */
+async function fetchDecisionWithSession(
+  requestId: string,
+  input: string,
+  init: (guardToken: string | null) => RequestInit,
+): Promise<Response> {
   const verdict = guardDecisionSession(requestId);
   if (verdict.kind === "sign_in") {
     throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
   }
-  return verdict.token;
-}
-
-/** A decision call sent with the session chosen for its request. */
-function fetchDecisionWithSession(
-  requestId: string,
-  guardToken: string | null,
-  input: string,
-  init: RequestInit,
-): Promise<Response> {
-  const send = async (sendInput: RequestInfo, sendInit?: RequestInit): Promise<Response> => {
-    if (guardToken === readGuardToken()) {
-      return fetchWithGuardAuthOnce(sendInput, sendInit);
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens: Array<string | null> = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    const send = (sendInput: RequestInfo, sendInit?: RequestInit): Promise<Response> =>
+      token !== null && token === readGuardToken()
+        ? fetchWithGuardAuthOnce(sendInput, sendInit)
+        : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!(await decisionRefusedSession(response))) {
+      return response;
     }
-    return daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, guardToken));
-  };
-  return sendWithPulseApproval(send, input, init).then((response) => {
-    if (response.status === 401) {
-      throw new GuardDecisionSignInRequiredError(requestId, guardToken === null ? "no_session" : "expired");
+    if (token === null) {
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
     }
-    return response;
-  });
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 
 function saveGuardToken(guardToken: string): void {
@@ -3501,8 +3411,7 @@ export async function resolveRequestWithQueueResult(
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const decisionToken = decisionSessionOrThrow(input.requestId);
-  const init = (guardToken: string | null = decisionToken): RequestInit => ({
+  const init = (guardToken: string | null): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3533,7 +3442,7 @@ export async function resolveRequestWithQueueResult(
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
     })
   });
-  const response = await fetchDecisionWithSession(input.requestId, decisionToken, path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload: Record<string, unknown> | null = null;
     try {
@@ -3972,16 +3881,22 @@ export async function retryResume(requestId: string): Promise<GuardCodexResumeRe
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const session = guardDecisionSession(requestId);
-  const guardToken = session.kind === "ready" ? session.token : readGuardToken();
-  const response = await fetchDecisionWithSession(requestId, guardToken, path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
+  let response: Response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -4881,9 +4796,8 @@ export async function resolveMcpPolicyRequest(input: {
 }): Promise<McpPolicyDecisionResult> {
   const response = await fetchDecisionWithSession(
     input.requestId,
-    decisionSessionOrThrow(input.requestId),
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -4891,7 +4805,7 @@ export async function resolveMcpPolicyRequest(input: {
         ...(input.approval_password ? { approval_password: input.approval_password } : {}),
         ...(input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}),
       }),
-    },
+    }),
   );
   const payloadBody = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {

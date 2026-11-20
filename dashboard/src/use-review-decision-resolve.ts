@@ -105,8 +105,17 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       return true;
     }
     const verdict = guardDecisionSession(shownRequestId);
-    setSignInReason(verdict.kind === "sign_in" ? verdict.reason : null);
-    return verdict.kind === "ready";
+    if (verdict.kind === "ready") {
+      setSignInReason(null);
+      return true;
+    }
+    // The panel replaces every decision control, so an earlier error, its
+    // Retry, and an open credentials dialog go with it.
+    setSignInReason(verdict.reason);
+    setErrorMessage(null);
+    setPendingAction(null);
+    setPendingContractKey(null);
+    return false;
   }, [shownRequestId]);
 
   useEffect(() => {
