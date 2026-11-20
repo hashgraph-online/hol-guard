@@ -297,6 +297,21 @@ def test_the_worker_uses_a_direct_resident_edge_before_the_daemon_edge(
     assert fixture.captured == []
 
 
+def test_a_direct_resident_defer_keeps_the_daemon_edge_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(containment_rewrite="routed"))
+    monkeypatch.setattr(
+        hook_worker_native,
+        "native_hook_direct",
+        lambda **_kwargs: {"outcome": "defer", "reason": "review_queue"},
+    )
+
+    _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert [call["containment_sink"] for call in fixture.captured] == [True]
+
+
 def test_an_unmarked_sink_route_in_a_workspace_is_the_outage(tmp_path: Path) -> None:
     fixture = _SinkRouteFixture(edge=_edge())
     answer, native = _review(fixture, tmp_path, workspace=tmp_path)
