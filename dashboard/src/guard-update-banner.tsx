@@ -5,6 +5,7 @@ import { requestGuardDesktopHandoff } from "./guard-api";
 import {
   DESKTOP_HANDOFF_FAILED,
   DESKTOP_HANDOFF_GUIDANCE,
+  desktopHandoffFailureMessage,
   DESKTOP_HANDOFF_OPENING_LABEL,
   type DesktopUpdateBannerModel,
 } from "./guard-update-copy";
@@ -46,6 +47,7 @@ export function GuardUpdateBanner(props: {
 }) {
   const { model, onDismiss } = props;
   const [phase, setPhase] = useState<HandoffPhase>("idle");
+  const [failureMessage, setFailureMessage] = useState<string>(DESKTOP_HANDOFF_FAILED);
   const guidanceTimer = useRef<number | null>(null);
   // A handoff attempt belongs to one offered version: when a newer release
   // replaces the model, the old attempt's promise and timer must not move
@@ -77,12 +79,13 @@ export function GuardUpdateBanner(props: {
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     setPhase("requesting");
-    void requestGuardDesktopHandoff()
+    void requestGuardDesktopHandoff(model.latestVersion)
       .then((result) => {
         if (attemptRef.current !== attempt) {
           return;
         }
         if (!result.handoff_requested) {
+          setFailureMessage(DESKTOP_HANDOFF_FAILED);
           setPhase("failed");
           return;
         }
@@ -93,12 +96,13 @@ export function GuardUpdateBanner(props: {
           }
         }, HANDOFF_GUIDANCE_DELAY_MS);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (attemptRef.current === attempt) {
+          setFailureMessage(desktopHandoffFailureMessage(error));
           setPhase("failed");
         }
       });
-  }, [phase]);
+  }, [model.latestVersion, phase]);
 
   const handleDismiss = useCallback(() => {
     rememberDismissedDesktopUpdateVersion(model.latestVersion);
@@ -125,7 +129,7 @@ export function GuardUpdateBanner(props: {
           ) : null}
           {phase === "failed" ? (
             <p className="mt-1 text-sm text-brand-dark/75" role="alert">
-              {DESKTOP_HANDOFF_FAILED}
+              {failureMessage}
             </p>
           ) : null}
         </div>

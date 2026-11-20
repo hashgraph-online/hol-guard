@@ -1,7 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
+import {
+  buildGuardDaemonCandidatePorts,
+  GuardDesktopHandoffError,
+  normalizeGuardUpdateStatus,
+  updateReconnectSucceeded,
+} from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
 import { GuardUpdatePanel } from "./guard-update-panel";
 import {
@@ -9,7 +14,12 @@ import {
   readDismissedDesktopUpdateVersion,
   rememberDismissedDesktopUpdateVersion,
 } from "./guard-update-banner";
-import { desktopUpdateBannerModel } from "./guard-update-copy";
+import {
+  DESKTOP_HANDOFF_ALREADY_CURRENT,
+  DESKTOP_HANDOFF_FAILED,
+  desktopHandoffFailureMessage,
+  desktopUpdateBannerModel,
+} from "./guard-update-copy";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -579,5 +589,34 @@ assert(
 );
 
 (globalThis as { window?: unknown }).window = priorWindow;
+
+// A hand-off failure names what happened. Only an unanswered request
+// "did not reach the app"; a refusal from Guard carries its own reason.
+assert(
+  desktopHandoffFailureMessage(new TypeError("Failed to fetch")) === DESKTOP_HANDOFF_FAILED,
+  "a network failure should say the request did not reach the app",
+);
+assert(
+  desktopHandoffFailureMessage(new DOMException("The operation was aborted.", "AbortError")) === DESKTOP_HANDOFF_FAILED,
+  "a timed-out request should say the request did not reach the app",
+);
+assert(
+  desktopHandoffFailureMessage(
+    new GuardDesktopHandoffError("Guard is already on the latest version.", "update_not_available", 400),
+  ) === DESKTOP_HANDOFF_ALREADY_CURRENT,
+  "an already-current refusal should not claim the request was lost",
+);
+const unmanagedMessage = desktopHandoffFailureMessage(
+  new GuardDesktopHandoffError("This install is not managed by the HOL Guard app.", "desktop_handoff_unavailable", 400),
+);
+assert(
+  unmanagedMessage.startsWith("This install is not managed by the HOL Guard app.") &&
+    !unmanagedMessage.includes("did not reach"),
+  "a daemon refusal should show the daemon's reason",
+);
+assert(
+  desktopHandoffFailureMessage(new GuardDesktopHandoffError("  ", "desktop_handoff_failed", 500)) === DESKTOP_HANDOFF_FAILED,
+  "an empty daemon reason should fall back to the menu-bar route",
+);
 
 console.log("guard-update.test.ts: all tests passed");

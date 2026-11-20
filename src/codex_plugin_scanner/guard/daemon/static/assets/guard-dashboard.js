@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-agIHYZF9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CesXE34g.js","assets/chunks/home-protection-module-DhHiwTs6.js","assets/chunks/supply-chain-protection-stats-DZVL58wK.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CO7DaU8J.js","assets/chunks/harness-version-label-DpAtB9h1.js","assets/chunks/connect-guard-cloud-button-DtlA45p8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-D6P3kGE3.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-DHYA5vR8.js","assets/chunks/app-detail-workspace-Qi0mR_JY.js","assets/chunks/harness-action-errors-PgLjgif9.js","assets/chunks/supply-chain-hub-workspace-CXh-c9D0.js","assets/chunks/policy-workspace-page-Dsr4CEyy.js","assets/chunks/about-workspace-C4WLPFxP.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CAyt_xfe.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-COpcjev3.js","assets/chunks/home-protection-module-BsFaf4vy.js","assets/chunks/supply-chain-protection-stats-Cu9oDPz3.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-afR9d4AB.js","assets/chunks/harness-version-label-CPnNdoDR.js","assets/chunks/connect-guard-cloud-button-DMNzsDd6.js","assets/chunks/guard-repair-control-Bh0s5hZU.js","assets/chunks/settings-workspace-DJlSucWK.js","assets/chunks/confirm-dialog-BKeHLbw5.js","assets/chunks/extensions-workspace-CTLn4Bwv.js","assets/chunks/app-detail-workspace-CwLwmDZo.js","assets/chunks/harness-action-errors-DFbGhAUw.js","assets/chunks/supply-chain-hub-workspace-ZUQLYIva.js","assets/chunks/policy-workspace-page-D7uSrlwy.js","assets/chunks/about-workspace-X6gDkFhT.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -71,6 +71,710 @@ function requireJsxRuntime() {
   return jsxRuntime.exports;
 }
 var jsxRuntimeExports = requireJsxRuntime();
+var react$1 = { exports: {} };
+var react_production$1 = {};
+var hasRequiredReact_production$1;
+function requireReact_production$1() {
+  if (hasRequiredReact_production$1) return react_production$1;
+  hasRequiredReact_production$1 = 1;
+  var REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.transitional.element"), REACT_PORTAL_TYPE = /* @__PURE__ */ Symbol.for("react.portal"), REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment"), REACT_STRICT_MODE_TYPE = /* @__PURE__ */ Symbol.for("react.strict_mode"), REACT_PROFILER_TYPE = /* @__PURE__ */ Symbol.for("react.profiler"), REACT_CONSUMER_TYPE = /* @__PURE__ */ Symbol.for("react.consumer"), REACT_CONTEXT_TYPE = /* @__PURE__ */ Symbol.for("react.context"), REACT_FORWARD_REF_TYPE = /* @__PURE__ */ Symbol.for("react.forward_ref"), REACT_SUSPENSE_TYPE = /* @__PURE__ */ Symbol.for("react.suspense"), REACT_MEMO_TYPE = /* @__PURE__ */ Symbol.for("react.memo"), REACT_LAZY_TYPE = /* @__PURE__ */ Symbol.for("react.lazy"), REACT_ACTIVITY_TYPE = /* @__PURE__ */ Symbol.for("react.activity"), MAYBE_ITERATOR_SYMBOL = Symbol.iterator;
+  function getIteratorFn(maybeIterable) {
+    if (null === maybeIterable || "object" !== typeof maybeIterable) return null;
+    maybeIterable = MAYBE_ITERATOR_SYMBOL && maybeIterable[MAYBE_ITERATOR_SYMBOL] || maybeIterable["@@iterator"];
+    return "function" === typeof maybeIterable ? maybeIterable : null;
+  }
+  var ReactNoopUpdateQueue = {
+    isMounted: function() {
+      return false;
+    },
+    enqueueForceUpdate: function() {
+    },
+    enqueueReplaceState: function() {
+    },
+    enqueueSetState: function() {
+    }
+  }, assign = Object.assign, emptyObject = {};
+  function Component(props, context, updater) {
+    this.props = props;
+    this.context = context;
+    this.refs = emptyObject;
+    this.updater = updater || ReactNoopUpdateQueue;
+  }
+  Component.prototype.isReactComponent = {};
+  Component.prototype.setState = function(partialState, callback) {
+    if ("object" !== typeof partialState && "function" !== typeof partialState && null != partialState)
+      throw Error(
+        "takes an object of state variables to update or a function which returns an object of state variables."
+      );
+    this.updater.enqueueSetState(this, partialState, callback, "setState");
+  };
+  Component.prototype.forceUpdate = function(callback) {
+    this.updater.enqueueForceUpdate(this, callback, "forceUpdate");
+  };
+  function ComponentDummy() {
+  }
+  ComponentDummy.prototype = Component.prototype;
+  function PureComponent(props, context, updater) {
+    this.props = props;
+    this.context = context;
+    this.refs = emptyObject;
+    this.updater = updater || ReactNoopUpdateQueue;
+  }
+  var pureComponentPrototype = PureComponent.prototype = new ComponentDummy();
+  pureComponentPrototype.constructor = PureComponent;
+  assign(pureComponentPrototype, Component.prototype);
+  pureComponentPrototype.isPureReactComponent = true;
+  var isArrayImpl = Array.isArray;
+  function noop() {
+  }
+  var ReactSharedInternals = { H: null, A: null, T: null, S: null }, hasOwnProperty = Object.prototype.hasOwnProperty;
+  function ReactElement(type, key, props) {
+    var refProp = props.ref;
+    return {
+      $$typeof: REACT_ELEMENT_TYPE,
+      type,
+      key,
+      ref: void 0 !== refProp ? refProp : null,
+      props
+    };
+  }
+  function cloneAndReplaceKey(oldElement, newKey) {
+    return ReactElement(oldElement.type, newKey, oldElement.props);
+  }
+  function isValidElement(object2) {
+    return "object" === typeof object2 && null !== object2 && object2.$$typeof === REACT_ELEMENT_TYPE;
+  }
+  function escape(key) {
+    var escaperLookup = { "=": "=0", ":": "=2" };
+    return "$" + key.replace(/[=:]/g, function(match) {
+      return escaperLookup[match];
+    });
+  }
+  var userProvidedKeyEscapeRegex = /\/+/g;
+  function getElementKey(element, index) {
+    return "object" === typeof element && null !== element && null != element.key ? escape("" + element.key) : index.toString(36);
+  }
+  function resolveThenable(thenable) {
+    switch (thenable.status) {
+      case "fulfilled":
+        return thenable.value;
+      case "rejected":
+        throw thenable.reason;
+      default:
+        switch ("string" === typeof thenable.status ? thenable.then(noop, noop) : (thenable.status = "pending", thenable.then(
+          function(fulfilledValue) {
+            "pending" === thenable.status && (thenable.status = "fulfilled", thenable.value = fulfilledValue);
+          },
+          function(error) {
+            "pending" === thenable.status && (thenable.status = "rejected", thenable.reason = error);
+          }
+        )), thenable.status) {
+          case "fulfilled":
+            return thenable.value;
+          case "rejected":
+            throw thenable.reason;
+        }
+    }
+    throw thenable;
+  }
+  function mapIntoArray(children, array2, escapedPrefix, nameSoFar, callback) {
+    var type = typeof children;
+    if ("undefined" === type || "boolean" === type) children = null;
+    var invokeCallback = false;
+    if (null === children) invokeCallback = true;
+    else
+      switch (type) {
+        case "bigint":
+        case "string":
+        case "number":
+          invokeCallback = true;
+          break;
+        case "object":
+          switch (children.$$typeof) {
+            case REACT_ELEMENT_TYPE:
+            case REACT_PORTAL_TYPE:
+              invokeCallback = true;
+              break;
+            case REACT_LAZY_TYPE:
+              return invokeCallback = children._init, mapIntoArray(
+                invokeCallback(children._payload),
+                array2,
+                escapedPrefix,
+                nameSoFar,
+                callback
+              );
+          }
+      }
+    if (invokeCallback)
+      return callback = callback(children), invokeCallback = "" === nameSoFar ? "." + getElementKey(children, 0) : nameSoFar, isArrayImpl(callback) ? (escapedPrefix = "", null != invokeCallback && (escapedPrefix = invokeCallback.replace(userProvidedKeyEscapeRegex, "$&/") + "/"), mapIntoArray(callback, array2, escapedPrefix, "", function(c) {
+        return c;
+      })) : null != callback && (isValidElement(callback) && (callback = cloneAndReplaceKey(
+        callback,
+        escapedPrefix + (null == callback.key || children && children.key === callback.key ? "" : ("" + callback.key).replace(
+          userProvidedKeyEscapeRegex,
+          "$&/"
+        ) + "/") + invokeCallback
+      )), array2.push(callback)), 1;
+    invokeCallback = 0;
+    var nextNamePrefix = "" === nameSoFar ? "." : nameSoFar + ":";
+    if (isArrayImpl(children))
+      for (var i = 0; i < children.length; i++)
+        nameSoFar = children[i], type = nextNamePrefix + getElementKey(nameSoFar, i), invokeCallback += mapIntoArray(
+          nameSoFar,
+          array2,
+          escapedPrefix,
+          type,
+          callback
+        );
+    else if (i = getIteratorFn(children), "function" === typeof i)
+      for (children = i.call(children), i = 0; !(nameSoFar = children.next()).done; )
+        nameSoFar = nameSoFar.value, type = nextNamePrefix + getElementKey(nameSoFar, i++), invokeCallback += mapIntoArray(
+          nameSoFar,
+          array2,
+          escapedPrefix,
+          type,
+          callback
+        );
+    else if ("object" === type) {
+      if ("function" === typeof children.then)
+        return mapIntoArray(
+          resolveThenable(children),
+          array2,
+          escapedPrefix,
+          nameSoFar,
+          callback
+        );
+      array2 = String(children);
+      throw Error(
+        "Objects are not valid as a React child (found: " + ("[object Object]" === array2 ? "object with keys {" + Object.keys(children).join(", ") + "}" : array2) + "). If you meant to render a collection of children, use an array instead."
+      );
+    }
+    return invokeCallback;
+  }
+  function mapChildren(children, func, context) {
+    if (null == children) return children;
+    var result = [], count2 = 0;
+    mapIntoArray(children, result, "", "", function(child) {
+      return func.call(context, child, count2++);
+    });
+    return result;
+  }
+  function lazyInitializer(payload) {
+    if (-1 === payload._status) {
+      var ctor = payload._result;
+      ctor = ctor();
+      ctor.then(
+        function(moduleObject) {
+          if (0 === payload._status || -1 === payload._status)
+            payload._status = 1, payload._result = moduleObject;
+        },
+        function(error) {
+          if (0 === payload._status || -1 === payload._status)
+            payload._status = 2, payload._result = error;
+        }
+      );
+      -1 === payload._status && (payload._status = 0, payload._result = ctor);
+    }
+    if (1 === payload._status) return payload._result.default;
+    throw payload._result;
+  }
+  var reportGlobalError = "function" === typeof reportError ? reportError : function(error) {
+    if ("object" === typeof window && "function" === typeof window.ErrorEvent) {
+      var event = new window.ErrorEvent("error", {
+        bubbles: true,
+        cancelable: true,
+        message: "object" === typeof error && null !== error && "string" === typeof error.message ? String(error.message) : String(error),
+        error
+      });
+      if (!window.dispatchEvent(event)) return;
+    } else if ("object" === typeof process && "function" === typeof process.emit) {
+      process.emit("uncaughtException", error);
+      return;
+    }
+    console.error(error);
+  }, Children = {
+    map: mapChildren,
+    forEach: function(children, forEachFunc, forEachContext) {
+      mapChildren(
+        children,
+        function() {
+          forEachFunc.apply(this, arguments);
+        },
+        forEachContext
+      );
+    },
+    count: function(children) {
+      var n = 0;
+      mapChildren(children, function() {
+        n++;
+      });
+      return n;
+    },
+    toArray: function(children) {
+      return mapChildren(children, function(child) {
+        return child;
+      }) || [];
+    },
+    only: function(children) {
+      if (!isValidElement(children))
+        throw Error(
+          "React.Children.only expected to receive a single React element child."
+        );
+      return children;
+    }
+  };
+  react_production$1.Activity = REACT_ACTIVITY_TYPE;
+  react_production$1.Children = Children;
+  react_production$1.Component = Component;
+  react_production$1.Fragment = REACT_FRAGMENT_TYPE;
+  react_production$1.Profiler = REACT_PROFILER_TYPE;
+  react_production$1.PureComponent = PureComponent;
+  react_production$1.StrictMode = REACT_STRICT_MODE_TYPE;
+  react_production$1.Suspense = REACT_SUSPENSE_TYPE;
+  react_production$1.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE = ReactSharedInternals;
+  react_production$1.__COMPILER_RUNTIME = {
+    __proto__: null,
+    c: function(size) {
+      return ReactSharedInternals.H.useMemoCache(size);
+    }
+  };
+  react_production$1.cache = function(fn) {
+    return function() {
+      return fn.apply(null, arguments);
+    };
+  };
+  react_production$1.cacheSignal = function() {
+    return null;
+  };
+  react_production$1.cloneElement = function(element, config2, children) {
+    if (null === element || void 0 === element)
+      throw Error(
+        "The argument must be a React element, but you passed " + element + "."
+      );
+    var props = assign({}, element.props), key = element.key;
+    if (null != config2)
+      for (propName in void 0 !== config2.key && (key = "" + config2.key), config2)
+        !hasOwnProperty.call(config2, propName) || "key" === propName || "__self" === propName || "__source" === propName || "ref" === propName && void 0 === config2.ref || (props[propName] = config2[propName]);
+    var propName = arguments.length - 2;
+    if (1 === propName) props.children = children;
+    else if (1 < propName) {
+      for (var childArray = Array(propName), i = 0; i < propName; i++)
+        childArray[i] = arguments[i + 2];
+      props.children = childArray;
+    }
+    return ReactElement(element.type, key, props);
+  };
+  react_production$1.createContext = function(defaultValue) {
+    defaultValue = {
+      $$typeof: REACT_CONTEXT_TYPE,
+      _currentValue: defaultValue,
+      _currentValue2: defaultValue,
+      _threadCount: 0,
+      Provider: null,
+      Consumer: null
+    };
+    defaultValue.Provider = defaultValue;
+    defaultValue.Consumer = {
+      $$typeof: REACT_CONSUMER_TYPE,
+      _context: defaultValue
+    };
+    return defaultValue;
+  };
+  react_production$1.createElement = function(type, config2, children) {
+    var propName, props = {}, key = null;
+    if (null != config2)
+      for (propName in void 0 !== config2.key && (key = "" + config2.key), config2)
+        hasOwnProperty.call(config2, propName) && "key" !== propName && "__self" !== propName && "__source" !== propName && (props[propName] = config2[propName]);
+    var childrenLength = arguments.length - 2;
+    if (1 === childrenLength) props.children = children;
+    else if (1 < childrenLength) {
+      for (var childArray = Array(childrenLength), i = 0; i < childrenLength; i++)
+        childArray[i] = arguments[i + 2];
+      props.children = childArray;
+    }
+    if (type && type.defaultProps)
+      for (propName in childrenLength = type.defaultProps, childrenLength)
+        void 0 === props[propName] && (props[propName] = childrenLength[propName]);
+    return ReactElement(type, key, props);
+  };
+  react_production$1.createRef = function() {
+    return { current: null };
+  };
+  react_production$1.forwardRef = function(render) {
+    return { $$typeof: REACT_FORWARD_REF_TYPE, render };
+  };
+  react_production$1.isValidElement = isValidElement;
+  react_production$1.lazy = function(ctor) {
+    return {
+      $$typeof: REACT_LAZY_TYPE,
+      _payload: { _status: -1, _result: ctor },
+      _init: lazyInitializer
+    };
+  };
+  react_production$1.memo = function(type, compare) {
+    return {
+      $$typeof: REACT_MEMO_TYPE,
+      type,
+      compare: void 0 === compare ? null : compare
+    };
+  };
+  react_production$1.startTransition = function(scope) {
+    var prevTransition = ReactSharedInternals.T, currentTransition = {};
+    ReactSharedInternals.T = currentTransition;
+    try {
+      var returnValue = scope(), onStartTransitionFinish = ReactSharedInternals.S;
+      null !== onStartTransitionFinish && onStartTransitionFinish(currentTransition, returnValue);
+      "object" === typeof returnValue && null !== returnValue && "function" === typeof returnValue.then && returnValue.then(noop, reportGlobalError);
+    } catch (error) {
+      reportGlobalError(error);
+    } finally {
+      null !== prevTransition && null !== currentTransition.types && (prevTransition.types = currentTransition.types), ReactSharedInternals.T = prevTransition;
+    }
+  };
+  react_production$1.unstable_useCacheRefresh = function() {
+    return ReactSharedInternals.H.useCacheRefresh();
+  };
+  react_production$1.use = function(usable) {
+    return ReactSharedInternals.H.use(usable);
+  };
+  react_production$1.useActionState = function(action2, initialState, permalink) {
+    return ReactSharedInternals.H.useActionState(action2, initialState, permalink);
+  };
+  react_production$1.useCallback = function(callback, deps) {
+    return ReactSharedInternals.H.useCallback(callback, deps);
+  };
+  react_production$1.useContext = function(Context) {
+    return ReactSharedInternals.H.useContext(Context);
+  };
+  react_production$1.useDebugValue = function() {
+  };
+  react_production$1.useDeferredValue = function(value, initialValue) {
+    return ReactSharedInternals.H.useDeferredValue(value, initialValue);
+  };
+  react_production$1.useEffect = function(create, deps) {
+    return ReactSharedInternals.H.useEffect(create, deps);
+  };
+  react_production$1.useEffectEvent = function(callback) {
+    return ReactSharedInternals.H.useEffectEvent(callback);
+  };
+  react_production$1.useId = function() {
+    return ReactSharedInternals.H.useId();
+  };
+  react_production$1.useImperativeHandle = function(ref, create, deps) {
+    return ReactSharedInternals.H.useImperativeHandle(ref, create, deps);
+  };
+  react_production$1.useInsertionEffect = function(create, deps) {
+    return ReactSharedInternals.H.useInsertionEffect(create, deps);
+  };
+  react_production$1.useLayoutEffect = function(create, deps) {
+    return ReactSharedInternals.H.useLayoutEffect(create, deps);
+  };
+  react_production$1.useMemo = function(create, deps) {
+    return ReactSharedInternals.H.useMemo(create, deps);
+  };
+  react_production$1.useOptimistic = function(passthrough, reducer) {
+    return ReactSharedInternals.H.useOptimistic(passthrough, reducer);
+  };
+  react_production$1.useReducer = function(reducer, initialArg, init) {
+    return ReactSharedInternals.H.useReducer(reducer, initialArg, init);
+  };
+  react_production$1.useRef = function(initialValue) {
+    return ReactSharedInternals.H.useRef(initialValue);
+  };
+  react_production$1.useState = function(initialState) {
+    return ReactSharedInternals.H.useState(initialState);
+  };
+  react_production$1.useSyncExternalStore = function(subscribe, getSnapshot, getServerSnapshot) {
+    return ReactSharedInternals.H.useSyncExternalStore(
+      subscribe,
+      getSnapshot,
+      getServerSnapshot
+    );
+  };
+  react_production$1.useTransition = function() {
+    return ReactSharedInternals.H.useTransition();
+  };
+  react_production$1.version = "19.2.7";
+  return react_production$1;
+}
+var hasRequiredReact$1;
+function requireReact$1() {
+  if (hasRequiredReact$1) return react$1.exports;
+  hasRequiredReact$1 = 1;
+  {
+    react$1.exports = requireReact_production$1();
+  }
+  return react$1.exports;
+}
+var reactExports$1 = requireReact$1();
+var client$1 = { exports: {} };
+var reactDomClient_production = {};
+var scheduler = { exports: {} };
+var scheduler_production = {};
+var hasRequiredScheduler_production;
+function requireScheduler_production() {
+  if (hasRequiredScheduler_production) return scheduler_production;
+  hasRequiredScheduler_production = 1;
+  (function(exports) {
+    function push(heap, node) {
+      var index = heap.length;
+      heap.push(node);
+      a: for (; 0 < index; ) {
+        var parentIndex = index - 1 >>> 1, parent = heap[parentIndex];
+        if (0 < compare(parent, node))
+          heap[parentIndex] = node, heap[index] = parent, index = parentIndex;
+        else break a;
+      }
+    }
+    function peek(heap) {
+      return 0 === heap.length ? null : heap[0];
+    }
+    function pop(heap) {
+      if (0 === heap.length) return null;
+      var first = heap[0], last = heap.pop();
+      if (last !== first) {
+        heap[0] = last;
+        a: for (var index = 0, length = heap.length, halfLength = length >>> 1; index < halfLength; ) {
+          var leftIndex = 2 * (index + 1) - 1, left = heap[leftIndex], rightIndex = leftIndex + 1, right = heap[rightIndex];
+          if (0 > compare(left, last))
+            rightIndex < length && 0 > compare(right, left) ? (heap[index] = right, heap[rightIndex] = last, index = rightIndex) : (heap[index] = left, heap[leftIndex] = last, index = leftIndex);
+          else if (rightIndex < length && 0 > compare(right, last))
+            heap[index] = right, heap[rightIndex] = last, index = rightIndex;
+          else break a;
+        }
+      }
+      return first;
+    }
+    function compare(a, b) {
+      var diff = a.sortIndex - b.sortIndex;
+      return 0 !== diff ? diff : a.id - b.id;
+    }
+    exports.unstable_now = void 0;
+    if ("object" === typeof performance && "function" === typeof performance.now) {
+      var localPerformance = performance;
+      exports.unstable_now = function() {
+        return localPerformance.now();
+      };
+    } else {
+      var localDate = Date, initialTime = localDate.now();
+      exports.unstable_now = function() {
+        return localDate.now() - initialTime;
+      };
+    }
+    var taskQueue = [], timerQueue = [], taskIdCounter = 1, currentTask = null, currentPriorityLevel = 3, isPerformingWork = false, isHostCallbackScheduled = false, isHostTimeoutScheduled = false, needsPaint = false, localSetTimeout = "function" === typeof setTimeout ? setTimeout : null, localClearTimeout = "function" === typeof clearTimeout ? clearTimeout : null, localSetImmediate = "undefined" !== typeof setImmediate ? setImmediate : null;
+    function advanceTimers(currentTime) {
+      for (var timer = peek(timerQueue); null !== timer; ) {
+        if (null === timer.callback) pop(timerQueue);
+        else if (timer.startTime <= currentTime)
+          pop(timerQueue), timer.sortIndex = timer.expirationTime, push(taskQueue, timer);
+        else break;
+        timer = peek(timerQueue);
+      }
+    }
+    function handleTimeout(currentTime) {
+      isHostTimeoutScheduled = false;
+      advanceTimers(currentTime);
+      if (!isHostCallbackScheduled)
+        if (null !== peek(taskQueue))
+          isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline());
+        else {
+          var firstTimer = peek(timerQueue);
+          null !== firstTimer && requestHostTimeout(handleTimeout, firstTimer.startTime - currentTime);
+        }
+    }
+    var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
+    function shouldYieldToHost() {
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
+    }
+    function performWorkUntilDeadline() {
+      needsPaint = false;
+      if (isMessageLoopRunning) {
+        var currentTime = exports.unstable_now();
+        startTime = currentTime;
+        var hasMoreWork = true;
+        try {
+          a: {
+            isHostCallbackScheduled = false;
+            isHostTimeoutScheduled && (isHostTimeoutScheduled = false, localClearTimeout(taskTimeoutID), taskTimeoutID = -1);
+            isPerformingWork = true;
+            var previousPriorityLevel = currentPriorityLevel;
+            try {
+              b: {
+                advanceTimers(currentTime);
+                for (currentTask = peek(taskQueue); null !== currentTask && !(currentTask.expirationTime > currentTime && shouldYieldToHost()); ) {
+                  var callback = currentTask.callback;
+                  if ("function" === typeof callback) {
+                    currentTask.callback = null;
+                    currentPriorityLevel = currentTask.priorityLevel;
+                    var continuationCallback = callback(
+                      currentTask.expirationTime <= currentTime
+                    );
+                    currentTime = exports.unstable_now();
+                    if ("function" === typeof continuationCallback) {
+                      currentTask.callback = continuationCallback;
+                      advanceTimers(currentTime);
+                      hasMoreWork = true;
+                      break b;
+                    }
+                    currentTask === peek(taskQueue) && pop(taskQueue);
+                    advanceTimers(currentTime);
+                  } else pop(taskQueue);
+                  currentTask = peek(taskQueue);
+                }
+                if (null !== currentTask) hasMoreWork = true;
+                else {
+                  var firstTimer = peek(timerQueue);
+                  null !== firstTimer && requestHostTimeout(
+                    handleTimeout,
+                    firstTimer.startTime - currentTime
+                  );
+                  hasMoreWork = false;
+                }
+              }
+              break a;
+            } finally {
+              currentTask = null, currentPriorityLevel = previousPriorityLevel, isPerformingWork = false;
+            }
+            hasMoreWork = void 0;
+          }
+        } finally {
+          hasMoreWork ? schedulePerformWorkUntilDeadline() : isMessageLoopRunning = false;
+        }
+      }
+    }
+    var schedulePerformWorkUntilDeadline;
+    if ("function" === typeof localSetImmediate)
+      schedulePerformWorkUntilDeadline = function() {
+        localSetImmediate(performWorkUntilDeadline);
+      };
+    else if ("undefined" !== typeof MessageChannel) {
+      var channel = new MessageChannel(), port = channel.port2;
+      channel.port1.onmessage = performWorkUntilDeadline;
+      schedulePerformWorkUntilDeadline = function() {
+        port.postMessage(null);
+      };
+    } else
+      schedulePerformWorkUntilDeadline = function() {
+        localSetTimeout(performWorkUntilDeadline, 0);
+      };
+    function requestHostTimeout(callback, ms) {
+      taskTimeoutID = localSetTimeout(function() {
+        callback(exports.unstable_now());
+      }, ms);
+    }
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
+      task.callback = null;
+    };
+    exports.unstable_forceFrameRate = function(fps) {
+      0 > fps || 125 < fps ? console.error(
+        "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
+      ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
+    };
+    exports.unstable_getCurrentPriorityLevel = function() {
+      return currentPriorityLevel;
+    };
+    exports.unstable_next = function(eventHandler) {
+      switch (currentPriorityLevel) {
+        case 1:
+        case 2:
+        case 3:
+          var priorityLevel = 3;
+          break;
+        default:
+          priorityLevel = currentPriorityLevel;
+      }
+      var previousPriorityLevel = currentPriorityLevel;
+      currentPriorityLevel = priorityLevel;
+      try {
+        return eventHandler();
+      } finally {
+        currentPriorityLevel = previousPriorityLevel;
+      }
+    };
+    exports.unstable_requestPaint = function() {
+      needsPaint = true;
+    };
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+      switch (priorityLevel) {
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+          break;
+        default:
+          priorityLevel = 3;
+      }
+      var previousPriorityLevel = currentPriorityLevel;
+      currentPriorityLevel = priorityLevel;
+      try {
+        return eventHandler();
+      } finally {
+        currentPriorityLevel = previousPriorityLevel;
+      }
+    };
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
+      "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
+      switch (priorityLevel) {
+        case 1:
+          var timeout = -1;
+          break;
+        case 2:
+          timeout = 250;
+          break;
+        case 5:
+          timeout = 1073741823;
+          break;
+        case 4:
+          timeout = 1e4;
+          break;
+        default:
+          timeout = 5e3;
+      }
+      timeout = options + timeout;
+      priorityLevel = {
+        id: taskIdCounter++,
+        callback,
+        priorityLevel,
+        startTime: options,
+        expirationTime: timeout,
+        sortIndex: -1
+      };
+      options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
+      return priorityLevel;
+    };
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
+      var parentPriorityLevel = currentPriorityLevel;
+      return function() {
+        var previousPriorityLevel = currentPriorityLevel;
+        currentPriorityLevel = parentPriorityLevel;
+        try {
+          return callback.apply(this, arguments);
+        } finally {
+          currentPriorityLevel = previousPriorityLevel;
+        }
+      };
+    };
+  })(scheduler_production);
+  return scheduler_production;
+}
+var hasRequiredScheduler;
+function requireScheduler() {
+  if (hasRequiredScheduler) return scheduler.exports;
+  hasRequiredScheduler = 1;
+  {
+    scheduler.exports = requireScheduler_production();
+  }
+  return scheduler.exports;
+}
 var react = { exports: {} };
 var react_production = {};
 var hasRequiredReact_production;
@@ -505,276 +1209,6 @@ function requireReact() {
     react.exports = requireReact_production();
   }
   return react.exports;
-}
-var reactExports = requireReact();
-const React = /* @__PURE__ */ getDefaultExportFromCjs(reactExports);
-var client$1 = { exports: {} };
-var reactDomClient_production = {};
-var scheduler = { exports: {} };
-var scheduler_production = {};
-var hasRequiredScheduler_production;
-function requireScheduler_production() {
-  if (hasRequiredScheduler_production) return scheduler_production;
-  hasRequiredScheduler_production = 1;
-  (function(exports) {
-    function push(heap, node) {
-      var index = heap.length;
-      heap.push(node);
-      a: for (; 0 < index; ) {
-        var parentIndex = index - 1 >>> 1, parent = heap[parentIndex];
-        if (0 < compare(parent, node))
-          heap[parentIndex] = node, heap[index] = parent, index = parentIndex;
-        else break a;
-      }
-    }
-    function peek(heap) {
-      return 0 === heap.length ? null : heap[0];
-    }
-    function pop(heap) {
-      if (0 === heap.length) return null;
-      var first = heap[0], last = heap.pop();
-      if (last !== first) {
-        heap[0] = last;
-        a: for (var index = 0, length = heap.length, halfLength = length >>> 1; index < halfLength; ) {
-          var leftIndex = 2 * (index + 1) - 1, left = heap[leftIndex], rightIndex = leftIndex + 1, right = heap[rightIndex];
-          if (0 > compare(left, last))
-            rightIndex < length && 0 > compare(right, left) ? (heap[index] = right, heap[rightIndex] = last, index = rightIndex) : (heap[index] = left, heap[leftIndex] = last, index = leftIndex);
-          else if (rightIndex < length && 0 > compare(right, last))
-            heap[index] = right, heap[rightIndex] = last, index = rightIndex;
-          else break a;
-        }
-      }
-      return first;
-    }
-    function compare(a, b) {
-      var diff = a.sortIndex - b.sortIndex;
-      return 0 !== diff ? diff : a.id - b.id;
-    }
-    exports.unstable_now = void 0;
-    if ("object" === typeof performance && "function" === typeof performance.now) {
-      var localPerformance = performance;
-      exports.unstable_now = function() {
-        return localPerformance.now();
-      };
-    } else {
-      var localDate = Date, initialTime = localDate.now();
-      exports.unstable_now = function() {
-        return localDate.now() - initialTime;
-      };
-    }
-    var taskQueue = [], timerQueue = [], taskIdCounter = 1, currentTask = null, currentPriorityLevel = 3, isPerformingWork = false, isHostCallbackScheduled = false, isHostTimeoutScheduled = false, needsPaint = false, localSetTimeout = "function" === typeof setTimeout ? setTimeout : null, localClearTimeout = "function" === typeof clearTimeout ? clearTimeout : null, localSetImmediate = "undefined" !== typeof setImmediate ? setImmediate : null;
-    function advanceTimers(currentTime) {
-      for (var timer = peek(timerQueue); null !== timer; ) {
-        if (null === timer.callback) pop(timerQueue);
-        else if (timer.startTime <= currentTime)
-          pop(timerQueue), timer.sortIndex = timer.expirationTime, push(taskQueue, timer);
-        else break;
-        timer = peek(timerQueue);
-      }
-    }
-    function handleTimeout(currentTime) {
-      isHostTimeoutScheduled = false;
-      advanceTimers(currentTime);
-      if (!isHostCallbackScheduled)
-        if (null !== peek(taskQueue))
-          isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline());
-        else {
-          var firstTimer = peek(timerQueue);
-          null !== firstTimer && requestHostTimeout(handleTimeout, firstTimer.startTime - currentTime);
-        }
-    }
-    var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
-    function shouldYieldToHost() {
-      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
-    }
-    function performWorkUntilDeadline() {
-      needsPaint = false;
-      if (isMessageLoopRunning) {
-        var currentTime = exports.unstable_now();
-        startTime = currentTime;
-        var hasMoreWork = true;
-        try {
-          a: {
-            isHostCallbackScheduled = false;
-            isHostTimeoutScheduled && (isHostTimeoutScheduled = false, localClearTimeout(taskTimeoutID), taskTimeoutID = -1);
-            isPerformingWork = true;
-            var previousPriorityLevel = currentPriorityLevel;
-            try {
-              b: {
-                advanceTimers(currentTime);
-                for (currentTask = peek(taskQueue); null !== currentTask && !(currentTask.expirationTime > currentTime && shouldYieldToHost()); ) {
-                  var callback = currentTask.callback;
-                  if ("function" === typeof callback) {
-                    currentTask.callback = null;
-                    currentPriorityLevel = currentTask.priorityLevel;
-                    var continuationCallback = callback(
-                      currentTask.expirationTime <= currentTime
-                    );
-                    currentTime = exports.unstable_now();
-                    if ("function" === typeof continuationCallback) {
-                      currentTask.callback = continuationCallback;
-                      advanceTimers(currentTime);
-                      hasMoreWork = true;
-                      break b;
-                    }
-                    currentTask === peek(taskQueue) && pop(taskQueue);
-                    advanceTimers(currentTime);
-                  } else pop(taskQueue);
-                  currentTask = peek(taskQueue);
-                }
-                if (null !== currentTask) hasMoreWork = true;
-                else {
-                  var firstTimer = peek(timerQueue);
-                  null !== firstTimer && requestHostTimeout(
-                    handleTimeout,
-                    firstTimer.startTime - currentTime
-                  );
-                  hasMoreWork = false;
-                }
-              }
-              break a;
-            } finally {
-              currentTask = null, currentPriorityLevel = previousPriorityLevel, isPerformingWork = false;
-            }
-            hasMoreWork = void 0;
-          }
-        } finally {
-          hasMoreWork ? schedulePerformWorkUntilDeadline() : isMessageLoopRunning = false;
-        }
-      }
-    }
-    var schedulePerformWorkUntilDeadline;
-    if ("function" === typeof localSetImmediate)
-      schedulePerformWorkUntilDeadline = function() {
-        localSetImmediate(performWorkUntilDeadline);
-      };
-    else if ("undefined" !== typeof MessageChannel) {
-      var channel = new MessageChannel(), port = channel.port2;
-      channel.port1.onmessage = performWorkUntilDeadline;
-      schedulePerformWorkUntilDeadline = function() {
-        port.postMessage(null);
-      };
-    } else
-      schedulePerformWorkUntilDeadline = function() {
-        localSetTimeout(performWorkUntilDeadline, 0);
-      };
-    function requestHostTimeout(callback, ms) {
-      taskTimeoutID = localSetTimeout(function() {
-        callback(exports.unstable_now());
-      }, ms);
-    }
-    exports.unstable_IdlePriority = 5;
-    exports.unstable_ImmediatePriority = 1;
-    exports.unstable_LowPriority = 4;
-    exports.unstable_NormalPriority = 3;
-    exports.unstable_Profiling = null;
-    exports.unstable_UserBlockingPriority = 2;
-    exports.unstable_cancelCallback = function(task) {
-      task.callback = null;
-    };
-    exports.unstable_forceFrameRate = function(fps) {
-      0 > fps || 125 < fps ? console.error(
-        "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
-      ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
-    };
-    exports.unstable_getCurrentPriorityLevel = function() {
-      return currentPriorityLevel;
-    };
-    exports.unstable_next = function(eventHandler) {
-      switch (currentPriorityLevel) {
-        case 1:
-        case 2:
-        case 3:
-          var priorityLevel = 3;
-          break;
-        default:
-          priorityLevel = currentPriorityLevel;
-      }
-      var previousPriorityLevel = currentPriorityLevel;
-      currentPriorityLevel = priorityLevel;
-      try {
-        return eventHandler();
-      } finally {
-        currentPriorityLevel = previousPriorityLevel;
-      }
-    };
-    exports.unstable_requestPaint = function() {
-      needsPaint = true;
-    };
-    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
-      switch (priorityLevel) {
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-          break;
-        default:
-          priorityLevel = 3;
-      }
-      var previousPriorityLevel = currentPriorityLevel;
-      currentPriorityLevel = priorityLevel;
-      try {
-        return eventHandler();
-      } finally {
-        currentPriorityLevel = previousPriorityLevel;
-      }
-    };
-    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports.unstable_now();
-      "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
-      switch (priorityLevel) {
-        case 1:
-          var timeout = -1;
-          break;
-        case 2:
-          timeout = 250;
-          break;
-        case 5:
-          timeout = 1073741823;
-          break;
-        case 4:
-          timeout = 1e4;
-          break;
-        default:
-          timeout = 5e3;
-      }
-      timeout = options + timeout;
-      priorityLevel = {
-        id: taskIdCounter++,
-        callback,
-        priorityLevel,
-        startTime: options,
-        expirationTime: timeout,
-        sortIndex: -1
-      };
-      options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
-      return priorityLevel;
-    };
-    exports.unstable_shouldYield = shouldYieldToHost;
-    exports.unstable_wrapCallback = function(callback) {
-      var parentPriorityLevel = currentPriorityLevel;
-      return function() {
-        var previousPriorityLevel = currentPriorityLevel;
-        currentPriorityLevel = parentPriorityLevel;
-        try {
-          return callback.apply(this, arguments);
-        } finally {
-          currentPriorityLevel = previousPriorityLevel;
-        }
-      };
-    };
-  })(scheduler_production);
-  return scheduler_production;
-}
-var hasRequiredScheduler;
-function requireScheduler() {
-  if (hasRequiredScheduler) return scheduler.exports;
-  hasRequiredScheduler = 1;
-  {
-    scheduler.exports = requireScheduler_production();
-  }
-  return scheduler.exports;
 }
 var reactDom = { exports: {} };
 var reactDom_production = {};
@@ -12552,7 +12986,7 @@ function recordBusinessQueueReadResult(payload) {
   else if (payload.native_business_queue_checked === true) recordBusinessQueueReadFailure(false);
 }
 function useBusinessQueueReadFailure() {
-  return reactExports.useSyncExternalStore((listener) => {
+  return reactExports$1.useSyncExternalStore((listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
   }, businessQueueReadFailed, () => false);
@@ -12645,6 +13079,8 @@ function isSupplyChainAuditEvidence(value) {
 function isPackageExecutionContextEvidence(value) {
   return isScannerEvidenceRecord(value) && value.kind === "package_execution_context" && value.schema_version === 2 && typeof value.portable === "boolean" && typeof value.context_digest === "string";
 }
+var reactExports = requireReact();
+const React = /* @__PURE__ */ getDefaultExportFromCjs(reactExports);
 var DefaultContext = {
   color: void 0,
   size: void 0,
@@ -17976,19 +18412,19 @@ function protectionPresentationState(health, options) {
   return health.state;
 }
 function useProtectionPresentationState(health) {
-  const [unprovenSinceMs, setUnprovenSinceMs] = reactExports.useState(null);
-  const [nowMs, setNowMs] = reactExports.useState(() => Date.now());
+  const [unprovenSinceMs, setUnprovenSinceMs] = reactExports$1.useState(null);
+  const [nowMs, setNowMs] = reactExports$1.useState(() => Date.now());
   const failed = health.checks.some((check) => check.status === "fail");
   const byId = new Map(health.checks.map((check) => [check.check_id, check.status]));
   const coreStillProving = !failed && CORE_CHECK_IDS.some((checkId) => byId.get(checkId) !== "pass");
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!coreStillProving) {
       setUnprovenSinceMs(null);
       return;
     }
     setUnprovenSinceMs((current) => current ?? Date.now());
   }, [coreStillProving]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (unprovenSinceMs === null) {
       return;
     }
@@ -18640,7 +19076,7 @@ function lazyWorkspace(moduleId, loader) {
     const module = await loadWorkspaceModule(loader, { moduleId, storage: browserSessionStorage() });
     return { default: module.default };
   };
-  return reactExports.lazy(load);
+  return reactExports$1.lazy(load);
 }
 const DASHBOARD_BUILD_HEADER = "X-Guard-Dashboard-Build";
 const DASHBOARD_BUILD_META_NAME = "guard-dashboard-build";
@@ -21935,7 +22371,17 @@ async function scheduleGuardUpdate(options) {
     error: stringValue$1(payload.error) ?? void 0
   };
 }
-async function requestGuardDesktopHandoff() {
+class GuardDesktopHandoffError extends Error {
+  code;
+  status;
+  constructor(message, code, status) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+async function requestGuardDesktopHandoff(offeredVersion = null) {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -21947,7 +22393,12 @@ async function requestGuardDesktopHandoff() {
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion ? { handoff_to_desktop: true, latest_version: offeredVersion } : { handoff_to_desktop: true }
+      ),
       signal: controller.signal
     });
   } finally {
@@ -21956,7 +22407,7 @@ async function requestGuardDesktopHandoff() {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = stringValue$1(payload.message) ?? stringValue$1(payload.error) ?? `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue$1(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,
@@ -22835,26 +23286,26 @@ function resolveDisplayName(profile) {
   return profile.email.split("@")[0];
 }
 function CloudUserMenu(props) {
-  const [open, setOpen] = reactExports.useState(false);
-  const [copied, setCopied] = reactExports.useState(false);
-  const containerRef = reactExports.useRef(null);
-  const copyTimeoutRef = reactExports.useRef(null);
-  const handleClickOutside = reactExports.useCallback((event) => {
+  const [open, setOpen] = reactExports$1.useState(false);
+  const [copied, setCopied] = reactExports$1.useState(false);
+  const containerRef = reactExports$1.useRef(null);
+  const copyTimeoutRef = reactExports$1.useRef(null);
+  const handleClickOutside = reactExports$1.useCallback((event) => {
     if (containerRef.current && !containerRef.current.contains(event.target)) {
       setOpen(false);
       setCopied(false);
     }
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (open) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open, handleClickOutside]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     return () => clearTimeout(copyTimeoutRef.current);
   }, []);
-  const handleCopyWorkspaceId = reactExports.useCallback(async () => {
+  const handleCopyWorkspaceId = reactExports$1.useCallback(async () => {
     if (!props.workspaceId) return;
     try {
       await navigator.clipboard.writeText(props.workspaceId);
@@ -23242,15 +23693,15 @@ function QuickActionButton(props) {
   ] });
 }
 function OpenGuardCloudAction(props) {
-  const [state, setState] = reactExports.useState({ status: "idle" });
-  const controllerRef = reactExports.useRef(null);
+  const [state, setState] = reactExports$1.useState({ status: "idle" });
+  const controllerRef = reactExports$1.useRef(null);
   const collapsed = props.collapsed ?? false;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     return () => {
       controllerRef.current?.abort();
     };
   }, []);
-  const handleClick = reactExports.useCallback(() => {
+  const handleClick = reactExports$1.useCallback(() => {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -23361,7 +23812,7 @@ function anchorPropsFromButtonProps(props) {
   } = props;
   return rest;
 }
-const ActionButton = reactExports.forwardRef(
+const ActionButton = reactExports$1.forwardRef(
   ({ children, href, variant, disabled, onClick, className: customClassName, type, ...buttonProps }, ref) => {
     const className = `${actionButtonClass(variant)}${customClassName ? ` ${customClassName}` : ""}`;
     if (href) {
@@ -23742,10 +24193,10 @@ function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = fal
   return { approval_totp_code: credentials.approvalTotpCode };
 }
 function ApprovalProofFieldInputs(props) {
-  const instanceId = reactExports.useId();
+  const instanceId = reactExports$1.useId();
   const passwordFieldId = `${instanceId}-approval-proof-password`;
   const totpFieldId = `${instanceId}-approval-proof-totp`;
-  const handleTotpChange = reactExports.useCallback((event) => {
+  const handleTotpChange = reactExports$1.useCallback((event) => {
     const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
     event.target.value = digits;
     props.onApprovalTotpCodeChange(event);
@@ -23803,16 +24254,16 @@ function ApprovalProofFieldInputs(props) {
   ] }) });
 }
 function ApprovalProofInline(props) {
-  const passwordRef = reactExports.useRef(null);
-  const [now2, setNow] = reactExports.useState(() => Date.now());
+  const passwordRef = reactExports$1.useRef(null);
+  const [now2, setNow] = reactExports$1.useState(() => Date.now());
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.approvalGate, now2);
   const gateLocked = lockRemainingSeconds > 0;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!gateLocked) return void 0;
     const timer = window.setInterval(() => setNow(Date.now()), 1e3);
     return () => window.clearInterval(timer);
   }, [gateLocked]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const timer = window.setTimeout(() => {
       passwordRef.current?.focus();
     }, 50);
@@ -23826,7 +24277,7 @@ function ApprovalProofInline(props) {
     },
     props.submitBusy
   );
-  const handleKeyDown = reactExports.useCallback(
+  const handleKeyDown = reactExports$1.useCallback(
     (event) => {
       if (shouldSubmitApprovalProof(event.key, event.nativeEvent.isComposing, submitDisabled)) {
         event.preventDefault();
@@ -24046,6 +24497,21 @@ function desktopUpdateBannerModel(status, embeddedInDesktop, dismissedVersion) {
 const DESKTOP_HANDOFF_OPENING_LABEL = "Opening the app updater…";
 const DESKTOP_HANDOFF_GUIDANCE = "If the updater didn't open, choose Check for Updates from the HOL Guard menu-bar icon.";
 const DESKTOP_HANDOFF_FAILED = "The request did not reach the app. Choose Check for Updates from the HOL Guard menu-bar icon.";
+const DESKTOP_HANDOFF_ALREADY_CURRENT = "Guard is already on the latest version. Choose Check for Updates from the HOL Guard menu-bar icon to look again.";
+function desktopHandoffFailureMessage(error) {
+  if (!(error instanceof Error) || error.name !== "GuardDesktopHandoffError") {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  const code = error.code;
+  if (code === "update_not_available") {
+    return DESKTOP_HANDOFF_ALREADY_CURRENT;
+  }
+  const reason = error.message.trim();
+  if (!reason) {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  return `${reason} You can also choose Check for Updates from the HOL Guard menu-bar icon.`;
+}
 function shouldPromptRecoveryReinstall(status) {
   return status?.recovery_reinstall_available === true && status?.auto_updatable !== true && status?.version_check?.update_available === true;
 }
@@ -24139,8 +24605,8 @@ function getFocusableElements(container2) {
   );
 }
 function useFocusTrap(active, containerRef) {
-  const previouslyFocusedRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
+  const previouslyFocusedRef = reactExports$1.useRef(null);
+  reactExports$1.useEffect(() => {
     if (!active) return;
     const container2 = containerRef.current;
     if (!container2) return;
@@ -24184,16 +24650,16 @@ function GuardModalLayer({
   onClose,
   panelClassName = "w-full max-w-2xl"
 }) {
-  const [overlayRoot, setOverlayRoot] = reactExports.useState(null);
-  const panelRef = reactExports.useRef(null);
-  const onCloseRef = reactExports.useRef(onClose);
+  const [overlayRoot, setOverlayRoot] = reactExports$1.useState(null);
+  const panelRef = reactExports$1.useRef(null);
+  const onCloseRef = reactExports$1.useRef(onClose);
   onCloseRef.current = onClose;
   const mounted = overlayRoot !== null;
   useFocusTrap(mounted, panelRef);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setOverlayRoot(ensureGuardOverlayRoot());
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!mounted) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -24209,7 +24675,7 @@ function GuardModalLayer({
       }
     };
   }, [mounted]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!mounted) return;
     function handleKeyDown(event) {
       if (event.key === "Escape") {
@@ -24316,27 +24782,27 @@ const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
 function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
-  const [updateStatus, setUpdateStatus] = reactExports.useState(null);
-  const [updatePhase, setUpdatePhase] = reactExports.useState(enabled ? "checking" : "idle");
-  const [updateError, setUpdateError] = reactExports.useState(null);
-  const reconnectStartedAt = reactExports.useRef(null);
-  const updatePhaseRef = reactExports.useRef("checking");
-  const updateStatusEpoch = reactExports.useRef(0);
-  const channelMutationId = reactExports.useRef(0);
-  const channelMutationPending = reactExports.useRef(false);
-  const modeMutationId = reactExports.useRef(0);
-  const modeMutationPending = reactExports.useRef(false);
-  const isMounted = reactExports.useRef(false);
-  reactExports.useEffect(() => {
+  const [updateStatus, setUpdateStatus] = reactExports$1.useState(null);
+  const [updatePhase, setUpdatePhase] = reactExports$1.useState(enabled ? "checking" : "idle");
+  const [updateError, setUpdateError] = reactExports$1.useState(null);
+  const reconnectStartedAt = reactExports$1.useRef(null);
+  const updatePhaseRef = reactExports$1.useRef("checking");
+  const updateStatusEpoch = reactExports$1.useRef(0);
+  const channelMutationId = reactExports$1.useRef(0);
+  const channelMutationPending = reactExports$1.useRef(false);
+  const modeMutationId = reactExports$1.useRef(0);
+  const modeMutationPending = reactExports$1.useRef(false);
+  const isMounted = reactExports$1.useRef(false);
+  reactExports$1.useEffect(() => {
     updatePhaseRef.current = updatePhase;
   }, [updatePhase]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
   }, []);
-  const refreshUpdateStatus = reactExports.useCallback(async () => {
+  const refreshUpdateStatus = reactExports$1.useCallback(async () => {
     if (!enabled || !isMounted.current || channelMutationPending.current || modeMutationPending.current) {
       return;
     }
@@ -24357,7 +24823,7 @@ function useGuardUpdate(options) {
       }
     }
   }, [enabled]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!enabled) {
       setUpdatePhase("idle");
       return;
@@ -24389,7 +24855,7 @@ function useGuardUpdate(options) {
       window.clearInterval(pollId);
     };
   }, [enabled, refreshUpdateStatus]);
-  const waitForReconnect = reactExports.useCallback(
+  const waitForReconnect = reactExports$1.useCallback(
     async (expectedPreviousVersion, expectedLatestVersion, authorization) => {
       reconnectStartedAt.current = Date.now();
       let sawUpdateInProgress = false;
@@ -24427,7 +24893,7 @@ function useGuardUpdate(options) {
     },
     [options]
   );
-  const scheduleAndWait = reactExports.useCallback(
+  const scheduleAndWait = reactExports$1.useCallback(
     async (params) => {
       setUpdatePhase("updating");
       setUpdateError(null);
@@ -24469,7 +24935,7 @@ function useGuardUpdate(options) {
     },
     [waitForReconnect]
   );
-  const onUpdateGuard = reactExports.useCallback(async () => {
+  const onUpdateGuard = reactExports$1.useCallback(async () => {
     if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
       return;
     }
@@ -24478,7 +24944,7 @@ function useGuardUpdate(options) {
       expectedLatestVersion: updateStatus.latest_version
     });
   }, [scheduleAndWait, updateStatus]);
-  const onReinstallGuard = reactExports.useCallback(async () => {
+  const onReinstallGuard = reactExports$1.useCallback(async () => {
     if (!updateStatus?.recovery_reinstall_available) {
       return;
     }
@@ -24488,7 +24954,7 @@ function useGuardUpdate(options) {
       expectedLatestVersion: null
     });
   }, [scheduleAndWait, updateStatus]);
-  const onSetUpdateChannel = reactExports.useCallback(async (channel, proof) => {
+  const onSetUpdateChannel = reactExports$1.useCallback(async (channel, proof) => {
     const mutationId = ++channelMutationId.current;
     updateStatusEpoch.current += 1;
     channelMutationPending.current = true;
@@ -24507,7 +24973,7 @@ function useGuardUpdate(options) {
       }
     }
   }, []);
-  const onSetUpdateMode = reactExports.useCallback(async (mode, proof) => {
+  const onSetUpdateMode = reactExports$1.useCallback(async (mode, proof) => {
     const mutationId = ++modeMutationId.current;
     updateStatusEpoch.current += 1;
     modeMutationPending.current = true;
@@ -24543,26 +25009,26 @@ function GuardUpdatePanel(props) {
   const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
-  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
-  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
-  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
-  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
-  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
-  const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports.useState(false);
-  const [updateModeDraft, setUpdateModeDraft] = reactExports.useState(props.updateStatus?.update_mode ?? "automatic");
-  const [updateModeSavePending, setUpdateModeSavePending] = reactExports.useState(false);
-  const [updateModeSaveError, setUpdateModeSaveError] = reactExports.useState(null);
-  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = reactExports.useState("");
-  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = reactExports.useState("");
+  const [alphaModalOpen, setAlphaModalOpen] = reactExports$1.useState(false);
+  const [alphaSavePending, setAlphaSavePending] = reactExports$1.useState(false);
+  const [alphaSaveError, setAlphaSaveError] = reactExports$1.useState(null);
+  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports$1.useState("");
+  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports$1.useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports$1.useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = reactExports$1.useState(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = reactExports$1.useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = reactExports$1.useState(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = reactExports$1.useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = reactExports$1.useState("");
   const targetChannel = useAlpha ? "stable" : "alpha";
   const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
-  const handleOpenAlphaModal = reactExports.useCallback(() => {
+  const handleOpenAlphaModal = reactExports$1.useCallback(() => {
     setAlphaSaveError(null);
     setAlphaApprovalPassword("");
     setAlphaApprovalTotpCode("");
     setAlphaModalOpen(true);
   }, []);
-  const handleCloseAlphaModal = reactExports.useCallback(() => {
+  const handleCloseAlphaModal = reactExports$1.useCallback(() => {
     if (alphaSavePending) {
       return;
     }
@@ -24571,7 +25037,7 @@ function GuardUpdatePanel(props) {
     setAlphaApprovalPassword("");
     setAlphaApprovalTotpCode("");
   }, [alphaSavePending]);
-  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
+  const handleConfirmAlphaChannel = reactExports$1.useCallback(async () => {
     if (!props.onSetUpdateChannel) {
       return;
     }
@@ -24590,25 +25056,25 @@ function GuardUpdatePanel(props) {
       setAlphaSavePending(false);
     }
   }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+  const handleApprovalPasswordChange = reactExports$1.useCallback((event) => {
     setAlphaApprovalPassword(event.target.value);
   }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+  const handleApprovalTotpCodeChange = reactExports$1.useCallback((event) => {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
-  const handleOpenUpdateModeModal = reactExports.useCallback(() => {
+  const handleOpenUpdateModeModal = reactExports$1.useCallback(() => {
     setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
     setUpdateModeSaveError(null);
     setUpdateModeApprovalPassword("");
     setUpdateModeApprovalTotpCode("");
     setUpdateModeModalOpen(true);
   }, [props.updateStatus?.update_mode]);
-  const handleCloseUpdateModeModal = reactExports.useCallback(() => {
+  const handleCloseUpdateModeModal = reactExports$1.useCallback(() => {
     if (updateModeSavePending) return;
     setUpdateModeModalOpen(false);
     setUpdateModeSaveError(null);
   }, [updateModeSavePending]);
-  const handleConfirmUpdateMode = reactExports.useCallback(async () => {
+  const handleConfirmUpdateMode = reactExports$1.useCallback(async () => {
     if (!props.onSetUpdateMode) return;
     setUpdateModeSavePending(true);
     setUpdateModeSaveError(null);
@@ -24958,8 +25424,8 @@ function focusableElements(container2) {
   );
 }
 function useNavigationDrawerFocus(open, dialogRef, closeButtonRef, onClose) {
-  const restoreFocusRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
+  const restoreFocusRef = reactExports$1.useRef(null);
+  reactExports$1.useEffect(() => {
     if (!open) return;
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
@@ -25008,13 +25474,13 @@ function useNavigationDrawerFocus(open, dialogRef, closeButtonRef, onClose) {
       }
     };
   }, [open, dialogRef, closeButtonRef, onClose]);
-  return reactExports.useCallback(() => {
+  return reactExports$1.useCallback(() => {
     restoreFocusRef.current = null;
   }, []);
 }
 function NavigationDrawer(props) {
-  const dialogRef = reactExports.useRef(null);
-  const closeButtonRef = reactExports.useRef(null);
+  const dialogRef = reactExports$1.useRef(null);
+  const closeButtonRef = reactExports$1.useRef(null);
   const suppressFocusRestore = useNavigationDrawerFocus(
     props.open,
     dialogRef,
@@ -25409,13 +25875,13 @@ function MobileBottomNavigation(props) {
   );
 }
 function ShellNavigation(props) {
-  const [drawerOpen, setDrawerOpen] = reactExports.useState(false);
-  const openDrawer = reactExports.useCallback(() => setDrawerOpen(true), []);
-  const closeDrawer = reactExports.useCallback(() => setDrawerOpen(false), []);
-  reactExports.useEffect(() => {
+  const [drawerOpen, setDrawerOpen] = reactExports$1.useState(false);
+  const openDrawer = reactExports$1.useCallback(() => setDrawerOpen(true), []);
+  const closeDrawer = reactExports$1.useCallback(() => setDrawerOpen(false), []);
+  reactExports$1.useEffect(() => {
     setDrawerOpen(false);
   }, [props.view]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const persistentQuery = window.matchMedia("(min-width: 48rem)");
     const expandedQuery = window.matchMedia("(min-width: 80rem)");
     const closeForResponsiveMode = (event) => {
@@ -25458,10 +25924,10 @@ function invalidateReceiptAnalyticsCache() {
   analyticsInflight = null;
 }
 function useReceiptAnalytics(enabled) {
-  const [state, setState] = reactExports.useState(
+  const [state, setState] = reactExports$1.useState(
     () => enabled ? { kind: "loading" } : { kind: "idle" }
   );
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!enabled) {
       setState({ kind: "idle" });
       return;
@@ -25851,13 +26317,13 @@ function ActiveChip({ label, onRemove }) {
   ] });
 }
 function SearchInput({ value, onChange }) {
-  const handleChange = reactExports.useCallback(
+  const handleChange = reactExports$1.useCallback(
     (e) => {
       onChange(e.target.value);
     },
     [onChange]
   );
-  const handleClear = reactExports.useCallback(() => {
+  const handleClear = reactExports$1.useCallback(() => {
     onChange("");
   }, [onChange]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative flex flex-1 min-w-[160px] items-center", children: [
@@ -25899,44 +26365,44 @@ function EvidenceFilterBar({
   harnesses,
   hideHarnessFilter = false
 }) {
-  const [showMore, setShowMore] = reactExports.useState(false);
-  const handleSearchChange = reactExports.useCallback(
+  const [showMore, setShowMore] = reactExports$1.useState(false);
+  const handleSearchChange = reactExports$1.useCallback(
     (value) => {
       onChange({ search: value });
     },
     [onChange]
   );
-  const handleTimeChange = reactExports.useCallback(
+  const handleTimeChange = reactExports$1.useCallback(
     (e) => {
       onChange({ time: e.target.value, day: "" });
     },
     [onChange]
   );
-  const handleDecisionChange = reactExports.useCallback(
+  const handleDecisionChange = reactExports$1.useCallback(
     (e) => {
       onChange({ decision: e.target.value });
     },
     [onChange]
   );
-  const handleHarnessChange = reactExports.useCallback(
+  const handleHarnessChange = reactExports$1.useCallback(
     (e) => {
       onChange({ harness: e.target.value });
     },
     [onChange]
   );
-  const handleCategoryChange = reactExports.useCallback(
+  const handleCategoryChange = reactExports$1.useCallback(
     (e) => {
       onChange({ category: e.target.value });
     },
     [onChange]
   );
-  const handleSourceScopeChange = reactExports.useCallback(
+  const handleSourceScopeChange = reactExports$1.useCallback(
     (e) => {
       onChange({ sourceScope: e.target.value });
     },
     [onChange]
   );
-  const handleClearAll = reactExports.useCallback(() => {
+  const handleClearAll = reactExports$1.useCallback(() => {
     onChange({
       search: "",
       time: "all",
@@ -25947,25 +26413,25 @@ function EvidenceFilterBar({
       day: ""
     });
   }, [onChange]);
-  const handleRemoveSearch = reactExports.useCallback(() => {
+  const handleRemoveSearch = reactExports$1.useCallback(() => {
     onChange({ search: "" });
   }, [onChange]);
-  const handleRemoveTime = reactExports.useCallback(() => {
+  const handleRemoveTime = reactExports$1.useCallback(() => {
     onChange({ time: "all", day: "" });
   }, [onChange]);
-  const handleRemoveDecision = reactExports.useCallback(() => {
+  const handleRemoveDecision = reactExports$1.useCallback(() => {
     onChange({ decision: "all" });
   }, [onChange]);
-  const handleRemoveHarness = reactExports.useCallback(() => {
+  const handleRemoveHarness = reactExports$1.useCallback(() => {
     onChange({ harness: "all" });
   }, [onChange]);
-  const handleRemoveCategory = reactExports.useCallback(() => {
+  const handleRemoveCategory = reactExports$1.useCallback(() => {
     onChange({ category: "" });
   }, [onChange]);
-  const handleRemoveSourceScope = reactExports.useCallback(() => {
+  const handleRemoveSourceScope = reactExports$1.useCallback(() => {
     onChange({ sourceScope: "" });
   }, [onChange]);
-  const handleToggleMore = reactExports.useCallback(() => {
+  const handleToggleMore = reactExports$1.useCallback(() => {
     setShowMore((prev) => !prev);
   }, []);
   const hasActiveFilters = filters.search || filters.time !== "all" || filters.decision !== "all" || !hideHarnessFilter && filters.harness !== "all" || filters.category || filters.sourceScope || filters.day;
@@ -26192,7 +26658,7 @@ function EvidenceActionList({
 }) {
   const visible = receipts.slice(0, (page + 1) * pageSize);
   const showLoadMore = hasMore(page, pageSize, receipts.length);
-  const handleSort = reactExports.useCallback(
+  const handleSort = reactExports$1.useCallback(
     (key) => {
       if (sort === key) {
         onSortChange(SORT_TOGGLE_MAP[key]);
@@ -26305,24 +26771,24 @@ function ActionRow({
   const actionTitleTooltip = resolveActionTitleTooltip(receipt);
   const actionType = resolveActionType(receipt);
   const actionSubtitle = resolveActionSubtitle(receipt);
-  const handleClick = reactExports.useCallback(() => {
+  const handleClick = reactExports$1.useCallback(() => {
     onSelect(receipt.receipt_id);
   }, [receipt.receipt_id, onSelect]);
-  const handleHarnessClick = reactExports.useCallback(
+  const handleHarnessClick = reactExports$1.useCallback(
     (e) => {
       e.stopPropagation();
       onFilterHarness(receipt.harness);
     },
     [receipt.harness, onFilterHarness]
   );
-  const handleCategoryClick = reactExports.useCallback(
+  const handleCategoryClick = reactExports$1.useCallback(
     (e) => {
       e.stopPropagation();
       onFilterCategory(category);
     },
     [category, onFilterCategory]
   );
-  const handleKeyDown = reactExports.useCallback(
+  const handleKeyDown = reactExports$1.useCallback(
     (e) => {
       if (e.target !== e.currentTarget) return;
       if (e.key === "Enter" || e.key === " ") {
@@ -26393,20 +26859,20 @@ function ActionRow({
   );
 }
 function useCopyFeedbackTimeout(resetMs) {
-  const [copied, setCopied] = reactExports.useState(false);
-  const resetTimeoutRef = reactExports.useRef(null);
-  const clearResetTimeout = reactExports.useCallback(() => {
+  const [copied, setCopied] = reactExports$1.useState(false);
+  const resetTimeoutRef = reactExports$1.useRef(null);
+  const clearResetTimeout = reactExports$1.useCallback(() => {
     if (resetTimeoutRef.current !== null) {
       clearTimeout(resetTimeoutRef.current);
       resetTimeoutRef.current = null;
     }
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     return () => {
       clearResetTimeout();
     };
   }, [clearResetTimeout]);
-  const flashCopied = reactExports.useCallback(() => {
+  const flashCopied = reactExports$1.useCallback(() => {
     clearResetTimeout();
     setCopied(true);
     resetTimeoutRef.current = setTimeout(() => {
@@ -26414,7 +26880,7 @@ function useCopyFeedbackTimeout(resetMs) {
       setCopied(false);
     }, resetMs);
   }, [clearResetTimeout, resetMs]);
-  const resetCopied = reactExports.useCallback(() => {
+  const resetCopied = reactExports$1.useCallback(() => {
     clearResetTimeout();
     setCopied(false);
   }, [clearResetTimeout]);
@@ -26433,18 +26899,18 @@ function shouldOfferLoggedActionExpand(text2) {
   return trimmed.split(/\r?\n/).length > EXPAND_LINE_THRESHOLD;
 }
 function LoggedActionPanel(props) {
-  const canExpand = reactExports.useMemo(() => shouldOfferLoggedActionExpand(props.text), [props.text]);
-  const [expanded, setExpanded] = reactExports.useState(!canExpand);
+  const canExpand = reactExports$1.useMemo(() => shouldOfferLoggedActionExpand(props.text), [props.text]);
+  const [expanded, setExpanded] = reactExports$1.useState(!canExpand);
   const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2e3);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     resetCopied();
   }, [props.text, resetCopied]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!canExpand) {
       setExpanded(true);
     }
   }, [canExpand]);
-  const handleCopy = reactExports.useCallback(async () => {
+  const handleCopy = reactExports$1.useCallback(async () => {
     if (!navigator.clipboard?.writeText) {
       resetCopied();
       return;
@@ -26456,7 +26922,7 @@ function LoggedActionPanel(props) {
       resetCopied();
     }
   }, [flashCopied, props.text, resetCopied]);
-  const handleToggleExpanded = reactExports.useCallback(() => {
+  const handleToggleExpanded = reactExports$1.useCallback(() => {
     setExpanded((value) => !value);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl bg-[#0f172a]", children: [
@@ -26507,18 +26973,18 @@ function LoggedActionPanel(props) {
     ] })
   ] });
 }
-const useClientLayoutEffect = typeof window === "undefined" ? reactExports.useEffect : reactExports.useLayoutEffect;
+const useClientLayoutEffect = typeof window === "undefined" ? reactExports$1.useEffect : reactExports$1.useLayoutEffect;
 function SelectMenu(props) {
-  const generated = reactExports.useId();
+  const generated = reactExports$1.useId();
   const id2 = props.id ?? generated;
   const listId = id2 + "-listbox";
   const optionId = (index) => id2 + "-option-" + index;
-  const button2 = reactExports.useRef(null);
-  const list = reactExports.useRef(null);
-  const typed = reactExports.useRef({ text: "", at: 0 });
-  const [open, setOpen] = reactExports.useState(false);
-  const [active, setActive] = reactExports.useState(-1);
-  const [upward, setUpward] = reactExports.useState(false);
+  const button2 = reactExports$1.useRef(null);
+  const list = reactExports$1.useRef(null);
+  const typed = reactExports$1.useRef({ text: "", at: 0 });
+  const [open, setOpen] = reactExports$1.useState(false);
+  const [active, setActive] = reactExports$1.useState(-1);
+  const [upward, setUpward] = reactExports$1.useState(false);
   const selectedIndex = props.options.findIndex((option) => option.value === props.value);
   const selected = selectedIndex >= 0 ? props.options[selectedIndex] : void 0;
   const enabled = (index) => index >= 0 && index < props.options.length && !props.options[index].disabled;
@@ -26549,7 +27015,7 @@ function SelectMenu(props) {
     hide();
     if (props.options[index].value !== props.value) props.onChange(props.options[index].value);
   }
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!open) return;
     const close = (event) => {
       const target2 = event.target;
@@ -27128,20 +27594,20 @@ const preparedAt = (value) => {
   return Number.isNaN(date.getTime()) ? "Unknown preparation time" : date.toLocaleString();
 };
 function ContextHistoryPanel({ decisionId, harness }) {
-  const [open, setOpen] = reactExports.useState(false);
-  const [scopes, setScopes] = reactExports.useState([]);
-  const [scope, setScope] = reactExports.useState(null);
-  const [entries, setEntries] = reactExports.useState([]);
-  const [summary, setSummary] = reactExports.useState(null);
-  const [detail, setDetail] = reactExports.useState(null);
-  const [previous, setPrevious] = reactExports.useState(null);
-  const [busy, setBusy] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const revision2 = reactExports.useRef(0);
-  const generation = reactExports.useRef(null);
-  const request2 = reactExports.useRef(null);
-  const id2 = reactExports.useId();
-  reactExports.useEffect(() => {
+  const [open, setOpen] = reactExports$1.useState(false);
+  const [scopes, setScopes] = reactExports$1.useState([]);
+  const [scope, setScope] = reactExports$1.useState(null);
+  const [entries, setEntries] = reactExports$1.useState([]);
+  const [summary, setSummary] = reactExports$1.useState(null);
+  const [detail, setDetail] = reactExports$1.useState(null);
+  const [previous, setPrevious] = reactExports$1.useState(null);
+  const [busy, setBusy] = reactExports$1.useState(false);
+  const [error, setError] = reactExports$1.useState(null);
+  const revision2 = reactExports$1.useRef(0);
+  const generation = reactExports$1.useRef(null);
+  const request2 = reactExports$1.useRef(null);
+  const id2 = reactExports$1.useId();
+  reactExports$1.useEffect(() => {
     revision2.current += 1;
     request2.current?.abort();
     generation.current = null;
@@ -27158,7 +27624,7 @@ function ContextHistoryPanel({ decisionId, harness }) {
       request2.current?.abort();
     };
   }, [decisionId, harness]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!open || !scope) return;
     const controller = new AbortController();
     let pending = false;
@@ -27347,8 +27813,8 @@ function SeverityBadge({ severity }) {
   );
 }
 function ScannerEvidenceSection$1({ signals }) {
-  const [expanded, setExpanded] = reactExports.useState({});
-  const toggle = reactExports.useCallback((id2) => {
+  const [expanded, setExpanded] = reactExports$1.useState({});
+  const toggle = reactExports$1.useCallback((id2) => {
     setExpanded((prev) => ({ ...prev, [id2]: !prev[id2] }));
   }, []);
   if (signals.length === 0) return null;
@@ -27406,8 +27872,8 @@ function ScannerEvidenceSection$1({ signals }) {
   ] });
 }
 function TechnicalSection({ receipt }) {
-  const [open, setOpen] = reactExports.useState(false);
-  const handleToggle = reactExports.useCallback(() => {
+  const [open, setOpen] = reactExports$1.useState(false);
+  const handleToggle = reactExports$1.useCallback(() => {
     setOpen((prev) => !prev);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200", children: [
@@ -27532,9 +27998,9 @@ function EvidenceActionDetail({
   receipt,
   onClose
 }) {
-  const [copied, setCopied] = reactExports.useState(false);
-  const [copyUnavailable, setCopyUnavailable] = reactExports.useState(false);
-  const handleCopyId = reactExports.useCallback(async () => {
+  const [copied, setCopied] = reactExports$1.useState(false);
+  const [copyUnavailable, setCopyUnavailable] = reactExports$1.useState(false);
+  const handleCopyId = reactExports$1.useCallback(async () => {
     if (!receipt) return;
     try {
       await navigator.clipboard.writeText(receipt.receipt_id);
@@ -27771,24 +28237,24 @@ function EvidenceActivityHeatmap({
   days,
   onSelectDay
 }) {
-  const gridRef = reactExports.useRef(null);
-  const cellRefs = reactExports.useRef(/* @__PURE__ */ new Map());
-  const [activeIndex, setActiveIndex] = reactExports.useState(0);
-  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
-  const [tooltip, setTooltip] = reactExports.useState(null);
-  const [reduceMotion, setReduceMotion] = reactExports.useState(false);
-  const peak = reactExports.useMemo(() => Math.max(...days.map((day) => day.total), 0), [days]);
-  const weeks = reactExports.useMemo(() => buildWeekColumns(days), [days]);
-  const labels = reactExports.useMemo(() => monthLabels(weeks), [weeks]);
-  const flatCells = reactExports.useMemo(() => flatCellsFromWeeks(weeks), [weeks]);
+  const gridRef = reactExports$1.useRef(null);
+  const cellRefs = reactExports$1.useRef(/* @__PURE__ */ new Map());
+  const [activeIndex, setActiveIndex] = reactExports$1.useState(0);
+  const [hoveredKey, setHoveredKey] = reactExports$1.useState(null);
+  const [tooltip, setTooltip] = reactExports$1.useState(null);
+  const [reduceMotion, setReduceMotion] = reactExports$1.useState(false);
+  const peak = reactExports$1.useMemo(() => Math.max(...days.map((day) => day.total), 0), [days]);
+  const weeks = reactExports$1.useMemo(() => buildWeekColumns(days), [days]);
+  const labels = reactExports$1.useMemo(() => monthLabels(weeks), [weeks]);
+  const flatCells = reactExports$1.useMemo(() => flatCellsFromWeeks(weeks), [weeks]);
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const activeCell = flatCells[activeIndex] ?? null;
   const displayKey = hoveredKey ?? activeCell?.date_key ?? null;
   const displayCell = displayKey ? flatCells.find((c) => c.date_key === displayKey) ?? null : null;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
-  const updateTooltipForKey = reactExports.useCallback((dateKey) => {
+  const updateTooltipForKey = reactExports$1.useCallback((dateKey) => {
     if (!dateKey || isGuardModalOpen$1()) {
       setTooltip(null);
       return;
@@ -27811,10 +28277,10 @@ function EvidenceActivityHeatmap({
       placement
     });
   }, [flatCells]);
-  reactExports.useLayoutEffect(() => {
+  reactExports$1.useLayoutEffect(() => {
     updateTooltipForKey(displayKey);
   }, [displayKey, updateTooltipForKey, weeks]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!displayKey) return;
     const onScrollOrResize = () => updateTooltipForKey(displayKey);
     window.addEventListener("scroll", onScrollOrResize, true);
@@ -27824,7 +28290,7 @@ function EvidenceActivityHeatmap({
       window.removeEventListener("resize", onScrollOrResize);
     };
   }, [displayKey, updateTooltipForKey]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (typeof document === "undefined") return;
     const dismissWhenModalOpens = () => {
       if (isGuardModalOpen$1()) {
@@ -27836,7 +28302,7 @@ function EvidenceActivityHeatmap({
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-guard-modal-open"] });
     return () => observer.disconnect();
   }, []);
-  const moveActive = reactExports.useCallback(
+  const moveActive = reactExports$1.useCallback(
     (delta) => {
       if (flatCells.length === 0) return;
       setActiveIndex((prev) => Math.max(0, Math.min(flatCells.length - 1, prev + delta)));
@@ -29065,7 +29531,7 @@ function FiCheck(props) {
 }
 function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
   const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2e3);
-  const handleCopy = reactExports.useCallback(async () => {
+  const handleCopy = reactExports$1.useCallback(async () => {
     try {
       await navigator.clipboard.writeText(publicUrl);
       flashCopied();
@@ -29073,7 +29539,7 @@ function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
       resetCopied();
     }
   }, [flashCopied, publicUrl, resetCopied]);
-  const handleNativeShare = reactExports.useCallback(async () => {
+  const handleNativeShare = reactExports$1.useCallback(async () => {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
@@ -29229,20 +29695,20 @@ function EvidenceInsightsShareModal({
   runtime: initialRuntime,
   onClose
 }) {
-  const [runtime2, setRuntime] = reactExports.useState(initialRuntime);
-  const [includeTopArtifacts, setIncludeTopArtifacts] = reactExports.useState(false);
-  const [showDisplayName, setShowDisplayName] = reactExports.useState(true);
-  const [displayName, setDisplayName] = reactExports.useState("");
-  const [publishing, setPublishing] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const [rawError, setRawError] = reactExports.useState(null);
-  const [shareResult, setShareResult] = reactExports.useState(null);
-  const [connectFlow, setConnectFlow] = reactExports.useState(null);
-  const [connectStarting, setConnectStarting] = reactExports.useState(false);
-  const [connectError, setConnectError] = reactExports.useState(null);
+  const [runtime2, setRuntime] = reactExports$1.useState(initialRuntime);
+  const [includeTopArtifacts, setIncludeTopArtifacts] = reactExports$1.useState(false);
+  const [showDisplayName, setShowDisplayName] = reactExports$1.useState(true);
+  const [displayName, setDisplayName] = reactExports$1.useState("");
+  const [publishing, setPublishing] = reactExports$1.useState(false);
+  const [error, setError] = reactExports$1.useState(null);
+  const [rawError, setRawError] = reactExports$1.useState(null);
+  const [shareResult, setShareResult] = reactExports$1.useState(null);
+  const [connectFlow, setConnectFlow] = reactExports$1.useState(null);
+  const [connectStarting, setConnectStarting] = reactExports$1.useState(false);
+  const [connectError, setConnectError] = reactExports$1.useState(null);
   const cloudConnected = insightsShareCloudReady(runtime2);
   const connectMode = runtime2?.cloud_state === "local_only" || runtime2?.cloud_state === "paired_waiting" ? "connect" : "repair";
-  const refreshConnectState = reactExports.useCallback(async () => {
+  const refreshConnectState = reactExports$1.useCallback(async () => {
     const [connectStatus, runtimeSnapshot] = await Promise.all([
       fetchGuardCloudConnectStatus(),
       fetchRuntimeSnapshot({ includeItems: false })
@@ -29251,7 +29717,7 @@ function EvidenceInsightsShareModal({
     setConnectFlow(connectStatus.connect_flow);
     return connectStatus;
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (cloudConnected) {
       setConnectFlow(null);
       return;
@@ -29262,7 +29728,7 @@ function EvidenceInsightsShareModal({
       );
     });
   }, [cloudConnected, refreshConnectState]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (connectFlow?.state !== "running" && connectFlow?.state !== "starting") {
       return;
     }
@@ -29271,7 +29737,7 @@ function EvidenceInsightsShareModal({
     }, connectFlow.poll_after_ms ?? 1500);
     return () => window.clearTimeout(handle);
   }, [connectFlow, refreshConnectState]);
-  const handleStartConnect = reactExports.useCallback(async () => {
+  const handleStartConnect = reactExports$1.useCallback(async () => {
     setConnectStarting(true);
     setConnectError(null);
     try {
@@ -29294,7 +29760,7 @@ function EvidenceInsightsShareModal({
       setConnectStarting(false);
     }
   }, [refreshConnectState]);
-  const handlePublish = reactExports.useCallback(async () => {
+  const handlePublish = reactExports$1.useCallback(async () => {
     setPublishing(true);
     setError(null);
     setRawError(null);
@@ -29313,7 +29779,7 @@ function EvidenceInsightsShareModal({
       setPublishing(false);
     }
   }, [displayName, includeTopArtifacts, showDisplayName]);
-  const activeConnectFlow = reactExports.useMemo(() => {
+  const activeConnectFlow = reactExports$1.useMemo(() => {
     if (connectFlow !== null) {
       return connectFlow;
     }
@@ -29515,20 +29981,20 @@ function isGuardModalOpen() {
   return Number.isFinite(count2) && count2 > 0;
 }
 function EvidenceTrendChart({ buckets }) {
-  const cellRefs = reactExports.useRef(/* @__PURE__ */ new Map());
-  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
-  const [tooltip, setTooltip] = reactExports.useState(null);
-  const [reduceMotion, setReduceMotion] = reactExports.useState(false);
-  const maxTotal = reactExports.useMemo(() => Math.max(...buckets.map((bucket) => bucketTotal(bucket)), 1), [buckets]);
-  const hasAnyData = reactExports.useMemo(() => buckets.some((bucket) => bucketTotal(bucket) > 0), [buckets]);
-  reactExports.useEffect(() => {
+  const cellRefs = reactExports$1.useRef(/* @__PURE__ */ new Map());
+  const [hoveredKey, setHoveredKey] = reactExports$1.useState(null);
+  const [tooltip, setTooltip] = reactExports$1.useState(null);
+  const [reduceMotion, setReduceMotion] = reactExports$1.useState(false);
+  const maxTotal = reactExports$1.useMemo(() => Math.max(...buckets.map((bucket) => bucketTotal(bucket)), 1), [buckets]);
+  const hasAnyData = reactExports$1.useMemo(() => buckets.some((bucket) => bucketTotal(bucket) > 0), [buckets]);
+  reactExports$1.useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const syncPreference = () => setReduceMotion(media.matches);
     syncPreference();
     media.addEventListener("change", syncPreference);
     return () => media.removeEventListener("change", syncPreference);
   }, []);
-  const updateTooltipForKey = reactExports.useCallback(
+  const updateTooltipForKey = reactExports$1.useCallback(
     (dateKey) => {
       if (!dateKey || isGuardModalOpen()) {
         setTooltip(null);
@@ -29556,10 +30022,10 @@ function EvidenceTrendChart({ buckets }) {
     },
     [buckets]
   );
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     updateTooltipForKey(hoveredKey);
   }, [hoveredKey, updateTooltipForKey, buckets]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!hoveredKey) return;
     const onScrollOrResize = () => updateTooltipForKey(hoveredKey);
     window.addEventListener("scroll", onScrollOrResize, true);
@@ -29569,7 +30035,7 @@ function EvidenceTrendChart({ buckets }) {
       window.removeEventListener("resize", onScrollOrResize);
     };
   }, [hoveredKey, updateTooltipForKey]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (typeof document === "undefined") return;
     const dismissWhenModalOpens = () => {
       if (isGuardModalOpen()) {
@@ -29775,18 +30241,18 @@ function EvidenceInsightsSurface({
   onFilterDay,
   onViewActions
 }) {
-  const [mounted, setMounted] = reactExports.useState(false);
-  const [shareOpen, setShareOpen] = reactExports.useState(false);
-  const handleShareOpen = reactExports.useCallback(() => {
+  const [mounted, setMounted] = reactExports$1.useState(false);
+  const [shareOpen, setShareOpen] = reactExports$1.useState(false);
+  const handleShareOpen = reactExports$1.useCallback(() => {
     setShareOpen(true);
   }, []);
-  const handleShareClose = reactExports.useCallback(() => {
+  const handleShareClose = reactExports$1.useCallback(() => {
     setShareOpen(false);
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setMounted(true);
   }, []);
-  const artifactTotal = reactExports.useMemo(
+  const artifactTotal = reactExports$1.useMemo(
     () => analytics.top_artifacts.reduce((sum, item) => sum + item.total, 0),
     [analytics.top_artifacts]
   );
@@ -29966,8 +30432,8 @@ function EvidenceExportDrawer({
   isOpen,
   onClose
 }) {
-  const [status, setStatus] = reactExports.useState("idle");
-  const handleCsvExport = reactExports.useCallback(() => {
+  const [status, setStatus] = reactExports$1.useState("idle");
+  const handleCsvExport = reactExports$1.useCallback(() => {
     try {
       downloadEvidence("csv", receipts, filters);
       setStatus("success");
@@ -29976,7 +30442,7 @@ function EvidenceExportDrawer({
       setStatus("error");
     }
   }, [receipts, filters]);
-  const handleJsonExport = reactExports.useCallback(() => {
+  const handleJsonExport = reactExports$1.useCallback(() => {
     try {
       downloadEvidence("json", receipts, filters);
       setStatus("success");
@@ -29985,7 +30451,7 @@ function EvidenceExportDrawer({
       setStatus("error");
     }
   }, [receipts, filters]);
-  const handleDiagnosticsExport = reactExports.useCallback(async () => {
+  const handleDiagnosticsExport = reactExports$1.useCallback(async () => {
     try {
       const blob = await exportDiagnostics();
       const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -30103,8 +30569,8 @@ function EvidenceClearModal({
   onClose,
   onCleared
 }) {
-  const [loading, setLoading] = reactExports.useState(false);
-  const handleConfirm = reactExports.useCallback(async () => {
+  const [loading, setLoading] = reactExports$1.useState(false);
+  const handleConfirm = reactExports$1.useCallback(async () => {
     setLoading(true);
     try {
       await clearEvidence();
@@ -30266,7 +30732,7 @@ function isConnectableAppHarness(harness) {
   return appSetupTarget(harness) === "harness";
 }
 function Sparkline({ items, days = 7 }) {
-  const buckets = reactExports.useMemo(() => {
+  const buckets = reactExports$1.useMemo(() => {
     const now2 = /* @__PURE__ */ new Date();
     const counts = new Array(days).fill(0);
     for (const item of items) {
@@ -30323,12 +30789,12 @@ function ScopedEvidenceTable({
   onFilterCategory,
   onFilterHarness
 }) {
-  const [sort, setSort] = reactExports.useState("newest");
-  const [page, setPage] = reactExports.useState(0);
-  const [selectedId, setSelectedId] = reactExports.useState("");
-  const [exportOpen, setExportOpen] = reactExports.useState(false);
-  const sorted = reactExports.useMemo(() => sortEvidence(receipts, sort), [receipts, sort]);
-  const exportFilterState = reactExports.useMemo(
+  const [sort, setSort] = reactExports$1.useState("newest");
+  const [page, setPage] = reactExports$1.useState(0);
+  const [selectedId, setSelectedId] = reactExports$1.useState("");
+  const [exportOpen, setExportOpen] = reactExports$1.useState(false);
+  const sorted = reactExports$1.useMemo(() => sortEvidence(receipts, sort), [receipts, sort]);
+  const exportFilterState = reactExports$1.useMemo(
     () => ({
       search: "",
       time: "all",
@@ -30343,30 +30809,30 @@ function ScopedEvidenceTable({
     }),
     [exportFilters.decision, exportFilters.harness, exportFilters.category, sort]
   );
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setPage(0);
     setSelectedId("");
     setSort("newest");
   }, [receipts]);
-  const handleSortChange = reactExports.useCallback((next) => {
+  const handleSortChange = reactExports$1.useCallback((next) => {
     setSort(next);
     setPage(0);
   }, []);
-  const handleLoadMore = reactExports.useCallback(() => {
+  const handleLoadMore = reactExports$1.useCallback(() => {
     setPage((prev) => prev + 1);
   }, []);
-  const handleSelectId = reactExports.useCallback((id2) => {
+  const handleSelectId = reactExports$1.useCallback((id2) => {
     setSelectedId((prev) => prev === id2 ? "" : id2);
   }, []);
-  const handleOpenExport = reactExports.useCallback(() => {
+  const handleOpenExport = reactExports$1.useCallback(() => {
     setExportOpen(true);
   }, []);
-  const handleCloseExport = reactExports.useCallback(() => {
+  const handleCloseExport = reactExports$1.useCallback(() => {
     setExportOpen(false);
   }, []);
-  const noopHarness = reactExports.useCallback(() => {
+  const noopHarness = reactExports$1.useCallback(() => {
   }, []);
-  const noopCategory = reactExports.useCallback(() => {
+  const noopCategory = reactExports$1.useCallback(() => {
   }, []);
   if (receipts.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No actions match the selected filters." }) });
@@ -30425,7 +30891,7 @@ function AppListCard({ harness, items, onSelect }) {
   const reviewed = items.filter((r) => guardActionDisposition(r.policy_decision) === "reviewed").length;
   const lastActive = items[0]?.timestamp;
   const color = harnessColor(harness);
-  const handleClick = reactExports.useCallback(() => onSelect(harness), [harness, onSelect]);
+  const handleClick = reactExports$1.useCallback(() => onSelect(harness), [harness, onSelect]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "button",
     {
@@ -30463,15 +30929,15 @@ function AppListCard({ harness, items, onSelect }) {
   );
 }
 function AppTabRaw({ receipts }) {
-  const [selectedApp, setSelectedApp] = reactExports.useState(null);
-  const [searchTerm, setSearchTerm] = reactExports.useState("");
-  const [decisionFilter, setDecisionFilter] = reactExports.useState("all");
-  const [categoryFilter, setCategoryFilter] = reactExports.useState("");
-  const appReceipts = reactExports.useMemo(
+  const [selectedApp, setSelectedApp] = reactExports$1.useState(null);
+  const [searchTerm, setSearchTerm] = reactExports$1.useState("");
+  const [decisionFilter, setDecisionFilter] = reactExports$1.useState("all");
+  const [categoryFilter, setCategoryFilter] = reactExports$1.useState("");
+  const appReceipts = reactExports$1.useMemo(
     () => receipts.filter((receipt) => isConnectableAppHarness(receipt.harness)),
     [receipts]
   );
-  const apps = reactExports.useMemo(() => {
+  const apps = reactExports$1.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const receipt of appReceipts) {
       if (!map.has(receipt.harness)) map.set(receipt.harness, []);
@@ -30482,25 +30948,25 @@ function AppTabRaw({ receipts }) {
     }
     return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
   }, [appReceipts]);
-  const filteredApps = reactExports.useMemo(() => {
+  const filteredApps = reactExports$1.useMemo(() => {
     if (!searchTerm.trim()) return apps;
     const q = searchTerm.toLowerCase();
     return apps.filter(([harness]) => harnessDisplayName(harness).toLowerCase().includes(q));
   }, [apps, searchTerm]);
-  const handleSearchChange = reactExports.useCallback((e) => {
+  const handleSearchChange = reactExports$1.useCallback((e) => {
     setSearchTerm(e.target.value);
   }, []);
-  const handleBack = reactExports.useCallback(() => {
+  const handleBack = reactExports$1.useCallback(() => {
     setSelectedApp(null);
     setDecisionFilter("all");
     setCategoryFilter("");
   }, []);
-  const handleSelectApp = reactExports.useCallback((h) => {
+  const handleSelectApp = reactExports$1.useCallback((h) => {
     setSelectedApp(h);
     setDecisionFilter("all");
     setCategoryFilter("");
   }, []);
-  const selectedItems = reactExports.useMemo(() => {
+  const selectedItems = reactExports$1.useMemo(() => {
     if (!selectedApp) return [];
     let items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
     if (decisionFilter !== "all") {
@@ -30511,16 +30977,16 @@ function AppTabRaw({ receipts }) {
     }
     return items;
   }, [apps, selectedApp, decisionFilter, categoryFilter]);
-  const handleCategoryFilter = reactExports.useCallback((category) => {
+  const handleCategoryFilter = reactExports$1.useCallback((category) => {
     setCategoryFilter(category);
   }, []);
-  const handleDecisionFilterChange = reactExports.useCallback((event) => {
+  const handleDecisionFilterChange = reactExports$1.useCallback((event) => {
     const nextValue = event.target.value;
     if (nextValue === "all" || nextValue === "allow" || nextValue === "ask" || nextValue === "block") {
       setDecisionFilter(nextValue);
     }
   }, []);
-  const categories = reactExports.useMemo(() => {
+  const categories = reactExports$1.useMemo(() => {
     if (!selectedApp) return [];
     const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
     return Array.from(new Set(allItems.map((r) => detectCategory(r))));
@@ -30680,9 +31146,9 @@ function AppTabRaw({ receipts }) {
     filteredApps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No apps match your search." }) })
   ] });
 }
-const AppTab = reactExports.memo(AppTabRaw);
+const AppTab = reactExports$1.memo(AppTabRaw);
 function CategoryCard({ cat, count: count2, blocked, onSelect }) {
-  const handleClick = reactExports.useCallback(() => {
+  const handleClick = reactExports$1.useCallback(() => {
     onSelect(cat.key);
   }, [cat.key, onSelect]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30711,22 +31177,22 @@ function CategoryCard({ cat, count: count2, blocked, onSelect }) {
   );
 }
 function CategoryTabRaw({ receipts, onFilterCategory }) {
-  const [selectedCategory, setSelectedCategory] = reactExports.useState(null);
-  const [decisionFilter, setDecisionFilter] = reactExports.useState("all");
-  const [harnessFilter, setHarnessFilter] = reactExports.useState("");
-  const groups = reactExports.useMemo(() => groupByCategory(receipts), [receipts]);
-  const handleBack = reactExports.useCallback(() => {
+  const [selectedCategory, setSelectedCategory] = reactExports$1.useState(null);
+  const [decisionFilter, setDecisionFilter] = reactExports$1.useState("all");
+  const [harnessFilter, setHarnessFilter] = reactExports$1.useState("");
+  const groups = reactExports$1.useMemo(() => groupByCategory(receipts), [receipts]);
+  const handleBack = reactExports$1.useCallback(() => {
     setSelectedCategory(null);
     setDecisionFilter("all");
     setHarnessFilter("");
   }, []);
-  const handleSelectCategory = reactExports.useCallback((key) => {
+  const handleSelectCategory = reactExports$1.useCallback((key) => {
     setSelectedCategory(key);
     setDecisionFilter("all");
     setHarnessFilter("");
     onFilterCategory?.(key);
   }, [onFilterCategory]);
-  const selectedItems = reactExports.useMemo(() => {
+  const selectedItems = reactExports$1.useMemo(() => {
     if (!selectedCategory) return [];
     let items = groups.get(selectedCategory) ?? [];
     if (decisionFilter !== "all") {
@@ -30737,7 +31203,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
     }
     return items;
   }, [groups, selectedCategory, decisionFilter, harnessFilter]);
-  const harnesses = reactExports.useMemo(() => {
+  const harnesses = reactExports$1.useMemo(() => {
     if (!selectedCategory) return [];
     const allItems = groups.get(selectedCategory) ?? [];
     return Array.from(new Set(allItems.map((r) => r.harness)));
@@ -30883,7 +31349,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
     Array.from(groups.values()).every((items) => items.length === 0) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "col-span-full rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
   ] });
 }
-const CategoryTab = reactExports.memo(CategoryTabRaw);
+const CategoryTab = reactExports$1.memo(CategoryTabRaw);
 function WorkspacePageHeaderToolbar(props) {
   if (!props.tabConfig && !props.actions) {
     return null;
@@ -30941,8 +31407,8 @@ function subscribeDashboardLocation(listener) {
   };
 }
 function useDashboardPathname() {
-  const [pathname, setPathname] = reactExports.useState(window.location.pathname);
-  reactExports.useEffect(() => subscribeDashboardLocation(() => setPathname(window.location.pathname)), []);
+  const [pathname, setPathname] = reactExports$1.useState(window.location.pathname);
+  reactExports$1.useEffect(() => subscribeDashboardLocation(() => setPathname(window.location.pathname)), []);
   return pathname;
 }
 const DECISION_LABELS = {
@@ -31130,7 +31596,7 @@ function CommandValue(props) {
 }
 function MatchEvidence(props) {
   const effects = commandEffectLabels(props.match);
-  const openPatternFromRule = reactExports.useCallback(() => {
+  const openPatternFromRule = reactExports$1.useCallback(() => {
     commitDashboardLocation(extensionPatternHref(props.match.extension_id, props.match.rule_id));
   }, [props.match.extension_id, props.match.rule_id]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "rounded-lg border border-slate-200 bg-slate-50/60 p-3", children: [
@@ -31162,11 +31628,11 @@ function MatchEvidence(props) {
   ] });
 }
 function CommandActivityDetail(props) {
-  const handleShouldNotInterrupt = reactExports.useCallback(
+  const handleShouldNotInterrupt = reactExports$1.useCallback(
     () => props.onFeedback("should_not_have_interrupted"),
     [props.onFeedback]
   );
-  const handleExpectedStop = reactExports.useCallback(
+  const handleExpectedStop = reactExports$1.useCallback(
     () => props.onFeedback("expected_guard_to_stop_this"),
     [props.onFeedback]
   );
@@ -31283,7 +31749,7 @@ function CommandActivityFiltersPanel(props) {
   let interactionValue = "";
   if (props.filters.prompted === true) interactionValue = "prompted";
   if (props.filters.prompted === false) interactionValue = "not_prompted";
-  const harnesses = reactExports.useMemo(
+  const harnesses = reactExports$1.useMemo(
     () => preserveActiveOption(
       props.analytics?.dimensions.harness.map((bucket) => safeEvidenceId(bucket.value)).filter((value) => value !== "Unavailable").map((value) => ({ label: value, value })) ?? [],
       props.filters.harness
@@ -31293,41 +31759,41 @@ function CommandActivityFiltersPanel(props) {
   const selectedExtension = props.extensions?.items.find(
     (extension2) => extension2.extension_id === props.filters.extension_id
   );
-  const extensions = reactExports.useMemo(
+  const extensions = reactExports$1.useMemo(
     () => preserveActiveOption(
       props.extensions?.items.map((extension2) => ({ label: extension2.name, value: extension2.extension_id })) ?? [],
       props.filters.extension_id
     ),
     [props.extensions, props.filters.extension_id]
   );
-  const rules = reactExports.useMemo(
+  const rules = reactExports$1.useMemo(
     () => preserveActiveOption(
       selectedExtension?.rules.map((rule2) => ({ label: rule2.title, value: rule2.rule_id })) ?? [],
       props.filters.rule_id
     ),
     [props.filters.rule_id, selectedExtension]
   );
-  const handleHarness = reactExports.useCallback(
+  const handleHarness = reactExports$1.useCallback(
     (event) => props.onChange({ harness: event.target.value || null }),
     [props.onChange]
   );
-  const handleExtension = reactExports.useCallback(
+  const handleExtension = reactExports$1.useCallback(
     (event) => props.onChange({ extension_id: event.target.value || null, rule_id: null }),
     [props.onChange]
   );
-  const handleRule = reactExports.useCallback(
+  const handleRule = reactExports$1.useCallback(
     (event) => props.onChange({ rule_id: event.target.value || null }),
     [props.onChange]
   );
-  const handleExecution = reactExports.useCallback(
+  const handleExecution = reactExports$1.useCallback(
     (event) => props.onChange({ execution_status: event.target.value || null }),
     [props.onChange]
   );
-  const handleProof = reactExports.useCallback(
+  const handleProof = reactExports$1.useCallback(
     (event) => props.onChange({ proof_level: event.target.value || null }),
     [props.onChange]
   );
-  const handlePrompted = reactExports.useCallback(
+  const handlePrompted = reactExports$1.useCallback(
     (event) => {
       const value = event.target.value;
       let prompted = null;
@@ -31337,7 +31803,7 @@ function CommandActivityFiltersPanel(props) {
     },
     [props.onChange]
   );
-  const handleReuse = reactExports.useCallback(
+  const handleReuse = reactExports$1.useCallback(
     (event) => props.onChange({ approval_reuse_status: event.target.value || null }),
     [props.onChange]
   );
@@ -31568,9 +32034,9 @@ function commandActivityLoadFailed(current, requestId, _error) {
 const PROTECTION_REPAIR_ROUTE = "/protection/repair";
 const REPAIR_FAILED_COPY = "Guard could not repair the command evidence store.";
 function CommandActivityHealthNotice(props) {
-  const [repair, setRepair] = reactExports.useState({ kind: "idle" });
+  const [repair, setRepair] = reactExports$1.useState({ kind: "idle" });
   const { onRepaired } = props;
-  const handleRepair = reactExports.useCallback(() => {
+  const handleRepair = reactExports$1.useCallback(() => {
     setRepair({ kind: "repairing" });
     repairProtectionCheck("decision_stream").then((result) => {
       if (result.repaired) {
@@ -31623,7 +32089,7 @@ function safeBuckets(buckets) {
   return buckets.filter((bucket) => safeEvidenceId(bucket.value) !== "Unavailable").slice(0, 5);
 }
 function FrequencyList(props) {
-  const buckets = reactExports.useMemo(() => safeBuckets(props.buckets), [props.buckets]);
+  const buckets = reactExports$1.useMemo(() => safeBuckets(props.buckets), [props.buckets]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: props.title }),
     buckets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-2 space-y-2", children: buckets.map((bucket) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center justify-between gap-3 text-sm", children: [
@@ -31691,7 +32157,7 @@ function recordedTime(value) {
   return Number.isNaN(date.valueOf()) ? "Time unavailable" : date.toLocaleString();
 }
 function CommandRow(props) {
-  const handleSelect = reactExports.useCallback(() => {
+  const handleSelect = reactExports$1.useCallback(() => {
     props.onSelect(props.item.activity_id);
   }, [props.item.activity_id, props.onSelect]);
   const firstRule = props.item.matches[0];
@@ -32384,21 +32850,21 @@ function previousData(state) {
   return null;
 }
 function useCommandActivity(harness = null) {
-  const [filters, setFilters] = reactExports.useState(() => initialFilters(harness));
-  const [cursor, setCursor] = reactExports.useState(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
-  const [selectedId, setSelectedId] = reactExports.useState(initialSelectedId);
-  const [page, setPage] = reactExports.useState({ kind: "idle" });
-  const [analytics, setAnalytics] = reactExports.useState({ kind: "idle" });
-  const [extensions, setExtensions] = reactExports.useState({ kind: "idle" });
-  const [feedback, setFeedback] = reactExports.useState({ kind: "idle" });
-  const [refreshKey, setRefreshKey] = reactExports.useState(0);
-  const requestIdRef = reactExports.useRef(0);
-  const previousHarnessRef = reactExports.useRef(harness);
-  const effectiveFilters = reactExports.useMemo(
+  const [filters, setFilters] = reactExports$1.useState(() => initialFilters(harness));
+  const [cursor, setCursor] = reactExports$1.useState(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
+  const [selectedId, setSelectedId] = reactExports$1.useState(initialSelectedId);
+  const [page, setPage] = reactExports$1.useState({ kind: "idle" });
+  const [analytics, setAnalytics] = reactExports$1.useState({ kind: "idle" });
+  const [extensions, setExtensions] = reactExports$1.useState({ kind: "idle" });
+  const [feedback, setFeedback] = reactExports$1.useState({ kind: "idle" });
+  const [refreshKey, setRefreshKey] = reactExports$1.useState(0);
+  const requestIdRef = reactExports$1.useRef(0);
+  const previousHarnessRef = reactExports$1.useRef(harness);
+  const effectiveFilters = reactExports$1.useMemo(
     () => ({ ...filters, harness: harness ?? filters.harness }),
     [filters, harness]
   );
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (previousHarnessRef.current === harness) return;
     previousHarnessRef.current = harness;
     setFilters((current) => ({ ...current, harness }));
@@ -32408,10 +32874,10 @@ function useCommandActivity(harness = null) {
     setPage({ kind: "idle" });
     setAnalytics({ kind: "idle" });
   }, [harness]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     writeCommandUrl(effectiveFilters, selectedId, harness === null);
   }, [effectiveFilters, harness, selectedId]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const controller = new AbortController();
     const requestId = ++requestIdRef.current;
     setPage((current) => commandActivityLoadStarted(requestId, previousPage(current)));
@@ -32434,7 +32900,7 @@ function useCommandActivity(harness = null) {
     });
     return () => controller.abort();
   }, [cursor.current, effectiveFilters, refreshKey]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const controller = new AbortController();
     const requestId = ++requestIdRef.current;
     setExtensions((current) => commandActivityLoadStarted(requestId, previousData(current)));
@@ -32444,7 +32910,7 @@ function useCommandActivity(harness = null) {
     );
     return () => controller.abort();
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const controller = new AbortController();
     let stopped = false;
     let eventCursor = 0;
@@ -32467,7 +32933,7 @@ function useCommandActivity(harness = null) {
       controller.abort();
     };
   }, []);
-  const updateFilters = reactExports.useCallback(
+  const updateFilters = reactExports$1.useCallback(
     (patch) => {
       setFilters((current) => updateCommandActivityFilters(current, patch, harness));
       setCursor(INITIAL_COMMAND_ACTIVITY_CURSOR_STATE);
@@ -32478,11 +32944,11 @@ function useCommandActivity(harness = null) {
     },
     [harness]
   );
-  const selectActivity = reactExports.useCallback((activityId) => {
+  const selectActivity = reactExports$1.useCallback((activityId) => {
     setSelectedId(activityId);
     setFeedback({ kind: "idle" });
   }, []);
-  const nextPage = reactExports.useCallback(() => {
+  const nextPage = reactExports$1.useCallback(() => {
     const data = previousPage(page);
     const nextCursor = data?.next_cursor;
     if (nextCursor) {
@@ -32490,11 +32956,11 @@ function useCommandActivity(harness = null) {
       setCursor((current) => advanceCommandActivityCursor(current, nextCursor));
     }
   }, [page]);
-  const previousPageAction = reactExports.useCallback(() => {
+  const previousPageAction = reactExports$1.useCallback(() => {
     setPage({ kind: "idle" });
     setCursor((current) => retreatCommandActivityCursor(current));
   }, []);
-  const recordFeedback = reactExports.useCallback(
+  const recordFeedback = reactExports$1.useCallback(
     async (label) => {
       if (!selectedId) return;
       const activityId = selectedId;
@@ -32516,11 +32982,11 @@ function useCommandActivity(harness = null) {
     [selectedId]
   );
   const pageData = previousPage(page);
-  const selectedActivity = reactExports.useMemo(
+  const selectedActivity = reactExports$1.useMemo(
     () => pageData?.items.find((item) => item.activity_id === selectedId) ?? null,
     [pageData, selectedId]
   );
-  const retry = reactExports.useCallback(() => {
+  const retry = reactExports$1.useCallback(() => {
     setRefreshKey((value) => value + 1);
   }, []);
   return {
@@ -32548,19 +33014,19 @@ function availableData(state) {
 }
 function CommandActivityWorkspace(props) {
   const activity = useCommandActivity(props.harness ?? null);
-  const detailTriggerRef = reactExports.useRef(null);
-  const detailRef = reactExports.useRef(null);
-  const handleClose = reactExports.useCallback(() => {
+  const detailTriggerRef = reactExports$1.useRef(null);
+  const detailRef = reactExports$1.useRef(null);
+  const handleClose = reactExports$1.useCallback(() => {
     const trigger = detailTriggerRef.current;
     activity.selectActivity(null);
     requestAnimationFrame(() => trigger?.focus());
   }, [activity.selectActivity]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (activity.selectedId !== null && activity.selectedActivity === null && activity.page.kind === "ready") {
       activity.selectActivity(null);
     }
   }, [activity.page, activity.selectActivity, activity.selectedActivity, activity.selectedId]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (activity.selectedActivity) detailRef.current?.focus();
   }, [activity.selectedActivity]);
   const extensions = availableData(activity.extensions);
@@ -32601,8 +33067,8 @@ function evidenceTitleForView(view) {
   return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
 }
 function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, onNavigate }) {
-  const initial = reactExports.useMemo(() => readEvidenceUrlState(), []);
-  const [filters, setFilters] = reactExports.useState(() => {
+  const initial = reactExports$1.useMemo(() => readEvidenceUrlState(), []);
+  const [filters, setFilters] = reactExports$1.useState(() => {
     const linkedReceipt = initial.selectedId ? receiptItems.find((receipt) => receipt.receipt_id === initial.selectedId) : void 0;
     if (!linkedReceipt) {
       return initial;
@@ -32613,20 +33079,20 @@ function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, o
       harness: linkedReceipt.harness
     };
   });
-  const [debouncedSearch, setDebouncedSearch] = reactExports.useState(initial.search);
-  const [page, setPage] = reactExports.useState(0);
-  const [exportOpen, setExportOpen] = reactExports.useState(false);
-  const [clearOpen, setClearOpen] = reactExports.useState(false);
+  const [debouncedSearch, setDebouncedSearch] = reactExports$1.useState(initial.search);
+  const [page, setPage] = reactExports$1.useState(0);
+  const [exportOpen, setExportOpen] = reactExports$1.useState(false);
+  const [clearOpen, setClearOpen] = reactExports$1.useState(false);
   const analytics = useReceiptAnalytics(true);
-  const urlSyncTimerRef = reactExports.useRef(null);
-  const harnesses = reactExports.useMemo(
+  const urlSyncTimerRef = reactExports$1.useRef(null);
+  const harnesses = reactExports$1.useMemo(
     () => Array.from(
       new Set(receiptItems.map((r) => r.harness).filter(isDisplayableHarness))
     ).sort(),
     [receiptItems]
   );
-  const searchTimerRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
+  const searchTimerRef = reactExports$1.useRef(null);
+  reactExports$1.useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(filters.search);
@@ -32635,7 +33101,7 @@ function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, o
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
   }, [filters.search]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
     urlSyncTimerRef.current = setTimeout(() => {
       writeEvidenceUrlState({ ...filters, search: debouncedSearch });
@@ -32644,86 +33110,86 @@ function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, o
       if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
     };
   }, [filters, debouncedSearch]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (filters.harness !== "all" && !harnesses.includes(filters.harness)) {
       setFilters((prev) => ({ ...prev, harness: "all" }));
     }
   }, [harnesses, filters.harness]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope, filters.day]);
-  const effectiveFilters = reactExports.useMemo(
+  const effectiveFilters = reactExports$1.useMemo(
     () => ({ ...filters, search: debouncedSearch }),
     [filters, debouncedSearch]
   );
-  const filtered = reactExports.useMemo(
+  const filtered = reactExports$1.useMemo(
     () => filterEvidence(receiptItems, effectiveFilters),
     [receiptItems, effectiveFilters]
   );
-  const sorted = reactExports.useMemo(
+  const sorted = reactExports$1.useMemo(
     () => sortEvidence(filtered, filters.sort),
     [filtered, filters.sort]
   );
-  const metrics = reactExports.useMemo(
+  const metrics = reactExports$1.useMemo(
     () => computeMetrics(filtered),
     [filtered]
   );
-  const selectedReceipt = reactExports.useMemo(() => {
+  const selectedReceipt = reactExports$1.useMemo(() => {
     if (!filters.selectedId) return null;
     return receiptItems.find((receipt) => receipt.receipt_id === filters.selectedId) ?? filtered.find((receipt) => receipt.receipt_id === filters.selectedId) ?? null;
   }, [filtered, filters.selectedId, receiptItems]);
-  const handleFilterChange = reactExports.useCallback((patch) => {
+  const handleFilterChange = reactExports$1.useCallback((patch) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
-  const handleSelectId = reactExports.useCallback((id2) => {
+  const handleSelectId = reactExports$1.useCallback((id2) => {
     setFilters((prev) => ({
       ...prev,
       selectedId: prev.selectedId === id2 ? "" : id2
     }));
   }, []);
-  const handleCloseDetail = reactExports.useCallback(() => {
+  const handleCloseDetail = reactExports$1.useCallback(() => {
     setFilters((prev) => ({ ...prev, selectedId: "" }));
   }, []);
-  const handleFilterHarness = reactExports.useCallback((harness) => {
+  const handleFilterHarness = reactExports$1.useCallback((harness) => {
     setFilters((prev) => ({ ...prev, harness }));
   }, []);
-  const handleFilterCategory = reactExports.useCallback((category) => {
+  const handleFilterCategory = reactExports$1.useCallback((category) => {
     setFilters((prev) => ({ ...prev, category }));
   }, []);
-  const handleSortChange = reactExports.useCallback((sort) => {
+  const handleSortChange = reactExports$1.useCallback((sort) => {
     handleFilterChange({ sort });
   }, [handleFilterChange]);
-  const handleLoadMore = reactExports.useCallback(() => {
+  const handleLoadMore = reactExports$1.useCallback(() => {
     setPage((prev) => prev + 1);
   }, []);
-  const handleViewChange = reactExports.useCallback((view) => {
+  const handleViewChange = reactExports$1.useCallback((view) => {
     setFilters((prev) => ({
       ...prev,
       view,
       ...view !== "actions" ? { day: "" } : {}
     }));
   }, []);
-  const handleOpenExport = reactExports.useCallback(() => {
+  const handleOpenExport = reactExports$1.useCallback(() => {
     setExportOpen(true);
   }, []);
-  const handleCloseExport = reactExports.useCallback(() => {
+  const handleCloseExport = reactExports$1.useCallback(() => {
     setExportOpen(false);
   }, []);
-  const handleOpenClear = reactExports.useCallback(() => {
+  const handleOpenClear = reactExports$1.useCallback(() => {
     setClearOpen(true);
   }, []);
-  const handleCloseClear = reactExports.useCallback(() => {
+  const handleCloseClear = reactExports$1.useCallback(() => {
     setClearOpen(false);
   }, []);
-  const handleConfirmClear = reactExports.useCallback(() => {
+  const handleConfirmClear = reactExports$1.useCallback(() => {
     setFilters(DEFAULT_FILTER_STATE);
     invalidateReceiptAnalyticsCache();
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
-  const handleViewActions = reactExports.useCallback(() => {
+  const handleViewActions = reactExports$1.useCallback(() => {
     setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
   }, []);
-  const handleFilterDay = reactExports.useCallback((dateKey) => {
+  const handleFilterDay = reactExports$1.useCallback((dateKey) => {
     setFilters((prev) => ({
       ...prev,
       view: "actions",
@@ -32731,10 +33197,10 @@ function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, o
       time: "all"
     }));
   }, []);
-  const handleFilterHarnessFromInsights = reactExports.useCallback((harness) => {
+  const handleFilterHarnessFromInsights = reactExports$1.useCallback((harness) => {
     setFilters((prev) => ({ ...prev, view: "actions", harness, day: "" }));
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     function handlePopState() {
       const urlState = readEvidenceUrlState();
       setFilters(urlState);
@@ -32746,13 +33212,13 @@ function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, o
   }, []);
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
   const totalReceiptCount = analytics.kind === "ready" ? analytics.data.total : receiptItems.length;
-  const insightsHeaderDescription = reactExports.useMemo(() => {
+  const insightsHeaderDescription = reactExports$1.useMemo(() => {
     if (filters.view !== "insights") return void 0;
     if (analytics.kind !== "ready") return "Loading analytics from your local evidence store.";
     const total = analytics.data.total;
     return `${formatEvidenceCount(total)} actions in your full local store.`;
   }, [filters.view, analytics]);
-  const headerActions = reactExports.useMemo(
+  const headerActions = reactExports$1.useMemo(
     () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         IconActionButton,
@@ -32968,9 +33434,9 @@ function ReceiptsWorkspace(props) {
 }
 const FETCH_DEBOUNCE_MS = 2e3;
 function useRequestReadState() {
-  const [readIds, setReadIds] = reactExports.useState(() => /* @__PURE__ */ new Set());
-  const [lastFetch, setLastFetch] = reactExports.useState(0);
-  const refresh = reactExports.useCallback(async () => {
+  const [readIds, setReadIds] = reactExports$1.useState(() => /* @__PURE__ */ new Set());
+  const [lastFetch, setLastFetch] = reactExports$1.useState(0);
+  const refresh = reactExports$1.useCallback(async () => {
     try {
       const response = await fetchReadState();
       if (response?.ids) {
@@ -32980,16 +33446,16 @@ function useRequestReadState() {
     }
     setLastFetch(Date.now());
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (Date.now() - lastFetch > FETCH_DEBOUNCE_MS) {
       void refresh();
     }
   }, [lastFetch, refresh]);
-  const isRead = reactExports.useCallback(
+  const isRead = reactExports$1.useCallback(
     (requestId) => readIds.has(requestId),
     [readIds]
   );
-  const markRead = reactExports.useCallback(
+  const markRead = reactExports$1.useCallback(
     (requestId) => {
       setReadIds((prev) => {
         if (prev.has(requestId)) return prev;
@@ -33002,7 +33468,7 @@ function useRequestReadState() {
     },
     []
   );
-  const markUnread = reactExports.useCallback(
+  const markUnread = reactExports$1.useCallback(
     (requestId) => {
       setReadIds((prev) => {
         if (!prev.has(requestId)) return prev;
@@ -33015,7 +33481,7 @@ function useRequestReadState() {
     },
     []
   );
-  const markAllRead = reactExports.useCallback(
+  const markAllRead = reactExports$1.useCallback(
     (requestIds) => {
       if (requestIds.length === 0) return;
       setReadIds((prev) => {
@@ -33028,7 +33494,7 @@ function useRequestReadState() {
     },
     []
   );
-  return reactExports.useMemo(
+  return reactExports$1.useMemo(
     () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.size }),
     [isRead, markRead, markUnread, markAllRead, readIds.size]
   );
@@ -33092,9 +33558,9 @@ const TIER_LABEL = {
   high: "High risk"
 };
 function QueueBulkStickyBar(props) {
-  const blockButton = reactExports.useRef(null);
-  const previousStep = reactExports.useRef(props.blockStep);
-  reactExports.useEffect(() => {
+  const blockButton = reactExports$1.useRef(null);
+  const previousStep = reactExports$1.useRef(props.blockStep);
+  reactExports$1.useEffect(() => {
     if (previousStep.current === "confirming" && props.blockStep === "idle") blockButton.current?.focus();
     previousStep.current = props.blockStep;
   }, [props.blockStep]);
@@ -33277,7 +33743,7 @@ function QueueBulkDrawer(props) {
   const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
   const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const submitLabel = props.step === "submitting" ? "Approving…" : `Approve once (${props.selectedActionCount} ${unit})`;
-  const shownGroups = reactExports.useMemo(() => {
+  const shownGroups = reactExports$1.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const line of riskLines) {
       const bucket = map.get(line.categoryLabel) ?? [];
@@ -33725,56 +34191,56 @@ function bulkBlockGroups(groups, selectedIds) {
   return groups.filter((group) => isBulkBlockableGroup(group) && selectedIds.has(group.primary.request_id));
 }
 function useQueueBulkApprove(props) {
-  const [drawerOpen, setDrawerOpen] = reactExports.useState(false);
-  const [drawerStep, setDrawerStep] = reactExports.useState("review");
-  const [selectedBulkIds, setSelectedBulkIds] = reactExports.useState(() => /* @__PURE__ */ new Set());
-  const [bulkApprovePassword, setBulkApprovePassword] = reactExports.useState("");
-  const [bulkApproveTotpCode, setBulkApproveTotpCode] = reactExports.useState("");
-  const [typedConfirm, setTypedConfirm] = reactExports.useState("");
-  const [bulkApproveError, setBulkApproveError] = reactExports.useState(null);
-  const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports.useState(null);
-  const [blockStep, setBlockStep] = reactExports.useState("idle");
-  const [blockError, setBlockError] = reactExports.useState(null);
-  const blocking = reactExports.useRef(false);
-  const groups = reactExports.useMemo(() => groupDuplicates(props.items), [props.items]);
-  const bulkEligibleGroups = reactExports.useMemo(
+  const [drawerOpen, setDrawerOpen] = reactExports$1.useState(false);
+  const [drawerStep, setDrawerStep] = reactExports$1.useState("review");
+  const [selectedBulkIds, setSelectedBulkIds] = reactExports$1.useState(() => /* @__PURE__ */ new Set());
+  const [bulkApprovePassword, setBulkApprovePassword] = reactExports$1.useState("");
+  const [bulkApproveTotpCode, setBulkApproveTotpCode] = reactExports$1.useState("");
+  const [typedConfirm, setTypedConfirm] = reactExports$1.useState("");
+  const [bulkApproveError, setBulkApproveError] = reactExports$1.useState(null);
+  const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports$1.useState(null);
+  const [blockStep, setBlockStep] = reactExports$1.useState("idle");
+  const [blockError, setBlockError] = reactExports$1.useState(null);
+  const blocking = reactExports$1.useRef(false);
+  const groups = reactExports$1.useMemo(() => groupDuplicates(props.items), [props.items]);
+  const bulkEligibleGroups = reactExports$1.useMemo(
     () => groups.filter((group) => isBulkApprovableGroup(group)),
     [groups]
   );
-  const sensitiveFileReadCount = reactExports.useMemo(
+  const sensitiveFileReadCount = reactExports$1.useMemo(
     () => countSensitiveFileReadGroups(groups),
     [groups]
   );
-  const sensitiveSummary = reactExports.useMemo(() => summarizeSensitiveFileReadGroups(groups), [groups]);
+  const sensitiveSummary = reactExports$1.useMemo(() => summarizeSensitiveFileReadGroups(groups), [groups]);
   const bulkGateReady = isBulkApproveGateReady(props.approvalGate);
   const hasBulkHandler = props.onBulkApprove !== void 0;
   const hasEligibleGroups = bulkEligibleGroups.length >= 1;
   const showBulkApprove = hasBulkHandler && bulkGateReady && hasEligibleGroups;
   const hasBlockHandler = props.onBulkBlock !== void 0 && props.approvalGate?.strict_all_decisions !== true;
-  const selectableGroups = reactExports.useMemo(
+  const selectableGroups = reactExports$1.useMemo(
     () => hasBlockHandler ? groups.filter((group) => isBulkBlockableGroup(group)) : bulkEligibleGroups,
     [bulkEligibleGroups, groups, hasBlockHandler]
   );
   const selectionMode = showBulkApprove || hasBlockHandler && selectableGroups.length > 0;
-  const selectedBulkGroups = reactExports.useMemo(
+  const selectedBulkGroups = reactExports$1.useMemo(
     () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
     [bulkEligibleGroups, selectedBulkIds]
   );
-  const selectedActionCount = reactExports.useMemo(
+  const selectedActionCount = reactExports$1.useMemo(
     () => bulkApproveActionCount(selectedBulkGroups),
     [selectedBulkGroups]
   );
   const selectedGroupCount = selectedBulkGroups.length;
-  const selectedBlockGroups = reactExports.useMemo(
+  const selectedBlockGroups = reactExports$1.useMemo(
     () => hasBlockHandler ? bulkBlockGroups(groups, selectedBulkIds) : [],
     [groups, hasBlockHandler, selectedBulkIds]
   );
-  const selectedSelectableGroups = reactExports.useMemo(
+  const selectedSelectableGroups = reactExports$1.useMemo(
     () => selectableGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
     [selectableGroups, selectedBulkIds]
   );
   const selectedRequestCount = bulkApproveActionCount(selectedSelectableGroups);
-  const selectionStats = reactExports.useMemo(() => {
+  const selectionStats = reactExports$1.useMemo(() => {
     let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
@@ -33798,26 +34264,26 @@ function useQueueBulkApprove(props) {
       retryBlockedActionCount
     };
   }, [props.items, selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
-  const riskDisclosure = reactExports.useMemo(
+  const riskDisclosure = reactExports$1.useMemo(
     () => buildBulkRiskDisclosure(selectionStats),
     [selectionStats]
   );
-  const credentialError = reactExports.useMemo(
+  const credentialError = reactExports$1.useMemo(
     () => validateBulkApproveCredentials(props.approvalGate, {
       password: bulkApprovePassword,
       totpCode: bulkApproveTotpCode
     }),
     [props.approvalGate, bulkApprovePassword, bulkApproveTotpCode]
   );
-  const confirmMatches = reactExports.useMemo(
+  const confirmMatches = reactExports$1.useMemo(
     () => !riskDisclosure.requiresTypedConfirm || bulkConfirmMatches(typedConfirm, riskDisclosure.confirmPhrase),
     [riskDisclosure, typedConfirm]
   );
-  const canConfirm = reactExports.useMemo(
+  const canConfirm = reactExports$1.useMemo(
     () => credentialError === null && confirmMatches && selectedGroupCount > 0 && (selectionStats.retryBlockedActionCount ?? 0) === 0,
     [credentialError, confirmMatches, selectedGroupCount, selectionStats.retryBlockedActionCount]
   );
-  const resetBulkFlow = reactExports.useCallback(() => {
+  const resetBulkFlow = reactExports$1.useCallback(() => {
     setDrawerOpen(false);
     setDrawerStep("review");
     setSelectedBulkIds(/* @__PURE__ */ new Set());
@@ -33829,7 +34295,7 @@ function useQueueBulkApprove(props) {
     setBlockStep("idle");
     setBlockError(null);
   }, []);
-  const handleClearSelection = reactExports.useCallback(() => {
+  const handleClearSelection = reactExports$1.useCallback(() => {
     if (blocking.current) return;
     setSelectedBulkIds(/* @__PURE__ */ new Set());
     setTypedConfirm("");
@@ -33837,16 +34303,16 @@ function useQueueBulkApprove(props) {
     setBlockStep("idle");
     setBlockError(null);
   }, []);
-  const handleRequestBlock = reactExports.useCallback(() => {
+  const handleRequestBlock = reactExports$1.useCallback(() => {
     if (selectedBlockGroups.length === 0) return;
     setBlockStep("confirming");
     setBlockError(null);
   }, [selectedBlockGroups.length]);
-  const handleCancelBlock = reactExports.useCallback(() => {
+  const handleCancelBlock = reactExports$1.useCallback(() => {
     if (blockStep === "blocking") return;
     setBlockStep("idle");
   }, [blockStep]);
-  const handleConfirmBlock = reactExports.useCallback(async () => {
+  const handleConfirmBlock = reactExports$1.useCallback(async () => {
     if (blockStep === "blocking" || selectedBlockGroups.length === 0 || !hasBlockHandler || props.onBulkBlock === void 0) {
       return;
     }
@@ -33864,7 +34330,7 @@ function useQueueBulkApprove(props) {
       setBlockStep("idle");
     }
   }, [blockStep, hasBlockHandler, props.onBulkBlock, selectedBlockGroups]);
-  const handleStartReview = reactExports.useCallback(() => {
+  const handleStartReview = reactExports$1.useCallback(() => {
     if (selectedBulkGroups.length === 0) {
       return;
     }
@@ -33872,7 +34338,7 @@ function useQueueBulkApprove(props) {
     setDrawerStep("review");
     setBulkApproveError(null);
   }, [selectedBulkGroups.length]);
-  const handleCancelDrawer = reactExports.useCallback(() => {
+  const handleCancelDrawer = reactExports$1.useCallback(() => {
     if (drawerStep === "submitting") return;
     if (drawerStep === "completed") {
       resetBulkFlow();
@@ -33885,7 +34351,7 @@ function useQueueBulkApprove(props) {
     setBulkApprovePassword("");
     setBulkApproveTotpCode("");
   }, [drawerStep, resetBulkFlow]);
-  const handleBulkToggleSelect = reactExports.useCallback((requestId) => {
+  const handleBulkToggleSelect = reactExports$1.useCallback((requestId) => {
     if (blocking.current) return;
     setSelectedBulkIds((current) => {
       const next = new Set(current);
@@ -33901,7 +34367,7 @@ function useQueueBulkApprove(props) {
     setBlockStep("idle");
     setBlockError(null);
   }, []);
-  const handleBulkToggleMany = reactExports.useCallback(
+  const handleBulkToggleMany = reactExports$1.useCallback(
     (items, selectAll) => {
       if (blocking.current) return;
       setSelectedBulkIds(() => {
@@ -33929,16 +34395,16 @@ function useQueueBulkApprove(props) {
     },
     [selectableGroups]
   );
-  const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
+  const handleBulkApprovePasswordChange = reactExports$1.useCallback((event) => {
     setBulkApprovePassword(event.target.value);
   }, []);
-  const handleBulkApproveTotpCodeChange = reactExports.useCallback((event) => {
+  const handleBulkApproveTotpCodeChange = reactExports$1.useCallback((event) => {
     setBulkApproveTotpCode(event.target.value);
   }, []);
-  const handleTypedConfirmChange = reactExports.useCallback((event) => {
+  const handleTypedConfirmChange = reactExports$1.useCallback((event) => {
     setTypedConfirm(event.target.value);
   }, []);
-  const handleBulkConfirmApprove = reactExports.useCallback(async () => {
+  const handleBulkConfirmApprove = reactExports$1.useCallback(async () => {
     if (drawerStep === "submitting" || drawerStep === "completed" || selectedBulkGroups.length === 0) {
       return;
     }
@@ -33989,7 +34455,7 @@ function useQueueBulkApprove(props) {
     selectedBulkGroups,
     selectionStats.retryBlockedActionCount
   ]);
-  const bulkSelectableMap = reactExports.useMemo(() => {
+  const bulkSelectableMap = reactExports$1.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
       const selectable = hasBlockHandler ? isBulkBlockableGroup(group) : isBulkApprovableGroup(group);
@@ -34000,7 +34466,7 @@ function useQueueBulkApprove(props) {
     }
     return map;
   }, [groups, hasBlockHandler]);
-  const groupIdMap = reactExports.useMemo(() => {
+  const groupIdMap = reactExports$1.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
       map.set(group.primary.request_id, group.primary.request_id);
@@ -34010,21 +34476,21 @@ function useQueueBulkApprove(props) {
     }
     return map;
   }, [groups]);
-  const isSelectable = reactExports.useCallback(
+  const isSelectable = reactExports$1.useCallback(
     (item) => bulkSelectableMap.get(item.request_id) ?? (hasBlockHandler ? isBulkBlockableGroup({ primary: item }) : isBulkApprovableGroup({ primary: item })),
     [bulkSelectableMap, hasBlockHandler]
   );
-  const isSelected = reactExports.useCallback(
+  const isSelected = reactExports$1.useCallback(
     (item) => selectedBulkIds.has(groupIdMap.get(item.request_id) ?? item.request_id),
     [groupIdMap, selectedBulkIds]
   );
-  const onToggle = reactExports.useCallback(
+  const onToggle = reactExports$1.useCallback(
     (item) => {
       handleBulkToggleSelect(groupIdMap.get(item.request_id) ?? item.request_id);
     },
     [groupIdMap, handleBulkToggleSelect]
   );
-  const onToggleMany = reactExports.useCallback(
+  const onToggleMany = reactExports$1.useCallback(
     (items, selectAll) => {
       const resolved = items.map((item) => ({
         ...item,
@@ -34037,7 +34503,7 @@ function useQueueBulkApprove(props) {
   const canApprove = showBulkApprove && selectedGroupCount > 0;
   const stickyBarVisible = (canApprove || selectedBlockGroups.length > 0) && drawerStep !== "completed";
   const gatePromptVisible = hasBulkHandler && hasEligibleGroups && !bulkGateReady;
-  const eligibleActionCount = reactExports.useMemo(
+  const eligibleActionCount = reactExports$1.useMemo(
     () => bulkApproveActionCount(bulkEligibleGroups),
     [bulkEligibleGroups]
   );
@@ -34116,8 +34582,8 @@ function approvalProofModalTitle(locked, recentlySatisfied, needsPassword, usesP
   return "Authenticator code required";
 }
 function ApprovalPasswordModal(props) {
-  const passwordRef = reactExports.useRef(null);
-  const [now2, setNow] = reactExports.useState(() => Date.now());
+  const passwordRef = reactExports$1.useRef(null);
+  const [now2, setNow] = reactExports$1.useState(() => Date.now());
   const requireFreshTotp = props.requireFreshTotp === true;
   const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
@@ -34129,12 +34595,12 @@ function ApprovalPasswordModal(props) {
     props.busy === true,
     requireFreshTotp
   );
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!gateLocked) return void 0;
     const timer = window.setInterval(() => setNow(Date.now()), 1e3);
     return () => window.clearInterval(timer);
   }, [gateLocked]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (recentlySatisfied) return void 0;
     const timer = setTimeout(() => {
       passwordRef.current?.focus();
@@ -34149,13 +34615,13 @@ function ApprovalPasswordModal(props) {
     modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
   }
   const showCooldownOption = approvalProofCooldownOptionShown(props.gate);
-  const handleBackdropClick = reactExports.useCallback(
+  const handleBackdropClick = reactExports$1.useCallback(
     (e) => {
       if (e.target === e.currentTarget && props.busy !== true) props.onCancel();
     },
     [props.onCancel, props.busy]
   );
-  const handleSubmit = reactExports.useCallback(
+  const handleSubmit = reactExports$1.useCallback(
     (event) => {
       event.preventDefault();
       if (!submitDisabled) props.onSubmit();
@@ -34239,16 +34705,16 @@ function ApprovalPasswordModal(props) {
   );
 }
 function ConsolidatedEvidenceAlert({ items }) {
-  const [index, setIndex] = reactExports.useState(0);
-  reactExports.useEffect(() => {
+  const [index, setIndex] = reactExports$1.useState(0);
+  reactExports$1.useEffect(() => {
     if (index >= items.length) {
       setIndex(0);
     }
   }, [items.length, index]);
-  const handleNext = reactExports.useCallback(() => {
+  const handleNext = reactExports$1.useCallback(() => {
     setIndex((prev) => (prev + 1) % items.length);
   }, [items.length]);
-  const handlePrevious = reactExports.useCallback(() => {
+  const handlePrevious = reactExports$1.useCallback(() => {
     setIndex((prev) => (prev - 1 + items.length) % items.length);
   }, [items.length]);
   if (items.length === 0) return null;
@@ -34652,11 +35118,11 @@ function simpleMcpChoiceApplies(item) {
 function McpDecisionChoice(props) {
   const exact = props.allowScope === "artifact";
   const { onAllowScopeChange, onRememberExactActionChange } = props;
-  const chooseOnce = reactExports.useCallback(() => {
+  const chooseOnce = reactExports$1.useCallback(() => {
     onAllowScopeChange("artifact");
     onRememberExactActionChange(false);
   }, [onAllowScopeChange, onRememberExactActionChange]);
-  const chooseAlways = reactExports.useCallback(() => {
+  const chooseAlways = reactExports$1.useCallback(() => {
     onAllowScopeChange("artifact");
     onRememberExactActionChange(true);
   }, [onAllowScopeChange, onRememberExactActionChange]);
@@ -34773,8 +35239,8 @@ function ReviewScopeControls(props) {
   ] });
 }
 function ExactActionPersistenceChoice(props) {
-  const handleOnce = reactExports.useCallback(() => props.onChange(false), [props.onChange]);
-  const handleAlways = reactExports.useCallback(() => props.onChange(true), [props.onChange]);
+  const handleOnce = reactExports$1.useCallback(() => props.onChange(false), [props.onChange]);
+  const handleAlways = reactExports$1.useCallback(() => props.onChange(true), [props.onChange]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] p-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "px-1 text-sm font-semibold text-brand-dark", children: "How long should Guard allow it?" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2", children: [
@@ -34817,7 +35283,7 @@ function exactActionChoiceClassName(selected) {
   return `${base} border-slate-200 bg-white/60 hover:border-brand-blue/40`;
 }
 function ScopeChoiceButton(props) {
-  const handleClick = reactExports.useCallback(() => {
+  const handleClick = reactExports$1.useCallback(() => {
     props.onScopeChange(props.choice.value);
   }, [props.onScopeChange, props.choice.value]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -35285,8 +35751,8 @@ function LinkValue({ value }) {
   ] });
 }
 function LongText({ value }) {
-  const [open, setOpen] = reactExports.useState(false);
-  const toggle = reactExports.useCallback(() => setOpen((current) => !current), []);
+  const [open, setOpen] = reactExports$1.useState(false);
+  const toggle = reactExports$1.useCallback(() => setOpen((current) => !current), []);
   const needsToggle = value.length > LONG_VALUE_CHARS || value.includes("\n");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `whitespace-pre-wrap break-words ${open || !needsToggle ? "" : "line-clamp-3"}`, children: value }),
@@ -35673,9 +36139,9 @@ function BusinessReviewSummaryDetails({ summary }) {
   ] });
 }
 function BusinessReviewSummaryPanel({ requestId }) {
-  const [state, setState] = reactExports.useState(null);
-  const [revision2, setRevision] = reactExports.useState(0);
-  reactExports.useEffect(() => {
+  const [state, setState] = reactExports$1.useState(null);
+  const [revision2, setRevision] = reactExports$1.useState(0);
+  reactExports$1.useEffect(() => {
     const controller = new AbortController();
     setState({ requestId, status: "loading", summary: null });
     fetchBusinessReviewSummary(requestId, controller.signal).then((summary) => {
@@ -35695,7 +36161,7 @@ function BusinessReviewSummaryPanel({ requestId }) {
 function ApprovalExtensionCoverageCard(props) {
   const { coverage, linkedPatterns } = props;
   const hasRecommendation = linkedPatterns.length > 0;
-  const open = reactExports.useCallback((extensionId, ruleId) => {
+  const open = reactExports$1.useCallback((extensionId, ruleId) => {
     commitDashboardLocation(extensionPatternHref(extensionId, ruleId));
   }, []);
   if (!coverage) return null;
@@ -36535,21 +37001,21 @@ const DEFAULT_RECOVER_COMMAND = "hol-guard command controls recover-authority";
 const AUTHORITY_WATCH_INTERVAL_MS = 5e3;
 function useExtensionAuthorityWatch(input) {
   const { active, requestId, onAvailable } = input;
-  const [effective, setEffective] = reactExports.useState(null);
-  const [liveGate, setLiveGate] = reactExports.useState(null);
-  const [loadFailed, setLoadFailed] = reactExports.useState(false);
-  const [checking, setChecking] = reactExports.useState(false);
-  const [checkResult, setCheckResult] = reactExports.useState(null);
-  const [noOption, setNoOption] = reactExports.useState(null);
-  const inFlight = reactExports.useRef(null);
-  const mounted = reactExports.useRef(true);
-  reactExports.useEffect(() => {
+  const [effective, setEffective] = reactExports$1.useState(null);
+  const [liveGate, setLiveGate] = reactExports$1.useState(null);
+  const [loadFailed, setLoadFailed] = reactExports$1.useState(false);
+  const [checking, setChecking] = reactExports$1.useState(false);
+  const [checkResult, setCheckResult] = reactExports$1.useState(null);
+  const [noOption, setNoOption] = reactExports$1.useState(null);
+  const inFlight = reactExports$1.useRef(null);
+  const mounted = reactExports$1.useRef(true);
+  reactExports$1.useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
-  const load = reactExports.useCallback(async () => {
+  const load = reactExports$1.useCallback(async () => {
     try {
       const [nextEffective, settings, item] = await Promise.all([
         fetchEffectiveExtensionControls(),
@@ -36582,7 +37048,7 @@ function useExtensionAuthorityWatch(input) {
       return "failed";
     }
   }, [onAvailable, requestId]);
-  const refresh = reactExports.useCallback(() => {
+  const refresh = reactExports$1.useCallback(() => {
     if (inFlight.current === null) {
       inFlight.current = load().finally(() => {
         inFlight.current = null;
@@ -36590,7 +37056,7 @@ function useExtensionAuthorityWatch(input) {
     }
     return inFlight.current;
   }, [load]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!active || noOption) return void 0;
     void refresh();
     const timer = window.setInterval(() => {
@@ -36598,7 +37064,7 @@ function useExtensionAuthorityWatch(input) {
     }, AUTHORITY_WATCH_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [active, noOption, refresh]);
-  const checkAgain = reactExports.useCallback(() => {
+  const checkAgain = reactExports$1.useCallback(() => {
     if (checking) return;
     setChecking(true);
     setCheckResult(null);
@@ -36630,7 +37096,7 @@ function SetupStep(props) {
   ] });
 }
 function CopyCommand(props) {
-  const [state, setState] = reactExports.useState("idle");
+  const [state, setState] = reactExports$1.useState("idle");
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(props.command);
@@ -36778,14 +37244,14 @@ function ApprovalProofModal(props) {
     onCancel,
     onConfirm
   } = props;
-  const [password, setPassword] = reactExports.useState("");
-  const [totpCode, setTotpCode] = reactExports.useState("");
-  const formRef = reactExports.useRef(null);
+  const [password, setPassword] = reactExports$1.useState("");
+  const [totpCode, setTotpCode] = reactExports$1.useState("");
+  const formRef = reactExports$1.useRef(null);
   useFocusTrap(true, formRef);
-  const handlePasswordChange = reactExports.useCallback((event) => {
+  const handlePasswordChange = reactExports$1.useCallback((event) => {
     setPassword(event.target.value);
   }, []);
-  const handleTotpChange = reactExports.useCallback((event) => {
+  const handleTotpChange = reactExports$1.useCallback((event) => {
     setTotpCode(event.target.value);
   }, []);
   const confirmDisabled = isApprovalProofSubmitDisabled(
@@ -36794,7 +37260,7 @@ function ApprovalProofModal(props) {
     busy,
     requireFreshTotp
   );
-  const handleSubmit = reactExports.useCallback((event) => {
+  const handleSubmit = reactExports$1.useCallback((event) => {
     event.preventDefault();
     if (confirmDisabled) {
       return;
@@ -36805,7 +37271,7 @@ function ApprovalProofModal(props) {
       requireFreshTotp
     ));
   }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
-  const handleEscape = reactExports.useCallback(() => {
+  const handleEscape = reactExports$1.useCallback(() => {
     if (!busy) {
       onCancel();
     }
@@ -37020,14 +37486,14 @@ async function approveWithExtensionAllow(deps, permissionIds, credentials) {
   return { status: "approved", revision: revision2 };
 }
 function ApprovalExtensionRecommendationCard(props) {
-  const [liveRecommendation, setLiveRecommendation] = reactExports.useState(null);
+  const [liveRecommendation, setLiveRecommendation] = reactExports$1.useState(null);
   const recommendation = liveRecommendation ?? props.item.extension_recommendation;
-  const [confirmOpen, setConfirmOpen] = reactExports.useState(false);
-  const [busy, setBusy] = reactExports.useState(false);
-  const inFlight = reactExports.useRef(false);
-  const [error, setError] = reactExports.useState(null);
-  const [savedMessage, setSavedMessage] = reactExports.useState(null);
-  const copy = reactExports.useMemo(
+  const [confirmOpen, setConfirmOpen] = reactExports$1.useState(false);
+  const [busy, setBusy] = reactExports$1.useState(false);
+  const inFlight = reactExports$1.useRef(false);
+  const [error, setError] = reactExports$1.useState(null);
+  const [savedMessage, setSavedMessage] = reactExports$1.useState(null);
+  const copy = reactExports$1.useMemo(
     () => recommendation ? approvalExtensionRecommendationCopy(recommendation) : null,
     [recommendation]
   );
@@ -37035,7 +37501,7 @@ function ApprovalExtensionRecommendationCard(props) {
   const { item, allowScope, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
   const resolutionAvailable = !retryCannotReuseApproval(item) || persistExactAction;
   const authorityUnavailable = recommendation?.status === "authority_unavailable";
-  const handleAvailable = reactExports.useCallback((next) => {
+  const handleAvailable = reactExports$1.useCallback((next) => {
     setLiveRecommendation(next);
   }, []);
   const oneTap = recommendation?.caution !== true;
@@ -37048,11 +37514,11 @@ function ApprovalExtensionRecommendationCard(props) {
   const approvalGate = watch.approvalGate;
   const justEnrolled = liveRecommendation !== null;
   const dialogActive = confirmOpen || busy;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     onDialogActiveChange?.(dialogActive);
   }, [dialogActive, onDialogActiveChange]);
-  reactExports.useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
-  const configurable = reactExports.useMemo(() => {
+  reactExports$1.useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
+  const configurable = reactExports$1.useMemo(() => {
     const seen2 = /* @__PURE__ */ new Map();
     for (const permission2 of recommendation?.permissions ?? []) {
       if (!seen2.has(permission2.extension_id)) {
@@ -37065,17 +37531,17 @@ function ApprovalExtensionRecommendationCard(props) {
     }
     return [...seen2.values()];
   }, [recommendation]);
-  const openPattern = reactExports.useCallback((extensionId, ruleId) => {
+  const openPattern = reactExports$1.useCallback((extensionId, ruleId) => {
     commitDashboardLocation(extensionPatternHref(extensionId, ruleId));
   }, []);
-  const openConfirm = reactExports.useCallback(() => {
+  const openConfirm = reactExports$1.useCallback(() => {
     setError(null);
     setConfirmOpen(true);
   }, []);
-  const closeConfirm = reactExports.useCallback(() => {
+  const closeConfirm = reactExports$1.useCallback(() => {
     if (!busy) setConfirmOpen(false);
   }, [busy]);
-  const confirm = reactExports.useCallback(
+  const confirm = reactExports$1.useCallback(
     (credentials) => {
       if (!recommendation || !copy || inFlight.current) return;
       inFlight.current = true;
@@ -37225,22 +37691,22 @@ function approvalGateDemandedCode(err) {
   return err instanceof GuardRequestResolutionError && err.payload?.["error"] === "approval_gate_totp_required";
 }
 function useShownRequestCheck(requestId) {
-  const shown = reactExports.useRef(requestId);
-  reactExports.useLayoutEffect(() => {
+  const shown = reactExports$1.useRef(requestId);
+  reactExports$1.useLayoutEffect(() => {
     shown.current = requestId;
   }, [requestId]);
-  return reactExports.useCallback((expected) => shown.current === expected, []);
+  return reactExports$1.useCallback((expected) => shown.current === expected, []);
 }
 async function fetchResolvedApprovalGate(fetcher = fetchSettings) {
   const payload = await fetcher();
   return payload.settings.approval_gate ?? null;
 }
 function useResolvedApprovalGate(initialGate) {
-  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(initialGate);
-  reactExports.useEffect(() => {
+  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports$1.useState(initialGate);
+  reactExports$1.useEffect(() => {
     setResolvedApprovalGate(initialGate);
   }, [initialGate]);
-  const refreshApprovalGate = reactExports.useCallback(async (options) => {
+  const refreshApprovalGate = reactExports$1.useCallback(async (options) => {
     try {
       const gate = await fetchResolvedApprovalGate();
       setResolvedApprovalGate(gate);
@@ -37252,7 +37718,7 @@ function useResolvedApprovalGate(initialGate) {
       return resolvedApprovalGate;
     }
   }, [resolvedApprovalGate]);
-  const resolveApprovalGate = reactExports.useCallback(async (options) => {
+  const resolveApprovalGate = reactExports$1.useCallback(async (options) => {
     if (resolvedApprovalGate !== null) {
       return resolvedApprovalGate;
     }
@@ -37281,27 +37747,27 @@ function useReviewDecisionResolve(params) {
     decisionContractKey,
     decisionSubjectKey
   } = params;
-  const [submitting, setSubmitting] = reactExports.useState(null);
-  const [resolvedState, setResolved] = reactExports.useState(null);
+  const [submitting, setSubmitting] = reactExports$1.useState(null);
+  const [resolvedState, setResolved] = reactExports$1.useState(null);
   const resolved = resolvedStateForItem(resolvedState, item);
   const isStillShown = useShownRequestCheck(item?.request_id ?? null);
-  const [lastAction, setLastAction] = reactExports.useState(null);
-  const [errorMessage, setErrorMessage] = reactExports.useState(null);
-  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
-  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
-  const [cooldownOptOut, setCooldownOptOut] = reactExports.useState(false);
-  const [pendingAction, setPendingAction] = reactExports.useState(null);
-  const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
-  const [preflighting, setPreflighting] = reactExports.useState(false);
-  const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(params.approvalGate);
-  const [freshCodeRequired, setFreshCodeRequired] = reactExports.useState(false);
+  const [lastAction, setLastAction] = reactExports$1.useState(null);
+  const [errorMessage, setErrorMessage] = reactExports$1.useState(null);
+  const [approvalPassword, setApprovalPassword] = reactExports$1.useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = reactExports$1.useState("");
+  const [cooldownOptOut, setCooldownOptOut] = reactExports$1.useState(false);
+  const [pendingAction, setPendingAction] = reactExports$1.useState(null);
+  const [pendingContractKey, setPendingContractKey] = reactExports$1.useState(null);
+  const [preflighting, setPreflighting] = reactExports$1.useState(false);
+  const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports$1.useState(params.approvalGate);
+  const [freshCodeRequired, setFreshCodeRequired] = reactExports$1.useState(false);
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setEffectiveApprovalGate(params.approvalGate);
   }, [params.approvalGate]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!item) return;
     setResolved(null);
     setSubmitting(null);
@@ -37315,7 +37781,7 @@ function useReviewDecisionResolve(params) {
     setPendingContractKey(null);
     setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
-  const handleResolve = reactExports.useCallback(
+  const handleResolve = reactExports$1.useCallback(
     async (action2, gateOverride) => {
       if (!item || resolutionBlockReason !== null) return;
       if (action2 === "allow" && !canSubmitAllow) {
@@ -37410,7 +37876,7 @@ function useReviewDecisionResolve(params) {
       hasAllowScope
     ]
   );
-  const handleRequestResolve = reactExports.useCallback(
+  const handleRequestResolve = reactExports$1.useCallback(
     (action2) => {
       if (resolutionBlockReason !== null || decisionBusy) return;
       if (action2 === "allow" && !hasAllowScope) {
@@ -37502,13 +37968,13 @@ function useReviewDecisionResolve(params) {
       resolutionBlockReason
     ]
   );
-  const handleAllow = reactExports.useCallback(() => {
+  const handleAllow = reactExports$1.useCallback(() => {
     handleRequestResolve("allow");
   }, [handleRequestResolve]);
-  const handleBlock = reactExports.useCallback(() => {
+  const handleBlock = reactExports$1.useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     function handleKeyDown(event) {
       if (!reviewDecisionShortcutAllowed(event.isComposing) || decisionBusy || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
         return;
@@ -37541,7 +38007,7 @@ function useReviewDecisionResolve(params) {
     resolved,
     setAllowScope
   ]);
-  const handleModalSubmit = reactExports.useCallback(() => {
+  const handleModalSubmit = reactExports$1.useCallback(() => {
     if (pendingAction === null || submitting !== null) {
       return;
     }
@@ -37553,26 +38019,26 @@ function useReviewDecisionResolve(params) {
     }
     void handleResolve(pendingAction);
   }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey, submitting]);
-  const handleModalCancel = reactExports.useCallback(() => {
+  const handleModalCancel = reactExports$1.useCallback(() => {
     setPendingAction(null);
     setPendingContractKey(null);
     setApprovalPassword("");
     setApprovalTotpCode("");
     setCooldownOptOut(false);
   }, []);
-  const handleRetryLastAction = reactExports.useCallback(() => {
+  const handleRetryLastAction = reactExports$1.useCallback(() => {
     setErrorMessage(null);
     if (lastAction !== null) {
       handleRequestResolve(lastAction);
     }
   }, [handleRequestResolve, lastAction]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+  const handleApprovalPasswordChange = reactExports$1.useCallback((event) => {
     setApprovalPassword(event.target.value);
   }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+  const handleApprovalTotpCodeChange = reactExports$1.useCallback((event) => {
     setApprovalTotpCode(event.target.value);
   }, []);
-  const handleUseCooldownChange = reactExports.useCallback((event) => {
+  const handleUseCooldownChange = reactExports$1.useCallback((event) => {
     setCooldownOptOut(!event.target.checked);
   }, []);
   return {
@@ -37599,15 +38065,15 @@ function useReviewDecisionResolve(params) {
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function ContextReviewPanel({ item }) {
   const decisionId = attachedNativeDecision(item.action_envelope_json, item.harness);
-  const [context, setContext] = reactExports.useState(null);
-  const [previous, setPrevious] = reactExports.useState(null);
-  const [busy, setBusy] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const request2 = reactExports.useRef(null);
-  const revision2 = reactExports.useRef(0);
-  const generation = reactExports.useRef(null);
-  const [watching, setWatching] = reactExports.useState(false);
-  reactExports.useEffect(() => {
+  const [context, setContext] = reactExports$1.useState(null);
+  const [previous, setPrevious] = reactExports$1.useState(null);
+  const [busy, setBusy] = reactExports$1.useState(false);
+  const [error, setError] = reactExports$1.useState(null);
+  const request2 = reactExports$1.useRef(null);
+  const revision2 = reactExports$1.useRef(0);
+  const generation = reactExports$1.useRef(null);
+  const [watching, setWatching] = reactExports$1.useState(false);
+  reactExports$1.useEffect(() => {
     revision2.current += 1;
     request2.current?.abort();
     generation.current = null;
@@ -37621,7 +38087,7 @@ function ContextReviewPanel({ item }) {
       request2.current?.abort();
     };
   }, [item.request_id, item.status, item.workspace, item.harness, decisionId]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!watching || !context) return;
     const controller = new AbortController();
     let pending = false;
@@ -37773,30 +38239,30 @@ function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
   const resolutionBlockReason = item ? requestResolutionBlockReason(item) : null;
-  const [allowScope, setAllowScope] = reactExports.useState("artifact");
-  const [blockScope, setBlockScope] = reactExports.useState("artifact");
-  const [showConsequences, setShowConsequences] = reactExports.useState(false);
-  const [showEvidence, setShowEvidence] = reactExports.useState(false);
-  const [extensionDialogActive, setExtensionDialogActive] = reactExports.useState(false);
-  const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
-  const allowButtonRef = reactExports.useRef(null);
-  const availableScopeChoices = reactExports.useMemo(
+  const [allowScope, setAllowScope] = reactExports$1.useState("artifact");
+  const [blockScope, setBlockScope] = reactExports$1.useState("artifact");
+  const [showConsequences, setShowConsequences] = reactExports$1.useState(false);
+  const [showEvidence, setShowEvidence] = reactExports$1.useState(false);
+  const [extensionDialogActive, setExtensionDialogActive] = reactExports$1.useState(false);
+  const [rememberExactAction, setRememberExactAction] = reactExports$1.useState(false);
+  const allowButtonRef = reactExports$1.useRef(null);
+  const availableScopeChoices = reactExports$1.useMemo(
     () => item ? standardScopeChoicesForRequest(item, "allow") : [],
     [item]
   );
-  const commonScopeOptions = reactExports.useMemo(
+  const commonScopeOptions = reactExports$1.useMemo(
     () => availableScopeChoices.filter((choice) => commonScopeValues.has(choice.value)),
     [availableScopeChoices]
   );
-  const broaderScopeOptions = reactExports.useMemo(
+  const broaderScopeOptions = reactExports$1.useMemo(
     () => availableScopeChoices.filter((choice) => !commonScopeValues.has(choice.value)),
     [availableScopeChoices]
   );
-  const advancedScopeOptions = reactExports.useMemo(
+  const advancedScopeOptions = reactExports$1.useMemo(
     () => item ? advancedScopeChoicesForRequest(item, "allow") : [],
     [item]
   );
-  const blockScopeOptions = reactExports.useMemo(
+  const blockScopeOptions = reactExports$1.useMemo(
     () => item ? scopeChoicesForRequest(item, "block") : [],
     [item]
   );
@@ -37806,14 +38272,14 @@ function ReviewDecisionCard(props) {
   const canSubmitAllow = hasAllowScope && (item === null || !retryCannotReuseApproval(item) || allowScope === "artifact" && rememberExactAction && item.exact_action_persistence_eligible === true);
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (item) {
       setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : recommendedScopeForAction(item, "allow") ?? "artifact");
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setRememberExactAction(false);
     }
   }, [decisionSubjectKey]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!item) return;
     setAllowScope(
       (current) => normalizeDecisionScope(item, "allow", current) ?? recommendedScopeForAction(item, "allow") ?? "artifact"
@@ -37862,14 +38328,14 @@ function ReviewDecisionCard(props) {
     decisionContractKey,
     decisionSubjectKey
   });
-  const handleToggleConsequences = reactExports.useCallback(() => {
+  const handleToggleConsequences = reactExports$1.useCallback(() => {
     setShowConsequences((visible) => !visible);
   }, []);
-  const handleToggleEvidence = reactExports.useCallback(() => {
+  const handleToggleEvidence = reactExports$1.useCallback(() => {
     setShowEvidence((visible) => !visible);
   }, []);
   const reviewedRequestId = item?.request_id ?? null;
-  const handleExtensionApproved = reactExports.useCallback(
+  const handleExtensionApproved = reactExports$1.useCallback(
     (message) => {
       if (reviewedRequestId === null) return;
       setResolved({ requestId: reviewedRequestId, action: "allow", persistedExactAction: false, message });
@@ -38281,10 +38747,10 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const showCheckbox = selectionMode;
   const canSelect = selectionMode && selectable;
-  const handleClick = reactExports.useCallback(() => {
+  const handleClick = reactExports$1.useCallback(() => {
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
-  const handleCheckboxChange = reactExports.useCallback(
+  const handleCheckboxChange = reactExports$1.useCallback(
     (event) => {
       event.stopPropagation();
       if (!canSelect) return;
@@ -38292,7 +38758,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     },
     [item, onToggleSelect, canSelect]
   );
-  const handleKeyDown = reactExports.useCallback(
+  const handleKeyDown = reactExports$1.useCallback(
     (event) => {
       if (!canSelect) return;
       if (event.key === "Enter") {
@@ -38510,7 +38976,7 @@ function resolveSemanticGroup(categoryId) {
   }
   return "other";
 }
-const ReviewQueueList = reactExports.forwardRef(({
+const ReviewQueueList = reactExports$1.forwardRef(({
   requests,
   allFilteredRequests,
   totalCount,
@@ -38544,26 +39010,26 @@ const ReviewQueueList = reactExports.forwardRef(({
   onBulkSelectAll,
   onBulkClearAll
 }, ref) => {
-  const [showFilters, setShowFilters] = reactExports.useState(false);
-  const handleSearchChange = reactExports.useCallback((event) => {
+  const [showFilters, setShowFilters] = reactExports$1.useState(false);
+  const handleSearchChange = reactExports$1.useCallback((event) => {
     onSearchTermChange(event.target.value);
   }, [onSearchTermChange]);
-  reactExports.useCallback((event) => {
+  reactExports$1.useCallback((event) => {
     onCategoryFilterChange(event.target.value);
   }, [onCategoryFilterChange]);
-  const handleSortChange = reactExports.useCallback((event) => {
+  const handleSortChange = reactExports$1.useCallback((event) => {
     onSortDirectionChange(event.target.value);
   }, [onSortDirectionChange]);
-  const handleDateFromChange = reactExports.useCallback((event) => {
+  const handleDateFromChange = reactExports$1.useCallback((event) => {
     onDateFromChange(event.target.value);
   }, [onDateFromChange]);
-  const handleDateToChange = reactExports.useCallback((event) => {
+  const handleDateToChange = reactExports$1.useCallback((event) => {
     onDateToChange(event.target.value);
   }, [onDateToChange]);
-  const handleToggleFilters = reactExports.useCallback(() => {
+  const handleToggleFilters = reactExports$1.useCallback(() => {
     setShowFilters((visible) => !visible);
   }, []);
-  const handleClearFilters = reactExports.useCallback(() => {
+  const handleClearFilters = reactExports$1.useCallback(() => {
     onSearchTermChange("");
     onCategoryFilterChange("all");
     onSortDirectionChange("newest");
@@ -38580,17 +39046,17 @@ const ReviewQueueList = reactExports.forwardRef(({
     onSetupFilterChange,
     onSortDirectionChange
   ]);
-  const handleToggleSetupFilter = reactExports.useCallback(() => {
+  const handleToggleSetupFilter = reactExports$1.useCallback(() => {
     onSetupFilterChange?.(!setupFilter);
   }, [onSetupFilterChange, setupFilter]);
-  const handlePreviousPage = reactExports.useCallback(() => {
+  const handlePreviousPage = reactExports$1.useCallback(() => {
     onPageChange(Math.max(1, page - 1));
   }, [page, onPageChange]);
-  const handleNextPage = reactExports.useCallback(() => {
+  const handleNextPage = reactExports$1.useCallback(() => {
     onPageChange(Math.min(totalPages, page + 1));
   }, [page, totalPages, onPageChange]);
   const activeSemanticGroup = semanticFilter;
-  const visibleGroups = reactExports.useMemo(() => {
+  const visibleGroups = reactExports$1.useMemo(() => {
     const available = /* @__PURE__ */ new Set();
     for (const item of allFilteredRequests) {
       available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
@@ -38599,24 +39065,24 @@ const ReviewQueueList = reactExports.forwardRef(({
   }, [allFilteredRequests]);
   const isFiltered = searchTerm || semanticFilter !== "all" || setupFilter || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
   const showPagination = filteredCount > QUEUE_PAGE_SIZE$1;
-  const pageSelectableItems = reactExports.useMemo(
+  const pageSelectableItems = reactExports$1.useMemo(
     () => requests.filter((item) => isBulkSelectable?.(item) === true),
     [requests, isBulkSelectable]
   );
-  const pageSelectedCount = reactExports.useMemo(
+  const pageSelectedCount = reactExports$1.useMemo(
     () => pageSelectableItems.filter((item) => isBulkSelected?.(item) === true).length,
     [pageSelectableItems, isBulkSelected]
   );
   const pageAllSelected = pageSelectableItems.length > 0 && pageSelectedCount === pageSelectableItems.length;
   const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
-  const handlePageSelectAll = reactExports.useCallback(() => {
+  const handlePageSelectAll = reactExports$1.useCallback(() => {
     if (pageAllSelected) {
       onBulkClearAll?.();
     } else {
       onBulkSelectAll?.();
     }
   }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
-  const setIndeterminate = reactExports.useCallback(
+  const setIndeterminate = reactExports$1.useCallback(
     (el) => {
       if (el) el.indeterminate = pageSomeSelected;
     },
@@ -38842,7 +39308,7 @@ const ReviewQueueList = reactExports.forwardRef(({
 ReviewQueueList.displayName = "ReviewQueueList";
 function SemanticFilterButton(props) {
   const { group, selected, onSelect } = props;
-  const handleSelect = reactExports.useCallback(() => {
+  const handleSelect = reactExports$1.useCallback(() => {
     onSelect(group.id);
   }, [group.id, onSelect]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -40089,8 +40555,8 @@ function connectorGroupOutcome(body) {
 const SETUP_COPY = GUARD_REVIEW_INTENT_COPY.setup;
 const CLI_LIST_RETRY_DELAYS_MS = [2e3, 1e4];
 function useConnectorSetupClis(identityKey) {
-  const [items, setItems] = reactExports.useState([]);
-  reactExports.useEffect(() => {
+  const [items, setItems] = reactExports$1.useState([]);
+  reactExports$1.useEffect(() => {
     if (identityKey === "") return;
     let cancelled = false;
     let timer = null;
@@ -40125,7 +40591,7 @@ function Block(props) {
 }
 function EvidenceRow(props) {
   const { item, onOpenRequest } = props;
-  const handleOpen = reactExports.useCallback(() => onOpenRequest(item.request_id), [item.request_id, onOpenRequest]);
+  const handleOpen = reactExports$1.useCallback(() => onOpenRequest(item.request_id), [item.request_id, onOpenRequest]);
   const repeats = connectorItemCallCount(item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
@@ -40259,42 +40725,42 @@ function ReviewWorkspace(props) {
   const businessQueueReadFailed2 = useBusinessQueueReadFailure();
   const { requests, activeRequestId, detail } = props;
   const readState = useRequestReadState();
-  const queueRef = reactExports.useRef(null);
-  const [searchTerm, setSearchTerm] = reactExports.useState("");
-  const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
-  const [sortDirection, setSortDirection] = reactExports.useState("newest");
-  const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
-  const [setupFilter, setSetupFilter] = reactExports.useState(false);
-  const [dateFrom, setDateFrom] = reactExports.useState("");
-  const [dateTo, setDateTo] = reactExports.useState("");
-  const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
-  const [page, setPage] = reactExports.useState(1);
-  const [setupPinnedRequestId, setSetupPinnedRequestId] = reactExports.useState(null);
-  const selectRequest = reactExports.useCallback((id2) => {
+  const queueRef = reactExports$1.useRef(null);
+  const [searchTerm, setSearchTerm] = reactExports$1.useState("");
+  const [categoryFilter, setCategoryFilter] = reactExports$1.useState("all");
+  const [sortDirection, setSortDirection] = reactExports$1.useState("newest");
+  const [semanticFilter, setSemanticFilter] = reactExports$1.useState("all");
+  const [setupFilter, setSetupFilter] = reactExports$1.useState(false);
+  const [dateFrom, setDateFrom] = reactExports$1.useState("");
+  const [dateTo, setDateTo] = reactExports$1.useState("");
+  const [mobileQueueOpen, setMobileQueueOpen] = reactExports$1.useState(false);
+  const [page, setPage] = reactExports$1.useState(1);
+  const [setupPinnedRequestId, setSetupPinnedRequestId] = reactExports$1.useState(null);
+  const selectRequest = reactExports$1.useCallback((id2) => {
     props.onOpenRequest(id2);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
-  const handleOpenRequest = reactExports.useCallback((id2) => {
+  const handleOpenRequest = reactExports$1.useCallback((id2) => {
     setSetupPinnedRequestId(null);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
-  const handleOpenSetupEvidence = reactExports.useCallback((id2) => {
+  const handleOpenSetupEvidence = reactExports$1.useCallback((id2) => {
     setSetupPinnedRequestId(id2);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
-  const handlePageChange = reactExports.useCallback((nextPage) => {
+  const handlePageChange = reactExports$1.useCallback((nextPage) => {
     setSetupPinnedRequestId(null);
     setPage(nextPage);
   }, []);
-  const handleToggleMobileQueue = reactExports.useCallback(() => {
+  const handleToggleMobileQueue = reactExports$1.useCallback(() => {
     setMobileQueueOpen((v) => !v);
   }, []);
-  const setupIdentityKey = reactExports.useMemo(() => connectorSetupIdentityKey(requests), [requests]);
+  const setupIdentityKey = reactExports$1.useMemo(() => connectorSetupIdentityKey(requests), [requests]);
   const setupClis = useConnectorSetupClis(setupIdentityKey);
-  const setupGroups = reactExports.useMemo(() => buildConnectorSetupGroups(requests, setupClis), [requests, setupClis]);
-  const filteredRequests = reactExports.useMemo(() => {
+  const setupGroups = reactExports$1.useMemo(() => buildConnectorSetupGroups(requests, setupClis), [requests, setupClis]);
+  const filteredRequests = reactExports$1.useMemo(() => {
     let items = setupFilter ? requests.filter(isConnectorSetupItem) : requests;
     if (semanticFilter !== "all") {
       const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
@@ -40308,7 +40774,7 @@ function ReviewWorkspace(props) {
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     setSetupPinnedRequestId(null);
     setPage(1);
   }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
@@ -40316,9 +40782,9 @@ function ReviewWorkspace(props) {
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
   const pagedRequests = filteredRequests.slice(pageStart, pageStart + QUEUE_PAGE_SIZE);
-  const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
+  const categoryOptions = reactExports$1.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     function isNestedQueueActionButton(target2) {
       return target2 instanceof HTMLElement && target2.tagName.toLowerCase() === "button" && target2.getAttribute("role") !== "option";
     }
@@ -40341,7 +40807,7 @@ function ReviewWorkspace(props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pagedRequests, activeRequestId, handleOpenRequest]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (filteredRequests.length === 0) {
       return;
     }
@@ -40351,7 +40817,7 @@ function ReviewWorkspace(props) {
     }
     selectRequest(filteredRequests[0].request_id);
   }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const target2 = queuePageSyncTarget({
       pagedRequests,
       activeRequestId,
@@ -40367,7 +40833,7 @@ function ReviewWorkspace(props) {
     onBulkBlock: props.onBulkBlock,
     settingsHref: guardAwareHref("/settings")
   });
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!bulkApprove.bulkSelection.selectionMode) return;
     function handleBulkShortcut(event) {
       const target2 = event.target;
@@ -40658,12 +41124,12 @@ function handOffRequestPageToDesktop() {
   }
 }
 function QueueConnectionError(props) {
-  const [repairing, setRepairing] = reactExports.useState(false);
+  const [repairing, setRepairing] = reactExports$1.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
   const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
   const handedOff = desktopUrl !== null && (props.handedOffToDesktop ?? requestHandedOffToDesktop(props.requestId));
-  const handleRepair = reactExports.useCallback(async () => {
+  const handleRepair = reactExports$1.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
     }
@@ -40674,7 +41140,7 @@ function QueueConnectionError(props) {
       setRepairing(false);
     }
   }, [props.onRepair]);
-  const handleOpenDaemon = reactExports.useCallback(() => {
+  const handleOpenDaemon = reactExports$1.useCallback(() => {
     if (props.approvalUrl !== null) {
       window.open(props.approvalUrl, "_blank", "noopener,noreferrer");
     } else {
@@ -40742,7 +41208,7 @@ function showsRetryPlaceholder(state, lastAutoRetryAt, now2) {
   if (state.retrying) return true;
   return !state.retryDecided && shouldAutoRetry(state.error, lastAutoRetryAt, now2);
 }
-class ErrorBoundary extends reactExports.Component {
+class ErrorBoundary extends reactExports$1.Component {
   lastAutoRetryAt = null;
   retryTimer = null;
   constructor(props) {
@@ -40888,10 +41354,11 @@ function rememberDismissedDesktopUpdateVersion(version2) {
 }
 function GuardUpdateBanner(props) {
   const { model, onDismiss } = props;
-  const [phase, setPhase] = reactExports.useState("idle");
-  const guidanceTimer = reactExports.useRef(null);
-  const attemptRef = reactExports.useRef(0);
-  reactExports.useEffect(() => {
+  const [phase, setPhase] = reactExports$1.useState("idle");
+  const [failureMessage, setFailureMessage] = reactExports$1.useState(DESKTOP_HANDOFF_FAILED);
+  const guidanceTimer = reactExports$1.useRef(null);
+  const attemptRef = reactExports$1.useRef(0);
+  reactExports$1.useEffect(() => {
     attemptRef.current += 1;
     if (guidanceTimer.current !== null) {
       window.clearTimeout(guidanceTimer.current);
@@ -40899,7 +41366,7 @@ function GuardUpdateBanner(props) {
     }
     setPhase("idle");
   }, [model.latestVersion]);
-  reactExports.useEffect(
+  reactExports$1.useEffect(
     () => () => {
       if (guidanceTimer.current !== null) {
         window.clearTimeout(guidanceTimer.current);
@@ -40907,18 +41374,19 @@ function GuardUpdateBanner(props) {
     },
     []
   );
-  const handleUpdate = reactExports.useCallback(() => {
+  const handleUpdate = reactExports$1.useCallback(() => {
     if (phase === "requesting" || phase === "opening") {
       return;
     }
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     setPhase("requesting");
-    void requestGuardDesktopHandoff().then((result) => {
+    void requestGuardDesktopHandoff(model.latestVersion).then((result) => {
       if (attemptRef.current !== attempt) {
         return;
       }
       if (!result.handoff_requested) {
+        setFailureMessage(DESKTOP_HANDOFF_FAILED);
         setPhase("failed");
         return;
       }
@@ -40928,13 +41396,14 @@ function GuardUpdateBanner(props) {
           setPhase("guidance");
         }
       }, HANDOFF_GUIDANCE_DELAY_MS);
-    }).catch(() => {
+    }).catch((error) => {
       if (attemptRef.current === attempt) {
+        setFailureMessage(desktopHandoffFailureMessage(error));
         setPhase("failed");
       }
     });
-  }, [phase]);
-  const handleDismiss = reactExports.useCallback(() => {
+  }, [model.latestVersion, phase]);
+  const handleDismiss = reactExports$1.useCallback(() => {
     rememberDismissedDesktopUpdateVersion(model.latestVersion);
     onDismiss(model.latestVersion);
   }, [model.latestVersion, onDismiss]);
@@ -40957,7 +41426,7 @@ function GuardUpdateBanner(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: model.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: model.body }),
             phase === "guidance" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: DESKTOP_HANDOFF_GUIDANCE }) : null,
-            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: DESKTOP_HANDOFF_FAILED }) : null
+            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: failureMessage }) : null
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
@@ -41102,15 +41571,15 @@ function isSettingsSaveProofSubmitDisabled(mode, credentials, totpRequired, puls
   return current.length === 0;
 }
 function SettingsSaveProofModal(props) {
-  const dialogRef = reactExports.useRef(null);
-  const passwordRef = reactExports.useRef(null);
-  const totpRef = reactExports.useRef(null);
-  const [currentPassword, setCurrentPassword] = reactExports.useState("");
-  const [newPassword, setNewPassword] = reactExports.useState("");
-  const [confirmPassword, setConfirmPassword] = reactExports.useState("");
-  const [totpCode, setTotpCode] = reactExports.useState("");
+  const dialogRef = reactExports$1.useRef(null);
+  const passwordRef = reactExports$1.useRef(null);
+  const totpRef = reactExports$1.useRef(null);
+  const [currentPassword, setCurrentPassword] = reactExports$1.useState("");
+  const [newPassword, setNewPassword] = reactExports$1.useState("");
+  const [confirmPassword, setConfirmPassword] = reactExports$1.useState("");
+  const [totpCode, setTotpCode] = reactExports$1.useState("");
   useFocusTrap(props.open, dialogRef);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (!props.open) {
       setCurrentPassword("");
       setNewPassword("");
@@ -41127,7 +41596,7 @@ function SettingsSaveProofModal(props) {
     }, 50);
     return () => clearTimeout(timer);
   }, [props.gate?.totp_enabled, props.open, props.mode]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (props.open) {
       document.documentElement.dataset.guardModalOpen = String(
         Number(document.documentElement.dataset.guardModalOpen ?? 0) + 1
@@ -41146,19 +41615,19 @@ function SettingsSaveProofModal(props) {
   const pulseRequired = settingsSaveProofUsesPulse(props.gate, props.mode);
   const totpRequired = !pulseRequired && props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
   const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired && !pulseRequired;
-  const handleCurrentPasswordChange = reactExports.useCallback((event) => {
+  const handleCurrentPasswordChange = reactExports$1.useCallback((event) => {
     setCurrentPassword(event.target.value);
   }, []);
-  const handleNewPasswordChange = reactExports.useCallback((event) => {
+  const handleNewPasswordChange = reactExports$1.useCallback((event) => {
     setNewPassword(event.target.value);
   }, []);
-  const handleConfirmPasswordChange = reactExports.useCallback((event) => {
+  const handleConfirmPasswordChange = reactExports$1.useCallback((event) => {
     setConfirmPassword(event.target.value);
   }, []);
-  const handleTotpChange = reactExports.useCallback((event) => {
+  const handleTotpChange = reactExports$1.useCallback((event) => {
     setTotpCode(event.target.value);
   }, []);
-  const handleBackdropClick = reactExports.useCallback(
+  const handleBackdropClick = reactExports$1.useCallback(
     (event) => {
       if (event.target === event.currentTarget && !props.pending) {
         props.onCancel();
@@ -41166,7 +41635,7 @@ function SettingsSaveProofModal(props) {
     },
     [props.onCancel, props.pending]
   );
-  const handleConfirm = reactExports.useCallback((event) => {
+  const handleConfirm = reactExports$1.useCallback((event) => {
     event.preventDefault();
     if (props.pending || isSettingsSaveProofSubmitDisabled(
       props.mode,
@@ -41310,7 +41779,7 @@ function trackClass(checked, attentionWhenOff) {
   return "bg-slate-200";
 }
 function FleetAppModeSwitch(props) {
-  const reasonId = reactExports.useId();
+  const reasonId = reactExports$1.useId();
   const { checked, disabled } = props;
   const track = trackClass(checked, props.attentionWhenOff === true);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -41394,15 +41863,15 @@ function gateProofUpdate(gate, proof) {
 }
 function useFleetAppPosture(props) {
   const { onChanged } = props;
-  const [state, setState] = reactExports.useState({ kind: "loading" });
-  const [pendingWatch, setPendingWatch] = reactExports.useState(null);
-  const [savingHarness, setSavingHarness] = reactExports.useState(null);
-  const [proofRequest, setProofRequest] = reactExports.useState(null);
-  const [proofPending, setProofPending] = reactExports.useState(false);
-  const [proofError, setProofError] = reactExports.useState(null);
-  const [statusMessage, setStatusMessage] = reactExports.useState(null);
-  const [error, setError] = reactExports.useState(null);
-  reactExports.useEffect(() => {
+  const [state, setState] = reactExports$1.useState({ kind: "loading" });
+  const [pendingWatch, setPendingWatch] = reactExports$1.useState(null);
+  const [savingHarness, setSavingHarness] = reactExports$1.useState(null);
+  const [proofRequest, setProofRequest] = reactExports$1.useState(null);
+  const [proofPending, setProofPending] = reactExports$1.useState(false);
+  const [proofError, setProofError] = reactExports$1.useState(null);
+  const [statusMessage, setStatusMessage] = reactExports$1.useState(null);
+  const [error, setError] = reactExports$1.useState(null);
+  reactExports$1.useEffect(() => {
     let cancelled = false;
     fetchSettings().then((payload) => {
       if (cancelled) return;
@@ -41421,14 +41890,14 @@ function useFleetAppPosture(props) {
   }, []);
   const gate = state.kind === "ready" ? state.settings.approval_gate ?? null : null;
   const gateEnabled = gate?.enabled === true;
-  const rows = reactExports.useMemo(() => {
+  const rows = reactExports$1.useMemo(() => {
     if (state.kind !== "ready") return [];
     return fleetManagedRows(
       harnessPostureRows(state.settings, fleetManagedCapabilities(state.capabilities, props.apps)),
       props.apps
     );
   }, [state, props.apps]);
-  const commit = reactExports.useCallback(async (harness, next, proof) => {
+  const commit = reactExports$1.useCallback(async (harness, next, proof) => {
     if (state.kind !== "ready") return "App protection is still loading.";
     const saved = state.settings;
     const update = appModesUpdate(saved, harness, next);
@@ -41455,7 +41924,7 @@ function useFleetAppPosture(props) {
       setSavingHarness(null);
     }
   }, [state, gateEnabled, rows, onChanged]);
-  const save = reactExports.useCallback((change) => {
+  const save = reactExports$1.useCallback((change) => {
     if (gateEnabled) {
       const displayName = rows.find((row) => row.harness === change.harness)?.displayName ?? change.harness;
       setProofError(null);
@@ -41466,7 +41935,7 @@ function useFleetAppPosture(props) {
       if (failure2 !== null) setError(failure2);
     });
   }, [gateEnabled, rows, commit]);
-  const handleToggle = reactExports.useCallback((harness, part) => {
+  const handleToggle = reactExports$1.useCallback((harness, part) => {
     if (state.kind !== "ready") return;
     const current = appModes(state.settings, harness);
     const next = { ...current, [part]: !current[part] };
@@ -41480,11 +41949,11 @@ function useFleetAppPosture(props) {
     setPendingWatch(null);
     save({ harness, next });
   }, [state, save]);
-  const handleConfirmWatch = reactExports.useCallback((change) => {
+  const handleConfirmWatch = reactExports$1.useCallback((change) => {
     setPendingWatch(null);
     save(change);
   }, [save]);
-  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+  const handleProofConfirm = reactExports$1.useCallback(async (proof) => {
     if (proofRequest === null) return;
     setProofPending(true);
     setProofError(null);
@@ -41496,8 +41965,8 @@ function useFleetAppPosture(props) {
       setProofError(failure2);
     }
   }, [proofRequest, commit]);
-  const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
-  const rowFor = reactExports.useCallback((harness) => rows.find((row) => row.harness === harness), [rows]);
+  const handleCancelWatch = reactExports$1.useCallback(() => setPendingWatch(null), []);
+  const rowFor = reactExports$1.useCallback((harness) => rows.find((row) => row.harness === harness), [rows]);
   if (state.kind !== "ready") {
     return {
       kind: state.kind,
@@ -41674,26 +42143,26 @@ function WatchProtectionBanner(props) {
   const { onTurnedOn, onOpenSettings, onBusyChange } = props;
   const disabled = props.disabled === true;
   const deps = props.deps ?? DEFAULT_DEPS;
-  const [state, setState] = reactExports.useState(props.initialState ?? { kind: "idle" });
-  const mounted = reactExports.useRef(true);
-  reactExports.useEffect(() => {
+  const [state, setState] = reactExports$1.useState(props.initialState ?? { kind: "idle" });
+  const mounted = reactExports$1.useRef(true);
+  reactExports$1.useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
   const busy = state.kind === "working" || state.kind === "proof";
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
-  reactExports.useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
-  const settle = reactExports.useCallback(async (payload) => {
+  reactExports$1.useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  const settle = reactExports$1.useCallback(async (payload) => {
     if (mounted.current) setState({ kind: "done" });
     await onTurnedOn?.(payload);
   }, [onTurnedOn]);
-  const handleAsk = reactExports.useCallback(() => setState({ kind: "confirming" }), []);
-  const handleCancel = reactExports.useCallback(() => setState({ kind: "idle" }), []);
-  const handleConfirm = reactExports.useCallback(async () => {
+  const handleAsk = reactExports$1.useCallback(() => setState({ kind: "confirming" }), []);
+  const handleCancel = reactExports$1.useCallback(() => setState({ kind: "idle" }), []);
+  const handleConfirm = reactExports$1.useCallback(async () => {
     if (disabled) return;
     setState({ kind: "working" });
     try {
@@ -41710,10 +42179,10 @@ function WatchProtectionBanner(props) {
       if (mounted.current) setState({ kind: "error", message: turnProtectionOnErrorMessage(cause) });
     }
   }, [deps, disabled, settle]);
-  const handleProofCancel = reactExports.useCallback(() => {
+  const handleProofCancel = reactExports$1.useCallback(() => {
     setState((current) => current.kind === "proof" && current.pending ? current : { kind: "idle" });
   }, []);
-  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+  const handleProofConfirm = reactExports$1.useCallback(async (proof) => {
     if (state.kind !== "proof" || state.pending) return;
     const { settings, gate } = state;
     setState({ kind: "proof", settings, gate, pending: true, error: null });
@@ -41809,11 +42278,11 @@ function WatchProtectionBanner(props) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DAc3-viF.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DLfqT4Oj.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot, onRestored } = props;
-  const handleTurnedOn = reactExports.useCallback(() => {
+  const handleTurnedOn = reactExports$1.useCallback(() => {
     onRestored?.();
   }, [onRestored]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -41847,7 +42316,7 @@ function renderInboxContent(props) {
   }
   if (props.detail.kind === "mcp-policy") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      reactExports.Suspense,
+      reactExports$1.Suspense,
       {
         fallback: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-72" }),
@@ -41940,7 +42409,7 @@ function renderViewContent(props) {
   return null;
 }
 function ApprovalCenterLayout(props) {
-  const [sidebarCollapsed, setSidebarCollapsed] = reactExports.useState(() => {
+  const [sidebarCollapsed, setSidebarCollapsed] = reactExports$1.useState(() => {
     try {
       return localStorage.getItem("guard-sidebar-collapsed") === "true";
     } catch {
@@ -41954,10 +42423,10 @@ function ApprovalCenterLayout(props) {
   } else {
     queuedCount = queuedItems.length;
   }
-  const handleOpenSettings = reactExports.useCallback(() => {
+  const handleOpenSettings = reactExports$1.useCallback(() => {
     props.onNavigate("/settings");
   }, [props.onNavigate]);
-  const handleToggleSidebar = reactExports.useCallback(() => {
+  const handleToggleSidebar = reactExports$1.useCallback(() => {
     setSidebarCollapsed((previous) => {
       const next = !previous;
       try {
@@ -41977,10 +42446,10 @@ function ApprovalCenterLayout(props) {
     onSetUpdateChannel,
     onSetUpdateMode
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
-  const [dismissedUpdateVersion, setDismissedUpdateVersion] = reactExports.useState(
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = reactExports$1.useState(
     () => readDismissedDesktopUpdateVersion()
   );
-  const handleDismissUpdateBanner = reactExports.useCallback((version2) => {
+  const handleDismissUpdateBanner = reactExports$1.useCallback((version2) => {
     setDismissedUpdateVersion(version2);
   }, []);
   const updateBannerModel = desktopUpdateBannerModel(
@@ -42220,8 +42689,8 @@ async function runAutomaticProtectionRepair(input) {
   );
 }
 function useRouteFocus(view, mainSelector = "main#main-content") {
-  const prevViewRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
+  const prevViewRef = reactExports$1.useRef(null);
+  reactExports$1.useEffect(() => {
     if (prevViewRef.current === null) {
       prevViewRef.current = view;
       return;
@@ -42508,8 +42977,8 @@ const STATUS_COPY = {
   cancelled: "Pulse approval cancelled."
 };
 function PulseApprovalOverlay() {
-  const [toasts, setToasts] = reactExports.useState([]);
-  reactExports.useEffect(() => {
+  const [toasts, setToasts] = reactExports$1.useState([]);
+  reactExports$1.useEffect(() => {
     const timers = /* @__PURE__ */ new Set();
     const onEvent = (event) => {
       const detail = event.detail;
@@ -42548,35 +43017,35 @@ function PulseApprovalOverlay() {
   )) });
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-agIHYZF9.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CesXE34g.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CO7DaU8J.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-D6P3kGE3.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CAyt_xfe.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-COpcjev3.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-afR9d4AB.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DJlSucWK.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DHYA5vR8.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-CTLn4Bwv.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-Qi0mR_JY.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-CwLwmDZo.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CXh-c9D0.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-ZUQLYIva.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-Dsr4CEyy.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-D7uSrlwy.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-C4WLPFxP.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-X6gDkFhT.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-CLZ3Q8oI.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-CkMTw_x_.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-C4cjm79L.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-BCIhgfRA.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -42732,27 +43201,27 @@ function App() {
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);
-  const [requests, setRequests] = reactExports.useState({ kind: "loading" });
-  const [detail, setDetail] = reactExports.useState({ kind: "idle" });
-  const [detailRefreshKey, setDetailRefreshKey] = reactExports.useState(0);
-  const [receipts, setReceipts] = reactExports.useState({ kind: "loading" });
-  const [runtime2, setRuntime] = reactExports.useState({ kind: "loading" });
-  const [policies, setPolicies] = reactExports.useState({ kind: "loading" });
-  const [inventory, setInventory] = reactExports.useState({ kind: "idle" });
-  const [resolutionMessage, setResolutionMessage] = reactExports.useState(null);
-  const [codexResume, setCodexResume] = reactExports.useState(null);
-  const [resolvedRequestId, setResolvedRequestId] = reactExports.useState(null);
-  const [helpOpen, setHelpOpen] = reactExports.useState(false);
-  const [clearConfirm, setClearConfirm] = reactExports.useState(null);
-  const [approvalGate, setApprovalGate] = reactExports.useState(null);
-  const [guardVersion, setGuardVersion] = reactExports.useState(null);
-  const resolutionInFlight = reactExports.useRef(false);
-  const refreshSequence = reactExports.useRef(0);
-  const latestRefresh = reactExports.useRef(null);
-  const bulkApproveInFlight = reactExports.useRef(false);
+  const [requests, setRequests] = reactExports$1.useState({ kind: "loading" });
+  const [detail, setDetail] = reactExports$1.useState({ kind: "idle" });
+  const [detailRefreshKey, setDetailRefreshKey] = reactExports$1.useState(0);
+  const [receipts, setReceipts] = reactExports$1.useState({ kind: "loading" });
+  const [runtime2, setRuntime] = reactExports$1.useState({ kind: "loading" });
+  const [policies, setPolicies] = reactExports$1.useState({ kind: "loading" });
+  const [inventory, setInventory] = reactExports$1.useState({ kind: "idle" });
+  const [resolutionMessage, setResolutionMessage] = reactExports$1.useState(null);
+  const [codexResume, setCodexResume] = reactExports$1.useState(null);
+  const [resolvedRequestId, setResolvedRequestId] = reactExports$1.useState(null);
+  const [helpOpen, setHelpOpen] = reactExports$1.useState(false);
+  const [clearConfirm, setClearConfirm] = reactExports$1.useState(null);
+  const [approvalGate, setApprovalGate] = reactExports$1.useState(null);
+  const [guardVersion, setGuardVersion] = reactExports$1.useState(null);
+  const resolutionInFlight = reactExports$1.useRef(false);
+  const refreshSequence = reactExports$1.useRef(0);
+  const latestRefresh = reactExports$1.useRef(null);
+  const bulkApproveInFlight = reactExports$1.useRef(false);
   const queuedItems = requests.kind === "ready" ? requests.items : [];
   const activeRequestId = requestId ?? (view === "home" ? null : queuedItems[0]?.request_id) ?? null;
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (activeRequestId === null) {
       setDetail({ kind: "idle" });
       return;
@@ -42776,7 +43245,7 @@ function App() {
       cancelled = true;
     };
   }, [activeRequestId, detailRefreshKey]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     function handleKeyDown(event) {
       const target2 = event.target;
       if (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable) return;
@@ -42793,7 +43262,7 @@ function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     let cancelled = false;
     let pollId;
     let refreshInFlight = false;
@@ -42876,7 +43345,7 @@ function App() {
       }
     };
   }, [view, requestId]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const needsInventory = view === "app-detail";
     if (!needsInventory) {
       return;
@@ -42895,7 +43364,7 @@ function App() {
       cancelled = true;
     };
   }, [view]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     let cancelled = false;
     fetchSettings().then((payload) => {
       if (!cancelled && payload.settings.approval_gate !== void 0) {
@@ -42915,7 +43384,7 @@ function App() {
       cancelled = true;
     };
   }, [view]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     const needsReceipts = view === "home" || view === "evidence" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
     const needsPolicies = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health" || view === "policy";
     if (!needsReceipts && !needsPolicies) {
@@ -42956,7 +43425,7 @@ function App() {
       cancelled = true;
     };
   }, [view]);
-  reactExports.useEffect(() => {
+  reactExports$1.useEffect(() => {
     if (view !== "fleet") {
       return;
     }
@@ -42978,29 +43447,29 @@ function App() {
       cancelled = true;
     };
   }, [view]);
-  const handleOpenInbox = reactExports.useCallback(() => navigate("/inbox"), []);
-  const handleOpenFleet = reactExports.useCallback(() => navigate(PROTECT_ROUTE), []);
-  const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
-  const handleOpenTodayEvidence = reactExports.useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
-  const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
-  const handleOpenCommands = reactExports.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
-  const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
-  const handleOpenRecovery = reactExports.useCallback(() => openRecoveryView(), []);
-  const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
-  reactExports.useCallback(() => navigate("/policy"), []);
-  const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
-  const handleCloseHelp = reactExports.useCallback(() => setHelpOpen(false), []);
-  const handleGoHome = reactExports.useCallback(() => navigate("/"), []);
-  const handleOpenRequest = reactExports.useCallback((nextRequestId) => {
+  const handleOpenInbox = reactExports$1.useCallback(() => navigate("/inbox"), []);
+  const handleOpenFleet = reactExports$1.useCallback(() => navigate(PROTECT_ROUTE), []);
+  const handleOpenEvidence = reactExports$1.useCallback(() => navigate("/evidence"), []);
+  const handleOpenTodayEvidence = reactExports$1.useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
+  const handleOpenInsights = reactExports$1.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
+  const handleOpenCommands = reactExports$1.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
+  const handleOpenSettings = reactExports$1.useCallback(() => navigate("/settings"), []);
+  const handleOpenRecovery = reactExports$1.useCallback(() => openRecoveryView(), []);
+  const handleOpenSupplyChain = reactExports$1.useCallback(() => navigate("/supply-chain"), []);
+  reactExports$1.useCallback(() => navigate("/policy"), []);
+  const handleOpenHelp = reactExports$1.useCallback(() => setHelpOpen(true), []);
+  const handleCloseHelp = reactExports$1.useCallback(() => setHelpOpen(false), []);
+  const handleGoHome = reactExports$1.useCallback(() => navigate("/"), []);
+  const handleOpenRequest = reactExports$1.useCallback((nextRequestId) => {
     navigate(`/requests/${nextRequestId}`);
   }, []);
-  const handleOpenAppDetail = reactExports.useCallback((harness) => {
+  const handleOpenAppDetail = reactExports$1.useCallback((harness) => {
     const slug = normalizeHarnessSlug(harness);
     if (slug !== null) {
       navigate(`/apps/${encodeURIComponent(slug)}`);
     }
   }, []);
-  const refreshStateAfterAction = reactExports.useCallback(async (requireComplete = false) => {
+  const refreshStateAfterAction = reactExports$1.useCallback(async (requireComplete = false) => {
     const sequence = ++refreshSequence.current;
     const refresh = (async () => {
       const [inboxResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
@@ -43058,10 +43527,10 @@ function App() {
     }
     return outcome.snapshot;
   }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
-  const refreshStateWithoutResult = reactExports.useCallback(async (requireComplete = false) => {
+  const refreshStateWithoutResult = reactExports$1.useCallback(async (requireComplete = false) => {
     await refreshStateAfterAction(requireComplete);
   }, [refreshStateAfterAction]);
-  const handleReconnectSession = reactExports.useCallback(async () => {
+  const handleReconnectSession = reactExports$1.useCallback(async () => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
     const reminted = await ensureGuardDashboardSession();
@@ -43073,10 +43542,10 @@ function App() {
     }
     await refreshStateAfterAction();
   }, [refreshStateAfterAction]);
-  const handleClearPolicies = reactExports.useCallback(async (scope) => {
+  const handleClearPolicies = reactExports$1.useCallback(async (scope) => {
     setClearConfirm(scope);
   }, []);
-  const handleConfirmClear = reactExports.useCallback(async (credentials) => {
+  const handleConfirmClear = reactExports$1.useCallback(async (credentials) => {
     if (clearConfirm === null) return;
     await clearPolicy({ ...clearConfirm, ...credentials });
     setClearConfirm(null);
@@ -43098,10 +43567,10 @@ function App() {
       });
     }
   }, [clearConfirm, setRuntime, setRequests, setPolicies]);
-  const handleCancelClear = reactExports.useCallback(() => {
+  const handleCancelClear = reactExports$1.useCallback(() => {
     setClearConfirm(null);
   }, []);
-  const handleClearAppPolicies = reactExports.useCallback(async (harness) => {
+  const handleClearAppPolicies = reactExports$1.useCallback(async (harness) => {
     await clearPolicy({ harness });
     const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
     if (inboxResult.status === "fulfilled") {
@@ -43117,14 +43586,14 @@ function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
-  const handleRefreshPolicies = reactExports.useCallback(async () => {
+  const handleRefreshPolicies = reactExports$1.useCallback(async () => {
     try {
       const items = await fetchPolicies();
       setPolicies({ kind: "ready", items });
     } catch {
     }
   }, []);
-  const handleClearPolicy = reactExports.useCallback(async (policy) => {
+  const handleClearPolicy = reactExports$1.useCallback(async (policy) => {
     await clearPolicy(buildClearPayload(policy));
     const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
     if (inboxResult.status === "fulfilled") {
@@ -43140,10 +43609,10 @@ function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
-  const handleClearEvidence = reactExports.useCallback(() => {
+  const handleClearEvidence = reactExports$1.useCallback(() => {
     setReceipts({ kind: "ready", items: [] });
   }, [setReceipts]);
-  const handleResolve = reactExports.useCallback(async (payload) => {
+  const handleResolve = reactExports$1.useCallback(async (payload) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {
@@ -43179,12 +43648,12 @@ function App() {
       resolutionInFlight.current = false;
     }
   }, [activeRequestId, requests, refreshStateAfterAction, setResolutionMessage]);
-  const handleRetryResume = reactExports.useCallback(async () => {
+  const handleRetryResume = reactExports$1.useCallback(async () => {
     if (resolvedRequestId === null) return;
     const updated = await retryResume(resolvedRequestId);
     setCodexResume(updated);
   }, [resolvedRequestId]);
-  const refreshApprovalGate = reactExports.useCallback(async () => {
+  const refreshApprovalGate = reactExports$1.useCallback(async () => {
     try {
       const payload = await fetchSettings();
       const gate = payload.settings.approval_gate;
@@ -43197,7 +43666,7 @@ function App() {
       return null;
     }
   }, []);
-  const handleBulkApprove = reactExports.useCallback(async (ids, gateCredentials) => {
+  const handleBulkApprove = reactExports$1.useCallback(async (ids, gateCredentials) => {
     if (bulkApproveInFlight.current) {
       return;
     }
@@ -43237,7 +43706,7 @@ function App() {
       bulkApproveInFlight.current = false;
     }
   }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
-  const handleBulkBlock = reactExports.useCallback(async (selected) => {
+  const handleBulkBlock = reactExports$1.useCallback(async (selected) => {
     if (bulkApproveInFlight.current || resolutionInFlight.current) {
       throw new Error("Another decision is still being saved. Try again in a moment.");
     }
@@ -43257,7 +43726,7 @@ function App() {
       bulkApproveInFlight.current = false;
     }
   }, [refreshStateAfterAction, requests, setResolutionMessage]);
-  const handleRetry = reactExports.useCallback(() => {
+  const handleRetry = reactExports$1.useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
     fetchInboxState().then(({ snapshot, items }) => {
@@ -43269,7 +43738,7 @@ function App() {
       setRequests({ kind: "error", message });
     });
   }, []);
-  const refreshHubRuntime = reactExports.useCallback(async () => {
+  const refreshHubRuntime = reactExports$1.useCallback(async () => {
     try {
       const snapshot = await fetchRuntimeSnapshot({ includeItems: false, includeReceipts: true });
       setRuntime({ kind: "ready", snapshot });
@@ -43277,7 +43746,7 @@ function App() {
       setRuntime({ kind: "error", message: error instanceof Error ? error.message : "Unable to reach Guard." });
     }
   }, []);
-  const handleRepair = reactExports.useCallback(async () => {
+  const handleRepair = reactExports$1.useCallback(async () => {
     await repairApprovalCenter();
     await new Promise((resolve) => setTimeout(resolve, 1200));
     fetchInboxState().then(({ snapshot, items }) => {
@@ -43289,32 +43758,32 @@ function App() {
       setRequests({ kind: "error", message });
     });
   }, []);
-  const handleConnectHarness = reactExports.useCallback((harness) => {
+  const handleConnectHarness = reactExports$1.useCallback((harness) => {
     const slug = normalizeHarnessSlug(harness);
     if (slug !== null) {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
-  const handleTestHarness = reactExports.useCallback((harness) => {
+  const handleTestHarness = reactExports$1.useCallback((harness) => {
     const slug = normalizeHarnessSlug(harness);
     if (slug !== null) {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
-  const handleRepairHarness = reactExports.useCallback((harness) => {
+  const handleRepairHarness = reactExports$1.useCallback((harness) => {
     const slug = normalizeHarnessSlug(harness);
     if (slug !== null) {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
-  const handleRepairProtection = reactExports.useCallback(async (harnesses) => {
+  const handleRepairProtection = reactExports$1.useCallback(async (harnesses) => {
     return runAutomaticProtectionRepair({
       harnesses,
       displayName: harnessDisplayName,
       refreshStateAfterAction
     });
   }, [refreshStateAfterAction]);
-  const appDetailContent = reactExports.useMemo(() => {
+  const appDetailContent = reactExports$1.useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime2.kind !== "ready") {
       return null;
     }
@@ -43336,12 +43805,12 @@ function App() {
       }
     );
   }, [view, appDetailHarness, runtime2, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
-  const policyContent = reactExports.useMemo(() => {
+  const policyContent = reactExports$1.useMemo(() => {
     if (runtime2.kind !== "ready") {
       return null;
     }
     if (policies.kind === "ready") {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         PolicyWorkspacePage,
         {
           snapshot: runtime2.snapshot,
@@ -43392,8 +43861,8 @@ function App() {
         codexResume,
         approvalGate,
         onRetryResume: handleRetryResume,
-        swarmContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SwarmWorkspace, { onNavigate: navigate, onOpenRequest: handleOpenRequest, reviews: requests.kind === "ready" ? requests.items : null }) }),
-        homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        swarmContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SwarmWorkspace, { onNavigate: navigate, onOpenRequest: handleOpenRequest, reviews: requests.kind === "ready" ? requests.items : null }) }),
+        homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           HomeWorkspace,
           {
             onOpenCigar: () => navigate("/cigar"),
@@ -43436,7 +43905,7 @@ function App() {
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
         onClearEvidence: handleClearEvidence,
-        fleetContent: runtime2.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        fleetContent: runtime2.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,
           {
             runtime: runtime2.snapshot,
@@ -43450,10 +43919,10 @@ function App() {
             onRuntimeRefresh: refreshStateWithoutResult
           }
         ) }) : null,
-        appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime2.kind === "ready" ? runtime2.snapshot : null, onRefreshRuntime: refreshStateAfterAction, onNavigate: navigate }) }) }),
-        protectionRepairContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRepairPage, { onNavigate: navigate }) }) }),
-        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
+        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime2.kind === "ready" ? runtime2.snapshot : null, onRefreshRuntime: refreshStateAfterAction, onNavigate: navigate }) }) }),
+        protectionRepairContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRepairPage, { onNavigate: navigate }) }) }),
+        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           SettingsWorkspace,
           {
             contextOnly: view === "cigar",
@@ -43471,7 +43940,7 @@ function App() {
             onRefreshRuntime: refreshHubRuntime,
             onOpenInbox: handleOpenInbox,
             onOpenSettings: handleOpenSettings,
-            children: (snapshot) => /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            children: (snapshot) => /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
               SupplyChainHubWorkspace,
               {
                 activeView: view,
@@ -43489,8 +43958,8 @@ function App() {
           }
         ),
         policyContent,
-        releasesContent: view === "releases" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ReleasesWorkspace, { installedVersion: guardVersion }) }) : null,
-        aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime2.kind === "ready" ? {
+        releasesContent: view === "releases" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ReleasesWorkspace, { installedVersion: guardVersion }) }) : null,
+        aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime2.kind === "ready" ? {
           // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
           // When those fields are added, populate them here instead of null/0.
           guardVersion,
@@ -43504,7 +43973,7 @@ function App() {
         } : null }) })
       }
     ),
-    helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleCloseHelp, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) }) })
+    helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleCloseHelp, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) }) })
   ] });
 }
 const container = document.getElementById("guard-dashboard-root");
@@ -43514,7 +43983,7 @@ if (container === null) {
 installStaleBuildGuard();
 handOffRequestPageToDesktop();
 clientExports.createRoot(container).render(
-  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
+  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports$1.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
   DESKTOP_WINDOW_RECOVERY_MESSAGE as $,
@@ -43611,7 +44080,7 @@ export {
   HiMiniExclamationCircle as ay,
   hasRepairableProtectionGap as az,
   HiMiniCommandLine as b,
-  subscribeDashboardLocation as b$,
+  isCigarCoreLabel as b$,
   overrideRows as b0,
   harnessPostureSummary as b1,
   joinNames as b2,
@@ -43622,300 +44091,301 @@ export {
   harnessWatchPrompt as b7,
   harnessPostureOptions as b8,
   canRestartHarnessWatch as b9,
-  SettingsSaveProofModal as bA,
-  revokeContextAgentSession as bB,
-  grantContextWorkspace as bC,
-  authorizeContextAgentSession as bD,
-  ContextAssistanceApiError as bE,
-  ask as bF,
-  parseContextScope as bG,
-  validContextBrokerRevision as bH,
-  isGuardDemoMode as bI,
-  commitDashboardLocation as bJ,
-  HiMiniArrowUturnLeft as bK,
-  HiMiniCodeBracketSquare as bL,
-  HiMiniHome as bM,
-  HiMiniFolderPlus as bN,
-  HiMiniClock as bO,
-  HiMiniFolderOpen as bP,
-  manageContextWorkspace as bQ,
-  compileWorkspaceContext as bR,
-  HiMiniChatBubbleLeftEllipsis as bS,
-  HiMiniDocumentMagnifyingGlass as bT,
-  HiMiniPower as bU,
-  HiMiniEyeSlash as bV,
-  HiMiniCpuChip as bW,
-  HiMiniAcademicCap as bX,
-  HiMiniArrowLeft as bY,
-  isCigarProducerVersion as bZ,
-  isCigarCoreLabel as b_,
+  HiMiniLink as bA,
+  SettingsSaveProofModal as bB,
+  revokeContextAgentSession as bC,
+  grantContextWorkspace as bD,
+  authorizeContextAgentSession as bE,
+  ContextAssistanceApiError as bF,
+  ask as bG,
+  parseContextScope as bH,
+  validContextBrokerRevision as bI,
+  isGuardDemoMode as bJ,
+  commitDashboardLocation as bK,
+  HiMiniArrowUturnLeft as bL,
+  HiMiniCodeBracketSquare as bM,
+  HiMiniHome as bN,
+  HiMiniFolderPlus as bO,
+  HiMiniClock as bP,
+  HiMiniFolderOpen as bQ,
+  manageContextWorkspace as bR,
+  compileWorkspaceContext as bS,
+  HiMiniChatBubbleLeftEllipsis as bT,
+  HiMiniDocumentMagnifyingGlass as bU,
+  HiMiniPower as bV,
+  HiMiniEyeSlash as bW,
+  HiMiniCpuChip as bX,
+  HiMiniAcademicCap as bY,
+  HiMiniArrowLeft as bZ,
+  isCigarProducerVersion as b_,
   getDefaultExportFromCjs as ba,
-  React as bb,
-  PULSE_FACE_SCAN_OPTIONS as bc,
-  authorizeApprovalGatePulseSetup as bd,
-  confirmApprovalGatePulseEnrollment as be,
-  waitForPulseApproval as bf,
-  beginApprovalGatePulseEnrollment as bg,
-  GuardModalLayer as bh,
-  SelectMenu as bi,
-  disableApprovalGatePulse as bj,
-  setApprovalGatePulseShowCommand as bk,
-  recoverApprovalGatePulse as bl,
-  HiMiniBellAlert as bm,
-  HiMiniAdjustmentsHorizontal as bn,
-  TabBar as bo,
-  fetchCloudReviewSettings as bp,
-  ApprovalProofFieldInputs as bq,
-  isApprovalProofSubmitDisabled as br,
-  buildApprovalProofCredentials as bs,
-  changeCloudReviewSettings as bt,
-  isRecord$5 as bu,
-  HiMiniArrowTopRightOnSquare as bv,
-  shellHref as bw,
-  HiMiniPauseCircle as bx,
-  listContextAgentSessions as by,
-  HiMiniLink as bz,
+  reactExports as bb,
+  React as bc,
+  PULSE_FACE_SCAN_OPTIONS as bd,
+  authorizeApprovalGatePulseSetup as be,
+  confirmApprovalGatePulseEnrollment as bf,
+  waitForPulseApproval as bg,
+  beginApprovalGatePulseEnrollment as bh,
+  GuardModalLayer as bi,
+  SelectMenu as bj,
+  disableApprovalGatePulse as bk,
+  setApprovalGatePulseShowCommand as bl,
+  recoverApprovalGatePulse as bm,
+  HiMiniBellAlert as bn,
+  HiMiniAdjustmentsHorizontal as bo,
+  TabBar as bp,
+  fetchCloudReviewSettings as bq,
+  ApprovalProofFieldInputs as br,
+  isApprovalProofSubmitDisabled as bs,
+  buildApprovalProofCredentials as bt,
+  changeCloudReviewSettings as bu,
+  isRecord$5 as bv,
+  HiMiniArrowTopRightOnSquare as bw,
+  shellHref as bx,
+  HiMiniPauseCircle as by,
+  listContextAgentSessions as bz,
   HiMiniFolder as c,
-  setLocalPermissionDraftStates as c$,
-  HiMiniChatBubbleLeftRight as c0,
-  HiMiniArrowUpCircle as c1,
-  parseContextAssistanceStatus as c2,
-  isCigarBuildIdentity as c3,
-  fetchContextInstallations as c4,
-  HiMiniCloudArrowDown as c5,
-  turnOnJob as c6,
-  shouldResumeTurnOn as c7,
-  turnOnRequestedAt as c8,
-  forgetTurnOn as c9,
-  clearEvidence as cA,
-  exportDiagnostics as cB,
-  repairApprovalCenter as cC,
-  exportSettings as cD,
-  setupDesktopNotifications as cE,
-  settingsWatchBannerModel as cF,
-  WorkspacePageHeader as cG,
-  navigateFromAnchor as cH,
-  resolveSettingsSaveProofModalCopy as cI,
-  humanizeList as cJ,
-  isProtectionPosture as cK,
-  deriveProtectionPosture as cL,
-  normalizeHarnessPostures as cM,
-  approvalGateCooldownLabel as cN,
-  fetchExtensionCatalog as cO,
-  ExtensionControlApiError as cP,
-  normalizeExtensionCatalogSummary as cQ,
-  normalizeExtensionPermission as cR,
-  ExtensionControlProtocolError as cS,
-  normalizeExtensionCatalogItem as cT,
-  guardApiCacheScope as cU,
-  fetchExtensionCatalogV2Api as cV,
-  localPermissionDraftState as cW,
-  setLocalPermissionDraftState as cX,
-  extensionPolicyAuthorityUnchanged as cY,
-  newExtensionPolicyDraftIdentity as cZ,
-  extensionPolicyDraftIsDirty as c_,
-  rememberTurnOn as ca,
-  forgetTurnOnClick as cb,
-  rememberTurnOnJob as cc,
-  HiMiniArrowDownTray as cd,
-  downloadBlob as ce,
-  savedEvidenceCopy as cf,
-  guardAwareHref as cg,
-  fetchContextData as ch,
-  forgetContextHistory as ci,
-  forgetSavedEvidence as cj,
-  resolveProtectionLevelCopy as ck,
-  fetchSettings as cl,
-  fetchRuntimeSnapshot as cm,
-  clearHarnessWatchOverrides as cn,
-  withHarnessPosturePatch as co,
-  updateSettings as cp,
-  clearPolicy as cq,
-  clearReviewQueue as cr,
-  revokeApprovalGateCooldown as cs,
-  disableApprovalGateTotp as ct,
-  importSettings as cu,
-  resetSettings as cv,
-  resolveSettingsSaveProofKind as cw,
-  requiresSettingsSaveProof as cx,
-  enrollApprovalGateTotp as cy,
-  verifyApprovalGateTotp as cz,
+  extensionPolicyDraftIsDirty as c$,
+  subscribeDashboardLocation as c0,
+  HiMiniChatBubbleLeftRight as c1,
+  HiMiniArrowUpCircle as c2,
+  parseContextAssistanceStatus as c3,
+  isCigarBuildIdentity as c4,
+  fetchContextInstallations as c5,
+  HiMiniCloudArrowDown as c6,
+  turnOnJob as c7,
+  shouldResumeTurnOn as c8,
+  turnOnRequestedAt as c9,
+  verifyApprovalGateTotp as cA,
+  clearEvidence as cB,
+  exportDiagnostics as cC,
+  repairApprovalCenter as cD,
+  exportSettings as cE,
+  setupDesktopNotifications as cF,
+  settingsWatchBannerModel as cG,
+  WorkspacePageHeader as cH,
+  navigateFromAnchor as cI,
+  resolveSettingsSaveProofModalCopy as cJ,
+  humanizeList as cK,
+  isProtectionPosture as cL,
+  deriveProtectionPosture as cM,
+  normalizeHarnessPostures as cN,
+  approvalGateCooldownLabel as cO,
+  fetchExtensionCatalog as cP,
+  ExtensionControlApiError as cQ,
+  normalizeExtensionCatalogSummary as cR,
+  normalizeExtensionPermission as cS,
+  ExtensionControlProtocolError as cT,
+  normalizeExtensionCatalogItem as cU,
+  guardApiCacheScope as cV,
+  fetchExtensionCatalogV2Api as cW,
+  localPermissionDraftState as cX,
+  setLocalPermissionDraftState as cY,
+  extensionPolicyAuthorityUnchanged as cZ,
+  newExtensionPolicyDraftIdentity as c_,
+  forgetTurnOn as ca,
+  rememberTurnOn as cb,
+  forgetTurnOnClick as cc,
+  rememberTurnOnJob as cd,
+  HiMiniArrowDownTray as ce,
+  downloadBlob as cf,
+  savedEvidenceCopy as cg,
+  guardAwareHref as ch,
+  fetchContextData as ci,
+  forgetContextHistory as cj,
+  forgetSavedEvidence as ck,
+  resolveProtectionLevelCopy as cl,
+  fetchSettings as cm,
+  fetchRuntimeSnapshot as cn,
+  clearHarnessWatchOverrides as co,
+  withHarnessPosturePatch as cp,
+  updateSettings as cq,
+  clearPolicy as cr,
+  clearReviewQueue as cs,
+  revokeApprovalGateCooldown as ct,
+  disableApprovalGateTotp as cu,
+  importSettings as cv,
+  resetSettings as cw,
+  resolveSettingsSaveProofKind as cx,
+  requiresSettingsSaveProof as cy,
+  enrollApprovalGateTotp as cz,
   HiMiniCircleStack as d,
-  localCliHref as d$,
-  buildExtensionPolicyDraftMutation as d0,
-  fetchEffectiveExtensionControls as d1,
-  previewExtensionMutation as d2,
-  isCurrentExtensionPolicyDraft as d3,
-  applyExtensionMutation as d4,
-  fetchExtensionControlHistory as d5,
-  managedPermissionState as d6,
-  controlProvenance as d7,
-  treatmentLabel as d8,
-  useResolvedApprovalGate as d9,
-  filterExtensionSuggestions as dA,
-  suggestedHarnessExtensions as dB,
-  suggestedSeenExtensions as dC,
-  keepsPackageScriptCatalog as dD,
-  prefillSuggestedStates as dE,
-  recognizeLocalCli as dF,
-  preferredPackageScriptExtension as dG,
-  looksLikePackageScriptPaste as dH,
-  enrollmentCommandStates as dI,
-  isBulkApproveGateReady as dJ,
-  fetchLocalCliList as dK,
-  normalizeLocalCliList as dL,
-  unreviewedToolChangeCount as dM,
-  connectorSetupMatch as dN,
-  refreshMcpInventory as dO,
-  connectorGroupOutcome as dP,
-  allowedEarlierVersion as dQ,
-  startGuardCloudConnect as dR,
-  extensionEffectiveState as dS,
-  permissionEffectiveState as dT,
-  fetchExtensionControlApi as dU,
-  permissionForRule as dV,
-  refreshEffectiveExtensionControls as dW,
-  fetchExtensionDiscoveryApi as dX,
-  startCancelableDiscoveryJob as dY,
-  waitForMcpDiscoveryJob as dZ,
-  isLocalCliId as d_,
-  groupPermissionsByFamily as da,
-  HiMiniInformationCircle as db,
-  LocalCliApiError as dc,
-  hasSuggestedRules as dd,
-  approvalProofRecentlySatisfied as de,
-  StyledSelect as df,
-  bulkCommandState as dg,
-  fetchLocalCliApi as dh,
-  ExtensionBrandMark as di,
-  fetchMcpProviderActions as dj,
-  connectorSetupReady as dk,
-  shortIdentity as dl,
-  customExtensionDisplayName as dm,
-  previewLocalCliMutation as dn,
-  applyLocalCliMutation as dp,
-  LOCAL_CLI_CAPABILITIES as dq,
-  loadLocalCliCommands as dr,
-  DiscoveryFailure as ds,
-  readJson as dt,
-  enrollablePackageScriptCommands as du,
-  seenSuggestionMeta as dv,
-  looksLikeProjectRelocatePaste as dw,
-  packageScriptFilterNeedle as dx,
-  initialAddCommand as dy,
-  suggestedPackageScriptExtensions as dz,
+  isLocalCliId as d$,
+  setLocalPermissionDraftStates as d0,
+  buildExtensionPolicyDraftMutation as d1,
+  fetchEffectiveExtensionControls as d2,
+  previewExtensionMutation as d3,
+  isCurrentExtensionPolicyDraft as d4,
+  applyExtensionMutation as d5,
+  fetchExtensionControlHistory as d6,
+  managedPermissionState as d7,
+  controlProvenance as d8,
+  treatmentLabel as d9,
+  suggestedPackageScriptExtensions as dA,
+  filterExtensionSuggestions as dB,
+  suggestedHarnessExtensions as dC,
+  suggestedSeenExtensions as dD,
+  keepsPackageScriptCatalog as dE,
+  prefillSuggestedStates as dF,
+  recognizeLocalCli as dG,
+  preferredPackageScriptExtension as dH,
+  looksLikePackageScriptPaste as dI,
+  enrollmentCommandStates as dJ,
+  isBulkApproveGateReady as dK,
+  fetchLocalCliList as dL,
+  normalizeLocalCliList as dM,
+  unreviewedToolChangeCount as dN,
+  connectorSetupMatch as dO,
+  refreshMcpInventory as dP,
+  connectorGroupOutcome as dQ,
+  allowedEarlierVersion as dR,
+  startGuardCloudConnect as dS,
+  extensionEffectiveState as dT,
+  permissionEffectiveState as dU,
+  fetchExtensionControlApi as dV,
+  permissionForRule as dW,
+  refreshEffectiveExtensionControls as dX,
+  fetchExtensionDiscoveryApi as dY,
+  startCancelableDiscoveryJob as dZ,
+  waitForMcpDiscoveryJob as d_,
+  useResolvedApprovalGate as da,
+  groupPermissionsByFamily as db,
+  HiMiniInformationCircle as dc,
+  LocalCliApiError as dd,
+  hasSuggestedRules as de,
+  approvalProofRecentlySatisfied as df,
+  StyledSelect as dg,
+  bulkCommandState as dh,
+  fetchLocalCliApi as di,
+  ExtensionBrandMark as dj,
+  fetchMcpProviderActions as dk,
+  connectorSetupReady as dl,
+  shortIdentity as dm,
+  customExtensionDisplayName as dn,
+  previewLocalCliMutation as dp,
+  applyLocalCliMutation as dq,
+  LOCAL_CLI_CAPABILITIES as dr,
+  loadLocalCliCommands as ds,
+  DiscoveryFailure as dt,
+  readJson as du,
+  enrollablePackageScriptCommands as dv,
+  seenSuggestionMeta as dw,
+  looksLikeProjectRelocatePaste as dx,
+  packageScriptFilterNeedle as dy,
+  initialAddCommand as dz,
   HiMiniSquares2X2 as e,
-  fetchPackageFirewallStatus as e$,
-  fetchPluginUpdatesApi as e0,
-  filterCodexHostApps as e1,
-  connectorWorkspaceItems as e2,
-  customExtensionNeedsReview as e3,
-  profileSetupCommand as e4,
-  customExtensionBadge as e5,
-  extensionDisplayName as e6,
-  catalogRowSecondLine as e7,
-  extensionStateLabel as e8,
-  HiMiniGlobeAlt as e9,
-  guardActionPresentation as eA,
-  DEFAULT_FILTER_STATE as eB,
-  filterEvidence as eC,
-  sortEvidence as eD,
-  computeMetrics as eE,
-  CommandActivityWorkspace as eF,
-  EvidenceFilterBar as eG,
-  EvidenceInsightStrip as eH,
-  EvidenceActionList as eI,
-  EvidenceActionDetail as eJ,
-  policyIdentityKey as eK,
-  clearLabelForScope as eL,
-  HiMiniChartBar as eM,
-  HiMiniCheckBadge as eN,
-  isSupplyChainAuditIncomplete as eO,
-  isSupplyChainAuditEvidence as eP,
-  readString$1 as eQ,
-  IconActionButton as eR,
-  HiMiniBeaker as eS,
-  HiMiniBugAnt as eT,
-  ActivationSummary as eU,
-  ActionResultPanel as eV,
-  fetchSupplyChainBundle as eW,
-  closeOnEscape as eX,
-  ConnectFlowCard as eY,
-  ApprovalProofInline as eZ,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as e_,
-  HiMiniFunnel as ea,
-  discoveryFailureMessage as eb,
-  refreshCodexHostInventory as ec,
-  CODEX_HOST_FALLBACK as ed,
-  CONFIGURED_CONNECTIONS_FALLBACK as ee,
-  loadCurrentDashboardBuild as ef,
-  canonicalExtensionId as eg,
-  extensionDetailHref as eh,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as ei,
-  addCustomExtensionPrefillHref as ej,
-  acknowledgeDegradedExtensionControlAuthority as ek,
-  recoverExtensionControlAuthority as el,
-  connectorSetupLinkFromSearch as em,
-  readExtensionDetailUrlState as en,
-  parseProtectionRoute as eo,
-  addCustomExtensionHref as ep,
-  runHarnessAction as eq,
-  GuardHarnessActionError as er,
-  HiMiniRocketLaunch as es,
-  HiMiniTrash as et,
-  fetchGuardApi as eu,
-  formatHarnessCommand as ev,
-  appModes as ew,
-  fetchApprovalPage as ex,
-  fetchPolicy as ey,
-  appSetupTarget as ez,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as e$,
+  localCliHref as e0,
+  fetchPluginUpdatesApi as e1,
+  filterCodexHostApps as e2,
+  connectorWorkspaceItems as e3,
+  customExtensionNeedsReview as e4,
+  profileSetupCommand as e5,
+  customExtensionBadge as e6,
+  extensionDisplayName as e7,
+  catalogRowSecondLine as e8,
+  extensionStateLabel as e9,
+  appSetupTarget as eA,
+  guardActionPresentation as eB,
+  DEFAULT_FILTER_STATE as eC,
+  filterEvidence as eD,
+  sortEvidence as eE,
+  computeMetrics as eF,
+  CommandActivityWorkspace as eG,
+  EvidenceFilterBar as eH,
+  EvidenceInsightStrip as eI,
+  EvidenceActionList as eJ,
+  EvidenceActionDetail as eK,
+  policyIdentityKey as eL,
+  clearLabelForScope as eM,
+  HiMiniChartBar as eN,
+  HiMiniCheckBadge as eO,
+  isSupplyChainAuditIncomplete as eP,
+  isSupplyChainAuditEvidence as eQ,
+  readString$1 as eR,
+  IconActionButton as eS,
+  HiMiniBeaker as eT,
+  HiMiniBugAnt as eU,
+  ActivationSummary as eV,
+  ActionResultPanel as eW,
+  fetchSupplyChainBundle as eX,
+  closeOnEscape as eY,
+  ConnectFlowCard as eZ,
+  ApprovalProofInline as e_,
+  HiMiniGlobeAlt as ea,
+  HiMiniFunnel as eb,
+  discoveryFailureMessage as ec,
+  refreshCodexHostInventory as ed,
+  CODEX_HOST_FALLBACK as ee,
+  CONFIGURED_CONNECTIONS_FALLBACK as ef,
+  loadCurrentDashboardBuild as eg,
+  canonicalExtensionId as eh,
+  extensionDetailHref as ei,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as ej,
+  addCustomExtensionPrefillHref as ek,
+  acknowledgeDegradedExtensionControlAuthority as el,
+  recoverExtensionControlAuthority as em,
+  connectorSetupLinkFromSearch as en,
+  readExtensionDetailUrlState as eo,
+  parseProtectionRoute as ep,
+  addCustomExtensionHref as eq,
+  runHarnessAction as er,
+  GuardHarnessActionError as es,
+  HiMiniRocketLaunch as et,
+  HiMiniTrash as eu,
+  fetchGuardApi as ev,
+  formatHarnessCommand as ew,
+  appModes as ex,
+  fetchApprovalPage as ey,
+  fetchPolicy as ez,
   fetchWithGuardAuth as f,
-  runPackageAudit as f0,
-  resolveSupplyChainAuditFailure as f1,
-  runPackageSync as f2,
-  GuardOperationTimeoutError as f3,
-  startPackageFirewallConnect as f4,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f5,
-  repairSupplyChainProtection as f6,
-  runPackageFirewallAction as f7,
-  parseInterceptProofSnapshot as f8,
-  activatePackageFirewallRuntime as f9,
-  HiMiniDocumentPlus as fA,
-  HiMiniKey as fB,
-  HiMiniArrowUpRight as fC,
-  HiMiniArrowUp as fD,
-  HiMiniChevronLeft as fE,
-  HiMiniArrowDown as fF,
-  runAuditRemediation as fG,
-  isBlockedGuardAction as fH,
-  isSupplyChainScannerEvidence as fI,
-  HiMiniSignal as fJ,
-  EntitlementNotice as fa,
-  chooseSupplyChainAuditFolder as fb,
-  fetchReceipts as fc,
-  lazyWorkspace as fd,
-  scopeLabel as fe,
-  HiMiniCloudArrowUp as ff,
-  HiMiniCodeBracket as fg,
-  HiMiniUsers as fh,
-  HiMiniIdentification as fi,
-  policyActionLabel as fj,
-  createCloudExceptionRequest as fk,
-  HiMiniPuzzlePiece as fl,
-  fetchCloudExceptions as fm,
-  fetchCloudExceptionRequests as fn,
-  PaginationControls as fo,
-  PolicyStatField as fp,
-  HiMiniInbox as fq,
-  HiMiniQueueList as fr,
-  Surface as fs,
-  HiMiniEllipsisHorizontal as ft,
-  HiMiniMinus as fu,
-  HiMiniWrench as fv,
-  HiMiniArrowLongRight as fw,
-  fetchReleaseFeedApi as fx,
-  fetchMcpPolicyRequest as fy,
-  resolveMcpPolicyRequest as fz,
+  fetchPackageFirewallStatus as f0,
+  runPackageAudit as f1,
+  resolveSupplyChainAuditFailure as f2,
+  runPackageSync as f3,
+  GuardOperationTimeoutError as f4,
+  startPackageFirewallConnect as f5,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f6,
+  repairSupplyChainProtection as f7,
+  runPackageFirewallAction as f8,
+  parseInterceptProofSnapshot as f9,
+  resolveMcpPolicyRequest as fA,
+  HiMiniDocumentPlus as fB,
+  HiMiniKey as fC,
+  HiMiniArrowUpRight as fD,
+  HiMiniArrowUp as fE,
+  HiMiniChevronLeft as fF,
+  HiMiniArrowDown as fG,
+  runAuditRemediation as fH,
+  isBlockedGuardAction as fI,
+  isSupplyChainScannerEvidence as fJ,
+  HiMiniSignal as fK,
+  activatePackageFirewallRuntime as fa,
+  EntitlementNotice as fb,
+  chooseSupplyChainAuditFolder as fc,
+  fetchReceipts as fd,
+  lazyWorkspace as fe,
+  scopeLabel as ff,
+  HiMiniCloudArrowUp as fg,
+  HiMiniCodeBracket as fh,
+  HiMiniUsers as fi,
+  HiMiniIdentification as fj,
+  policyActionLabel as fk,
+  createCloudExceptionRequest as fl,
+  HiMiniPuzzlePiece as fm,
+  fetchCloudExceptions as fn,
+  fetchCloudExceptionRequests as fo,
+  PaginationControls as fp,
+  PolicyStatField as fq,
+  HiMiniInbox as fr,
+  HiMiniQueueList as fs,
+  Surface as ft,
+  HiMiniEllipsisHorizontal as fu,
+  HiMiniMinus as fv,
+  HiMiniWrench as fw,
+  HiMiniArrowLongRight as fx,
+  fetchReleaseFeedApi as fy,
+  fetchMcpPolicyRequest as fz,
   HiMiniComputerDesktop as g,
   HiMiniMagnifyingGlass as h,
   HiMiniListBullet as i,
@@ -43927,7 +44397,7 @@ export {
   controlContextAssistance as o,
   contextStatusCopy as p,
   HiMiniChevronRight as q,
-  reactExports as r,
+  reactExports$1 as r,
   formatRelativeTime as s,
   harnessDisplayName as t,
   formatNumber as u,
