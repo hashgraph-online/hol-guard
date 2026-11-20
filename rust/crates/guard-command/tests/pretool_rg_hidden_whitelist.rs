@@ -418,7 +418,7 @@ fn ambiguous_rg_globs_cannot_hide_reincluded_secret_names() {
         "template",
         &[
             (".gitignore", ".env*\n!.env.test.ts\n"),
-            (".env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\\n"),
+            (".env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\n"),
         ],
     )]);
     // Across ripgrep versions a comment-shaped inclusion may not be
