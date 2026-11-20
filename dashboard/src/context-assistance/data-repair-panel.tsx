@@ -177,7 +177,7 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
       <section className="space-y-3" aria-labelledby="cigar-data-fix">
         <h3 id="cigar-data-fix" className={versionHeading}>Fix a problem</h3>
         <ul className={versionList}>
-          <Row title="Start CIGAR fresh" body={!ready ? "If CIGAR seems stuck, turn it off to free everything it holds. Starting fresh needs Python 3.14, which Settings can set up." : "Ends current access and starts CIGAR again. Add your projects again afterward."}
+          <Row title="Start CIGAR fresh" body={!ready ? "If CIGAR seems stuck, turn it off to free everything it holds, then turn it on again." : "Ends current access and starts CIGAR again. Add your projects again afterward."}
             action={<button className={versionButton} type="button" disabled={busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job)} onClick={() => setConfirm("recheck")}>Start fresh</button>} />
           <Row title="Change setup" body="Choose what CIGAR may read and how long it keeps things."
             action={<a className={versionButton} href={guardAwareHref("/cigar?section=runtime")}>Open Settings</a>} />

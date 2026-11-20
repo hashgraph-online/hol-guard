@@ -88,12 +88,12 @@ fn switch_owner_excludes_installer_and_interpreter_preparation_on_the_same_profi
     let f = Fixture::new(false);
     assert!(!f.home.join("cigar-lifecycle.key").exists());
     let owner = Owner::acquire(&f.home).unwrap();
-    assert!(preparation::lifecycle_lease(&f.home).is_err());
+    assert!(lifecycle::lease(&f.home).is_err());
     assert!(Owner::acquire(&f.home).is_err());
     assert!(owner.record().is_none());
     assert!(!f.home.join("cigar-lifecycle.key").exists());
     drop(owner);
-    assert!(preparation::lifecycle_lease(&f.home).is_ok());
+    assert!(lifecycle::lease(&f.home).is_ok());
 }
 #[test]
 fn actual_config_commit_preserves_disabled_intent_and_promotes_last_good_only_after_health() {

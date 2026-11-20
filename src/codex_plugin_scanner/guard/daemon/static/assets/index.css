@@ -1812,10 +1812,6 @@
     flex: 16rem;
   }
 
-  .flex-\[1_1_18rem\] {
-    flex: 18rem;
-  }
-
   .flex-\[1_1_20rem\] {
     flex: 20rem;
   }
@@ -6431,7 +6427,7 @@
     rotate: 180deg;
   }
 
-  .group-open\/import\:rotate-90:is(:where(.group\/import):is([open], :popover-open, :open) *), .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
+  .group-open\/prev\:rotate-90:is(:where(.group\/prev):is([open], :popover-open, :open) *) {
     rotate: 90deg;
   }
 
@@ -7979,10 +7975,6 @@
 
     .sm\:w-56 {
       width: calc(var(--spacing) * 56);
-    }
-
-    .sm\:w-72 {
-      width: calc(var(--spacing) * 72);
     }
 
     .sm\:w-auto {

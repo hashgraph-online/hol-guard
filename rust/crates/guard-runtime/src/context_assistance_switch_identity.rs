@@ -1,7 +1,7 @@
 //! Installation stamps are constructed only from an enrolled record and an
 //! actually measured runtime. Operator labels cannot supply upstream identity.
 use super::*;
-use guard_cigar_release::{SelectionData, SelectionInstallation, SelectionOrigin};
+use guard_cigar_release::{SelectionData, SelectionInstallation};
 use guard_context_assistance::EvidenceUpgradeProducer;
 
 impl Installation {
@@ -14,10 +14,10 @@ impl Installation {
         let fresh = load(home, &self.runtime_id)?;
         let mut physical = self.clone();
         physical.verification_job_id = None;
-        let context = versioned::context(&physical, home)?;
+        let stored = context(&physical, home)?;
         let mut fresh_physical = fresh;
         fresh_physical.verification_job_id = None;
-        if versioned::context(&fresh_physical, home)? != context
+        if context(&fresh_physical, home)? != stored
             || runtime.bundle_approval() != &self.approval
             || serde_json::to_value(runtime.installation_selection())
                 .map_err(|_| error("switch_installation_invalid"))?
@@ -28,36 +28,12 @@ impl Installation {
         {
             return Err(error("switch_installation_changed"));
         }
-        let (origin, producer) = if self.schema == builtin::BUILTIN_SCHEMA {
-            (
-                builtin::origin(),
-                EvidenceUpgradeProducer::from_enrolled_runtime(runtime)
-                    .map_err(|e| error(e.code()))?,
-            )
-        } else if self.schema == SCHEMA {
-            let (legacy, profile) =
-                guard_cigar_release::legacy_candidate_profile().map_err(|e| error(e.code()))?;
-            (
-                SelectionOrigin::Enrolled {
-                    sdk_version: legacy.sdk_version,
-                    core_version: legacy.core_version,
-                    profile_id: profile.profile_id,
-                    adapter_id: profile.adapter_id,
-                    adapter_revision: profile.adapter_revision,
-                },
-                EvidenceUpgradeProducer::from_enrolled_runtime(runtime)
-                    .map_err(|e| error(e.code()))?,
-            )
-        } else {
-            let release = versioned::resolve(home, self, &[Feature::Graph])?;
-            (
-                SelectionOrigin::Catalog {
-                    release: Box::new(release.binding().map_err(|e| error(e.code()))?),
-                },
-                EvidenceUpgradeProducer::new(&release, runtime.bundle_approval())
-                    .map_err(|e| error(e.code()))?,
-            )
-        };
+        if self.schema != builtin::BUILTIN_SCHEMA {
+            return Err(error("runtime_retired"));
+        }
+        let origin = builtin::origin();
+        let producer =
+            EvidenceUpgradeProducer::from_enrolled_runtime(runtime).map_err(|e| error(e.code()))?;
         producer
             .revalidate_runtime(runtime)
             .map_err(|e| error(e.code()))?;
@@ -66,7 +42,7 @@ impl Installation {
         let pointer = SelectionPointer {
             runtime: SelectionInstallation {
                 installation_id: self.runtime_id.clone(),
-                installation_sha256: context,
+                installation_sha256: stored,
                 approval_sha256: format!("{:x}", Sha256::digest(bytes)),
                 producer_sha256: producer.identity_sha256().into(),
                 origin,

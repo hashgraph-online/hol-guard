@@ -119,11 +119,6 @@ pub(super) fn run(
     }
     let source_install = registry::load(home, &source.settings.effective.runtime_id)?;
     let target_install = registry::load(home, &job.request.target_runtime_id)?;
-    crate::guard_config_load::cigar_updates::check_installation(
-        home,
-        settings.update_preferences(),
-        &target_install,
-    )?;
     super::super::worker::step(home, job, signal, JobPhase::Verifying, "verifying")?;
     let mut original = PrivateRuntime::start(&source_install, home, settings.source(), signal)?;
     let data = source_data(owner, settings.source())?;

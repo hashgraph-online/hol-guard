@@ -17,11 +17,8 @@ fn is_switch(home: &Path, id: &str) -> Result<bool, String> {
     Ok(switches::get(home, id)?.is_some())
 }
 pub(super) fn list(service: &Service, home: &Path) -> Result<Value, String> {
-    let mut values = service.updates.list(home)?;
+    let mut values = Vec::new();
     for job in switches::list(home)? {
-        if values.iter().any(|v| v["job_id"] == job.request.job_id) {
-            return Err("native_context_assistance_switch_idempotency_conflict".into());
-        }
         values.push(service.switch_job(home, &job.request.job_id)?);
     }
     if values.len() > 32 {
@@ -39,13 +36,13 @@ pub(super) fn get(service: &Service, home: &Path, id: &str) -> Result<Value, Str
     if is_switch(home, id)? {
         return service.switch_job(home, id);
     }
-    service.updates.get(home, id)
+    Err("native_context_assistance_job_not_found".into())
 }
 pub(super) fn cancel(service: &Service, home: &Path, id: &str) -> Result<Value, String> {
     if is_switch(home, id)? {
         return service.cancel_switch(home, id);
     }
-    service.updates.cancel(home, id)
+    Err("native_context_assistance_job_not_found".into())
 }
 pub(super) fn recover(
     service: &Service,
@@ -57,10 +54,8 @@ pub(super) fn recover(
         let generation = generation(expected.ok_or_else(invalid)?)?;
         return service.reconcile_switch(home, id, generation);
     }
-    if expected.is_some() {
-        return Err(invalid());
-    }
-    service.updates.recover(home, id)
+    let _ = expected;
+    Err("native_context_assistance_job_not_found".into())
 }
 pub(super) fn prepare(
     service: &Service,
