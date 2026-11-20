@@ -11,8 +11,8 @@ from typing import Any
 
 from .catalog import Scenario
 from .command_outputs import _text
-from .input_evidence import post_input_matches
 from .goal_budget_scope import GOAL_BUDGET_CASE, goal_budget_scope_error
+from .input_evidence import post_input_matches
 from .parent_fixtures import PARENT_DIRECTORY, PARENT_WORKSPACE_CASE
 from .proofs import _edit_path, _path
 from .review_fixtures import (
