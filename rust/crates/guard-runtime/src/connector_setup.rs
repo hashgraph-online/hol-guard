@@ -89,6 +89,16 @@ pub(crate) fn for_launch(request: &LocalCliHookRequestV1, launch: &Launch) -> Op
     })
 }
 
+/// The connector payload only when the user allowed an earlier version of
+/// `launch`; a CLI this device never decided names none.
+pub(crate) fn for_changed_launch(
+    request: &LocalCliHookRequestV1,
+    launch: &Launch,
+) -> Option<Value> {
+    for_launch(request, launch)
+        .filter(|connector| connector.get(ALLOWED_EARLIER_VERSION) == Some(&Value::Bool(true)))
+}
+
 /// Whether `group` is a bare `connector:<identity_hash>` marker, which the
 /// queue completes with the row's own action digest.
 pub(crate) fn is_connector_marker(group: &str) -> bool {

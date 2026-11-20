@@ -305,6 +305,7 @@ const changedCard = renderToStaticMarkup(
   }),
 );
 assert(changedCard.includes("You allowed an earlier version"), "a changed file is named as changed since it was allowed");
+assert(changedCard.includes("Always allow on one of these calls attempts to allow this version"), "Always allow attempts to update the grant, without claiming a concurrent block was overruled");
 assert(!changedCard.includes("not set up on this device"), "a changed file is never called not set up");
 assert(changedCard.includes("Review this version"), "the card offers to review the current version");
 const [blockedLane] = buildConnectorSetupGroups([statusRow], [{ ...lanectl, state: "blocked", stale: true }]);

@@ -133,7 +133,7 @@ export function ConnectorSetupCard(props: {
           </div>
           <p className="text-sm leading-relaxed text-brand-dark/80">
             {changed
-              ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version.`
+              ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version. Always allow on one of these calls attempts to allow this version while keeping your command choices. A newer block or safety check can prevent the update; check the approval result.`
               : `Guard does not recognise this ${surface.toLowerCase()} and it is not set up on this device, so its calls are paused.`}{" "}
             {SETUP_COPY.scope}
           </p>

@@ -443,7 +443,7 @@ fn approvable(result: &Object) -> bool {
 }
 
 /// `_native_review_is_overridable`: a review a broad local-CLI grant may lift.
-pub(super) fn overridable(result: &Object) -> bool {
+pub(crate) fn overridable(result: &Object) -> bool {
     let action_type = result
         .get("action")
         .and_then(Value::as_object)

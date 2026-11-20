@@ -622,3 +622,7 @@ fn a_decided_connector_is_never_sent_back_to_setup() {
 
 #[path = "local_cli_hook_op_grant_lift_tests.rs"]
 mod grant_lift;
+
+#[cfg(unix)]
+#[path = "local_cli_hook_op_compound_tests.rs"]
+mod compound;

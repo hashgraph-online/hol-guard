@@ -250,7 +250,13 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/edge.rs",
-            ("evaluate_pre_tool_envelope", "edge_result_check::validate_pre_tool_result"),
+            ("evaluate_pre_tool_chain(", "edge_result_check::validate_pre_tool_result"),
+        ),
+        (
+            # The native review and the policy join the edge runs before its
+            # session stop; chained command steps are judged through it too.
+            root / "rust/crates/guard-runtime/src/edge_pre_tool_chain.rs",
+            ("evaluate_pre_tool_envelope", "apply_pre_tool_policy_for_hook"),
         ),
         (
             # PostToolUse is decided by the same native edge: the Rust review,
