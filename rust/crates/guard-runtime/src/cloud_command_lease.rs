@@ -7,8 +7,8 @@
 //! signed transport, checks the Cloud Review protocol version and picks the
 //! extra exact jobs a batch lease returned. The caller keeps its queue state:
 //! the answer reports what to record (the exact route's health, the batch
-//! limit Guard Cloud advertised and the responses whose policy revision it
-//! reads) beside the leased job, and a `failure` the caller raises after
+//! limit Guard Cloud advertised and each response's policy revision) beside
+//! the leased job, and a `failure` the caller raises after
 //! recording them, with the route base whose lease failed. A generic lease
 //! that fails outright after the exact route answered reports its error as
 //! `sync`, so that state is still recorded.
@@ -166,7 +166,7 @@ pub(crate) fn lease_with(
                 }
                 outcome.exact_route = Some("ok");
                 outcome.batch_limit = Some(advertised_batch_limit(&response).unwrap_or(1));
-                outcome.responses.push(Value::Object(response.clone()));
+                outcome.responses.push(revision_view(&response));
                 if let Some(item) = object(response.get("item")) {
                     if !is_exact_protocol(item) {
                         return Ok(outcome
@@ -206,10 +206,22 @@ pub(crate) fn lease_with(
             .answer()),
         Reply::Response(response) => {
             outcome.item = object(response.get("item")).cloned();
-            outcome.responses.push(Value::Object(response));
+            outcome.responses.push(revision_view(&response));
             Ok(outcome.answer())
         }
     }
+}
+
+/// The part of a lease response the caller reads: its policy revision, kept
+/// only when Guard Cloud sent the field. The leased jobs already travel as
+/// `item` and `extras`, so repeating the whole response would write every job
+/// twice to the runtime's bounded output.
+fn revision_view(response: &Map<String, Value>) -> Value {
+    let mut view = Map::new();
+    if let Some(revision) = response.get("policyRevision") {
+        view.insert("policyRevision".to_owned(), revision.clone());
+    }
+    Value::Object(view)
 }
 
 /// `command_queue_lease_payload`: one lease body for `operations`.

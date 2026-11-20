@@ -277,3 +277,27 @@ fn a_generic_lease_error_keeps_the_exact_route_state() {
     assert_eq!(answer["failure"]["sync"]["outcome"], json!("not_available"));
     assert_eq!(answer["failure"]["sync"]["retryable"], json!(true));
 }
+
+#[test]
+fn each_response_reports_only_its_policy_revision() {
+    let lease = call(&[EXACT_OPERATION, GENERIC], 3, true);
+    let (answer, _) = run(
+        &lease,
+        vec![
+            response(json!({"protocolVersion": 2, "item": null, "items": [exact_job("a")]})),
+            response(json!({"item": {"id": "job-g", "leaseId": "g"}, "policyRevision": "r1"})),
+        ],
+    );
+    assert_eq!(
+        answer["lease"]["responses"],
+        json!([{}, {"policyRevision": "r1"}])
+    );
+    let (answer, _) = run(
+        &call(&[GENERIC], 1, false),
+        vec![response(json!({"item": null, "policyRevision": null}))],
+    );
+    assert_eq!(
+        answer["lease"]["responses"],
+        json!([{"policyRevision": null}])
+    );
+}
