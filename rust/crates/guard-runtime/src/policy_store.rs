@@ -414,13 +414,10 @@ impl PolicySnapshotStore {
         generation: u64,
         policy_digest: &str,
     ) -> Option<Option<Value>> {
-        self.direct_lane
-            .lock()
-            .ok()
-            .and_then(|binding| {
-                let binding = binding.as_ref()?;
-                (binding.generation == generation && binding.policy_digest == policy_digest)
-                    .then(|| binding.structured_output_config.clone())
-            })
+        self.direct_lane.lock().ok().and_then(|binding| {
+            let binding = binding.as_ref()?;
+            (binding.generation == generation && binding.policy_digest == policy_digest)
+                .then(|| binding.structured_output_config.clone())
+        })
     }
 }
