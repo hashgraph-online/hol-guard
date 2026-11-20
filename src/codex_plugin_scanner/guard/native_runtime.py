@@ -7,7 +7,6 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 from __future__ import annotations
 
 import functools
-import importlib.metadata
 import json
 import os
 import stat
@@ -94,6 +93,8 @@ def _distribution_candidates() -> tuple[Path, ...]:
     production selection must use the runtime bundled inside the
     version-matched hol-guard wheel and its manifest.
     """
+
+    import importlib.metadata
 
     try:
         distribution = importlib.metadata.distribution("hol-guard-runtime")

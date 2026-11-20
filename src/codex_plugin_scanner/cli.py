@@ -11,7 +11,6 @@ from typing import Any
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
 from .cli_native_errors import guard_value_error_exit
-from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
 from .reporting import format_json as format_json
 from .version import __version__
 
@@ -100,6 +99,8 @@ def _list_supported_ecosystems() -> list[str]:
 
 
 def format_text(result) -> str:
+    from .cli_ui import build_plain_text
+
     return build_plain_text(result)
 
 
@@ -128,6 +129,9 @@ def _resolve_hol_guard_help_alias(program_name: str, argv: list[str]) -> list[st
 
 
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
+    # Help text loads only with a parser; the daemon's children never build one.
+    from .cli_ui import build_cli_epilog, build_scan_help_epilog
+
     if program_mode in {"guard", "hol-guard"}:
         parser = FriendlyArgumentParser(
             prog=program_name,
