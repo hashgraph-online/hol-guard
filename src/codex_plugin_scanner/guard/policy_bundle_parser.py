@@ -101,8 +101,25 @@ def _reference_chunks(reference: object, candidate: dict[str, object]) -> list[s
         and not isinstance(view.get("cloudExceptionsHash"), str)
         and "cloudExceptions" in reference
     ):
-        view["cloudExceptionsHash"] = policy_bundle_cloud_exceptions_hash(reference)
+        view["cloudExceptionsHash"] = _required_exceptions_hash(reference)
     return policy_bundle_chunks(view)
+
+
+def _required_exceptions_hash(reference: dict[str, object]) -> str:
+    """Hash the accepted exception set in its own request, or report an outage.
+
+    Without this hash the same-time replay check cannot run, so an answer
+    without a string hash fails closed instead of crossing as ``null``.
+    """
+
+    result = native_policy_bundle(
+        "v2_cloud_exceptions_hash",
+        {"bundle_chunks": policy_bundle_chunks({"cloudExceptions": reference["cloudExceptions"]})},
+    )
+    value = result.get("value")
+    if isinstance(value, str) and value and "error" not in result:
+        return value
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
 
 
 def policy_bundle_admission_rejection(
@@ -161,10 +178,11 @@ def policy_bundle_downgrade_verdict(
         raise
     except ValueError:
         return True
-    if isinstance(result.get("error"), str):
+    error = result.get("error")
+    if isinstance(error, str):
         return True
     value = result.get("value")
-    if isinstance(value, bool):
+    if "error" not in result and isinstance(value, bool):
         return value
     # A reply without a boolean verdict is an outage, never "no downgrade".
     raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)

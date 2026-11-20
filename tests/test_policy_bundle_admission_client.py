@@ -30,7 +30,7 @@ def test_candidate_admission_error_is_a_typed_rejection(monkeypatch: pytest.Monk
     assert raised.value.code == "limit_bytes"
 
 
-@pytest.mark.parametrize("answer", [{}, {"value": None}, {"value": "yes"}])
+@pytest.mark.parametrize("answer", [{}, {"value": None}, {"value": "yes"}, {"error": 7, "value": False}])
 def test_downgrade_verdict_never_reads_a_malformed_answer_as_no_downgrade(
     monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
 ) -> None:
@@ -54,3 +54,19 @@ def test_reference_exception_set_crosses_the_transport_as_its_hash(monkeypatch: 
     assert kind == "downgrade_verdict"
     sent = json.loads("".join(cast(list[str], request["reference_chunks"])))
     assert sent == {"bundleVersion": 2, "cloudExceptionsHash": "sha256:set"}
+
+
+@pytest.mark.parametrize("answer", [{}, {"value": None}, {"value": ""}, {"error": "limit_bytes"}])
+def test_an_unhashable_reference_exception_set_is_an_outage(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    def fake(kind: str, _request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        return answer if kind == "v2_cloud_exceptions_hash" else {"value": False}
+
+    monkeypatch.setattr(parser, "native_policy_bundle", fake)
+    candidate: dict[str, object] = {"contractVersion": "guard-policy-bundle.v2", "bundleVersion": 3}
+    reference: dict[str, object] = {"bundleVersion": 2, "cloudExceptions": []}
+    with pytest.raises(PolicyBundleNativeUnavailableError):
+        parser.policy_bundle_downgrade_verdict(reference, candidate)
+    with pytest.raises(PolicyBundleNativeUnavailableError):
+        parser.policy_bundle_admission_rejection(candidate, reference)
