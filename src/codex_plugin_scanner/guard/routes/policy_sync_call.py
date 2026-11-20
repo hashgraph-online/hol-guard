@@ -98,15 +98,12 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bundle: dict[str, object]) -> Any:
     from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
-    from ..policy_bundle_parser import policy_bundle_is_enforceable
     from ..policy_bundle_trusted_keys import (
         MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
         validate_synced_policy_bundle,
     )
     from ..runtime.runner import (
-        _daemon_version_supported,
-        _policy_bundle_downgrade_reference,
-        _policy_bundle_is_version_downgrade,
+        _policy_bundle_admission_rejection,
         _validate_cached_policy_bundle,
     )
 
@@ -123,12 +120,11 @@ def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bund
         raise _RejectedError(_unavailable())
     if validated is None:
         raise _RejectedError(_rejection(rejection_reason or "invalid_policy_bundle"))
-    if not _daemon_version_supported(validated):
-        raise _RejectedError(_reply({"error": "unsupported_daemon_version"}, 400))
-    if not policy_bundle_is_enforceable(validated):
-        raise _RejectedError(_rejection("inactive_rollout_state"))
-    if _policy_bundle_is_version_downgrade(_policy_bundle_downgrade_reference(store, existing), validated):
-        raise _RejectedError(_rejection("bundle_version_downgrade"))
+    admission_rejection = _policy_bundle_admission_rejection(store, existing, validated)
+    if admission_rejection == "unsupported_daemon_version":
+        raise _RejectedError(_reply({"error": admission_rejection}, 400))
+    if admission_rejection is not None:
+        raise _RejectedError(_rejection(admission_rejection))
     return validated, trusted_keys, existing
 
 
