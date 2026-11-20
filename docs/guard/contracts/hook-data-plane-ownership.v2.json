@@ -333,6 +333,7 @@
     "src/codex_plugin_scanner/guard/native_transport_error.py",
     "src/codex_plugin_scanner/guard/native_command_capability.py",
     "src/codex_plugin_scanner/guard/native_command_envelope.py",
+    "src/codex_plugin_scanner/guard/native_auto_update_state.py",
     "src/codex_plugin_scanner/guard/native_command_state.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_native_review.py",

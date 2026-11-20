@@ -14,22 +14,20 @@
 //! because `hol-guard commands approve` and the job results surface them.
 
 use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::PathBuf;
 
 use guard_contracts::utc_timestamp_micros;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior};
+use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use crate::command_capability_op::{envelope_digest, sign_envelope, verify_signed_envelope};
-use crate::local_store_read::STORE_FILE_NAME;
+use crate::sync_state_ledger::{read_payload, write_payload, LedgerCodes, SyncStateLedger};
 
 pub(crate) const COMMAND: &str = "command-state";
 pub(crate) const FEATURE: &str = "native-command-state-v1";
 const SCHEMA: &str = "command-state.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
-const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 const PENDING_KEY: &str = "guard_command_pending_approvals_v1";
 const LOCAL_APPROVALS_KEY: &str = "guard_command_local_approvals_v1";
@@ -113,7 +111,13 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
         return Err(INVALID.to_owned());
     }
     let now = utc_timestamp_micros(request.now.trim()).ok_or("invalid_current_time")?;
-    let ledger = Ledger::new(&request.guard_home);
+    let ledger = SyncStateLedger::new(
+        &request.guard_home,
+        LedgerCodes {
+            busy: BUSY,
+            unavailable: UNAVAILABLE,
+        },
+    );
     match request.op.as_str() {
         // A home whose store was never created has nothing waiting. Only the
         // read answers that way; every write still needs the store.
@@ -127,58 +131,10 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
     }
 }
 
-struct Ledger {
-    home: PathBuf,
-}
-
-impl Ledger {
-    fn new(guard_home: &Path) -> Self {
-        Self {
-            home: guard_home.to_path_buf(),
-        }
-    }
-
-    fn store_exists(&self) -> bool {
-        self.home.join(STORE_FILE_NAME).is_file()
-    }
-
-    /// Runs `update` in one immediate transaction while holding the shared
-    /// storage gate, so a recovery that moves the database waits for it.
-    fn transact<T>(
-        &self,
-        update: impl FnOnce(&Connection) -> Result<T, String>,
-    ) -> Result<T, String> {
-        let _gate = crate::hook_evidence_store_gate::hold_storage_gate(&self.home, BUSY_TIMEOUT)
-            .map_err(|_| BUSY.to_owned())?;
-        // The store is the Python store's own file. Opening it without the
-        // create flag never leaves an empty database where none was.
-        let mut conn = Connection::open_with_flags(
-            self.home.join(STORE_FILE_NAME),
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|_| UNAVAILABLE.to_owned())?;
-        conn.busy_timeout(BUSY_TIMEOUT)
-            .map_err(|_| UNAVAILABLE.to_owned())?;
-        let tx = conn
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|_| UNAVAILABLE.to_owned())?;
-        let value = update(&tx)?;
-        tx.commit().map_err(|_| UNAVAILABLE.to_owned())?;
-        Ok(value)
-    }
-}
-
 /// `_state_items(store.get_sync_payload(key))`: the object rows of a saved
 /// `{"items": [...]}` payload, or none.
 fn state_items(conn: &Connection, key: &str) -> Result<Vec<Map<String, Value>>, String> {
-    let raw: Option<String> = conn
-        .query_row(
-            "SELECT payload_json FROM sync_state WHERE state_key = ?1",
-            [key],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|_| UNAVAILABLE.to_owned())?;
+    let raw = read_payload(conn, key).map_err(|()| UNAVAILABLE.to_owned())?;
     let Some(raw) = raw else {
         return Ok(Vec::new());
     };
@@ -205,14 +161,7 @@ fn save_items(
         items.drain(..excess);
     }
     let payload = json!({"version": 1, "items": items});
-    conn.execute(
-        "INSERT INTO sync_state (state_key, payload_json, updated_at) VALUES (?1, ?2, ?3) \
-         ON CONFLICT(state_key) DO UPDATE SET \
-           payload_json = excluded.payload_json, updated_at = excluded.updated_at",
-        rusqlite::params![key, payload.to_string(), now],
-    )
-    .map(drop)
-    .map_err(|_| UNAVAILABLE.to_owned())
+    write_payload(conn, key, &payload, now).map_err(|()| UNAVAILABLE.to_owned())
 }
 
 fn unexpired(item: &Map<String, Value>, now: i64) -> bool {
