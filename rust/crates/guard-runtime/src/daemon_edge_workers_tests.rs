@@ -141,3 +141,17 @@ fn the_reconcile_call_gives_up_before_the_library_would_stop_its_resident() {
     assert!(RECONCILE_CALL_WAIT < Duration::from_secs(120));
     assert!(RECONCILE_CALL_WAIT > RECONCILE_READY_WAIT);
 }
+
+#[test]
+fn the_reconcile_names_the_daemon_it_runs_inside() {
+    // The daemon has not reported ready while the reconcile runs, so a hook
+    // install that records the daemon URL must not have to ask it.
+    assert_eq!(
+        reconcile_args(Some("/home/user"), 4781),
+        json!({"home": "/home/user", "daemon_url": "http://127.0.0.1:4781"})
+    );
+    assert_eq!(
+        reconcile_args(None, 1)["daemon_url"],
+        json!("http://127.0.0.1:1")
+    );
+}

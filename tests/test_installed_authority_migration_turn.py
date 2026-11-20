@@ -297,3 +297,30 @@ def test_a_failing_phase_reporter_does_not_skip_the_migration(tmp_path, monkeypa
 
     assert migrate_installed_authority(store, on_phase=broken) is True  # pyright: ignore[reportArgumentType]
     assert store.calls == 1
+
+
+def test_the_early_bundle_check_waits_for_the_one_the_worker_host_started(monkeypatch) -> None:
+    # The daemon's worker host starts the check before its imports; the
+    # migration's early check then waits for it instead of loading again.
+    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers
+
+    loads: list[str] = []
+    release = threading.Event()
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", lambda: loads.append("load"))
+
+    def started_check() -> None:
+        release.wait(5)
+        loads.append("early")
+
+    early = threading.Thread(target=started_check, daemon=True)
+    early.start()
+    monkeypatch.setattr(desktop_daemon_workers, "_bundle_check", early)
+    release.set()
+
+    extension_control_host._verify_installed_bundle_early()
+
+    assert loads == ["early"]
+    # A later attempt checks for itself.
+    extension_control_host._verify_installed_bundle_early()
+    assert loads == ["early", "load"]

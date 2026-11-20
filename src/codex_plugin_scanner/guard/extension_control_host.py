@@ -68,9 +68,14 @@ def _verify_installed_bundle_early() -> None:
     is reused only while the installed files stay the same, so doing it here
     overlaps that wait instead of following it. The migration loads the bundle
     again under the turn; a failure here is left for that load to raise and
-    record.
+    record. The daemon's worker host starts this check before its imports;
+    then this waits for that one instead of running it again.
     """
 
+    from .cli.desktop_daemon_workers import wait_for_early_bundle_check
+
+    if wait_for_early_bundle_check():
+        return
     from .catalog_delivery.preparation_authority import load_installed_bundle
 
     with suppress(Exception):

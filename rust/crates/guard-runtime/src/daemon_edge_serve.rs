@@ -31,6 +31,8 @@ use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_ra
 mod exit_records;
 #[path = "daemon_edge_resident_prewarm.rs"]
 mod resident_prewarm;
+#[path = "daemon_edge_runtime_copy.rs"]
+mod runtime_copy;
 #[path = "daemon_edge_workers.rs"]
 mod workers;
 
@@ -267,6 +269,11 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
     let home = home.to_path_buf();
     // Before any thread starts, so every later thread inherits the block.
     exit_records::record_termination(home.clone());
+    if config.workers {
+        // The worker host's first step runs this runtime's kept copy; place it
+        // and pay its first run while the host's own start is under way.
+        runtime_copy::prime_in_background(&home);
+    }
     // Pin the dashboard before reporting ready: the launcher that unpacked it
     // may exit, and remove it, once this daemon's state is published.
     if let Some(dir) = config.dashboard_dir.as_deref() {
@@ -329,7 +336,8 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did,
         // unless the reconcile outlasts its ready wait.
-        let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
+        let reconcile =
+            workers::reconcile_beside(&reads, config.user_home.clone(), home.clone(), port);
         let registration = workers::Registration {
             session_id: session_id.clone(),
             guard_home: home.clone(),

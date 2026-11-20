@@ -236,9 +236,12 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     tmp_path: Path,
 ) -> None:
     from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers
     from codex_plugin_scanner.guard.workers import host
 
     calls: list[tuple[str, Path | None]] = []
+    checked: list[str] = []
+    monkeypatch.setattr(desktop_daemon_workers, "_check_installed_bundle", lambda: checked.append("bundle"))
 
     def fake_bind(guard_home: Path | None, *, remember: bool = True) -> None:
         del remember
@@ -262,6 +265,10 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     assert code == 0
     # The digest home is bound before the host starts, as the command router does.
     assert calls == [("bind", guard_home.resolve()), ("host", guard_home.resolve())]
+    # The host's bundle check started before the host, and the host's migration waits for it.
+    assert desktop_daemon_workers.wait_for_early_bundle_check() is True
+    assert checked == ["bundle"]
+    assert desktop_daemon_workers.wait_for_early_bundle_check() is False
     assert _COMMANDS_HUB not in sys.modules
     assert _COMMANDS_PARSER not in sys.modules
     assert _COMMANDS_SUPPORT not in sys.modules
