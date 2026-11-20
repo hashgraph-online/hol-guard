@@ -9,7 +9,6 @@ from typing import Any
 from ..native_policy_admission import native_policy_not_ready_reason
 from ..native_policy_snapshot_resident_recovery import RESIDENT_FAIL_FAST_STREAK, is_resident_class_error
 from .hook_fail_closed import unmanaged_passthrough
-from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
 from .hook_policy_fence_window import policy_update_pending_reason
 
 _NATIVE_POLICY_NOT_READY_FALLBACK = (
@@ -23,6 +22,19 @@ _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK = (
     "HOL Guard could not prepare the native policy safely. The native runtime is not answering. "
     "Retry once more; if it still fails, ask the user to run `hol-guard repair` in a terminal."
 )
+
+
+def _native_managed_install_unmanaged(store: Any, harness: str) -> bool:
+    """Read the resident's atomic managed-install admission answer."""
+
+    native_store_call = getattr(store, "_native_store_call", None)
+    if not callable(native_store_call):
+        return False
+    try:
+        admission = native_store_call("hook_managed_install_admission", {"harness": harness})
+    except (OSError, RuntimeError, TypeError, ValueError, AttributeError):
+        return False
+    return isinstance(admission, Mapping) and admission.get("unmanaged") is True
 
 
 def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | None = None) -> str:
@@ -66,8 +78,11 @@ def prepare_native_hook_policy(
 ) -> bool:
     """Apply the production native-policy barrier before hook admission."""
 
-    harness = _canonical_managed_harness(default_harness)
-    if _hook_harness_is_unmanaged(daemon_server, harness):
+    from ..native_harness_client import canonical_harness
+
+    harness = canonical_harness(default_harness)
+    store = getattr(daemon_server, "store", None)
+    if _native_managed_install_unmanaged(store, harness):
         handler._write_json(unmanaged_passthrough(harness))
         return False
     workspace_path = Path(workspace) if workspace is not None else None
