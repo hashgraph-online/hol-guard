@@ -64,8 +64,17 @@ export function sessionRefused(token: string): boolean {
   return refusedSessions.has(token);
 }
 
+// Set once the daemon refuses a decision sent with no session, so a recheck
+// keeps asking for sign-in until some session appears.
+let anonymousDecisionRefused = false;
+
+export function markAnonymousDecisionRefused(): void {
+  anonymousDecisionRefused = true;
+}
+
 export function forgetRefusedSessionsForTests(): void {
   refusedSessions.clear();
+  anonymousDecisionRefused = false;
   lastLinkedSession = null;
 }
 
@@ -86,7 +95,10 @@ let lastLinkedSession: string | null = null;
 export function rememberLinkedGuardSession(guardToken: string): string {
   const now = Date.now();
   const scope = dashboardSessionScope(guardToken);
-  const firstSeen = lastLinkedSession !== guardToken;
+  // An ended bound link is never saved: it would replace a live session
+  // another link left for the same request.
+  const ended = scope?.kind === "request" && dashboardSessionExpired(scope, now);
+  const firstSeen = lastLinkedSession !== guardToken && !ended;
   lastLinkedSession = guardToken;
   if (scope?.kind === "request" && scope.requestId) {
     if (firstSeen) {
@@ -102,6 +114,7 @@ export function rememberLinkedGuardSession(guardToken: string): string {
       }
     }
   }
+  if (ended) return readFrom(tabStorage, SESSION_KEY) ?? readFrom(browserStorage, SESSION_KEY) ?? guardToken;
   if (firstSeen) writeBoth(SESSION_KEY, guardToken);
   return guardToken;
 }
@@ -192,7 +205,7 @@ export function decisionSessionVerdict(requestId: string, current: string | null
     return { kind: "ready", token: candidates[0] ?? null };
   }
   if (current === null) {
-    return { kind: "ready", token: null };
+    return anonymousDecisionRefused ? { kind: "sign_in", reason: "no_session" } : { kind: "ready", token: null };
   }
   const scope = dashboardSessionScope(current);
   if (sessionRefused(current) || scope === null || dashboardSessionExpired(scope, Date.now())) {

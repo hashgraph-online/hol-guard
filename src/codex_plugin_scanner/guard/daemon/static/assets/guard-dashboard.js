@@ -18886,6 +18886,10 @@ function markSessionRefused(token) {
 function sessionRefused(token) {
   return refusedSessions.has(token);
 }
+let anonymousDecisionRefused = false;
+function markAnonymousDecisionRefused() {
+  anonymousDecisionRefused = true;
+}
 function liveFullSession(token, nowMs) {
   const scope = dashboardSessionScope(token);
   return token !== null && scope?.kind === "full" && !dashboardSessionExpired(scope, nowMs) && !sessionRefused(token);
@@ -18894,7 +18898,8 @@ let lastLinkedSession = null;
 function rememberLinkedGuardSession(guardToken) {
   const now2 = Date.now();
   const scope = dashboardSessionScope(guardToken);
-  const firstSeen = lastLinkedSession !== guardToken;
+  const ended = scope?.kind === "request" && dashboardSessionExpired(scope, now2);
+  const firstSeen = lastLinkedSession !== guardToken && !ended;
   lastLinkedSession = guardToken;
   if (scope?.kind === "request" && scope.requestId) {
     if (firstSeen) {
@@ -18908,6 +18913,7 @@ function rememberLinkedGuardSession(guardToken) {
       }
     }
   }
+  if (ended) return readFrom(tabStorage, SESSION_KEY) ?? readFrom(browserStorage, SESSION_KEY) ?? guardToken;
   if (firstSeen) writeBoth(SESSION_KEY, guardToken);
   return guardToken;
 }
@@ -18972,7 +18978,7 @@ function decisionSessionVerdict(requestId, current) {
     return { kind: "ready", token: candidates[0] ?? null };
   }
   if (current === null) {
-    return { kind: "ready", token: null };
+    return anonymousDecisionRefused ? { kind: "sign_in", reason: "no_session" } : { kind: "ready", token: null };
   }
   const scope = dashboardSessionScope(current);
   if (sessionRefused(current) || scope === null || dashboardSessionExpired(scope, Date.now())) {
@@ -19721,12 +19727,14 @@ async function fetchDecisionWithSession(requestId, input, init) {
   const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
   const tokens = candidates.length > 0 ? candidates : [null];
   for (const token of tokens) {
-    const send = (sendInput, sendInit) => token !== null && token === readGuardToken() ? fetchWithGuardAuthOnce(sendInput, sendInit) : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput, sendInit) => tabSession ? fetchWithGuardAuthOnce(sendInput, sendInit) : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
     const response = await sendWithPulseApproval(send, input, init(token));
     if (!await decisionRefusedSession(response)) {
       return response;
     }
     if (token === null) {
+      markAnonymousDecisionRefused();
       throw new GuardDecisionSignInRequiredError(requestId, "no_session");
     }
     markSessionRefused(token);
@@ -38393,7 +38401,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
           item,

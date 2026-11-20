@@ -250,4 +250,52 @@ const lapsedA = sessionToken({ surface: "approval-center", request_id: requestA,
   assert((await decide(requestA)) === null && calls.length === 1, "a tab with no session still sends the decision");
 }
 
+{
+  // An ended link for a request never replaces a live session saved for it.
+  const shared = new Map([[`guard-token:request:${requestA}`, boundA]]);
+  installWindow(lapsedA, { browser: shared });
+  readGuardToken();
+  assert(shared.get(`guard-token:request:${requestA}`) === boundA, "an ended link keeps the live request session");
+  assert(!shared.has("guard-token"), "an ended link is never saved as the tab's session");
+  const verdict = guardDecisionSession(requestA);
+  assert(verdict.kind === "ready" && verdict.token === boundA, "the live request session still decides");
+}
+
+{
+  // A decision the daemon refused with no session keeps asking for sign-in.
+  const shared = new Map<string, string>();
+  installWindow(null, { browser: shared });
+  stubFetch(refused);
+  const error = await decide(requestA);
+  assert(error instanceof GuardDecisionSignInRequiredError && error.reason === "no_session", "no session asks to sign in");
+  const verdict = guardDecisionSession(requestA);
+  assert(verdict.kind === "sign_in" && verdict.reason === "no_session", "a recheck with still no session keeps the panel");
+  shared.set("guard-token", full);
+  const signedIn = guardDecisionSession(requestA);
+  assert(signedIn.kind === "ready" && signedIn.token === full, "a session from another tab clears the panel");
+}
+
+{
+  // Renewal saves a new tab session; a Pulse continuation sends it, not the old one.
+  const renewed = sessionToken({ surface: "approval-center", expires_at: later }, "renewed");
+  installWindow(null, { browser: new Map([["guard-token", full]]) });
+  const calls = stubFetch((session) => {
+    const last = calls.at(-1);
+    if (last?.url.endsWith("/v1/initialize")) {
+      return new Response(JSON.stringify({ dashboard_session_token: renewed }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (session !== renewed) return refused();
+    const continued = calls.filter((call) => call.session === renewed).length > 1;
+    return continued
+      ? ok()
+      : new Response(JSON.stringify({ error: "approval_gate_pulse_required" }), { status: 403 });
+  });
+  assert((await decide(requestA)) === null, "a renewed session carries the decision through Pulse");
+  assert(calls.at(-1)?.session === renewed, "the Pulse continuation is sent with the renewed session");
+  assert(!calls.slice(2).some((call) => call.session === full), "the replaced session is not sent again");
+}
+
 console.log("dashboard-decision-session.test.ts: all tests passed");

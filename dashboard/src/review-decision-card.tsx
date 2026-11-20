@@ -333,7 +333,7 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+        {resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && (
           <ApprovalExtensionRecommendationCard
             key={item.request_id}
             item={item}

@@ -105,6 +105,7 @@ import {
   decisionSessionCandidates,
   decisionSessionVerdict,
   GuardDecisionSignInRequiredError,
+  markAnonymousDecisionRefused,
   markSessionRefused,
   rememberLinkedGuardSession,
   type GuardDecisionSessionVerdict,
@@ -455,8 +456,11 @@ async function fetchDecisionWithSession(
   const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
   const tokens: Array<string | null> = candidates.length > 0 ? candidates : [null];
   for (const token of tokens) {
+    // The tab's own session may be renewed by the first call; every Pulse
+    // continuation then sends the renewed one, not the session it replaced.
+    const tabSession = token !== null && token === readGuardToken();
     const send = (sendInput: RequestInfo, sendInit?: RequestInit): Promise<Response> =>
-      token !== null && token === readGuardToken()
+      tabSession
         ? fetchWithGuardAuthOnce(sendInput, sendInit)
         : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
     const response = await sendWithPulseApproval(send, input, init(token));
@@ -464,6 +468,7 @@ async function fetchDecisionWithSession(
       return response;
     }
     if (token === null) {
+      markAnonymousDecisionRefused();
       throw new GuardDecisionSignInRequiredError(requestId, "no_session");
     }
     markSessionRefused(token);
