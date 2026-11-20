@@ -77,11 +77,8 @@ jobs:
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
-            --output "$RUNNER_TEMP/dev-workspace-profile.toml"
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
-            --config "$RUNNER_TEMP/dev-workspace-profile.toml"
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           "rust/target/$TARGET/release/hol-guard-runtime" self-test --json
           "rust/target/$TARGET/release/guard-command-source" export-trust \
             > contracts/extensions/build-trust-class-map.v1.json
@@ -251,7 +248,7 @@ jobs:
   startup-readiness:
     name: Installed acceptance (wheel, ${{ matrix.os }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
@@ -302,11 +299,8 @@ jobs:
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
-            --output "$RUNNER_TEMP/dev-workspace-profile.toml"
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
-            --config "$RUNNER_TEMP/dev-workspace-profile.toml"
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           "rust/target/$TARGET/release/hol-guard-runtime$EXE" self-test --json
           "rust/target/$TARGET/release/guard-command-source$EXE" export-trust \
             > contracts/extensions/build-trust-class-map.v1.json
