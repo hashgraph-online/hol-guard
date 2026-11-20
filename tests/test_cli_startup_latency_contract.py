@@ -243,6 +243,7 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     checked: list[str] = []
     monkeypatch.setattr(desktop_daemon_workers, "_check_installed_bundle", lambda: checked.append("bundle"))
     monkeypatch.setattr(desktop_daemon_workers, "_resolve_runtime_status", lambda: checked.append("runtime"))
+    monkeypatch.setattr(desktop_daemon_workers, "_runtime_status", None)
 
     def fake_bind(guard_home: Path | None, *, remember: bool = True) -> None:
         del remember
@@ -272,7 +273,9 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     assert desktop_daemon_workers.wait_for_early_runtime_status() is True
     assert sorted(checked) == ["bundle", "runtime"]
     assert desktop_daemon_workers.wait_for_early_bundle_check() is False
-    assert desktop_daemon_workers.wait_for_early_runtime_status() is False
+    # Every later caller waits on the same resolution instead of starting another.
+    assert desktop_daemon_workers.wait_for_early_runtime_status() is True
+    assert sorted(checked) == ["bundle", "runtime"]
     assert _COMMANDS_HUB not in sys.modules
     assert _COMMANDS_PARSER not in sys.modules
     assert _COMMANDS_SUPPORT not in sys.modules
@@ -291,6 +294,10 @@ def test_hol_guard_library_children_skip_command_surface(
     from codex_plugin_scanner.guard.cli import desktop_daemon_workers, desktop_library_call
 
     served: list[Path] = []
+    checked: list[str] = []
+    monkeypatch.setattr(desktop_daemon_workers, "_check_installed_bundle", lambda: checked.append("bundle"))
+    monkeypatch.setattr(desktop_daemon_workers, "_resolve_runtime_status", lambda: checked.append("runtime"))
+    monkeypatch.setattr(desktop_daemon_workers, "_runtime_status", None)
 
     def fake_child(guard_home: Path) -> int:
         served.append(guard_home)
@@ -308,11 +315,49 @@ def test_hol_guard_library_children_skip_command_surface(
 
     assert code == 0
     assert served == [guard_home.resolve()]
-    # Only the worker host opens a store, so only its launch resolves the runtime status early.
-    assert desktop_daemon_workers.wait_for_early_runtime_status() is False
+    # A library child opens a store for its first call, and the reconcile the
+    # daemon waits on before ready is one, so its launch resolves the runtime
+    # status beside the imports too. It has no installed-bundle check.
+    assert desktop_daemon_workers.wait_for_early_runtime_status() is True
+    assert checked == ["runtime"]
     assert _COMMANDS_HUB not in sys.modules
     assert _COMMANDS_PARSER not in sys.modules
     assert _COMMANDS_SUPPORT not in sys.modules
+
+
+def test_a_library_call_waits_for_the_early_runtime_status_before_it_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    from codex_plugin_scanner.guard import library_calls
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers, desktop_library_call
+
+    order: list[str] = []
+    resolved = threading.Event()
+
+    def resolve() -> None:
+        resolved.wait(5)
+        order.append("status")
+
+    monkeypatch.setattr(desktop_daemon_workers, "_runtime_status", None)
+    monkeypatch.setattr(desktop_daemon_workers, "_resolve_runtime_status", resolve)
+    monkeypatch.setattr(library_calls, "run_library_call", lambda _home, _request: order.append("call") or {"ok": {}})
+    desktop_daemon_workers._start_runtime_status()
+
+    answers: list[bytes] = []
+    callers = [
+        threading.Thread(target=lambda: answers.append(desktop_library_call.answer_line(Path("guard"), b'{"id":1}')))
+        for _ in range(2)
+    ]
+    for caller in callers:
+        caller.start()
+    callers[0].join(0.2)
+    # Neither call opens its store while the status is still resolving.
+    assert order == []
+    resolved.set()
+    for caller in callers:
+        caller.join(5)
+    assert order == ["status", "call", "call"]
+    assert len(answers) == 2
 
 
 def test_hol_guard_daemon_workers_fast_path_reports_a_host_failure(
