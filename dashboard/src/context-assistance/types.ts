@@ -5,7 +5,7 @@ import type { CigarReleaseBinding } from "./release-version";
 export type ContextRuntime = {
   schema: "guard-cigar-runtime-status.v1";
   interpreter: {
-    schema: "guard-cigar-interpreter.v1";
+    schema: "guard-cigar-interpreter.v1" | "guard-cigar-builtin.v1";
     implementation: string;
     version: [number, number, number];
     release_level: string;
@@ -32,14 +32,16 @@ export type ContextRuntime = {
 
 export type ContextInstallation = {
   runtime_id: string;
-  qualification: "local_candidate" | "guard_qualified";
+  qualification: "local_candidate" | "guard_qualified" | "guard_builtin";
   sdk_version?: string;
   core_version?: string;
   build_id?: string | null;
   adapter_id?: string;
   adapter_revision?: number;
   managed?: boolean;
-  python_version: [number, number, number];
+  /** True for the CIGAR engine compiled into Guard, which needs no Python. */
+  builtin?: boolean;
+  python_version: [number, number, number] | null;
   platform: string;
   worker_fingerprint: string;
 };

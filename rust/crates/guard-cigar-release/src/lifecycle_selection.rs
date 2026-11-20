@@ -18,6 +18,11 @@ pub enum SelectionOrigin {
         adapter_id: String,
         adapter_revision: u32,
     },
+    /// CIGAR compiled into Guard's own executable. There is no downloaded
+    /// package or interpreter; the engine release is the whole identity.
+    Builtin {
+        core_version: String,
+    },
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -62,6 +67,9 @@ impl SelectionInstallation {
                     && identifier(profile_id)
                     && identifier(adapter_id)
                     && *adapter_revision > 0
+            }
+            SelectionOrigin::Builtin { core_version } => {
+                crate::labels::producer_label(core_version)
             }
         };
         if valid {

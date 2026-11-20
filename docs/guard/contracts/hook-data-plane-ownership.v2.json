@@ -668,6 +668,7 @@
     "rust/crates/guard-swarm/**",
     "rust/crates/guard-context-assistance/**",
     "rust/crates/guard-cigar-release/**",
+    "rust/crates/guard-cigar-native/**",
     "rust/crates/guard-scanner/**",
     "rust/crates/guard-command-build/**",
     "rust/crates/guard-command-catalog-data/**",

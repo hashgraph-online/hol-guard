@@ -1460,6 +1460,11 @@ pub fn launch() {
     if guard_command::source_cli::is_command(&arguments) {
         std::process::exit(guard_command::source_cli::main(arguments));
     }
+    // CIGAR's bridges and worker run as private modes of this executable, so
+    // local context needs no Python and no second binary.
+    if guard_cigar_native::is_command(&arguments) {
+        std::process::exit(guard_cigar_native::main(&arguments));
+    }
     // Neither the hook nor the error path may panic on a closed stderr: a
     // panic inside the panic hook aborts the process and loses the code.
     std::panic::set_hook(Box::new(runtime_output::panic_hook));
