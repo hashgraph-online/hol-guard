@@ -103,12 +103,15 @@ def reallow_changed_cli(
     from ..runtime.custom_extension_continuity import record_local_custom_extension_mutation
 
     try:
+        # Capture the optimistic-lock revision before inspecting the allow or
+        # its command choices. A concurrent block must make the write fail,
+        # not supply the revision that would overwrite that newer decision.
+        expected = store.read_local_cli_revision()
         changed = _changed_cli(store, request_id)
         if changed is None:
             return None
         item, cli_id, identity_hash = changed
         command_states = store.read_local_cli_command_states(cli_id)
-        expected = store.read_local_cli_revision()
         notify_native_policy_mutation(store.guard_home)
         try:
             revision = record_local_custom_extension_mutation(
