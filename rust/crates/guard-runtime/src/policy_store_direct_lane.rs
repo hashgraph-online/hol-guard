@@ -55,8 +55,8 @@ const DIRECT_LANE_ACK_SETTLE: Duration = Duration::from_millis(100);
 const DIRECT_LANE_ACK_SETTLE_POLL: Duration = Duration::from_millis(5);
 
 pub(crate) struct DirectLaneBinding {
-    pub(crate) generation: u64,
-    pub(crate) policy_digest: String,
+    generation: u64,
+    policy_digest: String,
     workspaces: BTreeSet<String>,
     inputs: Vec<DirectLaneInputV1>,
     pub(crate) home_dir: Option<String>,
@@ -329,6 +329,26 @@ impl PolicySnapshotStore {
             .ok_or(DirectLaneDefer::Unbound)?;
         self.admit_binding_lease(&binding, None)?;
         Ok(binding)
+    }
+
+    /// Read the structured-output view only while the direct-lane ACK and
+    /// admitted snapshot still cover the requested generation.
+    pub(crate) fn structured_output_binding(
+        &self,
+        generation: u64,
+        policy_digest: &str,
+        deadline: Option<Instant>,
+    ) -> Option<Option<Value>> {
+        let binding = self
+            .direct_lane
+            .lock()
+            .ok()
+            .and_then(|binding| binding.clone())?;
+        if binding.generation != generation || binding.policy_digest != policy_digest {
+            return None;
+        }
+        self.admit_binding_lease(&binding, deadline).ok()?;
+        Some(binding.structured_output_config.clone())
     }
 
     /// The admitted snapshot when `binding` matches it and the publisher's

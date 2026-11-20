@@ -402,22 +402,4 @@ impl PolicySnapshotStore {
         let state_base = self.state_base().to_owned();
         approval_enrollment::with_transition_lock(&state_base, || self.push_locked(request))
     }
-
-    /// Return the resident-authenticated structured-output binding for a
-    /// request's direct-lane generation. Hook mediation reads this from the
-    /// Rust policy store so the daemon does not supply a second,
-    /// independently trusted copy of the managed policy view. The outer
-    /// `Option` distinguishes an absent current binding from a current
-    /// binding whose policy has no structured-output rule.
-    pub(crate) fn structured_output_binding(
-        &self,
-        generation: u64,
-        policy_digest: &str,
-    ) -> Option<Option<Value>> {
-        self.direct_lane.lock().ok().and_then(|binding| {
-            let binding = binding.as_ref()?;
-            (binding.generation == generation && binding.policy_digest == policy_digest)
-                .then(|| binding.structured_output_config.clone())
-        })
-    }
 }

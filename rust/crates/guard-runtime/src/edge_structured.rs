@@ -73,12 +73,17 @@ fn attach(
     {
         return;
     }
+    let budget = envelope
+        .deadline_budget_ms
+        .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
+        .clamp(1, MAX_DEADLINE_BUDGET_MS);
+    let deadline = started + Duration::from_millis(budget);
     let resident_view = origin_store.map(|store| {
         let digest = envelope
             .policy_snapshot
             .get("policy_digest")
             .and_then(Value::as_str)?;
-        store.structured_output_binding(envelope.policy_generation, digest)
+        store.structured_output_binding(envelope.policy_generation, digest, Some(deadline))
     });
     let view = match resident_view {
         Some(Some(Some(view))) => Some(view),
@@ -100,10 +105,6 @@ fn attach(
         .get(STRUCTURED_OUTPUT_FIELD)
         .cloned()
         .unwrap_or(Value::Null);
-    let budget = envelope
-        .deadline_budget_ms
-        .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
-        .clamp(1, MAX_DEADLINE_BUDGET_MS);
     let context = pi::Mediation {
         harness: &edge.harness,
         resolution: &resolution,
@@ -111,7 +112,7 @@ fn attach(
         receipt: &receipt,
         content: &content,
         recording_only: envelope.recording_only,
-        deadline: started + Duration::from_millis(budget),
+        deadline,
     };
     let mediation = pi::mediate(&context, || {
         let Some(store) = origin_store else {
@@ -124,7 +125,7 @@ fn attach(
         else {
             return Value::Null;
         };
-        match store.structured_output_binding(envelope.policy_generation, digest) {
+        match store.structured_output_binding(envelope.policy_generation, digest, Some(deadline)) {
             Some(Some(current_view)) => pi::resolution(&edge.harness, Some(&current_view))
                 .map(|current| pi::resolved_binding(&current))
                 .unwrap_or(Value::Null),
