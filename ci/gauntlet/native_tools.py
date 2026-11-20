@@ -615,7 +615,11 @@ def _route_segment_glob_path(value: object) -> bool:
     if path.startswith("{{workspace}}/"):
         return tuple(path[len("{{workspace}}/"):].split("/")[:3]) == ROUTE_SEGMENT_DIRECTORY
     if path.startswith("/") or re.match(r"^[A-Za-z]:/", path):
-        return any(tuple(parts[i:i + 3]) == ROUTE_SEGMENT_DIRECTORY for i in range(len(parts) - 2))
+        return any(
+            tuple(parts[i:i + 3]) == ROUTE_SEGMENT_DIRECTORY
+            and not any(re.search(r"[*?\[\]{}]", part) for part in parts[:i])
+            for i in range(len(parts) - 2)
+        )
     return tuple(parts[:3]) == ROUTE_SEGMENT_DIRECTORY
 
 
@@ -630,7 +634,14 @@ def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
     globs = [call for call in calls if call["name"] == "glob"]
     if not globs:
         return None
-    if any(not _route_segment_glob_path(call["args"].get("path")) for call in globs):
+    if any(
+        not _route_segment_glob_path(
+            call["args"].get("path")
+            if call["args"].get("path") not in (None, "")
+            else call["args"].get("pattern")
+        )
+        for call in globs
+    ):
         return "the glob call did not select through the dynamic route directory"
     return None
 
