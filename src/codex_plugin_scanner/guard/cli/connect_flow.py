@@ -524,7 +524,7 @@ def _parse_guard_token_exchange_payload(
     expires_in = _int_payload_value(payload, "expires_in", 0)
     try:
         identity = oauth_token_identity(access_token)
-    except NativeRunnerAuthorityError as error:
+    except (NativeRunnerAuthorityError, OSError) as error:
         if require_entitlement:
             # A new connection saved before its claims were read would leave a
             # row no later sync can tell apart from an unbound one.

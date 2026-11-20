@@ -87,3 +87,23 @@ def test_a_new_connection_keeps_its_identity_when_only_the_expiry_lookup_fails(
     result = connect_flow._parse_guard_token_exchange_payload(payload)
     assert (result.grant_id, result.machine_id, result.workspace_id) == ("grant-1", "machine-1", "ws-1")
     assert result.access_token_expires_at is None
+
+
+def test_a_refresh_survives_an_unreadable_guard_home_during_the_identity_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unreadable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise OSError("guard home unreadable")
+
+    monkeypatch.setattr(oauth_token_claims, "native_runner_authority", unreadable)
+    payload = {
+        "access_" + "token": _token({}),
+        "token_type": "Bearer",
+        "expires_in": 60,
+        "refresh_" + "token": "rotated-refresh",
+    }
+    result = connect_flow._parse_guard_token_exchange_payload(payload, require_entitlement=False)
+    assert result.refresh_token == "rotated-refresh"
+    assert (result.grant_id, result.machine_id, result.workspace_id, result.device_id) == (None, None, None, None)
+    with pytest.raises(RuntimeError, match="could not read the access token"):
+        connect_flow._parse_guard_token_exchange_payload(payload)
