@@ -135,6 +135,10 @@ fn semicolon_after_leading_entry_must_not_inherit_proved_checkout() {
             format!(
                 "cd {absolute} && git fetch origin main; {ADD} && cd ../app-review && git diff"
             ),
+            format!(
+                "cd {absolute} && git fetch origin main || {ADD} && cd ../app-review && git diff"
+            ),
+            format!("cd {absolute} && {ADD} && cd ../app-review || git diff"),
         ] {
             let verdict = evaluate(&home, &elsewhere, harness, &command, &controls);
             assert_ne!(
