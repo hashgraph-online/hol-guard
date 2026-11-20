@@ -89,16 +89,20 @@ pub(super) fn rg_glob_scope_proven(
     roots.iter().all(
         |target| match verified_directory_root(target, home_dir, cwd) {
             Some(root) => {
-                // ripgrep matches a path-shaped glob against the path from
-                // its match base, the working directory. Only a walk that
-                // starts there renders the same path, so a search target of
-                // its own leaves such a glob unmodeled.
-                (!filter.is_path_shaped()
-                    || working_directory_root(home_dir, cwd).as_deref() == Some(root.as_path()))
-                    && !super::read_paths::inside_agent_state_tree(&root, home_dir)
+                // ripgrep matches a path-shaped glob against the path from its
+                // match base, the working directory, so the walk renders each
+                // entry under the root's own path from there.
+                let Some(base) = super::search_scope_glob::glob_match_base(
+                    &root,
+                    filter.is_path_shaped(),
+                    working_directory_root(home_dir, cwd).as_deref(),
+                ) else {
+                    return false;
+                };
+                !super::read_paths::inside_agent_state_tree(&root, home_dir)
                     && walk_scope(
                         &root,
-                        &filter,
+                        &filter.rooted_at(base),
                         Ignores::RipgrepGlob,
                         false,
                         home_dir,

@@ -186,3 +186,26 @@ pub(super) fn expand_braces(pattern: &str) -> Result<Vec<String>, GlobError> {
     }
     Ok(expanded)
 }
+
+/// The path `root` carries from `working`, as a `/`-separated relative path
+/// and empty when they are the same directory. `None` when `root` is not a
+/// plain descendant, or when `path_shaped` is false, in which case the
+/// caller needs no base at all and `Some("")` is returned instead.
+pub(super) fn glob_match_base(
+    root: &std::path::Path,
+    path_shaped: bool,
+    working: Option<&std::path::Path>,
+) -> Option<String> {
+    if !path_shaped {
+        return Some(String::new());
+    }
+    root.strip_prefix(working?)
+        .ok()?
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(name) => name.to_str(),
+            _ => None,
+        })
+        .collect::<Option<Vec<&str>>>()
+        .map(|names| names.join("/"))
+}
