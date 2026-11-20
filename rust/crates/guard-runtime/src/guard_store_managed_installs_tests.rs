@@ -141,3 +141,10 @@ fn hook_admission_holds_an_inactive_direct_row() {
         true
     );
 }
+
+#[test]
+fn hook_admission_uses_a_snapshot_transaction() {
+    assert!(crate::guard_store_op::method_is_snapshot_for_test(
+        "hook_managed_install_admission"
+    ));
+}
