@@ -152,10 +152,11 @@ fn changed_script_after_cd_with_relative_path_names_exact_connector() {
 fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() {
     let fixture = Fixture::new("compound-cd-selection");
     let root_script = script(&fixture, "approve-merge.sh", "#!/bin/sh\necho ready\n");
-    let root_named = run_with_connector(&review(&fixture, &format!("{} go", root_script.display())))
-        .unwrap()
-        .1
-        .expect("root script named");
+    let root_named =
+        run_with_connector(&review(&fixture, &format!("{} go", root_script.display())))
+            .unwrap()
+            .1
+            .expect("root script named");
     fixture.grant(
         root_named["cli_id"].as_str().unwrap(),
         &"0".repeat(64),
@@ -164,11 +165,18 @@ fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() 
 
     let nested_dir = std::path::Path::new(&fixture.workspace).join("nested");
     fs::create_dir_all(&nested_dir).unwrap();
-    let nested_script = script(&fixture, "nested/approve-merge.sh", "#!/bin/sh\necho ready\n");
-    let nested_named = run_with_connector(&review(&fixture, &format!("{} go", nested_script.display())))
-        .unwrap()
-        .1
-        .expect("nested script named");
+    let nested_script = script(
+        &fixture,
+        "nested/approve-merge.sh",
+        "#!/bin/sh\necho ready\n",
+    );
+    let nested_named = run_with_connector(&review(
+        &fixture,
+        &format!("{} go", nested_script.display()),
+    ))
+    .unwrap()
+    .1
+    .expect("nested script named");
     fixture.grant(
         nested_named["cli_id"].as_str().unwrap(),
         &"0".repeat(64),
@@ -186,12 +194,18 @@ fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() 
     searched.env.insert("CDPATH".to_owned(), "/tmp".to_owned());
     let (action, connector) = run_with_connector(&searched).unwrap();
     assert_eq!(action, "review");
-    assert!(connector.is_none(), "CDPATH must not move another script's allow");
+    assert!(
+        connector.is_none(),
+        "CDPATH must not move another script's allow"
+    );
 
     // Logical shell cd removes '..' before following symlinks; canonicalize
     // follows symlinks first. This ambiguity must not provide an identity.
     let parent = "cd nested/.. && ./approve-merge.sh --dry-run";
     let (action, connector) = run_with_connector(&review(&fixture, parent)).unwrap();
     assert_eq!(action, "review");
-    assert!(connector.is_none(), "parent traversal must not name an unrelated script");
+    assert!(
+        connector.is_none(),
+        "parent traversal must not name an unrelated script"
+    );
 }

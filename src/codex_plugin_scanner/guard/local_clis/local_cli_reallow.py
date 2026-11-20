@@ -180,4 +180,4 @@ def finalize_reallow_siblings(
         _LOGGER.warning("Held calls on the changed CLI stay pending (%s)", type(error).__name__)
 
 
-__all__ = ["reallow_changed_cli", "finalize_reallow_siblings"]
+__all__ = ["finalize_reallow_siblings", "reallow_changed_cli"]

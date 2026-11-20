@@ -118,11 +118,15 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
         return None;
     }
     let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");
-    if searched && request.env.keys().any(|name| name.eq_ignore_ascii_case("CDPATH")) {
+    if searched
+        && request
+            .env
+            .keys()
+            .any(|name| name.eq_ignore_ascii_case("CDPATH"))
+    {
         return None;
     }
-    let directory =
-        std::fs::canonicalize(std::path::Path::new(&request.cwd).join(operand)).ok()?;
+    let directory = std::fs::canonicalize(std::path::Path::new(&request.cwd).join(operand)).ok()?;
     if !directory.is_dir() {
         return None;
     }
