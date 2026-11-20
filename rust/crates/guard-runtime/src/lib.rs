@@ -1149,6 +1149,7 @@ mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_shadow_source;
+mod policy_shadow_verdict;
 mod policy_snapshot_build;
 mod policy_snapshot_publish;
 mod policy_store;

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import runner_native_authority as authority
+from codex_plugin_scanner.guard.runtime import runner_policy_shadow as authority
 
 
 def test_the_shadow_is_the_stored_legacy_bundle_unless_it_predates_the_candidate() -> None:

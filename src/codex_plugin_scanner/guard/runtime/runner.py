@@ -88,6 +88,7 @@ from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
+from . import runner_policy_shadow as _shadow
 from .extension_catalog_handshake import (
     catalog_runtime_unavailable_summary,
     prepare_extension_catalog_handshake,
@@ -390,7 +391,7 @@ def policy_bundle_candidate_decisions(
 
     stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
     try:
-        shadow_source, evaluating = _authority.policy_shadow_source(
+        shadow_source, evaluating = _shadow.policy_shadow_source(
             policy_bundle,
             stored_legacy=stored_legacy,
             existing=existing_policy_bundle,
@@ -421,24 +422,28 @@ def policy_bundle_candidate_decisions(
         return [], native_rejection_code(error), None
 
     mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
-    if not native_shadow_unavailable:
+    rejection: str | None = "native_shadow_unavailable"
+    if not native_shadow_unavailable and evaluating:
+        # An Evaluate bundle keeps its canonical rows empty on purpose, so it
+        # has nothing to drift from and needs no verdict from the resident.
+        # This is the answer the Rust policy_shadow_verdict kind gives for an
+        # evaluating candidate; test_policy_bundle_v2 pins that answer, so the
+        # two stay in step. Asking anyway would refuse the bundle whenever the
+        # resident is unreachable, which the Evaluate rollout must not do.
+        mismatch_reasons, rejection = (), None
+    elif not native_shadow_unavailable:
         try:
-            # An Evaluate bundle compiles to no rows on purpose, so an older
-            # bundle's rows say nothing about its drift.
-            mismatch_reasons = (
-                ()
-                if evaluating
-                else _authority.policy_shadow_mismatch(
-                    legacy_decisions,
-                    canonical_decisions,
-                )
+            mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
+                legacy_decisions,
+                canonical_decisions,
+                evaluating=evaluating,
+                canonical_enforcement=canonical_enforcement,
             )
         except NativeRunnerAuthorityError:
             # Rust owns the shadow comparison. Without its verdict the candidate
             # cannot be proven equivalent, so treat it as a blocking mismatch:
             # keep the existing policy and never activate the new bundle.
-            native_shadow_unavailable = True
-    blocking_mismatch_reasons = tuple(reason for reason in mismatch_reasons if reason != "legacy_unavailable")
+            mismatch_reasons, rejection = ("native_shadow_unavailable",), "native_shadow_unavailable"
     if mismatch_reasons:
         store.add_event(
             "policy_bundle/shadow_mismatch",
@@ -450,11 +455,7 @@ def policy_bundle_candidate_decisions(
             },
             now,
         )
-    if native_shadow_unavailable:
-        return canonical_decisions, "native_shadow_unavailable", None
-    if canonical_enforcement and blocking_mismatch_reasons:
-        return canonical_decisions, "canonical_shadow_mismatch", None
-    return canonical_decisions, None, None
+    return canonical_decisions, rejection, None
 
 
 def sync_receipts(
