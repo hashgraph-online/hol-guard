@@ -172,10 +172,7 @@ mod tests {
     fn route_segment_directories_prove_their_fixed_directory() {
         // Next.js dynamic segments and route groups are ordinary directory
         // names an agent globs through every day.
-        assert_eq!(
-            glob_directory("app/items/[slug]/page.*"),
-            Some("app/items")
-        );
+        assert_eq!(glob_directory("app/items/[slug]/page.*"), Some("app/items"));
         assert_eq!(
             glob_directory("app/(group)/blog/*/page.tsx"),
             Some("app/(group)/blog")
