@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.deed-page",
+  "version": "1.0.0",
+  "name": "deed.page MCP",
+  "description": "Reviews deed.page tools that publish, replace, restore, or delete public static sites, change tokens or agent seats, domains, access, gallery listings, or webhooks, or send data to deed.page, on the official hosted MCP server. Read-only tools inherit Guard's usual handling.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "deed.page",
+    "displayName": "deed.page",
+    "url": "https://deed.page"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#111827" },
+  "homepage": "https://deed.page/docs",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://deed.page/mcp",
+    "serverNames": [
+      "deed-page",
+      "deed-page-mcp"
+    ]
+  },
+  "riskClasses": [
+    "external-public-publish",
+    "external-site-deletion",
+    "external-credential-change",
+    "external-domain-change",
+    "external-webhook-change"
+  ],
+  "tools": [
+    { "name": "publish_site", "state": "review" },
+    { "name": "update_site", "state": "review" },
+    { "name": "restore_version", "state": "review" },
+    { "name": "finalize_upload", "state": "review" },
+    { "name": "delete_site", "state": "review" },
+    { "name": "rotate_token", "state": "review" },
+    { "name": "revoke_token", "state": "review" },
+    { "name": "agent_seats", "state": "review" },
+    { "name": "add_domain", "state": "review" },
+    { "name": "remove_domain", "state": "review" },
+    { "name": "set_site_access", "state": "review" },
+    { "name": "set_listing", "state": "review" },
+    { "name": "create_webhook", "state": "review" },
+    { "name": "delete_webhook", "state": "review" },
+    { "name": "claim_share_credit", "state": "review" },
+    { "name": "submit_feedback", "state": "review" },
+    { "name": "plan_upload", "state": "inherit" },
+    { "name": "set_badge", "state": "review" },
+    { "name": "get_site", "state": "inherit" },
+    { "name": "list_sites", "state": "inherit" },
+    { "name": "whoami", "state": "inherit" },
+    { "name": "get_upgrade_link", "state": "review" },
+    { "name": "list_versions", "state": "inherit" },
+    { "name": "get_manifest", "state": "inherit" },
+    { "name": "site_analytics", "state": "inherit" },
+    { "name": "site_visits", "state": "inherit" },
+    { "name": "form_submissions", "state": "inherit" },
+    { "name": "list_domains", "state": "inherit" },
+    { "name": "domain_status", "state": "review" },
+    { "name": "list_webhooks", "state": "inherit" },
+    { "name": "search_domains", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://deed.page/docs",
+    "https://deed.page/openapi.json",
+    "https://github.com/f-o-x11/deed-page-skill"
+  ],
+  "saferAlternatives": [
+    "Use get_site, list_sites, list_versions, and site_analytics to inspect sites without changing what is public.",
+    "Publish a draft under a new slug with a short ttl and review it before replacing a live site with update_site or restore_version."
+  ]
+}
