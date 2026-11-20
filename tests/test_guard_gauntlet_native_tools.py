@@ -60,7 +60,7 @@ def test_realistic_fixture_has_lfs_config_nested_repo_and_linked_worktree(tmp_pa
     assert (fixture.home / ".agent/artifacts/report.md").is_file()
     assert "retry" in (fixture.home / "other-project/notes.md").read_text(encoding="utf-8")
     assert (fixture.workspace / ".agents/skills/x/SKILL.md").is_file()
-    assert (fixture.workspace / "app/registry/[slug]/page.tsx").is_file()
+    assert (fixture.workspace / "app/items/[slug]/page.tsx").is_file()
     tracked = subprocess.run(
         ["git", "-C", str(fixture.workspace), "ls-files"], capture_output=True, text=True, check=True
     ).stdout

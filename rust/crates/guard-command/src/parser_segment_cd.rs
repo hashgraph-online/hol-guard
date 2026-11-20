@@ -12,7 +12,7 @@ use super::*;
 /// segment parser: it opens a subshell, and the model comes back `uncertain`
 /// with `compound_shell_not_yet_supported` long before a `cd` operand is read.
 /// A parenthesis in an exact token is therefore part of the directory's own
-/// name -- a route group such as `app/(marketing)` is an ordinary directory --
+/// name -- a route group such as `app/(group)` is an ordinary directory --
 /// and refusing it only turned reads below it into reviews. `{` and `}` stay
 /// refused because brace expansion rewrites an unquoted word the tokenizer
 /// still hands over whole.

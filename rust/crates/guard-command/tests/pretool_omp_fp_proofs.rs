@@ -29,7 +29,7 @@ fn fixture() -> Fixture {
         "project/src/one.ts",
         "project/src/password-reset-email.tsx",
         "project/src/secrets-loader.ts",
-        "project/app/registry/[slug]/page.tsx",
+        "project/app/items/[slug]/page.tsx",
         "project/.env",
         "project/credentials.json",
         "project/private-key.pem",
@@ -77,7 +77,7 @@ fn allowed(f: &Fixture, harness: &str, tool: &str, input: Value) -> bool {
 #[test]
 fn bracketed_route_files_are_literal_reads() {
     let f = fixture();
-    let page = f.project.join("app/registry/[slug]/page.tsx");
+    let page = f.project.join("app/items/[slug]/page.tsx");
     let page = page.to_str().unwrap();
     assert!(allowed(
         &f,
@@ -91,12 +91,12 @@ fn bracketed_route_files_are_literal_reads() {
         &f,
         "omp",
         "read",
-        json!({"path": "app/registry/[slug]/page.tsx"})
+        json!({"path": "app/items/[slug]/page.tsx"})
     ));
     // Brackets never widen a read to an unresolved or glob-shaped target.
     for path in [
-        "app/registry/[slug]/missing.tsx",
-        "app/registry/[a-z]*/page.tsx",
+        "app/items/[slug]/missing.tsx",
+        "app/items/[a-z]*/page.tsx",
         "app/[x]/../../.env",
     ] {
         assert!(!allowed(&f, "omp", "read", json!({"path": path})), "{path}");
@@ -472,7 +472,7 @@ fn content_searches_of_agent_state_trees_stay_reviewed() {
 #[test]
 fn bracketed_paths_are_literal_only_for_host_read_tools() {
     let f = fixture();
-    let page = f.project.join("app/registry/[slug]/page.tsx");
+    let page = f.project.join("app/items/[slug]/page.tsx");
     let page = page.to_str().unwrap();
     for (harness, tool) in [
         ("omp", "read_many_files"),
