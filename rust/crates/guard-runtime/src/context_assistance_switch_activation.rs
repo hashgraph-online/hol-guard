@@ -111,7 +111,7 @@ pub(super) fn verify_selected(
     }
     let (measured, producer) =
         installation.measured_selection(home, runtime, selected.data.clone())?;
-    if &measured != selected {
+    if &measured != selected && !builtin_upgrade(selected, &measured) {
         return Err(error("switch_installation_changed"));
     }
     let generation = if let Some(id) = selected.data.generation_id() {
@@ -134,4 +134,53 @@ pub(super) fn verify_selected(
         producer: (!matches!(selected.data, SelectionData::LegacySaved)).then_some(producer),
         generation,
     })
+}
+
+/// A Guard update changes the compiled-in engine, and with it the identity of
+/// the reserved built-in installation. With memory-only data there is no saved
+/// evidence tied to the old engine, so the re-measured built-in selection
+/// stands in for the saved one. Saved data generations keep the strict check.
+fn builtin_upgrade(
+    selected: &guard_cigar_release::SelectionPointer,
+    measured: &guard_cigar_release::SelectionPointer,
+) -> bool {
+    let builtin = crate::policy_store::context_assistance_registry::BUILTIN_ID;
+    selected.runtime.installation_id == builtin
+        && measured.runtime.installation_id == builtin
+        && matches!(selected.data, SelectionData::Memory)
+        && measured.data == selected.data
+}
+
+#[cfg(test)]
+mod builtin_upgrade_tests {
+    use super::*;
+    use guard_cigar_release::{SelectionInstallation, SelectionOrigin, SelectionPointer};
+
+    fn pointer(id: &str, sha: char, data: SelectionData) -> SelectionPointer {
+        SelectionPointer {
+            runtime: SelectionInstallation {
+                installation_id: id.into(),
+                installation_sha256: sha.to_string().repeat(64),
+                approval_sha256: sha.to_string().repeat(64),
+                producer_sha256: sha.to_string().repeat(64),
+                origin: SelectionOrigin::Builtin {
+                    core_version: "0.14.2".into(),
+                },
+            },
+            data,
+        }
+    }
+
+    #[test]
+    fn builtin_memory_selection_survives_an_engine_update() {
+        let old = pointer("builtin", 'a', SelectionData::Memory);
+        let new = pointer("builtin", 'b', SelectionData::Memory);
+        assert!(builtin_upgrade(&old, &new));
+        let other = pointer("catalog-runtime", 'b', SelectionData::Memory);
+        assert!(!builtin_upgrade(
+            &pointer("catalog-runtime", 'a', SelectionData::Memory),
+            &other
+        ));
+        assert!(!builtin_upgrade(&old, &other));
+    }
 }

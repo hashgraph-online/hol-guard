@@ -6,7 +6,7 @@ import type { ContextAssistanceStatus, ContextInstallation } from "./types";
 import { cigarBuildBlock, cigarJobPending, cigarPythonBlock, cigarVersionJobId } from "./versions-actions";
 import type { CigarCatalogBuild, CigarInterpreterBuild } from "./versions-catalog";
 import type { CigarVersionsData } from "./versions-data";
-import { installationLabel, platformLabel, runtimeHostLabel, versionButton, versionBytes, versionHeading, versionLead, versionList,
+import { installationLabel, platformLabel, runtimeHostLabel, runtimeOwnerLabel, versionButton, versionBytes, versionHeading, versionLead, versionList,
   type CigarVersionActionHandler } from "./versions-view";
 type Props = { data: CigarVersionsData; status: ContextAssistanceStatus | null; disabled: boolean; selectionDisabled: boolean; onAction: CigarVersionActionHandler };
 const CHANNEL: Record<CigarCatalogBuild["channel"], string> = { stable: "Stable", preview: "Preview", local_candidate: "Local build" };
@@ -66,7 +66,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
   });
   const looseRows = data.installations.filter((item) => !matched.has(item.runtime_id)).map((item) => <Row key={item.runtime_id}
     titleId={id + "-installed-" + item.runtime_id} title={"CIGAR " + (item.sdk_version ?? "registered bundle")} tags={inUseTag(item)}
-    meta={<>Core {item.core_version ?? "not reported"} · {runtimeHostLabel(item.python_version)} · {item.builtin ? "ships with Guard" : item.managed ? "Guard managed" : "added outside Guard"} · {installationLabel(item.qualification)}</>}
+    meta={<>Core {item.core_version ?? "not reported"} · {runtimeHostLabel(item.python_version)} · {runtimeOwnerLabel(item)} · {installationLabel(item.qualification)}</>}
     extra={<p className="break-all font-mono text-xs text-brand-dark/50">Build: {item.build_id ?? "legacy registration"}</p>}
     action={prepareSelection(item)} />);
 

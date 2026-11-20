@@ -4039,7 +4039,16 @@ const versionList = "divide-y divide-brand-dark/[0.07] overflow-hidden rounded-2
 const versionHeading = "text-base font-semibold tracking-[-0.01em] text-brand-dark";
 const versionLead = "mt-1 max-w-[62ch] text-sm leading-6 text-brand-dark/70";
 const versionBytes = (bytes) => (bytes / 1048576).toFixed(1) + " MiB";
-const installationLabel = (qualification2) => qualification2 === "guard_builtin" ? "built into Guard, no Python needed" : qualification2 === "guard_qualified" ? "checked on this computer" : "local development build";
+function installationLabel(qualification2) {
+  if (qualification2 === "guard_builtin") return "built into Guard, no Python needed";
+  if (qualification2 === "guard_qualified") return "checked on this computer";
+  return "local development build";
+}
+function runtimeOwnerLabel(item) {
+  if (item.builtin) return "ships with Guard";
+  if (item.managed) return "Guard managed";
+  return "added outside Guard";
+}
 const runtimeHostLabel = (python) => python === null ? "Built into Guard" : "Python " + python.join(".");
 const OS = { darwin: "macOS", linux: "Linux", windows: "Windows", win32: "Windows" };
 const ARCH = { arm64: "Apple silicon", aarch64: "Arm", x86_64: "Intel", amd64: "Intel", x64: "Intel" };
@@ -7924,7 +7933,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
         " · ",
         runtimeHostLabel(item.python_version),
         " · ",
-        item.builtin ? "ships with Guard" : item.managed ? "Guard managed" : "added outside Guard",
+        runtimeOwnerLabel(item),
         " · ",
         installationLabel(item.qualification)
       ] }),

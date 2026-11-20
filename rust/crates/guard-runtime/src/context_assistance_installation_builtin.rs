@@ -4,7 +4,7 @@
 //! time, so it cannot go stale or be replaced on disk.
 use super::*;
 use guard_cigar_release::SelectionOrigin;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{Arc, atomic::AtomicBool};
 
 /// Reserved runtime id. Enrollment and the downloaded-runtime installer
 /// refuse it, so a stored record can never shadow the built-in engine.
@@ -19,6 +19,21 @@ pub(super) fn storable_id(id: &str) -> bool {
 fn work_dir(home: &Path) -> Result<PathBuf, String> {
     let home = fs::canonicalize(home).map_err(|_| error("home_invalid"))?;
     Ok(home.join("context-assistance/work").join(BUILTIN_ID))
+}
+
+/// Creates the built-in working directory one private level at a time, so a
+/// fresh home without `context-assistance/work` can still start the engine.
+fn ensure_work_dir(canonical_home: &Path, work_dir: &Path) -> Result<(), String> {
+    let relative = work_dir
+        .strip_prefix(canonical_home)
+        .map_err(|_| error("installation_invalid"))?;
+    let mut current = canonical_home.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        crate::resident_state::ensure_private_directory_under(&current, canonical_home, true)
+            .map_err(|_| error("registry_unavailable"))?;
+    }
+    Ok(())
 }
 
 pub(super) fn installation(home: &Path) -> Result<Installation, String> {
@@ -89,12 +104,7 @@ pub(super) fn start(
         return Err(error("installation_invalid"));
     }
     let canonical = fs::canonicalize(home).map_err(|_| error("home_invalid"))?;
-    crate::resident_state::ensure_private_directory_under(
-        &fresh.selection.work_dir,
-        &canonical,
-        true,
-    )
-    .map_err(|_| error("registry_unavailable"))?;
+    ensure_work_dir(&canonical, &fresh.selection.work_dir)?;
     VerifiedRuntime::start_builtin(
         fresh.selection.python.clone(),
         fresh.selection.work_dir.clone(),
@@ -108,6 +118,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn work_dir_is_created_on_a_fresh_home() {
+        let root = std::env::temp_dir().join(format!("guard-builtin-work-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        let home = fs::canonicalize(&root).unwrap();
+        let work = work_dir(&home).unwrap();
+        assert!(!home.join("context-assistance").exists());
+        ensure_work_dir(&home, &work).unwrap();
+        assert!(work.is_dir());
+        ensure_work_dir(&home, &work).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn builtin_id_is_reserved_and_record_is_derived() {
         assert!(!storable_id(BUILTIN_ID));
         assert!(storable_id("catalog-runtime"));
@@ -118,10 +142,12 @@ mod tests {
             record.approval,
             guard_context_assistance::builtin_approval()
         );
-        assert!(record
-            .selection
-            .work_dir
-            .ends_with("context-assistance/work/builtin"));
+        assert!(
+            record
+                .selection
+                .work_dir
+                .ends_with("context-assistance/work/builtin")
+        );
         assert!(record.selection.python_bundle.is_none());
         assert!(installation(Path::new("relative")).is_err());
         assert_eq!(choice()["builtin"], true);
