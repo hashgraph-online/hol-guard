@@ -1,7 +1,24 @@
 use super::*;
 
+/// A fresh fixture folder. On Windows only a Guard home under the user's
+/// profile keeps a copy, and the temporary folder may sit elsewhere.
+fn fixture_dir() -> tempfile::TempDir {
+    #[cfg(windows)]
+    {
+        let profile = PathBuf::from(std::env::var_os("USERPROFILE").expect("USERPROFILE"));
+        tempfile::Builder::new()
+            .prefix("guard-runtime-copy-")
+            .tempdir_in(profile)
+            .unwrap()
+    }
+    #[cfg(not(windows))]
+    {
+        tempfile::tempdir().unwrap()
+    }
+}
+
 fn private_home() -> (tempfile::TempDir, PathBuf) {
-    let base = tempfile::tempdir().unwrap();
+    let base = fixture_dir();
     let home = base.path().join(".hol-guard");
     create_private_directory(&home).unwrap();
     (base, home)
@@ -58,17 +75,37 @@ fn a_fresh_home_gets_the_copy_the_host_looks_for() {
 }
 
 #[test]
-fn a_matching_copy_already_in_place_is_reused() {
+fn a_warm_start_leaves_the_copy_in_place_and_runs_nothing() {
     let (base, home) = private_home();
     let bytes = b"same runtime".to_vec();
     let source = runtime(base.path(), &bytes);
     let first = place(&home, &source).unwrap();
     let modified = fs::metadata(&first).unwrap().modified().unwrap();
 
-    let second = place(&home, &source).unwrap();
+    assert_eq!(place(&home, &source), None);
 
-    assert_eq!(first, second);
-    assert_eq!(fs::metadata(&second).unwrap().modified().unwrap(), modified);
+    assert_eq!(fs::read(&first).unwrap(), bytes);
+    assert_eq!(fs::metadata(&first).unwrap().modified().unwrap(), modified);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_kept_folder_is_never_run_through() {
+    let (base, home) = private_home();
+    let bytes = b"runtime".to_vec();
+    let source = runtime(base.path(), &bytes);
+    let elsewhere = base.path().join("elsewhere");
+    create_private_directory(&elsewhere).unwrap();
+    fs::write(elsewhere.join(EXECUTABLE_NAME), &bytes).unwrap();
+    let root = home.join(PRIVATE_ROOT_NAME);
+    create_private_directory(&root).unwrap();
+    std::os::unix::fs::symlink(
+        &elsewhere,
+        root.join(format!("{KEPT_PREFIX}{}", digest(&bytes))),
+    )
+    .unwrap();
+
+    assert_eq!(place(&home, &source), None);
 }
 
 #[test]
@@ -133,7 +170,7 @@ fn a_linked_private_folder_gets_no_copy() {
 #[test]
 fn a_directory_above_the_home_that_others_can_rename_in_gets_no_copy() {
     use std::os::unix::fs::PermissionsExt;
-    let base = tempfile::tempdir().unwrap();
+    let base = fixture_dir();
     let shared = base.path().join("shared");
     fs::create_dir(&shared).unwrap();
     // Group- and world-writable without the sticky bit.

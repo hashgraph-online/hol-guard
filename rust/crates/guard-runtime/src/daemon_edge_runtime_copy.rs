@@ -13,9 +13,10 @@
 //! it once. The host's Python start then overlaps the write and the first
 //! run. Nothing here is trusted: before every run the host still compares the
 //! copy byte for byte with the bytes it verified, and it replaces a copy that
-//! differs. A copy that is already in place and differs is left for the host
-//! to replace. A Guard home whose folder is not private, or a test home, is
-//! left alone, and every failure leaves the host to write the copy as before.
+//! differs. A copy already in place, which a warm start finds, is left alone
+//! and not run: the host checks it, and the folder that holds it, as before.
+//! A Guard home whose folder is not private, or a test home, is left alone,
+//! and every failure leaves the host to write the copy as before.
 
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -60,8 +61,10 @@ pub(super) fn prime_in_background(home: &Path) {
         });
 }
 
-/// The kept copy of `source` in `home`'s private folder, written when absent.
-/// None when the folder is not private, or a different copy is in the way.
+/// The kept copy of `source` in `home`'s private folder, when this call wrote it.
+/// None when the folder is not private, or a copy under that name is already
+/// there: whoever placed it paid its first run, and the host checks it, and
+/// the folder it sits in, before it runs it.
 pub(super) fn place(home: &Path, source: &Path) -> Option<PathBuf> {
     let root = private_root(home)?;
     // The packaged manifest's digest saves a pass over 100 MB. It only names
@@ -73,15 +76,16 @@ pub(super) fn place(home: &Path, source: &Path) -> Option<PathBuf> {
     let kept = root.join(format!("{KEPT_PREFIX}{digest}"));
     let copy = kept.join(EXECUTABLE_NAME);
     if fs::symlink_metadata(&kept).is_ok() {
-        return same_bytes(&copy, source).then_some(copy);
+        // A warm start: nothing to write and nothing new to run.
+        return None;
     }
     let staged = stage(&root, source, &digest)?;
     if fs::rename(&staged, &kept).is_ok() {
         return Some(copy);
     }
-    // Another process placed a copy first. It stays, and runs only if it matches.
+    // Another process placed a copy first, and runs it itself.
     let _ = fs::remove_dir_all(&staged);
-    same_bytes(&copy, source).then_some(copy)
+    None
 }
 
 /// The runtime digest the package manifest beside `source` names, when its
@@ -153,39 +157,6 @@ fn sha256_file(path: &Path) -> io::Result<String> {
         }
         hasher.update(&buffer[..read]);
     }
-}
-
-/// Whether `copy` is a regular file holding exactly the bytes of `source`.
-fn same_bytes(copy: &Path, source: &Path) -> bool {
-    let compare = || -> io::Result<bool> {
-        let metadata = fs::symlink_metadata(copy)?;
-        if !metadata.is_file() || metadata.len() != fs::metadata(source)?.len() {
-            return Ok(false);
-        }
-        let (mut left, mut right) = (File::open(copy)?, File::open(source)?);
-        let (mut a, mut b) = (vec![0u8; CHUNK], vec![0u8; CHUNK]);
-        loop {
-            let read = read_full(&mut left, &mut a)?;
-            if read != read_full(&mut right, &mut b)? || a[..read] != b[..read] {
-                return Ok(false);
-            }
-            if read == 0 {
-                return Ok(true);
-            }
-        }
-    };
-    compare().unwrap_or(false)
-}
-
-fn read_full(file: &mut File, buffer: &mut [u8]) -> io::Result<usize> {
-    let mut filled = 0;
-    while filled < buffer.len() {
-        match file.read(&mut buffer[filled..])? {
-            0 => break,
-            read => filled += read,
-        }
-    }
-    Ok(filled)
 }
 
 /// Run the new copy once, so the system's first look at the image is paid
