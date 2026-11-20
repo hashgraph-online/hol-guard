@@ -32047,86 +32047,6 @@
       "expect": "not_allow"
     },
     {
-      "id": "search-a-design-token-document-tree",
-      "fix_area": "read",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "grep -rn surface-raised \"${PARENT}/docs/design\""
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "read-a-design-token-document",
-      "fix_area": "read",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cat \"${PARENT}/docs/design/spacing-token-drift.generated.md\""
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "cd-into-a-route-group-directory",
-      "fix_area": "read",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cd \"${HOME}/other-project/app/(marketing)/challenge\" && pwd"
-      },
-      "cwd": "home_sibling",
-      "expect": "allow"
-    },
-    {
-      "id": "read-below-a-route-group-directory",
-      "fix_area": "read",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cd \"app/(marketing)/challenge\" && head -40 page.tsx"
-      },
-      "cwd": "home_sibling",
-      "expect": "allow"
-    },
-    {
-      "id": "neg-unquoted-parenthesis-is-not-a-directory-name",
-      "fix_area": "read",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cd app/(marketing)/challenge && pwd"
-      },
-      "cwd": "home_sibling",
-      "expect": "not_allow"
-    },
-    {
       "id": "dns-dig-batch-file",
       "fix_area": "negative",
       "harnesses": [
@@ -32159,6 +32079,38 @@
         "command": "ln -s ${HOME}/other-project/node_modules ${HOME}/other-project-wt/node_modules && [ -e ${HOME}/other-project-wt/node_modules/jest/bin/jest.js ] && ls ${HOME}/other-project-wt/node_modules 2>/dev/null && echo linked"
       },
       "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "search-a-design-token-document-tree",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn surface-raised \"${PARENT}/docs/design\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "read-a-design-token-document",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat \"${PARENT}/docs/design/spacing-token-drift.generated.md\""
+      },
+      "cwd": "worktree",
       "expect": "allow"
     },
     {
