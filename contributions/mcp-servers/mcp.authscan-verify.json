@@ -17,7 +17,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "uvx",
-    "package": "mcp-authscan-verify@0.1.3"
+    "package": "mcp-authscan-verify@0.1.4"
   },
   "riskClasses": ["filesystem-read"],
   "tools": [
