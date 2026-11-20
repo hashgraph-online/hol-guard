@@ -41130,7 +41130,8 @@
         "command": "rg -n route --glob '**'"
       },
       "cwd": "ignore_negation",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "lanectl-status",
