@@ -129,6 +129,25 @@ def test_human_output_reports_pending_instead_of_claiming_activation(
     assert "CPython 3.14" in output.getvalue()
 
 
+def test_human_output_lists_the_built_in_engine_without_a_python_version(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    option = {
+        "runtime_id": "builtin",
+        "python_version": None,
+        "platform": "darwin-arm64",
+        "qualification": "guard_builtin",
+    }
+    python = {**option, "runtime_id": "catalog", "python_version": [3, 14, 0], "qualification": "guard_qualified"}
+    observed = {**state(), "installation_options": [option, python]}
+    monkeypatch.setattr(native, "control", lambda *args, **kwargs: observed)
+    args = parser().parse_args(["context", "status", "--guard-home", str(tmp_path)])
+    output = io.StringIO()
+    assert commands_router.run_guard_command(args, output_stream=output) == 0
+    assert "builtin: Built into Guard · darwin-arm64 · guard_builtin" in output.getvalue()
+    assert "catalog: Python 3.14.0 · darwin-arm64 · guard_qualified" in output.getvalue()
+
+
 @pytest.mark.parametrize(
     "extra", [["enable"], ["start", "--python", "python3.14"], ["start", "--implementation", "cpython"]]
 )

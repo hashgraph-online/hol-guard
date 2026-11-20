@@ -55,6 +55,29 @@ pub(in crate::pretool) fn creation_chain(model: &CanonicalCommandV1) -> bool {
     model.segments.len() > 1 && super::plain_chain(model, &["mkdir", "touch"])
 }
 
+/// A chain that clears the user's own scratch files beside creating or
+/// reading others: `mkdir -p /tmp/run && rm -f /tmp/run.log 2>/dev/null; ls
+/// /tmp/run`. Every `rm` step must pass the temporary-file removal proof,
+/// which takes only the user's own single-link regular files, or absent
+/// names, in a temporary root, and never a folder, a link or a recursive
+/// flag. Removing such a file cannot change which directory a later step
+/// resolves, and no peer renames or moves a file, so no earlier step can
+/// place the only copy of anything at a name a later `rm` clears. Each
+/// segment is still proven on its own against the files on disk.
+pub(in crate::pretool) fn removal_chain(
+    model: &CanonicalCommandV1,
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    if model.segments.len() < 2 || !super::plain_chain(model, &["mkdir", "touch", "rm"]) {
+        return false;
+    }
+    model
+        .segments
+        .iter()
+        .any(|segment| segment.executable.as_deref() == Some("rm"))
+        && crate::pretool::every_removal_temporary(model, context)
+}
+
 /// Git subcommands that read the repository or update only refs and
 /// metadata, never files in the work tree.
 const WORK_TREE_READERS: &[&str] = &[

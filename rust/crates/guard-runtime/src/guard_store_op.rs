@@ -409,6 +409,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_session"
         | "list_guard_sessions"
         | "list_events_after"
+        | "get_managed_install"
+        | "get_managed_install_revision"
+        | "list_managed_installs"
         | "list_cloud_exceptions"
         | "get_guard_operation"
         | "list_guard_operations"
@@ -445,7 +448,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_local_cli_items"
         | "list_cached_advisories"
         | "policy_source_contexts"
-        | "matching_native_review_block" => Kind::Read,
+        | "matching_native_review_block"
+        | "native_admitted_call" => Kind::Read,
         // Its lookup runs on the shared connection and its claim takes the
         // write lock itself, so no transaction is held around them.
         "settle_claimed_native_allow" => Kind::Read,
@@ -484,7 +488,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
-        | "cached_supply_chain_bundle" => Kind::Snapshot,
+        | "cached_supply_chain_bundle"
+        | "hook_managed_install_admission" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
@@ -494,6 +499,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
+        | "record_native_admitted_call"
         | "resolve_matching_approval_requests"
         | "resolve_approval_request"
         | "resolve_one_request_only"
@@ -568,6 +574,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "set_sync_payload"
         | "rotate_installation_id"
         | "add_event"
+        | "set_managed_install"
+        | "bump_managed_install_revision"
         | "add_guard_event_v1"
         | "list_guard_events_v1"
         | "mark_guard_events_v1_uploaded"
@@ -601,6 +609,11 @@ fn method_kind(method: &str) -> Option<Kind> {
         _ if connect::handles(method) => Kind::Write,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+pub(crate) fn method_is_snapshot_for_test(method: &str) -> bool {
+    method_kind(method) == Some(Kind::Snapshot)
 }
 
 fn dispatch(
@@ -736,6 +749,8 @@ fn dispatch(
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
         "matching_native_review_block" => native_review_consume::matching_block(connection, args),
         "settle_native_review_reuse" => native_review_consume::settle(connection, args),
+        "record_native_admitted_call" => crate::native_admitted_call::record(connection, args),
+        "native_admitted_call" => crate::native_admitted_call::lookup(connection, args),
         "add_approval_request" => queue_with_live_wait(connection, args, |args| {
             add_approval_request(connection, source, args)
         })
@@ -936,6 +951,18 @@ fn dispatch(
         "set_sync_payload" => crate::guard_store_sync_state::set(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
+        "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
+        "get_managed_install" => crate::guard_store_managed_installs::get(connection, args),
+        "get_managed_install_revision" => {
+            crate::guard_store_managed_installs::revision(connection, args)
+        }
+        "bump_managed_install_revision" => {
+            crate::guard_store_managed_installs::bump(connection, args)
+        }
+        "list_managed_installs" => crate::guard_store_managed_installs::list(connection, args),
+        "hook_managed_install_admission" => {
+            crate::guard_store_managed_installs::hook_admission(connection, args)
+        }
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "cached_supply_chain_bundle" => {

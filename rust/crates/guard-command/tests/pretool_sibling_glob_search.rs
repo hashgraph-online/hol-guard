@@ -137,14 +137,83 @@ fn wide_sibling_globs_are_proven_by_their_directory() {
     ] {
         assert_decision(&cwd, &layout.home, &command, true);
     }
+    // No shell option makes `*.ts` name `.env`, so a key beside the matches
+    // leaves the search as it was; a pattern that can name it does not.
     write(layout.org.join("service-api/src/.env"), "TOKEN=fixture\n");
     for command in [
         format!("rg -n export {sibling}/src/*.ts"),
-        format!("rg -n TOKEN {sibling}/src/.*"),
         format!("grep -n export {sibling}/src/*.ts"),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, true);
+    }
+    for command in [
+        format!("rg -n TOKEN {sibling}/src/.*"),
+        format!("rg -n TOKEN {sibling}/src/*"),
+        format!("grep -n TOKEN {sibling}/src/*env"),
     ] {
         assert_decision(&cwd, &layout.home, &command, false);
     }
+}
+
+/// A wide glob whose only pattern is its last component reads nothing but
+/// the entries that pattern names. A test fixture's `.env` deeper in the
+/// directory does not hold it. A key the pattern can name under `dotglob` or
+/// `nocaseglob`, or one inside a matched directory that `-r` walks, does.
+#[test]
+fn wide_globs_are_proven_by_the_entries_they_name() {
+    let layout = layout("sibling-glob-search-named");
+    let cwd = layout.org.join("app-portal");
+    for index in 0..300 {
+        write(cwd.join(format!("tests/test_guard_{index}.py")), "x = 1\n");
+    }
+    write(
+        cwd.join("tests/fixtures/bad-plugin/.env"),
+        "TOKEN=fixture\n",
+    );
+    for command in [
+        "grep -n x tests/test_*.py",
+        "grep -rn -e x -e y tests/test_*.py | head -8",
+        "rg -n x tests/test_*.py",
+    ] {
+        assert_decision(&cwd, &layout.home, command, true);
+    }
+    write(cwd.join("tests/test_guard_cases/.env"), "TOKEN=fixture\n");
+    write(cwd.join("tests/TEST_id_rsa"), "fixture\n");
+    for command in [
+        "grep -rn TOKEN tests/*",
+        "grep -rn TOKEN tests/test_guard_*",
+        "grep -n x tests/test_*",
+    ] {
+        assert_decision(&cwd, &layout.home, command, false);
+    }
+}
+
+/// The entry list holds files alone. A matched directory, whose name such as
+/// `credentials` only the walk of its parent keeps in view, and a pattern the
+/// list cannot match the way the shell does, such as a `[[:alpha:]]` class,
+/// both fall back to that walk, which a key anywhere in the directory holds.
+#[test]
+fn wide_globs_walk_the_directory_for_matched_directories_and_classes() {
+    let layout = layout("sibling-glob-search-named-fallback");
+    let cwd = layout.org.join("app-portal");
+    for index in 0..300 {
+        write(cwd.join(format!("tests/test_guard_{index}.py")), "x = 1\n");
+    }
+    write(cwd.join("tests/a]x.py"), "x = 1\n");
+    write(cwd.join("tests/credentials/prod.json"), "{}\n");
+    for command in ["grep -rn TOKEN tests/c*", "grep -rn TOKEN tests/*"] {
+        assert_decision(&cwd, &layout.home, command, false);
+    }
+    // The shell reads `[[:alpha:]]` as one letter, so both name `id_rsa`.
+    write(cwd.join("tests/id_rsa"), "fixture\n");
+    for command in [
+        "grep -n x tests/[[:alpha:]]*",
+        "grep -n x tests/[[:alpha:]]d_rsa",
+        "rg -n x tests/[[:lower:]]d_rsa",
+    ] {
+        assert_decision(&cwd, &layout.home, command, false);
+    }
+    assert_decision(&cwd, &layout.home, "grep -n x tests/test_*.py", true);
 }
 
 /// The directory proof stands in only for an expansion that ran out of room.
@@ -195,4 +264,39 @@ fn wide_globs_refuse_parent_steps_and_links() {
     ] {
         assert_decision(&cwd, &layout.home, &command, false);
     }
+}
+
+/// A test directory with thousands of files, as large web projects keep in
+/// `__tests__`. Each file the glob names is proven as a root of its own, and
+/// one evaluation remembers every one of those proofs. Remembering them in a
+/// list searched from the front made the decision quadratic in the number of
+/// files: these two searches took 12 and 32 seconds in a debug build, the
+/// hook ran out of time, and the agent got an error with no way to approve.
+#[test]
+fn thousands_of_globbed_files_are_decided_within_the_hook_budget() {
+    let layout = layout("sibling-glob-search-thousands");
+    let cwd = layout.org.join("app-portal");
+    let sibling = format!("{}/service-api", layout.org.display());
+    for index in 0..4900 {
+        write(
+            layout
+                .org
+                .join(format!("service-api/__tests__/case-{index}.test.ts")),
+            "export {};\n",
+        );
+    }
+    let started = std::time::Instant::now();
+    for command in [
+        format!("grep -l PGlite {sibling}/__tests__/*.ts"),
+        format!("grep -rln PGlite {sibling}/__tests__/*.ts | head -4"),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, true);
+    }
+    // About six seconds in a debug build with the memo keyed by hash, and
+    // forty-four with the list.
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "deciding the wide globs took {:?}",
+        started.elapsed()
+    );
 }

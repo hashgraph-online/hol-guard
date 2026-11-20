@@ -4,11 +4,10 @@
 //!
 //! Python keeps what only the Guard process knows and answers it when an op
 //! replies `{"reply": {...}}` with one key: `facts` (the attested Guard CLI,
-//! the native hook bridge and the interpreters), `probe` (whether `cursor
-//! agent --help` runs), `expand` (8.3 short names), `render` (Windows hook
-//! command lines), `relaunch` (Guard's proxy argv) and `servers` (which
-//! detected servers Guard manages, with their proxy entries). It merges each
-//! answer into the request and asks again.
+//! the native hook bridge and the interpreters), `expand` (8.3 short names), `render` (Windows hook
+//! command lines) and `relaunch` (Guard's proxy argv). It merges each answer
+//! into the request and asks again. The servers Guard manages are chosen here
+//! from the detection.
 
 use std::path::{Path, PathBuf};
 
@@ -23,6 +22,11 @@ use super::{
 use crate::pyjson::{self, PyVal};
 
 pub(super) use super::cursor_ask::{Ask, Attestation, Facts};
+use super::cursor_surfaces;
+
+#[path = "cursor_cli_manifest.rs"]
+mod cli_manifest;
+use cli_manifest::cli_manifest;
 
 pub(super) const HARNESS: &str = "cursor";
 pub(super) const SCRIPT_NAME: &str = "hol-guard-cursor-hook.py";
@@ -140,6 +144,32 @@ impl CliEntry {
     }
 }
 
+/// `_cursor_agent_subcommand_available`: whether `cursor agent --help` runs.
+/// Like the `lru_cache` it replaces, one answer per path is kept, a few
+/// paths at most.
+fn agent_subcommand_available(ctx: &Ctx, cursor: &str) -> bool {
+    static SEEN: std::sync::Mutex<Vec<(String, bool)>> = std::sync::Mutex::new(Vec::new());
+    const KEPT: usize = 8;
+    if let Ok(seen) = SEEN.lock() {
+        if let Some((_, available)) = seen.iter().find(|(path, _)| path == cursor) {
+            return *available;
+        }
+    }
+    let argv = [cursor.to_owned(), "agent".into(), "--help".into()];
+    let record = super::probe_run::command(ctx, &argv, super::probe_run::DEFAULT_TIMEOUT);
+    let available = super::probe_run::succeeded(&record);
+    // A skipped probe answers nothing about the CLI, so it is not kept.
+    if record.get("skipped").is_none() {
+        if let Ok(mut seen) = SEEN.lock() {
+            if seen.len() >= KEPT {
+                seen.remove(0);
+            }
+            seen.push((cursor.to_owned(), available));
+        }
+    }
+    available
+}
+
 /// `resolve_cursor_cli_entry`.
 pub(super) fn cli_entry(ask: &Ask) -> Step<Option<CliEntry>> {
     if let Some(executable) = which::which(ask.ctx, "cursor-agent") {
@@ -151,24 +181,24 @@ pub(super) fn cli_entry(ask: &Ask) -> Step<Option<CliEntry>> {
     let Some(cursor) = which::which(ask.ctx, "cursor") else {
         return Ok(None);
     };
-    match ask.fields.get("cursor_probe") {
-        None => Err(Ask::reply("probe", json!(cursor))),
-        Some(Value::Bool(true)) => Ok(Some(CliEntry {
-            executable: cursor,
-            subcommand: true,
-        })),
-        Some(Value::Bool(false)) => Ok(None),
-        Some(_) => Err(Failure::Invalid),
-    }
+    let available = match ask.fields.get("cursor_probe") {
+        None => agent_subcommand_available(ask.ctx, &cursor),
+        Some(Value::Bool(available)) => *available,
+        Some(_) => return Err(Failure::Invalid),
+    };
+    Ok(available.then_some(CliEntry {
+        executable: cursor,
+        subcommand: true,
+    }))
 }
 
 /// `cursor_cli_command_available`.
-fn cli_available(ask: &Ask) -> Step<bool> {
+pub(super) fn cli_available(ask: &Ask) -> Step<bool> {
     Ok(cli_entry(ask)?.is_some()
         || which::user_directory_command(ask.ctx, "cursor-agent", &ask.ctx.home, &[]).is_some())
 }
 
-fn shim_installed(ctx: &Ctx) -> bool {
+pub(super) fn shim_installed(ctx: &Ctx) -> bool {
     let bin = ctx.absolute(&ctx.guard_home.join("bin"));
     SHIM_COMMANDS.iter().any(|name| bin.join(name).exists())
 }
@@ -291,8 +321,7 @@ pub(super) fn detect(spec: &Spec, ask: &Ask, contents: Option<&Captured>) -> Ste
     }
     let mut answer = detection(spec, Ok(found), cli_available(ask)?)?;
     answer["warnings"] = json!([]);
-    answer["firewall"] = json!(true);
-    Ok(answer)
+    super::firewall::enrich(answer)
 }
 
 fn launch_command(ask: &Ask) -> Step<Value> {
@@ -364,7 +393,11 @@ pub(crate) fn dispatch(
     ctx: &Ctx,
     fields: &Map<String, Value>,
 ) -> Step<Value> {
-    let ask = Ask { ctx, fields };
+    let ask = Ask {
+        ctx,
+        fields,
+        preparing: op == "prepare_install",
+    };
     match op {
         "policy_path" => path_answer(
             &ctx.workspace
@@ -385,8 +418,10 @@ pub(crate) fn dispatch(
             })),
             Some(stdout) => Ok(json!({ "reported_artifacts": reported_artifacts(stdout) })),
         },
-        "cli_shim_installed" => Ok(json!({ "value": shim_installed(ctx) })),
-        "cli_detected" => Ok(json!({ "value": cli_available(&ask)? || shim_installed(ctx) })),
+        "install_surface"
+        | "protected_surfaces"
+        | "protected_surfaces_from_store"
+        | "local_action" => cursor_surfaces::dispatch(op, &ask),
         "cli_manifest" => cli_manifest(ctx, fields),
         "cli_uninstalled" => {
             let mut doc = Doc::default();
@@ -412,77 +447,4 @@ pub(crate) fn dispatch(
         })),
         _ => common(spec, op, ctx),
     }
-}
-
-/// The CLI surface's manifest over the two shims and the shell profile.
-fn cli_manifest(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let parsed = |key: &str| -> Step<Vec<(String, PyVal)>> {
-        let raw = fields
-            .get(key)
-            .and_then(Value::as_str)
-            .ok_or(Failure::Invalid)?;
-        parse_object(raw).ok_or(Failure::Invalid)
-    };
-    let (agent, cursor, profile) = (
-        parsed("agent_shim")?,
-        parsed("cursor_shim")?,
-        parsed("profile")?,
-    );
-    let bin = path_text(&ctx.guard_home.join("bin"));
-    let mut notes = files::shim_notes(&agent);
-    notes.push(files::text(
-        "Use guard-cursor-agent for the standalone cursor-agent binary.",
-    ));
-    notes.push(files::text(
-        "Use guard-cursor agent ... when launching through the Cursor app CLI.",
-    ));
-    notes.push(files::text(format!("Guard launcher shims live in {bin}.")));
-    let truthy = |key: &str| get(&profile, key).is_some_and(PyVal::truthy);
-    if truthy("changed") {
-        notes.push(files::text(
-            "Prepended the Guard launcher shim directory to your shell profile.",
-        ));
-    } else if truthy("restart_shell_required") {
-        notes.push(files::text(
-            "Restart your shell or open a new terminal so guard-cursor shims are on PATH.",
-        ));
-    } else if truthy("manual_path_required") {
-        notes.push(files::text(format!(
-            "Put {bin} first on your PATH so guard-cursor shims run."
-        )));
-    }
-    let field =
-        |shim: &[(String, PyVal)], key: &str| get(shim, key).cloned().ok_or(Failure::Invalid);
-    let mut doc = Doc::default();
-    doc.set("harness", files::text(HARNESS))
-        .set("active", PyVal::Bool(true))
-        .set("surface", files::text("cli"))
-        .set("shim_path", field(&agent, "shim_path")?)
-        .set("shim_dir", field(&agent, "shim_dir")?)
-        .set("shim_command", field(&agent, "shim_command")?)
-        .set(
-            "shim_paths",
-            PyVal::List(vec![
-                field(&agent, "shim_path")?,
-                field(&cursor, "shim_path")?,
-            ]),
-        )
-        .set(
-            "shim_commands",
-            PyVal::List(
-                SHIM_COMMANDS
-                    .iter()
-                    .map(|name| files::text(*name))
-                    .collect(),
-            ),
-        )
-        .set(
-            "windows_shim_path",
-            get(&agent, "windows_shim_path")
-                .cloned()
-                .unwrap_or(PyVal::Null),
-        )
-        .set("shell_profile", PyVal::Dict(profile))
-        .set("notes", PyVal::List(notes));
-    files::manifest_answer(doc)
 }

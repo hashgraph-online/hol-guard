@@ -8,7 +8,8 @@
 //!   every byte survives the JSON request and every offset is a byte offset.
 //! - `guard_proxies` names the MCP servers whose launch is a Guard proxy, the
 //!   test that decides which entries install refreshes and which alternate
-//!   config entries uninstall removes.
+//!   config entries uninstall removes. It reads the server table as the
+//!   config holds it and skips an entry that is not a launch.
 
 use serde_json::{json, Value};
 
@@ -16,7 +17,7 @@ use super::cursor_editor_plan::is_guard_proxy;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
-/// `_SHELL_GUARD_BEGIN` and `_SHELL_GUARD_END` in `adapters/codex.py`.
+/// The legacy shell marker lines Guard's Codex shell guard block began and ended with.
 const SHELL_BEGIN: &[u8] = b"# >>> HOL Guard Codex shell guard >>>";
 const SHELL_END: &[u8] = b"# <<< HOL Guard Codex shell guard <<<";
 
@@ -136,33 +137,32 @@ pub(crate) fn shell_block_ranges(original: &[u8]) -> Vec<[usize; 2]> {
     ranges
 }
 
-/// The names of `servers` (`{name: {"command": text | null, "args": [text]}}`)
-/// whose launch `is_guard_proxy_command` recognizes.
+/// The names of `servers` (the MCP server table as read from a config) whose
+/// launch `is_guard_proxy_command` recognizes. Only a table entry with an
+/// argument list is a launch the test applies to; a command that is not text
+/// is no command, and an argument that is not text is dropped.
 fn guard_proxies(servers: &Value) -> KindResult {
     let servers = servers.as_object().ok_or(ERR_INVALID)?;
+    Ok(json!({ "names": proxy_names(servers) }))
+}
+
+/// The servers of a table whose launch is a Guard MCP proxy.
+pub(crate) fn proxy_names(servers: &serde_json::Map<String, Value>) -> Vec<String> {
     let mut names = Vec::new();
-    for (name, launch) in servers {
-        let launch = launch.as_object().ok_or(ERR_INVALID)?;
-        if launch.len() != 2 {
-            return Err(ERR_INVALID);
-        }
-        let command = match launch.get("command").ok_or(ERR_INVALID)? {
-            Value::Null => None,
-            Value::String(command) => Some(command.as_str()),
-            _ => return Err(ERR_INVALID),
+    for (name, server) in servers {
+        let Some(args) = server.get("args").and_then(Value::as_array) else {
+            continue;
         };
-        let args = launch
-            .get("args")
-            .and_then(Value::as_array)
-            .ok_or(ERR_INVALID)?
+        let command = server.get("command").and_then(Value::as_str);
+        let args: Vec<String> = args
             .iter()
-            .map(|arg| arg.as_str().map(str::to_owned).ok_or(ERR_INVALID))
-            .collect::<Result<Vec<_>, _>>()?;
+            .filter_map(|arg| arg.as_str().map(str::to_owned))
+            .collect();
         if is_guard_proxy(command, &args) {
             names.push(name.clone());
         }
     }
-    Ok(json!({ "names": names }))
+    names
 }
 
 #[cfg(test)]

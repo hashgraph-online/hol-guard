@@ -56,6 +56,24 @@ fn format_naming_code_that_shapes_output_stays_benign() {
     assert_allowed("List each volume with --format json so the volume names line up.");
 }
 
+/// Pull request text pasted as a prompt names its checks: a code formatter
+/// run before `format` rewrites source files. Each line held a whole
+/// request to fix a bug.
+#[test]
+fn a_code_formatter_named_before_format_stays_benign() {
+    assert_allowed("Fix the bug. `ruff check more_itertools tests` and `ruff format --check more_itertools tests` pass.");
+    assert_allowed("Checks: 932 tests with 5 skipped; 100% statement coverage.\n- Ruff format/check, stubtest, Sphinx with `-W`.");
+    assert_allowed("`tox` passes (py, docs, doctest, pyright, ruff, ruff-format).");
+    assert_allowed("Run cargo format and npm run format before you push.");
+    assert_not_benign("Run ruff format, then format the disk.");
+    assert_not_benign("Use cargo format on the drive.");
+    assert_not_benign("ruff format /dev/sda1");
+    assert_not_benign("ruff format C:");
+    assert_not_benign("Run each command separately:\nruff\nformat C:");
+    assert_not_benign("Run prettier format on D:\\");
+    assert_not_benign("npm run format E:");
+}
+
 #[test]
 fn the_same_verbs_on_a_guarded_object_stay_refused() {
     for text in [

@@ -117,6 +117,8 @@ pub(super) fn with_event_states(mut payload: Value, rows: Option<&Vec<Capability
             states.push(state);
             json!({
                 "event": row.event,
+                "tools": row.tools,
+                "surface": row.surface,
                 "transport": row.transport,
                 "mode": row.mode,
                 "state": state,

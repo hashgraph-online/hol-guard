@@ -36,9 +36,10 @@ pub(in crate::pretool) fn python_alone(projected: &str) -> bool {
 
 /// Whether a program the POSIX shell text `command` launches needs the
 /// network or names a credential store, counting the local modules it
-/// imports. Neither is available in the workspace sandbox, so a program fed
-/// on standard input that does either, itself or through `import helper`,
-/// keeps the review of the text as sent.
+/// imports, or is Python fed on standard input that reaches past the
+/// workspace (`host_reach`), itself or through a local module. The sandbox
+/// withholds the first two and does not take the third away, so a program
+/// that does any of them keeps the review of the text as sent.
 pub(in crate::pretool) fn text_needs_withheld(
     command: &str,
     context: crate::pretool::PathContext<'_>,
@@ -52,6 +53,6 @@ pub(in crate::pretool) fn text_needs_withheld(
     .is_ok_and(|model| {
         super::assess(&model, context)
             .iter()
-            .any(|found| found.network || found.credential_store)
+            .any(|found| found.network || found.credential_store || found.host_reach)
     })
 }

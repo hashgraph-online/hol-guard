@@ -110,7 +110,6 @@ fn guard_section(ctx: &Ctx) -> Step<PyVal> {
 /// `_write_guard_to_hermes_config_yaml`, as text, without writing it.
 fn rewrite(
     ctx: &Ctx,
-    fields: &Map<String, Value>,
     config: &Path,
     overlay: &[(String, PyVal)],
     argv: &[PyVal],
@@ -134,7 +133,7 @@ fn rewrite(
     existing.set("guard", guard_section(ctx)?);
     let home = config.parent().unwrap_or(config);
     let allowlist = hermes_hooks::sync(ctx, &mut existing, argv, home)?;
-    let text = hermes::yaml(fields, &existing.value())?;
+    let text = hermes::yaml(&existing.value());
     Ok(Some(Rewrite {
         text,
         allowlist,
@@ -265,7 +264,7 @@ pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> St
     }
     let (manifest_empty, verified, ordered) = existing_manifest(ctx, &manifest_path);
     let state = install_state(ctx, manifest_empty, &overlay_path, &pretool_path)?;
-    let overlay = hermes_config::overlay(ctx, fields, &sources)?;
+    let overlay = hermes_config::overlay(ctx, &sources)?;
     let identity = cloud_identity::hints(ctx, spec.harness);
     let mut pretool = Doc::default();
     pretool
@@ -277,7 +276,7 @@ pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> St
         )
         .set("fail_open", PyVal::Bool(false));
 
-    let rewrite = rewrite(ctx, fields, &config, &overlay, &argv)?;
+    let rewrite = rewrite(ctx, &config, &overlay, &argv)?;
 
     let mut changes = vec![
         json_change(ctx, &overlay_path, &PyVal::Dict(overlay))?,

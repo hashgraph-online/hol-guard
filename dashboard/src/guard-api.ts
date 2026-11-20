@@ -100,7 +100,25 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
+import {
+  decisionRefusedSession,
+  decisionSessionCandidates,
+  decisionSessionVerdict,
+  GuardDecisionSignInRequiredError,
+  markAnonymousDecisionRefused,
+  markSessionRefused,
+  rememberLinkedGuardSession,
+  type GuardDecisionSessionVerdict,
+} from "./dashboard-decision-session";
 import { applyHarnessCigarPatch } from "./fleet-app-modes";
+import {
+  pulseEnrollmentBody,
+  pulseSetupRefusalMessage,
+  pulseShowCommandBody,
+  sendWithPulseApproval,
+  type PulseMinTier,
+  type PulseWaitTiming,
+} from "./pulse-approval";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -232,22 +250,47 @@ export class GuardOperationTimeoutError extends Error {
   }
 }
 
-function withLocalProtectionDeadline<T>(
-  operation: (signal: AbortSignal) => Promise<T>,
+/** Pause and restart a local-protection deadline around a wait on the user. */
+export type LocalProtectionDeadline = {
+  /** Stop counting: the operation is waiting on the user, not on Guard. */
+  pause: () => void;
+  /** Count a fresh `timeoutMs` from now: the operation is waiting on Guard again. */
+  restart: () => void;
+};
+
+/**
+ * Run `operation` under a deadline. While a Pulse approval waits on the YID
+ * app the operation pauses the deadline (that wait has its own 16-minute
+ * window and fails closed), and restarts it for the resubmission, so every
+ * call to Guard stays bounded.
+ */
+export function withLocalProtectionDeadline<T>(
+  operation: (signal: AbortSignal, deadline: LocalProtectionDeadline) => Promise<T>,
   timeoutMs: number,
   message: string,
 ): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let expire: () => void = () => undefined;
+  const pause = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  const restart = () => {
+    pause();
+    timer = setTimeout(expire, timeoutMs);
+  };
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+    expire = () => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
-    }, timeoutMs);
+    };
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal)), deadline]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
+  restart();
+  return Promise.race([
+    Promise.resolve().then(() => operation(controller.signal, { pause, restart })),
+    deadline,
+  ]).finally(pause);
 }
 
 function fetchLocalProtectionJson(
@@ -256,8 +299,12 @@ function fetchLocalProtectionJson(
   timeoutMs: number,
   message: string,
 ): Promise<{ response: Response; payload: unknown }> {
-  return withLocalProtectionDeadline(async (signal) => {
-    const response = await fetchGuardApi(input, { ...init, signal });
+  return withLocalProtectionDeadline(async (signal, deadline) => {
+    const response = await fetchWithGuardAuth(
+      input,
+      { ...init, signal },
+      { onPending: deadline.pause, onApproved: deadline.restart },
+    );
     const payload = (await response.json().catch(() => null)) as unknown;
     return { response, payload };
   }, timeoutMs, message);
@@ -376,10 +423,57 @@ export function readGuardToken(): string | null {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-    return guardToken;
+    return rememberLinkedGuardSession(guardToken);
   }
   return readGuardStorage(GUARD_TOKEN_PARAM);
+}
+
+export { GuardDecisionSignInRequiredError, type GuardDecisionSessionVerdict } from "./dashboard-decision-session";
+
+/** The session this tab should decide `requestId` with, or why it cannot. */
+export function guardDecisionSession(requestId: string): GuardDecisionSessionVerdict {
+  if (isGuardDemoMode()) {
+    return { kind: "ready", token: null };
+  }
+  return decisionSessionVerdict(requestId, readGuardToken());
+}
+
+/**
+ * A decision call sent with each session that may decide its request in
+ * turn. A session the daemon refuses is remembered and the next one is
+ * tried; when none is left the card asks the user to sign in. A 401 that
+ * carries an approval-gate code is the gate's answer and is returned as is.
+ */
+async function fetchDecisionWithSession(
+  requestId: string,
+  input: string,
+  init: (guardToken: string | null) => RequestInit,
+): Promise<Response> {
+  const verdict = guardDecisionSession(requestId);
+  if (verdict.kind === "sign_in") {
+    throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
+  }
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens: Array<string | null> = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    // The tab's own session may be renewed by the first call; every Pulse
+    // continuation then sends the renewed one, not the session it replaced.
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput: RequestInfo, sendInit?: RequestInit): Promise<Response> =>
+      tabSession
+        ? fetchWithGuardAuthOnce(sendInput, sendInit)
+        : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!(await decisionRefusedSession(response))) {
+      return response;
+    }
+    if (token === null) {
+      markAnonymousDecisionRefused();
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
+    }
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 
 function saveGuardToken(guardToken: string): void {
@@ -1082,7 +1176,16 @@ function withGuardAuthForToken(
   };
 }
 
-export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(
+  input: RequestInfo,
+  init?: RequestInit,
+  pulse?: PulseWaitTiming,
+): Promise<Response> {
+  // Every gated request goes through the Pulse flow when the gate asks for it.
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init, pulse);
+}
+
+async function fetchWithGuardAuthOnce(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
@@ -3313,7 +3416,7 @@ export async function resolveRequestWithQueueResult(
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
+  const init = (guardToken: string | null): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3344,7 +3447,7 @@ export async function resolveRequestWithQueueResult(
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
     })
   });
-  const response = await fetchGuardApi(path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload: Record<string, unknown> | null = null;
     try {
@@ -3374,6 +3477,7 @@ export async function bulkAllowReadOnce(input: {
   approval_password?: string;
   approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
+  approval_gate_pulse?: boolean;
 }): Promise<BulkAllowReadOnceResult> {
   if (isGuardDemoMode()) {
     return {
@@ -3393,6 +3497,7 @@ export async function bulkAllowReadOnce(input: {
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
+      ...(input.approval_gate_pulse === true ? { approval_gate_pulse: true } : {}),
     }),
   });
   return {
@@ -3625,7 +3730,22 @@ export type GuardDesktopHandoffResult = {
  * Desktop watches for the request and opens its own visible update flow,
  * which re-verifies the release before installing anything.
  */
-export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+/** A refusal or failure answered by the daemon: the request reached Guard. */
+export class GuardDesktopHandoffError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, code: string | null, status: number) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export async function requestGuardDesktopHandoff(
+  offeredVersion: string | null = null,
+): Promise<GuardDesktopHandoffResult> {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -3639,7 +3759,14 @@ export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffR
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion
+          ? { handoff_to_desktop: true, latest_version: offeredVersion }
+          : { handoff_to_desktop: true },
+      ),
       signal: controller.signal,
     });
   } finally {
@@ -3651,7 +3778,7 @@ export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffR
       stringValue(payload.message) ??
       stringValue(payload.error) ??
       `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,
@@ -3759,15 +3886,22 @@ export async function retryResume(requestId: string): Promise<GuardCodexResumeRe
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
-  const response = await fetchGuardApi(path, init());
+  let response: Response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -4665,9 +4799,10 @@ export async function resolveMcpPolicyRequest(input: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<McpPolicyDecisionResult> {
-  const response = await fetchGuardApi(
+  const response = await fetchDecisionWithSession(
+    input.requestId,
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -4675,7 +4810,7 @@ export async function resolveMcpPolicyRequest(input: {
         ...(input.approval_password ? { approval_password: input.approval_password } : {}),
         ...(input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}),
       }),
-    },
+    }),
   );
   const payloadBody = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
@@ -4702,3 +4837,115 @@ export {
   packageWorkbenchEcosystems,
   sortPackageWorkbenchFindings,
 } from "./supply-chain-audit-normalize";
+
+export type GuardPulseEnrollment = {
+  status: "pending";
+  request_id: string;
+  match_code: string;
+  yid_hint: string;
+  decide_by: string;
+};
+
+/** Step 1 of Pulse setup: check the approval password (and authenticator code) only. */
+export async function authorizeApprovalGatePulseSetup(payload: {
+  approval_password: string;
+  approval_totp_code?: string;
+}): Promise<{ status: "authorized"; expires_at: string }> {
+  return readJson("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, step: "authorize" }),
+  });
+}
+
+/**
+ * Send the enrollment request to the YID app. After step 1, the same session
+ * needs only the agent key for 15 minutes.
+ */
+export async function beginApprovalGatePulseEnrollment(payload: {
+  pulse_agent_key: string;
+  min_tier: PulseMinTier;
+}): Promise<GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment }> {
+  const response = await fetchWithGuardAuth("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pulseEnrollmentBody(payload.pulse_agent_key, payload.min_tier)),
+  });
+  if (!response.ok) {
+    let code: unknown = null;
+    try {
+      const refused: unknown = await response.clone().json();
+      code = isRecord(refused) ? refused["error"] : null;
+    } catch {
+      code = null;
+    }
+    throw new Error(
+      pulseSetupRefusalMessage(code, payload.min_tier)
+        ?? (await requestErrorMessage(response, `Request failed with ${response.status}`)),
+    );
+  }
+  return (await response.json()) as GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment };
+}
+
+/** One bounded poll of a Pulse request. */
+export async function pollApprovalGatePulse(requestId: string): Promise<{ status: "pending" | "approved" | "rejected" | "expired" }> {
+  return readJson("/v1/approval-gate/pulse/poll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId }),
+  });
+}
+
+/** Finish Pulse setup. The response carries the one-time recovery code. */
+export async function confirmApprovalGatePulseEnrollment(payload: {
+  request_id: string;
+  cooldown_seconds: 0 | 900 | 3600;
+}): Promise<GuardSettingsPayload & { pulse_recovery_code: string }> {
+  return readJson("/v1/approval-gate/pulse/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Return to the approval password. The Pulse layer asks the YID app first;
+ * aborting `signal` stops waiting for it.
+ */
+export async function disableApprovalGatePulse(signal?: AbortSignal): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+    signal,
+  });
+}
+
+/**
+ * Show or hide the agent's command in the YID app. It is a settings save, so
+ * the Pulse layer asks the YID app first and the approval covers exactly this
+ * change; aborting `signal` stops waiting for it.
+ */
+export async function setApprovalGatePulseShowCommand(
+  show: boolean,
+  signal?: AbortSignal,
+): Promise<GuardSettingsPayload> {
+  return readJson("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify(pulseShowCommandBody(show)),
+    signal,
+  });
+}
+
+/** Lost the YID app: the approval password and the one-time recovery code turn Pulse off. */
+export async function recoverApprovalGatePulse(payload: {
+  approval_password: string;
+  pulse_recovery_code: string;
+}): Promise<GuardSettingsPayload> {
+  return readJson("/v1/approval-gate/pulse/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}

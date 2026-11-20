@@ -63,6 +63,7 @@ fn shell_in_environment(
             None,
             PathContext {
                 literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: project.to_str(),
                 cdpath_unset: false,

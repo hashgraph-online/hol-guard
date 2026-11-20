@@ -217,6 +217,7 @@ fn decide_environment(
         None,
         guard_command::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             cdpath_unset: false,

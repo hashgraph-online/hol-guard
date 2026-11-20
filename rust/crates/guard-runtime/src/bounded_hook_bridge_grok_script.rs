@@ -1,19 +1,12 @@
-//! The generated Grok hook client the native bridge answers for.
+//! The Grok hook client older Guard releases installed.
 //!
-//! Grok runs `guard-runtime bounded-hook-bridge <python> -I <script>
-//! <config>`, where `<script>` is `managed/bounded-hooks/grok.py` rendered
-//! by `_render_bounded_hook_script`. The bridge reads the three constants
-//! the renderer writes, from the current client or one an older Guard
-//! installed, and answers the hook itself; the client's own code never
-//! runs. A script whose constants it cannot read fails the hook closed. The
-//! `<config>` argument is read here too, as `_configure_grok_invocation`
-//! reads it.
-//!
-//! [`GROK_SCRIPT_SHA256`] is the digest of the template the bridge was
-//! ported from, with its placeholders in place.
-//! `tests/test_grok_native_bridge.py` renders the current template and
-//! checks it against this digest, so a template change fails CI until the
-//! native port is reviewed and the digest updated.
+//! Those releases ran `guard-runtime bounded-hook-bridge <python> -I
+//! <script> <config>`, where `<script>` is `managed/bounded-hooks/grok.py`.
+//! Until `hol-guard update` moves such a hook to the native command, the
+//! bridge reads the three constants that client carries and answers the
+//! hook itself; the client's own code never runs. A script whose constants
+//! it cannot read fails the hook closed. The `<config>` argument is read
+//! here too.
 
 use std::io::Read;
 use std::path::Path;
@@ -21,11 +14,6 @@ use std::path::Path;
 use crate::bounded_hook_bridge_grok_render::{json_object, py_float};
 use crate::bounded_hook_bridge_render::member;
 use crate::pyjson::{self, PyVal};
-
-/// SHA-256 of the current template with its placeholders in place.
-#[allow(dead_code)] // Read by `tests/test_grok_native_bridge.py`.
-pub(crate) const GROK_SCRIPT_SHA256: &str =
-    "0bb71851408471c2a7f332be6745e71b273219c00add99fc60d3c3333cc2e34a";
 
 const MAX_SCRIPT_BYTES: u64 = 256 * 1024;
 const GUARD_HOME_LINE: &str = "GUARD_HOME = ";

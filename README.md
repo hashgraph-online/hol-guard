@@ -20,7 +20,7 @@
 | ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Stop risky AI actions before they compromise your machine.** HOL Guard is a local-first security layer for AI agents, tools, plugins, skills, MCP servers, and package installs.<br><br>[Install HOL Guard](https://hol.org/guard/activate)<br>[Read the documentation](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md)<br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
-HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy.
+HOL Guard reviews agent actions before they run: shell commands, file access, package installs, and MCP tool calls. It detects secret exposure, destructive operations, prompt injection, and supply-chain risks, then allows, blocks, or requests approval according to your policy. It sees only the events each agent exposes to it: the [support matrix](docs/guard/harness-support.md) lists, for each agent, the event surfaces Guard hooks and the actions it does not cover.
 
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
@@ -377,7 +377,7 @@ Use it for AI agent security on a developer machine, MCP security around connect
 
 ### What is HOL Guard?
 
-HOL Guard is open-source antivirus and runtime protection for AI agents. It reviews supported tool calls, shell commands, file access, and package operations for risks such as secret exposure, prompt injection, destructive actions, and malicious dependencies.
+HOL Guard is open-source antivirus and runtime protection for AI agents. It reviews supported tool calls, shell commands, file access, and package operations for risks such as secret exposure, prompt injection, destructive actions, and malicious dependencies. Unlike endpoint antivirus, it does not scan the whole machine: it sees only the actions a supported agent sends through its hooks, and some events fail open or are only observed. The [support matrix](docs/guard/harness-support.md) names those limits per agent.
 
 ### Does HOL Guard work without a cloud account?
 

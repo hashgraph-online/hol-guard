@@ -85,12 +85,13 @@ def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     server = _server(store, args)
     workspace = _text(args.get("workspace"))
     worker = server.hook_worker
-    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=_deadline(args))
+    deadline = _deadline(args)
+    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=deadline)
     if prepared is None:
         worker.metrics.record_route("native_fail_safe")
         return {
             "fail_safe": {
-                "reason": _native_policy_not_ready_reason(server),
+                "reason": _native_policy_not_ready_reason(server, deadline=deadline),
                 "reason_code": "native_policy_not_ready",
             }
         }
@@ -164,6 +165,40 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
     return key
 
 
+def hook_integrity_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Begin a policy-integrity generation before a Rust hook write."""
+
+    from .policy_write_calls import integrity_begin
+
+    return integrity_begin(store, args)
+
+
+def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Finalize Rust's policy-integrity generation in the secret store."""
+
+    next_control_state = args.get("next_control_state")
+    if next_control_state is None:
+        return {"finalized": True}
+    if not isinstance(next_control_state, dict):
+        return {"finalized": False}
+    try:
+        stored = store._finalize_policy_integrity_control_state(next_control_state)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return {"finalized": False}
+    return {"finalized": stored is True}
+
+
+def hook_integrity_finalize_locked(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Compatibility alias for the lock-owning finalize operation.
+
+    The old callback could outlive the coordinator lock after a timed-out
+    resident request. Finalization now always reacquires and validates its
+    own lock before writing the secret-backed generation.
+    """
+
+    return hook_integrity_finalize(store, args)
+
+
 def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
 
@@ -173,40 +208,78 @@ def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
 
 
 def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Saves the answer the daemon read from Claude's HOL Guard approval question.
+    """Transport a settled Claude approval plan to the Rust authority op."""
 
-    The daemon settles the question against the session's pending review and
-    hands over the plan the op returned; the policy write holds the integrity
-    lock, so it stays here. ``valid`` is false for a plan the library refuses.
-    """
-
-    from ..cli import commands_support  # noqa: F401
     from ..cli._commands_shared import _now
-    from ..cli.commands_support_hook_state import _remove_claude_pending_permission
-    from ..cli.commands_support_permission_store import _write_claude_native_permission_plan
-    from ..native_hook_decision import NativeHookDecisionError, validated_permission_persist_plan
+    from ..native_hook_authority_state import (
+        HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+        hook_authority_state,
+    )
 
     session_id = _text(args.get("session_id"))
     artifact_id = _text(args.get("artifact_id"))
+    pending_artifact_hash = _text(args.get("pending_artifact_hash"))
     reason = _text(args.get("reason"))
     source = _text(args.get("source"))
-    if not (session_id and artifact_id and reason and source):
+    if not (session_id and artifact_id and pending_artifact_hash and reason and source):
         return {"valid": False}
-    try:
-        plan = validated_permission_persist_plan(args.get("plan"))
-    except NativeHookDecisionError:
+
+    def save_under_lock() -> dict[str, object] | None:
+        try:
+            integrity = hook_integrity_begin(store, {"now": _now(), "sign": True})
+        except Exception:
+            return None
+        payload = {
+            "artifact_id": artifact_id,
+            "pending_artifact_hash": pending_artifact_hash,
+            "reason": reason,
+            "source": source,
+            "plan": args.get("plan"),
+        }
+        if isinstance(integrity.get("current_generation"), int):
+            payload["current_generation"] = integrity["current_generation"]
+        integrity_fields: dict[str, object] = (
+            {
+                "integrity_key_b64": integrity["integrity_key_b64"],
+                "integrity_key_id": integrity["integrity_key_id"],
+            }
+            if isinstance(integrity.get("current_generation"), int)
+            and isinstance(integrity.get("integrity_key_b64"), str)
+            and isinstance(integrity.get("integrity_key_id"), str)
+            else {}
+        )
+        return hook_authority_state(
+            store,
+            "claude_question_save",
+            now=_now(),
+            required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+            integrity=integrity_fields,
+            session_id=session_id,
+            payload=payload,
+        )
+
+    with store.hold_policy_integrity_generation_lock():
+        reply = save_under_lock()
+    if not isinstance(reply, dict) or reply.get("saved") is not True:
         return {"valid": False}
-    saved = _write_claude_native_permission_plan(
-        store=store,
-        plan=plan,
-        artifact_id=artifact_id,
-        reason=reason,
-        source=source,
+    finalized = hook_integrity_finalize(store, {"next_control_state": reply.get("next_control_state")})
+    if finalized.get("finalized") is not True:
+        return {"valid": False}
+    consumed = hook_authority_state(
+        store,
+        "claude_question_consume",
         now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+        session_id=session_id,
+        payload={
+            "artifact_id": artifact_id,
+            "pending_artifact_hash": pending_artifact_hash,
+            **({"pending_id": args["pending_id"]} if isinstance(args.get("pending_id"), str) else {}),
+        },
     )
-    if saved:
-        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
-    return {"valid": True, "saved": bool(saved)}
+    if not isinstance(consumed, dict) or consumed.get("consumed") is not True:
+        return {"valid": False}
+    return reply
 
 
 _LIVE_DECISION_REVIEW_SECONDS = 1.45
@@ -282,6 +355,9 @@ HOOK_CALLS = {
     "hook.claude_question_save": hook_claude_question_save,
     "hook.codex_live_decision": codex_live_decision,
     "hook.integrity_key": hook_integrity_key,
+    "hook.integrity_begin": hook_integrity_begin,
+    "hook.integrity_finalize": hook_integrity_finalize,
+    "hook.integrity_finalize_locked": hook_integrity_finalize_locked,
     "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,

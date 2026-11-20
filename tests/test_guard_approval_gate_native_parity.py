@@ -42,6 +42,9 @@ _CONFIG_FIELDS = (
     "totp_enabled",
     "totp_pending",
     "totp_recent_satisfied",
+    "pulse_enabled",
+    "pulse_cooldown_seconds",
+    "pulse_show_command",
 )
 _GRANT_FIELDS = (
     "purpose",

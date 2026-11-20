@@ -1,6 +1,6 @@
 //! Copilot's MCP plan: the launch-only slots `copilot_mcp_plan` reads, its
-//! per-target answer, and that answer applied to each config with the proxy
-//! relaunches and managed entries Python built.
+//! per-target answer, and that answer applied to each config with each
+//! proxy's relaunch and the managed entries Python built.
 
 use std::path::{Path, PathBuf};
 
@@ -91,38 +91,72 @@ pub(super) fn plan_servers<'a>(plan: &Value, payload: &'a Object) -> Step<&'a [(
     }
 }
 
-pub(super) fn parsed_field(fields: &Map<String, Value>, key: &str) -> Step<PyVal> {
-    let raw = fields
-        .get(key)
-        .and_then(Value::as_str)
-        .ok_or(Failure::Invalid)?;
-    pyjson::parse(raw).map_err(|_| Failure::Invalid)
-}
-
-/// `[[name, source_scope, config_path, proxy entry], ...]` from Python.
-pub(super) fn managed_servers(
-    fields: &Map<String, Value>,
-) -> Step<Vec<(String, String, String, PyVal)>> {
-    let managed = parsed_field(fields, "managed")?;
-    managed
-        .as_list()
-        .ok_or(Failure::Invalid)?
+/// `merge_guard_launcher_env(env)` over a server's own env dict. A value
+/// that is not a string passes through where the config set it.
+fn relaunch_env(ctx: &Ctx, env: &[(String, PyVal)]) -> PyVal {
+    let strings: Vec<(String, String)> = env
         .iter()
-        .map(|row| match row.as_list() {
-            Some(
-                [PyVal::Str(name), PyVal::Str(scope), PyVal::Str(path), entry @ PyVal::Dict(_)],
-            ) => Ok((name.clone(), scope.clone(), path.clone(), entry.clone())),
-            _ => Err(Failure::Invalid),
+        .filter_map(|(key, value)| value.as_str().map(|text| (key.clone(), text.to_owned())))
+        .collect();
+    let mut merged: Vec<(String, PyVal)> = super::proxy_launch::launcher_env(ctx, &strings)
+        .into_iter()
+        .map(|(key, value)| (key, PyVal::Str(value)))
+        .collect();
+    let bindings = merged
+        .iter()
+        .position(|(key, _)| super::caller::LAUNCHER_BINDING_ENV.contains(&key.as_str()))
+        .unwrap_or(merged.len());
+    let kept: Vec<(String, PyVal)> = env
+        .iter()
+        .filter(|(key, value)| {
+            value.as_str().is_none()
+                && key != "PYTHONPATH"
+                && !super::caller::LAUNCHER_BINDING_ENV.contains(&key.as_str())
         })
-        .collect()
+        .cloned()
+        .collect();
+    merged.splice(bindings..bindings, kept);
+    PyVal::Dict(merged)
 }
 
-/// `_apply_mcp_plan` with the relaunches Python built for its refresh rows.
+/// `mcp_proxy_launch(guard_cli_launcher(), python_args)` and the merged env:
+/// the `(command, args, env)` a refreshed Guard proxy is written with.
+fn relaunch(
+    ctx: &Ctx,
+    python_args: &Value,
+    config: &[(String, PyVal)],
+) -> Step<(PyVal, PyVal, PyVal)> {
+    let python_args: Vec<String> = python_args
+        .as_array()
+        .ok_or_else(|| Failure::Refusal(MALFORMED.into()))?
+        .iter()
+        .map(|arg| arg.as_str().map(str::to_owned))
+        .collect::<Option<_>>()
+        .ok_or_else(|| Failure::Refusal(MALFORMED.into()))?;
+    let (command, args) =
+        super::proxy_launch::relay_launch(ctx, super::caller::launcher(ctx)?, &python_args)?;
+    let env = ["env", "environment"]
+        .iter()
+        .find_map(|key| {
+            config
+                .iter()
+                .find(|(name, _)| name == key)
+                .and_then(|(_, value)| value.as_dict())
+        })
+        .unwrap_or(&[]);
+    Ok((
+        PyVal::Str(command),
+        PyVal::List(args.into_iter().map(PyVal::Str).collect()),
+        relaunch_env(ctx, env),
+    ))
+}
+
+/// `_apply_mcp_plan`, relaunching each Guard proxy the plan refreshes.
 pub(super) fn apply_plan(
+    ctx: &Ctx,
     plan: &Value,
     payload: &mut Object,
     managed: &[(String, String, String, PyVal)],
-    launches: &[PyVal],
 ) -> Step<()> {
     let malformed = || Failure::Refusal(MALFORMED.into());
     let key = plan["key"]
@@ -130,26 +164,20 @@ pub(super) fn apply_plan(
         .filter(|key| MCP_KEYS.contains(key))
         .ok_or_else(malformed)?;
     let mut normalized = Doc(plan_servers(plan, payload)?.to_vec());
-    let rows = plan["refresh"]
-        .as_array()
-        .filter(|rows| rows.len() == launches.len())
-        .ok_or_else(malformed)?;
-    for (row, launch) in rows.iter().zip(launches) {
+    let rows = plan["refresh"].as_array().ok_or_else(malformed)?;
+    for row in rows {
         let index = row[0]
             .as_u64()
             .map(|index| index as usize)
             .ok_or_else(malformed)?;
         let (name, config) = normalized.0.get(index).cloned().ok_or_else(malformed)?;
-        let mut refreshed = Doc(config.as_dict().ok_or_else(malformed)?.to_vec());
-        refreshed
-            .set(
-                "command",
-                launch.get("command").cloned().ok_or_else(malformed)?,
-            )
-            .set("args", launch.get("args").cloned().ok_or_else(malformed)?);
-        match launch.get("env") {
-            Some(env) if env.truthy() => {
-                refreshed.set("env", env.clone());
+        let config = config.as_dict().ok_or_else(malformed)?;
+        let (command, args, env) = relaunch(ctx, &row[1], config)?;
+        let mut refreshed = Doc(config.to_vec());
+        refreshed.set("command", command).set("args", args);
+        match env {
+            env if env.truthy() => {
+                refreshed.set("env", env);
             }
             _ => refreshed
                 .0

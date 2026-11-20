@@ -273,4 +273,4 @@ fn now_micros() -> i128 {
 
 #[cfg(test)]
 #[path = "guard_store_legacy_probe_tests.rs"]
-mod tests;
+pub(crate) mod tests;

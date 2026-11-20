@@ -15,6 +15,7 @@ pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
+pub use omp::omp_eval_commit_drafts;
 #[path = "generic_cline_view.rs"]
 mod cline_view;
 #[path = "generic_extract.rs"]
@@ -77,7 +78,6 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
@@ -225,6 +225,14 @@ mod web_fetch;
 pub(in crate::pretool) use tools::{executable_is_package_tool, installs_from_registry};
 pub(in crate::pretool) use web_fetch::plain_public_url;
 
+/// Whether a user prompt asks for local secrets, read the same way a
+/// reviewed `UserPromptSubmit` reads it: a secret location, or a credential
+/// word in a clause that asks for its value. Plain words such as "tokens"
+/// in a question about usage are not a request.
+pub fn prompt_asks_for_local_secrets(prompt: &str) -> bool {
+    extract::prompt_asks_for_local_secrets(prompt)
+}
+
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
 /// separate from `evaluate_pre_tool`, the compatibility command-model
 /// operation used by older clients.
@@ -262,6 +270,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         deadline,
         crate::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,
@@ -292,8 +301,12 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
     let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
-    let mut context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    // The session is rebuilt from the execution environment; the Guard home
+    // the hook reported is not part of it, so it is carried across.
+    let mut context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let (projected_payload, cline_payload);
     let mut payload = payload;
     let within;
@@ -436,8 +449,10 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let super::PathContext { home_dir, cwd, .. } = context;
     let yield_payload = (harness == "omp")
         .then(|| omp::yield_signal_payload(payload))
@@ -469,23 +484,17 @@ fn evaluate_envelope(
         && event == "PreToolUse"
         && omp::strict_tool_input(payload)
             .is_some_and(|input| github::read_only_call(input, signals.tool_name.as_deref()));
-    // A search pattern is data, not a command: a proven Claude or Grok `Grep`
-    // scope skips the command authority but still passes the command controls
-    // below.
+    // A search pattern is data, not a command: a proven search scope skips the
+    // command authority but still passes the command controls below.
     let search_scope_proven = event == "PreToolUse"
         && signals.url_values.is_empty()
-        && match (harness, signals.tool_name.as_deref()) {
-            ("claude-code", Some("Grep")) => {
-                super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd)
-            }
-            ("claude-code", Some("Glob")) => {
-                super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd)
-            }
-            ("grok", Some("Grep")) => {
-                super::search_scope::grok_grep_directory_scope_proven(payload, home_dir, cwd)
-            }
-            _ => false,
-        };
+        && super::search_scope::harness_search_scope_proven(
+            harness,
+            signals.tool_name.as_deref(),
+            payload,
+            home_dir,
+            cwd,
+        );
     // Codex sends an edit as `apply_patch` with the patch body in `command`.
     // That body is an edit description, not shell, so it has its own proof.
     let apply_patch_proven = event == "PreToolUse"
@@ -858,7 +867,7 @@ fn evaluate_envelope(
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
         .map(|command| {
-            evaluate_pre_tool_with_execution_context(
+            super::evaluate_pre_tool_with_reported_guard_home(
                 &CommandModelRequestV1 {
                     command: command.to_owned(),
                     dialect: tools::command_dialect(signals.tool_name.as_deref()).to_owned(),
@@ -869,6 +878,7 @@ fn evaluate_envelope(
                 cwd,
                 deadline,
                 execution_environment,
+                context.guard_home,
             )
         });
     // Parsed benign commands may contain credential words as search patterns.
@@ -1031,6 +1041,43 @@ fn evaluate_envelope(
             result.reason = reason;
         }
     }
+    if result.reason_code == "native_pre_tool_unknown_review"
+        && matches!(harness, "omp" | "pi")
+        && signals.tool_name.as_deref() == Some("eval")
+    {
+        // Same review; the reason names the one-cell draft form Guard checks.
+        if let Some(reason) = omp::earlier_cell_draft_reason(payload) {
+            result.reason = reason.into();
+        }
+    }
+    // A header Oh My Pi reads as a tagged file that does not exist, or a
+    // first header it cannot read at all, cannot apply. Blocking it at once,
+    // with how to write the header, keeps the agent from waiting on an
+    // approval for an edit that would fail.
+    if harness == "omp"
+        && event == "PreToolUse"
+        && signals.tool_name.as_deref() == Some("edit")
+        && result.minimum_action == "review"
+    {
+        let blocked = omp::strict_tool_input(payload)
+            .and_then(|input| input.get("input")?.as_str())
+            .and_then(|input| super::omp_hashline_recovery::unappliable_edit(input, cwd));
+        if let Some((reason_code, reason)) = blocked {
+            result = generic_result(
+                generic_action(
+                    harness,
+                    event,
+                    PreToolActionTypeV1::FileWrite,
+                    PreToolOperationV1::Write,
+                    true,
+                    false,
+                ),
+                "block",
+                reason_code,
+                &reason,
+            );
+        }
+    }
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);
@@ -1176,8 +1223,7 @@ fn evaluate_envelope(
     // sink command names only the profile, so every profile routes the same
     // way. Only harnesses that rewrite into the contained sink get the
     // receipt; others would see a bare deny.
-    let windows_contained =
-        matches!(
+    let windows_contained = matches!(
             contained_test_reason,
             Some(
                 "native_python_eval_readonly_containment_required"
@@ -1186,7 +1232,20 @@ fn evaluate_envelope(
                     | "native_node_eval_readonly_containment_required"
                     | "native_pytest_readonly_containment_required"
             )
-        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
+        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
+            // The AppContainer runs only a Program Files Python; a virtual
+            // environment of a per-user one keeps its review.
+            && !(contained_test_reason == Some("native_pytest_readonly_containment_required")
+                && command_model.is_some_and(|model| {
+                    super::windows_pytest_base::base_outside_program_files(
+                        model,
+                        super::PathContext {
+                            home_dir,
+                            cwd,
+                            ..context
+                        },
+                    )
+                }));
     // Linux runs the same read-only profiles under a bubblewrap mount, from
     // the same POSIX sink command, so no harness is narrowed out here the way
     // Windows narrows the shells whose quoting the sink command is written

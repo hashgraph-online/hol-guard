@@ -1088,6 +1088,8 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "package_install",
     "low_trust_artifact",
     "runtime_known_vulnerable",
+    "git_hook_bypass",
+    "git_stage_all",
 ];
 
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
@@ -1692,6 +1694,8 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_install", "allow"),
                 ("low_trust_artifact", "warn"),
                 ("runtime_known_vulnerable", "warn"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
         (
@@ -1718,6 +1722,8 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_install", "allow"),
                 ("low_trust_artifact", "warn"),
                 ("runtime_known_vulnerable", "warn"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
         (
@@ -1744,6 +1750,8 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
                 ("runtime_known_vulnerable", "require-reapproval"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
         (
@@ -1770,6 +1778,8 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
                 ("runtime_known_vulnerable", "block"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
         (
@@ -1796,6 +1806,8 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_install", "block"),
                 ("low_trust_artifact", "block"),
                 ("runtime_known_vulnerable", "block"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
         (
@@ -1822,6 +1834,8 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
                 ("runtime_known_vulnerable", "require-reapproval"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
     ];
@@ -1875,6 +1889,8 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
                 ("runtime_known_vulnerable", "require-reapproval"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
         (
@@ -1901,6 +1917,8 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
                 ("runtime_known_vulnerable", "require-reapproval"),
+                ("git_hook_bypass", "allow"),
+                ("git_stage_all", "allow"),
             ],
         ),
     ];

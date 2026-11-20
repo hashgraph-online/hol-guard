@@ -3,10 +3,10 @@
 //! refresh `hol-guard update` runs over every config.
 //!
 //! The refresh rewrites only the `command` of each verified `hol-guard::`
-//! companion whose Guard CLI prefix moved. Python computes the new argv
-//! from the proxy arguments `refresh_scan` returns and holds the config lock
-//! across both steps; `refresh_apply` scans again, makes the edits and
-//! writes each changed config back in place, rolling back on failure.
+//! companion whose Guard CLI prefix moved, building the new argv from the
+//! caller stamp. Python holds the config lock; `refresh_apply` scans, makes
+//! the edits and writes each changed config back in place, rolling back on
+//! failure.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -15,10 +15,11 @@ use serde_json::{json, Map, Value};
 
 use super::files::{self, text, Doc};
 use super::opencode::{
-    config_paths, global_plugin, managed_config_path, managed_plugin, overlay_path, read_config,
-    wire_payload, COMPANION_PREFIX, PROXY,
+    self, config_paths, global_plugin, managed_config_path, managed_plugin, overlay_path,
+    read_config, wire_payload, COMPANION_PREFIX, PROXY,
 };
-use super::{path_text, Ctx, Failure, Step};
+use super::opencode_servers::MODULE_PREFIX;
+use super::{caller, path_text, proxy_launch, Ctx, Failure, Spec, Step};
 use crate::copilot_detect::universal_newlines;
 use crate::pyjson::{self, PyVal};
 
@@ -27,9 +28,8 @@ const CHANGED: &str = "OpenCode config changed during launcher refresh";
 const INVALID_WARNING: &str =
     "An invalid OpenCode config was left unchanged; other configs were checked.";
 
-fn render_plugin(fields: &Map<String, Value>) -> Step<String> {
-    let plugin = fields.get("plugin").ok_or(Failure::Invalid)?;
-    crate::opencode_plugin_render::render(plugin)
+fn render_plugin(ctx: &Ctx, fields: &Map<String, Value>) -> Step<String> {
+    crate::opencode_plugin_render::render(&opencode::plugin_args(ctx, fields, false)?)
         .map_err(|error| {
             Failure::Refusal(format!(
                 "Guard could not render the OpenCode plugin: {error}"
@@ -55,7 +55,7 @@ fn installed_text(ctx: &Ctx, path: &Path) -> Step<String> {
 /// `plugin_refresh`: the plugin this Guard renders and whether both installed
 /// copies already hold it.
 pub(super) fn plugin_refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let source = render_plugin(fields)?;
+    let source = render_plugin(ctx, fields)?;
     let global = installed_text(ctx, &global_plugin(ctx))?;
     let managed = installed_text(ctx, &managed_plugin(ctx))?;
     Ok(json!({
@@ -121,17 +121,24 @@ fn config_uses_proxy(ctx: &Ctx, path: &Path) -> bool {
     })
 }
 
-/// `_opencode_protection_checks`, given the store's managed flag and the
-/// detection's config paths.
-pub(super) fn protection(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let active = fields
-        .get("managed_active")
-        .and_then(Value::as_bool)
-        .ok_or(Failure::Invalid)?;
-    let detected = fields
-        .get("config_paths")
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?;
+/// `_opencode_protection_checks`. The request names the `store_home` of the
+/// caller's store, whose install record says whether OpenCode is managed; a
+/// caller with no store leaves it out. The loaded config paths are this
+/// adapter's own detection.
+pub(super) fn protection(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let active = match fields.get("store_home") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(home)) => {
+            super::managed_store::managed_install(Path::new(home), "opencode")?
+                .is_some_and(|row| row.get("active") == Some(&Value::Bool(true)))
+        }
+        Some(_) => return Err(Failure::Invalid),
+    };
+    let mut detection = super::opencode::detect(spec, ctx)?;
+    let detected = match detection["config_paths"].take() {
+        Value::Array(paths) => paths,
+        _ => return Err(Failure::Invalid),
+    };
     let config = managed_config_path(ctx);
     let shim = ctx.guard_home.join("bin").join("guard-opencode");
     let plugin = global_plugin(ctx);
@@ -353,32 +360,6 @@ fn scan(ctx: &Ctx, warnings: &mut Vec<String>) -> Step<Vec<Scanned>> {
     Ok(scanned)
 }
 
-fn before_digest(before: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    hex::encode(Sha256::digest(before))
-}
-
-/// `refresh_scan`: each refreshable companion, the proxy arguments its new
-/// command is built from and a digest of the config it was read from.
-pub(super) fn refresh_scan(ctx: &Ctx) -> Step<Value> {
-    let mut warnings = Vec::new();
-    let candidates: Vec<Value> = scan(ctx, &mut warnings)?
-        .iter()
-        .flat_map(|config| {
-            let digest = before_digest(&config.before);
-            config.companions.iter().map(move |(name, _, args)| {
-                json!({
-                    "path": path_text(&config.path),
-                    "name": name,
-                    "proxy_args": args,
-                    "digest": digest,
-                })
-            })
-        })
-        .collect();
-    Ok(json!({ "candidates": candidates, "warnings": warnings }))
-}
-
 fn write_existing(ctx: &Ctx, path: &Path, before: &[u8], after: &[u8], mode: u32) -> Step<()> {
     let path = ctx.absolute(path);
     let unchanged =
@@ -417,36 +398,40 @@ fn write_existing(ctx: &Ctx, path: &Path, before: &[u8], after: &[u8], mode: u32
     Ok(())
 }
 
-/// `refresh_apply`: rewrite each companion whose command moved, given the
-/// new commands Python built, and answer how many were refreshed.
-pub(super) fn refresh_apply(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let raw = fields
-        .get("commands")
-        .and_then(Value::as_str)
-        .ok_or(Failure::Invalid)?;
-    let PyVal::List(commands) = pyjson::parse(raw).map_err(|_| Failure::Invalid)? else {
-        return Err(Failure::Invalid);
+/// `_guard_proxy_command`: a companion's new command, built from the
+/// caller's hook interpreter and relayed when the caller selects a relay. A
+/// frozen launcher runs the proxy without the module prefix.
+fn refresh_command(ctx: &Ctx, proxy_args: &[String]) -> Step<PyVal> {
+    let python = caller::hook_python(ctx)?;
+    let argv: Vec<String> = if caller::frozen(ctx)? {
+        std::iter::once(python.to_owned())
+            .chain(proxy_args.iter().cloned())
+            .collect()
+    } else {
+        let args: Vec<String> = MODULE_PREFIX
+            .iter()
+            .map(|part| (*part).to_owned())
+            .chain(proxy_args.iter().cloned())
+            .collect();
+        let (command, args) = proxy_launch::relay_launch(ctx, python, &args)?;
+        std::iter::once(command).chain(args).collect()
     };
-    let lookup = |path: &Path, name: &str| {
-        commands.iter().find(|entry| {
-            entry.get("path").and_then(PyVal::as_str) == Some(path_text(path).as_str())
-                && entry.get("name").and_then(PyVal::as_str) == Some(name)
-        })
-    };
+    Ok(PyVal::List(argv.iter().map(text).collect()))
+}
+
+/// `refresh_apply`: rewrite each companion whose command moved, and answer
+/// how many were refreshed and the configs that could not be read.
+pub(super) fn refresh_apply(ctx: &Ctx) -> Step<Value> {
+    let mut warnings = Vec::new();
+    let scanned = scan(ctx, &mut warnings)?;
     let mut refreshed = 0usize;
     let mut writes = Vec::new();
-    for config in scan(ctx, &mut Vec::new())? {
+    for config in scanned {
         let mut text = config.text.clone();
         let mut changed = false;
-        let digest = before_digest(&config.before);
-        for (name, current, _) in &config.companions {
-            let entry = lookup(&config.path, name).ok_or(Failure::Integrity("target_changed"))?;
-            // The config moved after the scan Python built these commands from.
-            if entry.get("digest").and_then(PyVal::as_str) != Some(digest.as_str()) {
-                return Err(Failure::Refusal(CHANGED.into()));
-            }
-            let command = entry.get("command").ok_or(Failure::Invalid)?;
-            if current.as_ref() == Some(command) {
+        for (name, current, args) in &config.companions {
+            let command = refresh_command(ctx, args)?;
+            if current.as_ref() == Some(&command) {
                 continue;
             }
             let wire = command.to_json().ok_or(Failure::Invalid)?;
@@ -482,5 +467,5 @@ pub(super) fn refresh_apply(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Valu
         }
         applied.push(write);
     }
-    Ok(json!({ "refreshed": refreshed }))
+    Ok(json!({ "refreshed": refreshed, "warnings": warnings }))
 }

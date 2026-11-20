@@ -138,6 +138,7 @@ fn dispatch(kind: &str, input: &Obj) -> Option<Handled> {
         .or_else(|| crate::policy_bundle_op_keys::handle(kind, input))
         .or_else(|| crate::policy_bundle_op_delivery::handle(kind, input))
         .or_else(|| crate::policy_bundle_op_review::handle(kind, input))
+        .or_else(|| crate::policy_bundle_rejection::handle(kind, input))
 }
 
 fn respond(

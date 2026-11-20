@@ -83,6 +83,13 @@ assert.match(builds, /disabled="">Get this version/);
 assert.match(builds, /Build details/);
 const pythonBuild = catalog.interpreter_builds[0].build_id;
 assert.ok(builds.includes(">Build: " + pythonBuild + "<"), "the Python build ID is readable text, not only a hover title");
+const builtinInstall = { runtime_id: "builtin", qualification: "guard_builtin" as const, sdk_version: "0.14.2", core_version: "0.14.2",
+  build_id: null, adapter_id: "guard-cigar-builtin-v1", adapter_revision: 1, managed: false, builtin: true, python_version: null,
+  platform: "darwin-arm64", worker_fingerprint: "b".repeat(64) };
+const withBuiltin = renderToStaticMarkup(<CigarVersionBuildsPanel data={{ ...data, installations: [builtinInstall] }} status={state}
+  disabled={false} selectionDisabled={false} onAction={noAction} />);
+assert.ok(withBuiltin.indexOf("Built into Guard") >= 0 && withBuiltin.indexOf("Built into Guard") < withBuiltin.indexOf("Get this version"),
+  "the built-in engine is listed before downloadable builds");
 const preferences = renderToStaticMarkup(<CigarUpdatePreferencesPanel value={updates} builds={catalog.builds} disabled={false} onAction={noAction} />);
 assert.match(preferences, /notifications and automatic preparation are not available/);
 assert.match(preferences, /aria-disabled="true"[^>]*><span[^>]*>Notify</);

@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::time::SystemTime;
 
 use super::*;

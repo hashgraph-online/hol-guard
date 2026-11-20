@@ -15,15 +15,17 @@ const GUARD_EXECUTABLES: [&str; 5] = [
     "plugin-guard",
     "plugin-guard.exe",
 ];
-const GUARD_MARKERS: [&str; 12] = [
+const GUARD_MARKERS: [&str; 14] = [
     "hol_guard_managed",
     "hol guard managed",
     "hol_guard_claude_daemon_hook",
     "hol_guard_claude_session_start_hook",
     "hol-guard-codex-hook",
+    "codex-hook-bridge",
     "hol-guard-cursor-hook",
     "hol_guard_hook_argv",
     "__guard-bounded-hook",
+    "bounded-hook-bridge",
     "codex_daemon_hook_bridge",
     "claude_daemon_hook_bridge",
     "bounded_cli_hook_bridge",

@@ -5,8 +5,9 @@
 //! links, no hidden entries outside a short benign list and no
 //! credential-named files. The copy must create a new path. An existing target
 //! would merge into or overwrite files, so it stays reviewed. The new path
-//! lands in the workspace under the same write screen as `mkdir`, and never
-//! inside the source tree.
+//! lands in the workspace under the same write screen as `mkdir`, or at a new
+//! path the user spelled absolutely in a private temporary directory, and
+//! never inside the source tree.
 use super::read_paths::expand_home_read_path;
 use std::path::{Path, PathBuf};
 
@@ -35,7 +36,7 @@ pub(super) fn safe_recursive_copy_arguments(
     ) else {
         return false;
     };
-    if guard_secure_fs::contains_symlink_component(&source_path) {
+    if guard_secure_fs::contains_symlink_component(&below_system_links(&source_path)) {
         return false;
     }
     let Ok(metadata) = source_path.symlink_metadata() else {
@@ -71,12 +72,25 @@ pub(super) fn safe_recursive_copy_arguments(
     let Some(target_text) = target.to_str() else {
         return false;
     };
-    super::safe_writes::bounded_new_directory_write_target(
+    (super::safe_writes::bounded_new_directory_write_target(
         target_text,
         context.home_dir,
         context.cwd,
-    ) && super::worktree_writes::canonical_write_target(&target)
-        .is_some_and(|canonical| !canonical.starts_with(&source_root))
+    ) || super::safe_writes::new_temporary_tree_target(destination, &target, context))
+        && super::worktree_writes::canonical_write_target(&target)
+            .is_some_and(|canonical| !canonical.starts_with(&source_root))
+}
+
+/// macOS spells `/tmp` and `/var` through links in `/` into `/private`. Only
+/// the system can change those two, so the link screen starts below them.
+fn below_system_links(path: &Path) -> PathBuf {
+    ["/tmp", "/var"]
+        .into_iter()
+        .find_map(|root| {
+            let rest = path.strip_prefix(root).ok()?;
+            Some(std::fs::canonicalize(root).ok()?.join(rest))
+        })
+        .unwrap_or_else(|| path.to_path_buf())
 }
 
 fn names_the_tree(source: &str) -> bool {
@@ -86,8 +100,16 @@ fn names_the_tree(source: &str) -> bool {
         .is_some_and(|last| !matches!(last, "" | "." | ".."))
 }
 
+/// `-R`, `-r` or `--recursive`, or `-R`/`-r` joined with `-c`, `-p` or `-v`,
+/// which change neither what is read nor where it lands.
 fn recursive_flag(flag: &str) -> bool {
-    matches!(flag, "-R" | "-r" | "--recursive")
+    flag == "--recursive"
+        || flag.strip_prefix('-').is_some_and(|letters| {
+            letters.contains(['R', 'r'])
+                && letters
+                    .chars()
+                    .all(|letter| matches!(letter, 'R' | 'r' | 'c' | 'p' | 'v'))
+        })
 }
 
 fn operand_path(value: &str, context: super::PathContext<'_>) -> Option<PathBuf> {

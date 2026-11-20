@@ -19,6 +19,14 @@
       "recording:write"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "zoom"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "zoom.meetings.list",

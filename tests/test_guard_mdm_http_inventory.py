@@ -94,10 +94,7 @@ def test_external_runtime_paths_import_the_managed_transport() -> None:
         "cli/update_commands.py",
         "catalog_delivery/transport.py",
         "local_supply_chain.py",
-        "plugin_telemetry/report.py",
         "proxy/remote.py",
-        "runtime/runner.py",
-        "runtime/verified_github_reads.py",
     }
     missing: list[str] = []
     for relative in sorted(expected_managed_paths):

@@ -5,6 +5,14 @@
 //! to write a backslash twice. The map names the command that runs just that
 //! function's doctest: shown none, agents guessed a pytest node id, then ran
 //! the whole module, its tests, and read the file again after the edit.
+//! An agent wrote the expected output from memory, saw the run fail, then
+//! called the function again or read the file to find the value; the failed
+//! run already printed it under `Got:`, so the note says to copy that. It does
+//! not say to copy it unchanged: a backslash still goes in twice when the
+//! docstring is not raw. It names only an example the agent added: an example
+//! already there states what the function should return, and a failure there
+//! is the code's to fix. A default `repr` holds a memory address, which
+//! differs on the next run, so copying it would fail that run.
 //! `python -m doctest` loads a file outside its package, so a module with
 //! relative imports fails there.
 use super::super::seen::Span;
@@ -30,8 +38,11 @@ const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in
 twice (`\\\\n` shows as `\\n`).";
 const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modules {path}`: \
 `python -m doctest` loads the file outside its package, so its relative imports fail.";
-const DOCTEST: &str = "\nRun just its doctest with `{command}`. That run is the check an added \
-example needs, and the edit's own reply confirms the edit, so the file need not be read again.";
+const DOCTEST: &str = "\nRun just its doctest with `{command}`. If an example you added fails, \
+write the value it prints under `Got:` into that example and run it again: it stops at the first \
+failure. A memory address such as `0x7f3a` in that value changes every run, so show a value without \
+one. A passing run is the check an added example needs, and the edit's own reply confirms \
+the edit, so the file need not be read again.";
 const DOCTEST_AGAIN: &str = "\nRun just its doctest with `{command}`.";
 const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
 relative imports fail.";
@@ -292,4 +303,20 @@ fn plain(path: &str) -> bool {
 /// Whether a Python file imports from its own package by a relative import.
 fn relative(file: &File) -> bool {
     (file.lines.iter()).any(|line| line.trim_start().starts_with("from ."))
+}
+
+/// Whether a named definition is shown whole after another was. Claude Code
+/// reads a file before editing it, so there only the first is, and a short
+/// constructor, whose fields the other methods use, named on the first line
+/// after any decorators, attributes or doc comments. A long one would push
+/// the rest of the note past the hook's size limit.
+pub(super) fn whole_here(asked: &Asked, shown_any: bool, code: &str) -> bool {
+    const SHORT_BUILD_CHARS: usize = 600;
+    let head = (code.lines())
+        .find(|line| !line.trim_start().starts_with(['@', '#', '/', '*']))
+        .unwrap_or_default();
+    let builds = ["__init__(", "__new__(", "constructor(", "fn new("];
+    let short_build =
+        code.len() <= SHORT_BUILD_CHARS && builds.iter().any(|name| head.contains(name));
+    !shown_any || asked.lookup || !asked.reads_first || short_build
 }

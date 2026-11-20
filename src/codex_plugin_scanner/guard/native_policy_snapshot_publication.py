@@ -29,6 +29,8 @@ from .native_policy_snapshot_direct_lane_saved import refresh_integrity_state, w
 from .native_policy_snapshot_direct_lane_structured import bound_structured_output_view, with_structured_output_view
 from .native_policy_snapshot_harness_postures import (
     HARNESS_POSTURES_BINDING_KEY,
+    sidecar_generation_to_retire,
+    signed_watch_ends,
     valid_harness_postures,
     write_harness_postures_sidecar,
 )
@@ -264,6 +266,15 @@ class NativePolicySnapshotPublicationMixin:
                 return
             identity, capabilities, master_key, config, command_extensions, client = context
             bound_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
+            bound_watch_ends = signed_watch_ends(bound_postures, publisher._compiled_watch_ends)
+            # A posture-only change keeps the materialized generation. Move
+            # past the sidecar's, so a publish that stops before the new
+            # sidecar is written leaves the old one bound to nothing.
+            retired_generation = sidecar_generation_to_retire(
+                publisher.store, postures=bound_postures, watch_ends=bound_watch_ends
+            )
+            if retired_generation is not None:
+                renew_after_generation = max(renew_after_generation or 0, retired_generation)
             direct_lane = with_direct_hook_state(
                 direct_lane,
                 home_dir=publisher._direct_lane_home_dir(),
@@ -395,6 +406,7 @@ class NativePolicySnapshotPublicationMixin:
                         generation=cast(int, snapshot["generation"]),
                         policy_digest=cast(str, snapshot["policy_digest"]),
                         postures=bound_postures,
+                        watch_ends=bound_watch_ends,
                     )
                     publisher._acked = True
                     if publisher._harness_postures == bound_postures:

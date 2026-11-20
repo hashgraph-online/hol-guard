@@ -3,7 +3,7 @@
 use super::*;
 
 /// One automatic attempt per window, so a runtime that keeps failing settles.
-const RETRY: Duration = Duration::from_secs(30);
+pub(super) const RETRY: Duration = Duration::from_secs(30);
 /// Callers sit behind an 8 second transport budget and still need their call.
 const WAIT: Duration = Duration::from_secs(4);
 /// A worker that stops this soon after starting is broken, not resting.

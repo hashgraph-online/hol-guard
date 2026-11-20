@@ -12,6 +12,7 @@ mod sources;
 #[path = "git_worktree_tracking.rs"]
 mod tracking;
 
+pub(super) use hooks::tree_names_any;
 use hooks::{hooks_are_inert, repository_hooks_inert};
 pub(super) use links::tracked_directory_with_free_name;
 use sources::{expand_config_path, safe_worktree_config, ConfigFacts};

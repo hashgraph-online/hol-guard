@@ -11,7 +11,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from codex_plugin_scanner.guard.text import ensure_terminal_punctuation as _ensure_terminal_punctuation
+
+def _ensure_terminal_punctuation(message: str | None) -> str:
+    trimmed = (message or "").strip()
+    if not trimmed or trimmed.endswith((".", "!", "?")):
+        return trimmed
+    return f"{trimmed}."
 
 
 def _canonical_harness_name(value: str) -> str:

@@ -9,14 +9,10 @@ from unittest import mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -50,7 +46,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = ClaudeCodeHarnessAdapter().detect(context)
+        detection = harness_ops.detect("claude-code", context)
     elif adapter_name == "codex":
         config_path = context.home_dir / ".codex" / "config.toml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +62,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = CodexHarnessAdapter().detect(context)
+        detection = harness_ops.detect("codex", context)
     else:
         config_path = context.home_dir / ".cursor" / "mcp.json"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,7 +80,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = CursorHarnessAdapter().detect(context)
+        detection = harness_ops.detect("cursor", context)
     artifact = next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     return detection, artifact
 
@@ -161,8 +157,8 @@ def _secondary_mcp_artifact(
         )
         with mock.patch.dict(os.environ):
             os.environ.pop("GROK_HOME", None)
-            detection = get_adapter("grok").detect(
-                HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
+            detection = harness_ops.detect(
+                "grok", HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
             )
         return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     if adapter_name == "hermes":
@@ -172,16 +168,16 @@ def _secondary_mcp_artifact(
         with mock.patch.dict(os.environ):
             os.environ.pop("HERMES_HOME", None)
             os.environ.pop("HERMES_HOST_HOME", None)
-            detection = HermesHarnessAdapter().detect(
-                HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
+            detection = harness_ops.detect(
+                "hermes", HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
             )
         return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
     config_path = root / "home" / ".zcode" / "cli" / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcp": {"servers": {"value-proof": server}}}), encoding="utf-8")
-    detection = get_adapter("zcode").detect(
-        HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
+    detection = harness_ops.detect(
+        "zcode", HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
     )
     return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
@@ -206,7 +202,7 @@ def _claude_header_artifact(
         ),
         encoding="utf-8",
     )
-    detection = ClaudeCodeHarnessAdapter().detect(context)
+    detection = harness_ops.detect("claude-code", context)
     return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
 

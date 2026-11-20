@@ -12,7 +12,6 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard.adapters.grok_approval_resume import wait_for_grok_live_approval
 from codex_plugin_scanner.guard.approvals import wait_for_approval_requests
 from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_review import _run_guard_cloud_review_command
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -323,18 +322,6 @@ def test_signed_deny_is_block_to_real_waiter_and_grok_harness(
     assert isinstance(waited_items, list)
     assert isinstance(waited_items[0], dict)
     assert waited_items[0]["resolution_action"] == "block"
-    payload: dict[str, object] = {"approval_requests": [{"request_id": "request-deny"}]}
-    assert (
-        wait_for_grok_live_approval(
-            event_name="PreToolUse",
-            policy_action="require-reapproval",
-            response_payload=payload,
-            store=store,
-            timeout_seconds=1,
-            json_mode=False,
-        )
-        == "block"
-    )
 
 
 def test_staged_snapshot_substitution_is_rejected_before_sqlite_application(

@@ -65,9 +65,8 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_network_grant_engine.py",
     ),
     "REM-126": (
-        "tests/test_guard_network_supervisor.py",
+        "rust/crates/guard-runtime/src/daemon_edge_network_tests.rs",
         "tests/test_guard_daemon_recovery_resilience.py",
-        "tests/test_guard_provider_recovery.py",
     ),
     "REM-127": ("tests/test_guard_network_capability_reachability.py",),
     "REM-128": (

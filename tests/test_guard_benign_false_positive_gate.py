@@ -36,7 +36,13 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import cursor_hook_fields, cursor_route_probe, omp_routes_profile, source_ref_payload
+from tests.gauntlet_replay import (
+    cursor_grep_input,
+    cursor_hook_fields,
+    cursor_route_probe,
+    omp_routes_profile,
+    source_ref_payload,
+)
 from tests.native_gate_retry import BUDGET_MISS_REASONS, RetryApprovals, review_with_unavailable_retry
 from tests.outbound_network_guard import outbound_network_attempts
 
@@ -59,7 +65,7 @@ _SHELL_TOOL = {
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
-_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "Grep"}
+_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "grep", "cursor": "Grep"}
 _WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write", "cursor": "Write"}
 _FIXED_TOOLS = {
     "eval": "eval",
@@ -78,8 +84,12 @@ _FIXED_TOOLS = {
     "agent": "Agent",
     # Grok's keyword search over its configured integration (MCP) tools.
     "search_tool": "search_tool",
+    # Grok's folder listing: a tree of entry names below `target_directory`.
+    "list_dir": "list_dir",
     # Oh My Pi's hashline edit: one `input` patch plus the `path`/`paths` copies it derives.
     "edit": "edit",
+    # Oh My Pi's session-state bookkeeping: an `op` plus the objective and budget it carries.
+    "goal": "goal",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
@@ -189,6 +199,8 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
+    if case.harness == "cursor" and case.tool == "grep":
+        resolved = cursor_grep_input(resolved)
     if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved

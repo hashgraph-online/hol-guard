@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import fleet_posture as fp
 from codex_plugin_scanner.guard.runtime import fleet_posture_runtimes as fpr
 from codex_plugin_scanner.guard.runtime.fleet_posture_common import keyed_digest

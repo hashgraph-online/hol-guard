@@ -193,6 +193,7 @@ fn replay(vector: &Value) -> Value {
     let mut expected = match outcome {
         Outcome::Resume(resume) => json!({ "result": resume }),
         Outcome::Refused(error) => json!({ "error": error }),
+        Outcome::Capabilities { .. } => unreachable!("the vectors never ask for capabilities"),
     };
     expected["dispatch_calls"] = json!(sent.into_inner());
     expected["final_row"] = final_row(&connection, request_id);

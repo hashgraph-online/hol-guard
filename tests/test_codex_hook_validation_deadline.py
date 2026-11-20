@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import threading
 import time
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_bridge_runtime as bridge_runtime
 from codex_plugin_scanner.guard import codex_hook_file_integrity as files
 from codex_plugin_scanner.guard import codex_hook_integrity as manifests
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launches
@@ -18,42 +16,37 @@ def test_expired_validation_reads_no_authority_or_executable(monkeypatch):
         raise AssertionError("expired operation started identity validation")
 
     monkeypatch.setattr(trust, "validate_codex_hook_launch", forbidden)
-    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"):
-        bridge_runtime.trusted_hook_launch(
+    with (
+        pytest.raises(files.CodexHookIntegrityError, match="exhausted"),
+        files.hook_validation_deadline(time.monotonic() - 1),
+    ):
+        trust.validate_codex_hook_launch(
             manifest_path="/isolated/manifest.json",
             state_path="/isolated/guard/daemon.json",
             fallback_command=("fixture",),
             start_command=("fixture",),
             config_json="{}",
-            deadline_monotonic=time.monotonic() - 1,
         )
 
 
-def test_hashing_stops_after_the_chunk_that_exhausts_original_budget(tmp_path, monkeypatch):
-    path = tmp_path / "module.py"
-    path.write_bytes(b"fixture")
-    clock, reads = [5.0], []
+def test_a_runtime_answer_after_the_original_budget_is_refused(monkeypatch):
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    clock, asked = [5.0], []
     monkeypatch.setattr(files.time, "monotonic", lambda: clock[0])
 
-    class SlowFile:
-        def __enter__(self):
-            return self
+    def slow_runtime(kind, request, **kwargs):
+        asked.append(kwargs["deadline_monotonic"])
+        clock[0] = 11.0
+        return {"ok": True}
 
-        def __exit__(self, *args):
-            return False
-
-        def read(self, size):
-            reads.append(size)
-            clock[0] = 11.0
-            return b"fixture"
-
-    with monkeypatch.context() as patch:
-        patch.setattr(type(path), "open", lambda *args, **kwargs: SlowFile())
-        with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
-            files._sha256_file(path)
-    assert reads == [1024 * 1024]
+    monkeypatch.setattr(authority, "native_runner_authority", slow_runtime)
+    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
+        files.verify_regular_file_identity({})
+    assert asked == [10]
     # A failed validator cannot leave a deadline attached to later operations.
-    assert files._sha256_file(path) == hashlib.sha256(b"fixture").hexdigest()
+    files.verify_regular_file_identity({})
+    assert asked == [10, None]
 
 
 def test_nested_and_legacy_validation_scopes_cannot_renew_original_budget(tmp_path, monkeypatch):
@@ -68,10 +61,10 @@ def test_nested_and_legacy_validation_scopes_cannot_renew_original_budget(tmp_pa
                 files.hook_validation_deadline(nested),
             ):
                 clock[0] = 11.0
-                files._sha256_file(path)
+                files.check_hook_validation_deadline()
             clock[0] = 5.0
     clock[0] = 11.0
-    assert files._sha256_file(path) == hashlib.sha256(b"fixture").hexdigest()
+    assert files.check_hook_validation_deadline() is None
 
 
 def test_expiry_after_manifest_read_does_not_read_authority_key(tmp_path, monkeypatch):
@@ -81,15 +74,15 @@ def test_expiry_after_manifest_read_does_not_read_authority_key(tmp_path, monkey
     clock = [5.0]
     monkeypatch.setattr(files.time, "monotonic", lambda: clock[0])
 
-    def slow_read(*args, **kwargs):
+    from codex_plugin_scanner.guard import codex_hook_authority_record as authority
+
+    def slow_runtime(*args, **kwargs):
+        # The runtime reads the manifest and key in one call; an answer that
+        # arrives after the deadline is not trusted.
         clock[0] = 11.0
-        return "{}"
+        return {"harness": "codex"}
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("expired manifest validation read authority key")
-
-    monkeypatch.setattr(manifests, "read_private_regular_text", slow_read)
-    monkeypatch.setattr(manifests, "load_hook_secret", forbidden)
+    monkeypatch.setattr(authority, "authenticated_manifest", slow_runtime)
     with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
         manifests.load_authenticated_hook_manifest_path(tmp_path, path)
 
@@ -104,7 +97,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
 
     def other_validator():
         try:
-            results.append(files._sha256_file(path))
+            results.append(files.check_hook_validation_deadline())
         except Exception as error:
             results.append(error)
 
@@ -113,7 +106,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
         thread.start()
         thread.join(timeout=1)
         assert not thread.is_alive()
-    assert results == [hashlib.sha256(b"fixture").hexdigest()]
+    assert results == [None]
 
 
 @pytest.mark.parametrize("deadline", [float("nan"), float("inf"), True])
@@ -144,7 +137,7 @@ def test_expired_authenticated_context_cannot_start_a_child_with_fresh_budget(tm
     def forbidden(*args, **kwargs):
         raise AssertionError("expired authenticated context launched a child")
 
-    monkeypatch.setattr(launches, "_spawn_hook_process", forbidden)
+    monkeypatch.setattr(launches, "_exchange", forbidden)
     context = trust.TrustedCodexHookLaunch(tmp_path, {}, deadline_monotonic=4)
     assert not context.run_start(("fixture",), timeout_seconds=99)
     assert context.run_fallback(("fixture",), data="{}", timeout_seconds=99) is None
@@ -160,14 +153,13 @@ def test_successful_validator_returned_after_deadline_cannot_publish_a_launch_co
         return trust.TrustedCodexHookLaunch(tmp_path, {}, deadline_monotonic=observed[0])
 
     monkeypatch.setattr(trust, "validate_codex_hook_launch", slow_validator)
-    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"):
-        bridge_runtime.trusted_hook_launch(
+    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
+        trust.validate_codex_hook_launch(
             manifest_path="/isolated/manifest.json",
             state_path="/isolated/guard/daemon.json",
             fallback_command=("fixture",),
             start_command=("fixture",),
             config_json="{}",
-            deadline_monotonic=10,
         )
     assert observed == [10]
 

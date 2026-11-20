@@ -404,3 +404,15 @@ fn a_standalone_daemon_refuses_a_guarded_post_before_its_body_arrives() {
         );
     }
 }
+
+#[test]
+fn an_idle_timeout_too_large_for_a_duration_means_no_idle_exit() {
+    assert_eq!(idle_timeout(Some(1e308)), None);
+    assert_eq!(idle_timeout(Some(f64::INFINITY)), None);
+    assert_eq!(idle_timeout(Some(0.0)), None);
+    assert_eq!(idle_timeout(None), None);
+    assert_eq!(
+        idle_timeout(Some(1.5)),
+        Some(std::time::Duration::from_millis(1500))
+    );
+}

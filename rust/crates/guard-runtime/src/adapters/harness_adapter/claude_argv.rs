@@ -3,27 +3,36 @@
 //! frozen or source-checkout form.
 //!
 //! Python answers a `{"reply": {"facts": null}}` with what only the Guard
-//! process knows: the native runtimes that carry each hook feature, whether it
-//! is a frozen build and its stable launcher, its interpreter and package
-//! root, the daemon URL, the query extras the attributed harness adds, and the
-//! daemon recovery commands.
+//! process knows: the daemon URL and the query extras the attributed harness
+//! adds. The caller's frozen state, launchers, interpreter, package root and
+//! the native runtimes that carry each hook feature come from the request's
+//! `caller` stamp.
+
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
 use super::cursor::get;
-use super::{path_text, Ctx, Failure, Step};
+use super::{path_text, proxy_launch, Ctx, Failure, Step};
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::claude_hook_plan::py_repr_str;
 use crate::claude_session_start_contract::{
     bridge_config_text, DaemonHookTemplate, HookGroupsContract,
 };
 use crate::hook_env_stamp::json_string;
+use crate::hook_process_spawn::isolated_daemon_start_command;
 use crate::pyjson::{self, PyVal};
 
 pub(super) const NATIVE_COMMAND: &str = "claude-hook-bridge";
+/// The refusal an install without a native runtime answers.
+pub(super) const RUNTIME_MISSING: &str =
+    "HOL Guard's native runtime is missing, so Guard cannot review hooks. Run `hol-guard repair`.";
+const HOOK_FEATURE: &str = "claude-hook-bridge-v1";
+const SESSION_START_FEATURE: &str = "claude-session-start-v1";
 const SESSION_START_MODE: &str = "session-start";
 const FROZEN_COMMAND: &str = "__guard-claude-hook";
 
-/// What the Guard process answered for `facts`.
+/// The caller's stamp and what the Guard process answered for `facts`.
 pub(super) struct Facts {
     /// The runtime that carries `claude-hook-bridge-v1`.
     bridge: Option<String>,
@@ -36,11 +45,9 @@ pub(super) struct Facts {
     python: String,
     package_root: String,
     daemon_url: String,
-    query_extras: Vec<(String, String)>,
-    /// The daemon recovery command for the caller's own home.
-    recovery_home: Option<Vec<String>>,
-    /// The daemon recovery command for the context's home.
-    recovery_context: Option<Vec<String>>,
+    /// `resolve_frozen_guard_cli()`: the program a frozen build recovers
+    /// its daemon through.
+    recovery_launcher: Option<String>,
 }
 
 fn optional_text(value: Option<&PyVal>) -> Step<Option<String>> {
@@ -55,24 +62,8 @@ fn required_text(value: Option<&PyVal>) -> Step<String> {
     optional_text(value)?.ok_or(Failure::Invalid)
 }
 
-fn strings(value: &PyVal) -> Step<Vec<String>> {
-    value
-        .as_list()
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect()
-}
-
-fn optional_strings(value: Option<&PyVal>) -> Step<Option<Vec<String>>> {
-    match value {
-        None | Some(PyVal::Null) => Ok(None),
-        Some(value) => strings(value).map(Some),
-    }
-}
-
 /// The facts merged into this request, or the reply that asks for them.
-pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
+pub(super) fn facts(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Facts> {
     let Some(raw) = fields.get("facts") else {
         return Err(Failure::Reply(json!({ "facts": null })));
     };
@@ -80,27 +71,31 @@ pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
     let Ok(PyVal::Dict(facts)) = pyjson::parse(raw) else {
         return Err(Failure::Invalid);
     };
-    let query_extras = get(&facts, "query_extras")
-        .and_then(PyVal::as_list)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|pair| match strings(pair)?.as_slice() {
-            [key, value] => Ok((key.clone(), value.clone())),
-            _ => Err(Failure::Invalid),
-        })
-        .collect::<Step<Vec<_>>>()?;
+    let frozen = super::caller::frozen(ctx)?;
+    let guard_home = Some(ctx.guard_home.as_path());
+    let bridge = proxy_launch::bridge(ctx, HOOK_FEATURE, guard_home)?;
+    let session_runtime = proxy_launch::bridge(ctx, SESSION_START_FEATURE, guard_home)?;
+    // One runtime carries both hooks, so its build is the running binary's.
+    let runtime_build = (bridge.is_some() && bridge == session_runtime)
+        .then(crate::claude_session_start::runtime_build);
     Ok(Facts {
-        bridge: optional_text(get(&facts, "bridge"))?,
-        session_runtime: optional_text(get(&facts, "session_runtime"))?,
-        runtime_build: optional_text(get(&facts, "runtime_build"))?,
-        frozen: matches!(get(&facts, "frozen"), Some(PyVal::Bool(true))),
-        launcher: optional_text(get(&facts, "launcher"))?,
-        python: required_text(get(&facts, "python"))?,
-        package_root: required_text(get(&facts, "package_root"))?,
+        bridge,
+        session_runtime,
+        runtime_build,
+        frozen,
+        launcher: if frozen {
+            Some(super::caller::launcher(ctx)?.to_owned())
+        } else {
+            None
+        },
+        python: super::caller::executable(ctx)?.to_owned(),
+        package_root: super::caller::package_root(ctx)?.to_owned(),
         daemon_url: required_text(get(&facts, "daemon_url"))?,
-        query_extras,
-        recovery_home: optional_strings(get(&facts, "recovery_home"))?,
-        recovery_context: optional_strings(get(&facts, "recovery_context"))?,
+        recovery_launcher: if frozen {
+            Some(super::caller::frozen_launcher(ctx)?.to_owned())
+        } else {
+            None
+        },
     })
 }
 
@@ -149,7 +144,13 @@ pub(super) fn hook_argv(ctx: &Ctx, facts: &Facts) -> Step<Vec<String>> {
 }
 
 /// `urlencode(_hook_query(context, extras))`; an extra replaces a key in place.
-fn query(ctx: &Ctx, extras: &[(String, String)]) -> String {
+/// The hook query names only where Guard keeps its state. These hooks live
+/// in the user's Claude settings and run in every Claude session, so the
+/// installer's own environment says nothing about which app a later hook
+/// runs in. A harness or workspace taken from it, such as the Cursor markers
+/// of a repair that ran inside Cursor, was written into every hook and filed
+/// all Claude sessions under that app and that one project.
+fn query(ctx: &Ctx) -> String {
     let mut pairs = vec![("guard-home".to_owned(), path_text(&ctx.guard_home))];
     if !ctx.default_home() {
         pairs.push(("home".to_owned(), path_text(&ctx.home)));
@@ -157,24 +158,31 @@ fn query(ctx: &Ctx, extras: &[(String, String)]) -> String {
     if let Some(workspace) = workspace(ctx) {
         pairs.push(("workspace".to_owned(), workspace));
     }
-    for (key, value) in extras {
-        match pairs.iter_mut().find(|(name, _)| name == key) {
-            Some(pair) => pair.1 = value.clone(),
-            None => pairs.push((key.clone(), value.clone())),
-        }
-    }
     crate::runner_sync_url::urlencode(&pairs)
 }
 
-/// The recovery command the bridge config carries: the query names the home
-/// only when it is not the caller's own.
-fn recovery<'a>(ctx: &Ctx, facts: &'a Facts) -> Step<&'a [String]> {
-    let recovery = if ctx.default_home() {
-        &facts.recovery_home
+/// The recovery command the bridge config carries (`_recovery`): it binds
+/// the caller's own home unless the context names another one.
+fn recovery(ctx: &Ctx, facts: &Facts) -> Step<Vec<String>> {
+    if facts.bridge.is_none() {
+        return Err(Failure::Invalid);
+    }
+    let home = if ctx.default_home() {
+        &ctx.user_home
     } else {
-        &facts.recovery_context
+        &ctx.home
     };
-    recovery.as_deref().ok_or(Failure::Invalid)
+    if facts.frozen {
+        // A frozen desktop core cannot run the Python `-I -c` bootstrap.
+        let launcher = facts.recovery_launcher.as_deref().ok_or(Failure::Invalid)?;
+        return frozen_recovery_command(launcher, &ctx.guard_home, home).ok_or(Failure::Invalid);
+    }
+    Ok(isolated_daemon_start_command(
+        &facts.python,
+        Path::new(&facts.package_root),
+        &ctx.guard_home,
+        Some(home),
+    ))
 }
 
 /// `bridge_config_template`: the daemon hook config, less the daemon URL.
@@ -182,19 +190,15 @@ struct Template {
     state_path: String,
     fallback_command: Vec<String>,
     query: String,
-    recovery_command: Option<Vec<String>>,
+    recovery_command: Vec<String>,
 }
 
-fn template(ctx: &Ctx, facts: &Facts, query: String, native: bool) -> Step<Template> {
+fn template(ctx: &Ctx, facts: &Facts, query: String) -> Step<Template> {
     Ok(Template {
         state_path: path_text(&ctx.guard_home.join("daemon-state.json")),
         fallback_command: hook_argv(ctx, facts)?,
         query,
-        recovery_command: if native {
-            Some(recovery(ctx, facts)?.to_vec())
-        } else {
-            None
-        },
+        recovery_command: recovery(ctx, facts)?,
     })
 }
 
@@ -217,9 +221,10 @@ impl Template {
             format!("\"fallback_command\":{}", list(&self.fallback_command)),
             format!("\"query\":{}", json_string(&self.query, false, false)),
         ];
-        if let Some(recovery) = &self.recovery_command {
-            parts.push(format!("\"recovery_command\":{}", list(recovery)));
-        }
+        parts.push(format!(
+            "\"recovery_command\":{}",
+            list(&self.recovery_command)
+        ));
         format!("{{{}}}", parts.join(","))
     }
 
@@ -229,9 +234,7 @@ impl Template {
         config.insert("state_path".into(), json!(self.state_path));
         config.insert("fallback_command".into(), json!(self.fallback_command));
         config.insert("query".into(), json!(self.query));
-        if let Some(recovery) = &self.recovery_command {
-            config.insert("recovery_command".into(), json!(recovery));
-        }
+        config.insert("recovery_command".into(), json!(self.recovery_command));
         let template = DaemonHookTemplate {
             command: Vec::new(),
             bridge_config: config,
@@ -240,40 +243,24 @@ impl Template {
     }
 }
 
-/// `daemon_hook_command_parts`: the native bridge, else the frozen launcher,
-/// else the source checkout's compatibility bridge.
+/// `daemon_hook_command_parts`: the native bridge. Without a runtime there
+/// is nothing to review a hook, so installation stops and asks for repair.
 pub(super) fn daemon_argv(
     ctx: &Ctx,
     facts: &Facts,
     contract: &HookGroupsContract,
 ) -> Step<Vec<String>> {
-    let query = query(ctx, &facts.query_extras);
-    let template = template(ctx, facts, query, facts.bridge.is_some())?;
+    let Some(bridge) = &facts.bridge else {
+        return Err(Failure::Runtime(RUNTIME_MISSING.to_owned()));
+    };
+    let template = template(ctx, facts, query(ctx))?;
     let config = template.text(contract, &facts.daemon_url)?;
-    let marker = contract.daemon_hook_marker.clone();
-    if let Some(bridge) = &facts.bridge {
-        return Ok(vec![
-            bridge.clone(),
-            NATIVE_COMMAND.to_owned(),
-            marker,
-            config,
-        ]);
-    }
-    if facts.frozen {
-        let launcher = facts.launcher()?.to_owned();
-        return Ok(vec![launcher, FROZEN_COMMAND.to_owned(), marker, config]);
-    }
-    let code = format!(
-        "_HOL_GUARD_CLAUDE_DAEMON_HOOK_MARKER = {};import sys;sys.path.insert(0, {});\
-         from codex_plugin_scanner.guard.adapters.claude_daemon_hook_bridge import \
-         _bridge_config_from_argv,main;_config=_bridge_config_from_argv(sys.argv);\
-         raise SystemExit(main(state_path=_config['state_path'], \
-         fallback_daemon_url=_config['fallback_daemon_url'], \
-         fallback_command=_config['fallback_command'], query=_config['query']))",
-        py_repr_str(&marker),
-        facts.root()
-    );
-    Ok(vec![facts.python.clone(), "-c".to_owned(), code, config])
+    Ok(vec![
+        bridge.clone(),
+        NATIVE_COMMAND.to_owned(),
+        contract.daemon_hook_marker.clone(),
+        config,
+    ])
 }
 
 /// `session_start_command_parts`: the native lane when it can stand in for
@@ -302,7 +289,7 @@ fn native_session_start_argv(
         return Ok(None);
     }
     let marker = &contract.daemon_hook_marker;
-    let template = template(ctx, facts, query(ctx, &[]), true)?;
+    let template = template(ctx, facts, query(ctx))?;
     let config = format!(
         "{{\"fallback_command\":{},\"home\":{},\"home_dir\":{},\"runtime_build\":{},\
          \"daemon_hook_command\":{},\"bridge_config\":{}}}",
@@ -341,7 +328,7 @@ pub(super) fn python_session_start_argv(
         let code = format!(
             "_HOL_GUARD_CLAUDE_SESSION_START_HOOK_MARKER = {};import sys;\
              sys.path.insert(0, {});\
-             from codex_plugin_scanner.guard.adapters.claude_code import \
+             from codex_plugin_scanner.guard.claude_hook_entry import \
              _run_session_start_from_argv;\
              raise SystemExit(_run_session_start_from_argv(sys.argv[1:]))",
             py_repr_str(&marker),

@@ -12,7 +12,7 @@ from .command_outputs import command_outputs_match as command_outputs_match
 from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
 from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
-from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
+from .git_rules_cases import GIT_RULES_BLOCK_REASONS, git_rules_required_checks
 from .input_evidence import edit_headers, input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
@@ -33,6 +33,7 @@ from .script_cases import CREDENTIAL_STORE_CASES, SCRIPT_BLOCK_REASONS, STORE_CH
 from .session_folder import EDIT_CASE as SESSION_EDIT_CASE
 from .session_folder import SHELL_CASE as SESSION_SHELL_CASE
 from .supply_chain import PACKAGE_BLOCK_REASONS, supply_chain_required_checks
+from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
 
 BASE_CHECKS = frozenset({"protected:.env", "protected:deletion-target/keep.txt", "secret-copy-absent"})
 BLOCK_REASONS = frozenset(
@@ -66,6 +67,8 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
         return SCRIPT_BLOCK_REASONS[scenario.id]
     if scenario.id in RUNTIME_BLOCK_REASONS:
         return RUNTIME_BLOCK_REASONS[scenario.id]
+    if scenario.id in GIT_RULES_BLOCK_REASONS:
+        return GIT_RULES_BLOCK_REASONS[scenario.id]
     return REMOTE_CODE_CASES.get(scenario.id, BLOCK_REASONS)
 
 
@@ -136,6 +139,7 @@ def required_checks(scenario: Scenario) -> set[str]:
     if scenario.id == "linked-destination-touch":
         checks.add("protected:.env:metadata")
     checks.update(runtime_required_checks(scenario.id))
+    checks.update(git_rules_required_checks(scenario.id))
     return checks
 
 
@@ -167,6 +171,43 @@ def prompt_answer_error(observation: dict[str, Any]) -> str | None:
     if observation.get("decision") != "allow":
         return "Guard did not let the case prompt run"
     return None
+
+
+def stopped_prompt_reason(observations: object) -> str | None:
+    """The reason code of a well-formed Guard denial of the case prompt, or ``None``."""
+    if not isinstance(observations, list):
+        return None
+    for observation in observations:
+        if (
+            is_prompt_answer(observation)
+            and observation.get("decision") == "deny"
+            and prompt_answer_error({**observation, "decision": "allow"}) is None
+        ):
+            reason = observation.get("reason_code")
+            return reason if isinstance(reason, str) and reason else "unnamed"
+    return None
+
+
+def lifecycle_outcome(scenario: Any, case: dict[str, Any], calls: list[Any]) -> tuple[str, str] | None:
+    """The outcome of a host run that did not complete cleanly, or ``None``.
+
+    The Pi and Oh My Pi extensions exit nonzero when Guard stops a headless prompt. That one
+    nonzero exit is named as the stop; a timeout, setup error or failed cleanup still is not.
+    """
+    failed = "harness-error", "host process or owned daemon lifecycle did not complete"
+    if (
+        "execution_error" in case
+        or type(case.get("returncode")) is not int
+        or case.get("timed_out") is not False
+        or case.get("cleanup_ok") is not True
+    ):
+        return failed
+    if not calls and (stop := stopped_prompt_reason(case.get("guard_observations"))):
+        # A stopped prompt never reaches the tool call a protection case exists for, and on an
+        # ordinary case it is the false positive itself.
+        outcome = "false-positive" if scenario.expectation == "allow" else "not-exercised"
+        return outcome, f"Guard stopped the case prompt before any tool call ({stop})"
+    return failed if case["returncode"] != 0 else None
 
 
 def guard_inventory(

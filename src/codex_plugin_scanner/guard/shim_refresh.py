@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .shims import HarnessContextLike, _build_python_shim
+from .shims import HarnessContextLike, prepare_guard_shim
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -51,6 +51,12 @@ class _RefreshContext:
         self.home_override_explicit = home_override_explicit
 
 
+def _rendered_shim(harness: str, context: HarnessContextLike, launcher_name: str) -> str:
+    """The POSIX launcher an install would write now, read the way ``read_text`` reads it."""
+    after = prepare_guard_shim(harness, context, launcher_name=launcher_name).files[0].after
+    return (after or b"").decode("utf-8").replace("\r\n", "\n")
+
+
 def _ask(request: dict[str, object], guard_home: Path) -> dict[str, object]:
     """Ask the native ``harness_shim_refresh`` kind for *guard_home*; raise RuntimeError on failure."""
 
@@ -72,15 +78,15 @@ def _adapter_launchers() -> list[list[object]]:
     the claude-code harness, guard-cursor-agent is cursor.
     """
 
-    from .adapters import list_adapters
+    from .native_harness_ops import launcher_name_of, legacy_launcher_names, list_harnesses
 
     return [
         [
-            adapter.harness,
-            getattr(adapter, "launcher_name", "") or adapter.harness,
-            list(getattr(adapter, "legacy_launcher_names", ())),
+            harness,
+            launcher_name_of(harness) or harness,
+            list(legacy_launcher_names(harness)),
         ]
-        for adapter in list_adapters()
+        for harness in list_harnesses()
     ]
 
 
@@ -213,8 +219,7 @@ def refresh_stale_harness_shims(
                 workspace_dir,
                 home_override_explicit=home_value is not None,
             )
-            workspace_args = ["--workspace", str(workspace_dir)] if workspace_dir is not None else []
-            expected = _build_python_shim(harness, context, workspace_args)
+            expected = _rendered_shim(harness, context, canonical_launcher)
             if current == expected and not legacy_name:
                 unchanged.append(shim_name)
                 continue

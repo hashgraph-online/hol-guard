@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.shim_refresh import (
     _shim_entries,
     refresh_stale_harness_shims,
 )
-from codex_plugin_scanner.guard.shims import _build_python_shim, install_guard_shim
+from codex_plugin_scanner.guard.shims import install_guard_shim, prepare_guard_shim
 
 
 class _Context:
@@ -27,9 +27,19 @@ class _Context:
         self.home_override_explicit = False
 
 
-class ShimRefreshTest(unittest.TestCase):
+def _rendered(harness: str, context: _Context) -> str:
+    after = prepare_guard_shim(harness, context).files[0].after
+    assert after is not None
+    return after.decode("utf-8").replace("\r\n", "\n")
+
+
+class _ShimRefreshCase(unittest.TestCase):
+    # The launcher never delegates to a CLI in a temporary directory, so the
+    # durable-CLI cases build their home beside the checkout instead.
+    durable_root: Path | None = None
+
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = tempfile.TemporaryDirectory(dir=self.durable_root, prefix=".shim-refresh-")
         self.addCleanup(self._tmp.cleanup)
         root = Path(self._tmp.name)
         self.home_dir = root / "home"
@@ -44,6 +54,8 @@ class ShimRefreshTest(unittest.TestCase):
         install_guard_shim(harness, self._context(workspace_dir))
         return self.guard_home / "bin" / f"guard-{harness}"
 
+
+class ShimRefreshTest(_ShimRefreshCase):
     def test_plan_resolves_legacy_names(self) -> None:
         steps = {
             step["name"]: (step["action"], step.get("harness"), step.get("canonical"))
@@ -92,108 +104,6 @@ class ShimRefreshTest(unittest.TestCase):
         self.assertEqual(result.unchanged, ("kimi",))
         self.assertEqual(result.errors, ())
 
-    @unittest.skipIf(sys.platform == "win32", "POSIX harness launcher contract")
-    def test_frozen_desktop_refresh_uses_stable_desktop_cli(self) -> None:
-        official_cli = self.home_dir / ".local" / "bin" / "hol-guard"
-        official_cli.parent.mkdir(parents=True)
-        official_cli.write_text("#!/bin/sh\nexit 98\n", encoding="utf-8")
-        official_cli.chmod(0o755)
-        capture_path = self.home_dir / "captured-args"
-        desktop_root = self.home_dir / "desktop" / "core"
-        stable_cli = desktop_root / "current-hol-guard"
-        stable_cli.parent.mkdir(parents=True)
-        stable_cli.write_text(
-            f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {str(capture_path)!r}\n",
-            encoding="utf-8",
-        )
-        stable_cli.chmod(0o755)
-        desktop_owner = desktop_root / "bundled" / "3.0.63" / "bin" / "hol-guard"
-        desktop_owner.parent.mkdir(parents=True)
-        desktop_owner.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
-        desktop_owner.chmod(0o755)
-
-        with (
-            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", False, create=True),
-            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(desktop_owner)),
-        ):
-            path = self._install("kimi")
-        self.assertTrue(path.read_text(encoding="utf-8").startswith(f"#!{desktop_owner}\n"))
-
-        with (
-            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", True, create=True),
-            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(desktop_owner)),
-            mock.patch(
-                "codex_plugin_scanner.guard.shims._is_transient_path",
-                side_effect=lambda path: ".mount_" in str(path),
-            ),
-            mock.patch.dict(
-                "codex_plugin_scanner.guard.durable_harness_launcher.os.environ",
-                {"HOL_GUARD_DESKTOP_RUNTIME_OWNER": str(desktop_owner)},
-                clear=False,
-            ),
-        ):
-            result = refresh_stale_harness_shims(
-                home_dir=self.home_dir,
-                guard_home=self.guard_home,
-                managed_installs=[],
-            )
-            completed = subprocess.run([str(path), "--help"], check=False)
-
-        self.assertEqual(result.refreshed, ("kimi",))
-        self.assertEqual(completed.returncode, 0)
-        self.assertTrue(path.read_text(encoding="utf-8").startswith("#!/bin/sh\n"))
-        windows_source = path.with_suffix(".cmd").read_text(encoding="utf-8")
-        self.assertIn("run-shim", windows_source)
-        self.assertIn(str(stable_cli), windows_source)
-        self.assertNotIn(str(path), windows_source)
-        self.assertIn('"--" %*', windows_source)
-        self.assertEqual(
-            capture_path.read_text(encoding="utf-8").splitlines(),
-            [
-                "run",
-                "kimi",
-                "--guard-home",
-                str(self.guard_home),
-                "--home",
-                str(self.home_dir),
-                "--arg=--help",
-            ],
-        )
-
-    @unittest.skipIf(sys.platform == "win32", "POSIX harness launcher contract")
-    def test_frozen_durable_runtime_remains_a_launcher_fallback(self) -> None:
-        capture_path = self.home_dir / "captured-args"
-        runtime = self.home_dir / "Applications" / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
-        runtime.parent.mkdir(parents=True)
-        runtime.write_text(
-            f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {str(capture_path)!r}\n",
-            encoding="utf-8",
-        )
-        runtime.chmod(0o755)
-
-        with (
-            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", True, create=True),
-            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(runtime)),
-            mock.patch(
-                "codex_plugin_scanner.guard.shims._is_transient_path",
-                side_effect=lambda path: ".mount_" in str(path),
-            ),
-            mock.patch.dict(
-                "codex_plugin_scanner.guard.durable_harness_launcher.os.environ",
-                {"HOL_GUARD_DESKTOP_RUNTIME_OWNER": ""},
-                clear=False,
-            ),
-        ):
-            path = self._install("kimi")
-            completed = subprocess.run([str(path), "--version"], check=False)
-
-        self.assertEqual(completed.returncode, 0)
-        self.assertIn(str(runtime), path.read_text(encoding="utf-8"))
-        self.assertEqual(
-            capture_path.read_text(encoding="utf-8").splitlines()[-1],
-            "--arg=--version",
-        )
-
     def test_stale_shim_is_refreshed_with_current_generator_content(self) -> None:
         path = self._install("kimi")
         # Drift a real generated shim (keeps base_command parseable).
@@ -205,7 +115,7 @@ class ShimRefreshTest(unittest.TestCase):
         )
         self.assertEqual(result.refreshed, ("kimi",))
         self.assertEqual(result.errors, ())
-        expected = _build_python_shim("kimi", self._context(), [])
+        expected = _rendered("kimi", self._context())
         self.assertEqual(path.read_text(encoding="utf-8"), expected)
 
     def test_workspace_binding_is_preserved_from_managed_installs(self) -> None:
@@ -233,7 +143,7 @@ class ShimRefreshTest(unittest.TestCase):
         shim_dir = self.guard_home / "bin"
         shim_dir.mkdir()
         # Write a real cursor shim under the legacy launcher name.
-        body = _build_python_shim("cursor", self._context(), [])
+        body = _rendered("cursor", self._context())
         legacy = shim_dir / "guard-cursor"
         legacy.write_text(body, encoding="utf-8")
         legacy.chmod(0o755)
@@ -285,11 +195,11 @@ class ShimRefreshTest(unittest.TestCase):
         workspace = self.home_dir / "project"
         workspace.mkdir()
         # Canonical shim carries a workspace binding; legacy has none.
-        canonical_body = _build_python_shim("cursor", self._context(workspace), ["--workspace", str(workspace)])
+        canonical_body = _rendered("cursor", self._context(workspace))
         canonical = shim_dir / "guard-cursor-agent"
         canonical.write_text(canonical_body, encoding="utf-8")
         canonical.chmod(0o755)
-        legacy_body = _build_python_shim("cursor", self._context(), [])
+        legacy_body = _rendered("cursor", self._context())
         legacy = shim_dir / "guard-cursor"
         legacy.write_text(legacy_body, encoding="utf-8")
         legacy.chmod(0o755)
@@ -316,6 +226,104 @@ class ShimRefreshTest(unittest.TestCase):
         self.assertEqual(result.refreshed, ())
         self.assertEqual(result.unchanged, ("retired-harness",))
         self.assertEqual(result.errors, ())
+
+
+class DurableCliRefreshTest(_ShimRefreshCase):
+    durable_root = Path(__file__).resolve().parent.parent
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX harness launcher contract")
+    def test_frozen_desktop_refresh_uses_stable_desktop_cli(self) -> None:
+        official_cli = self.home_dir / ".local" / "bin" / "hol-guard"
+        official_cli.parent.mkdir(parents=True)
+        official_cli.write_text("#!/bin/sh\nexit 98\n", encoding="utf-8")
+        official_cli.chmod(0o755)
+        capture_path = self.home_dir / "captured-args"
+        desktop_root = self.home_dir / "desktop" / "core"
+        stable_cli = desktop_root / "current-hol-guard"
+        stable_cli.parent.mkdir(parents=True)
+        stable_cli.write_text(
+            f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {str(capture_path)!r}\n",
+            encoding="utf-8",
+        )
+        stable_cli.chmod(0o755)
+        desktop_owner = desktop_root / "bundled" / "3.0.63" / "bin" / "hol-guard"
+        desktop_owner.parent.mkdir(parents=True)
+        desktop_owner.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+        desktop_owner.chmod(0o755)
+
+        with (
+            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", False, create=True),
+            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(desktop_owner)),
+        ):
+            path = self._install("kimi")
+        self.assertTrue(path.read_text(encoding="utf-8").startswith(f"#!{desktop_owner}\n"))
+
+        with (
+            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", True, create=True),
+            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(desktop_owner)),
+            mock.patch.dict(
+                "os.environ",
+                {"HOL_GUARD_DESKTOP_RUNTIME_OWNER": str(desktop_owner)},
+                clear=False,
+            ),
+        ):
+            result = refresh_stale_harness_shims(
+                home_dir=self.home_dir,
+                guard_home=self.guard_home,
+                managed_installs=[],
+            )
+            completed = subprocess.run([str(path), "--help"], check=False)
+
+        self.assertEqual(result.refreshed, ("kimi",))
+        self.assertEqual(completed.returncode, 0)
+        self.assertTrue(path.read_text(encoding="utf-8").startswith("#!/bin/sh\n"))
+        windows_source = path.with_suffix(".cmd").read_text(encoding="utf-8")
+        self.assertIn("run-shim", windows_source)
+        self.assertIn(str(stable_cli), windows_source)
+        self.assertNotIn(str(path), windows_source)
+        self.assertIn('"--" %*', windows_source)
+        self.assertEqual(
+            capture_path.read_text(encoding="utf-8").splitlines(),
+            [
+                "run",
+                "kimi",
+                "--guard-home",
+                str(self.guard_home),
+                "--home",
+                str(self.home_dir),
+                "--arg=--help",
+            ],
+        )
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX harness launcher contract")
+    def test_frozen_durable_runtime_remains_a_launcher_fallback(self) -> None:
+        capture_path = self.home_dir / "captured-args"
+        runtime = self.home_dir / "Applications" / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
+        runtime.parent.mkdir(parents=True)
+        runtime.write_text(
+            f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {str(capture_path)!r}\n",
+            encoding="utf-8",
+        )
+        runtime.chmod(0o755)
+
+        with (
+            mock.patch("codex_plugin_scanner.guard.shims.sys.frozen", True, create=True),
+            mock.patch("codex_plugin_scanner.guard.shims.sys.executable", str(runtime)),
+            mock.patch.dict(
+                "os.environ",
+                {"HOL_GUARD_DESKTOP_RUNTIME_OWNER": ""},
+                clear=False,
+            ),
+        ):
+            path = self._install("kimi")
+            completed = subprocess.run([str(path), "--version"], check=False)
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn(str(runtime), path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            capture_path.read_text(encoding="utf-8").splitlines()[-1],
+            "--arg=--version",
+        )
 
 
 if __name__ == "__main__":

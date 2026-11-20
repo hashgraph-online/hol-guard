@@ -62,6 +62,9 @@ pub mod cloud_catalog;
 pub mod cloud_pack;
 pub mod cloud_pack_artifact;
 pub mod cloud_pack_cli;
+pub mod cloud_pack_connection;
+#[cfg(test)]
+mod cloud_pack_connection_tests;
 #[cfg(test)]
 mod cloud_pack_corpus_tests;
 pub mod cloud_pack_diff;
@@ -90,6 +93,8 @@ mod cloud_pack_money;
 #[cfg(test)]
 mod cloud_pack_money_tests;
 pub mod cloud_pack_pattern;
+#[cfg(test)]
+mod cloud_pack_reconcile_tests;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;
 #[cfg(test)]
@@ -105,6 +110,9 @@ mod cloud_pack_sql_lex;
 mod cloud_pack_sql_tests;
 #[cfg(test)]
 mod cloud_pack_tests;
+pub mod cloud_pack_transport;
+#[cfg(test)]
+mod cloud_pack_transport_tests;
 pub mod cloud_pack_validate;
 mod cloud_pack_validate_facts;
 mod cloud_pack_validate_request;
@@ -174,6 +182,7 @@ mod command_workspace_write_candidates;
 pub mod content_sensitivity;
 pub mod contributed_mcp_decision;
 mod contributed_mcp_url;
+mod shell_comment_lines;
 pub use contributed_mcp_url::normalized_remote_mcp_url;
 mod data_flow;
 pub mod dep_map;
@@ -470,6 +479,9 @@ mod shell_secret_read_glob_tests;
 mod shell_secret_read_script_operand_tests;
 #[cfg(test)]
 mod shell_secret_read_search_reader_tests;
+mod shell_secret_read_stdin_search;
+#[cfg(test)]
+mod shell_secret_read_stdin_search_tests;
 mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
@@ -553,6 +565,7 @@ pub mod composition_rules;
 pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
+mod contained_expectation;
 mod contained_git;
 mod contained_inline_target;
 

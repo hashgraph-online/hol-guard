@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeGuard
 from urllib.parse import urlparse
 
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..shims import (
     activate_package_shims,
     package_shim_status,

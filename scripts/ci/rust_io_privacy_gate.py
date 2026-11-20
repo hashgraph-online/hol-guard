@@ -70,14 +70,14 @@ _SAFE_KEY_EXCEPTIONS: Final = frozenset(
 )
 _SERIALIZERS: Final = (
     (
-        "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
+        "src/codex_plugin_scanner/guard/route_metrics.py",
         "_snapshot_locked",
-        "HookMetricsRecorder",
+        "RouteMetricsRecorder",
     ),
     (
-        "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
+        "src/codex_plugin_scanner/guard/route_metrics.py",
         "snapshot",
-        "HookMetricsRecorder",
+        "RouteMetricsRecorder",
     ),
 )
 
@@ -231,9 +231,9 @@ def _dynamic_failures() -> list[str]:
         if not validate_artifact(artifact):
             failures.append("dynamic privacy probe accepted a raw-content adversarial artifact")
     try:
-        from codex_plugin_scanner.guard.hook_review.hook_metrics import HookMetricsRecorder
+        from codex_plugin_scanner.guard.route_metrics import RouteMetricsRecorder
 
-        metrics = HookMetricsRecorder()
+        metrics = RouteMetricsRecorder()
         metrics.record_route("native_resident")
         metrics.record_failure(stage="engine", exception_type="RuntimeError")
         # The evidence record itself is serialized by the Rust writer now, so

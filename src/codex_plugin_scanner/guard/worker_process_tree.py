@@ -8,7 +8,7 @@ import subprocess
 from contextlib import suppress
 from typing import Protocol
 
-from .codex_hook_windows_job import windows_system_executable_path
+from .codex_hook_launch_runtime import windows_system_executable_path
 
 
 class WorkerProcess(Protocol):

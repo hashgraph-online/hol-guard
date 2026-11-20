@@ -183,6 +183,7 @@ pub(super) fn evaluate(operation: &str, params: &Value) -> Result<Value, &'stati
         "harness_protection_contract" => crate::harness_protection_contract::check_payload_at(
             params.get("now").and_then(Value::as_str),
         )?,
+        "harness_claim_promotion" => crate::harness_protection_contract::promotion_payload(params)?,
         "native_readiness" => {
             crate::native_readiness::readiness_payload(text(params, "reason_code")?)
         }

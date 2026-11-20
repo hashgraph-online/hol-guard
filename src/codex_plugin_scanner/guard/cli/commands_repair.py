@@ -12,8 +12,8 @@ from ..repair_engine import run_repair
 from .commands_parser_helpers import _add_guard_common_args
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 

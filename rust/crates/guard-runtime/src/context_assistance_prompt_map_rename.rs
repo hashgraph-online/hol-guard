@@ -7,6 +7,8 @@ use super::{file, Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
 
+#[path = "context_assistance_prompt_map_check.rs"]
+pub(super) mod check;
 #[path = "context_assistance_prompt_map_rewrite.rs"]
 mod rewrite;
 use rewrite::Rewrite;

@@ -5,6 +5,8 @@ import type {
 } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
+import { explainMcpCall } from "../mcp-call/explain-mcp-call";
+import { listedMcpRef } from "../mcp-call/mcp-queue-name";
 import { detectCategory, type ReceiptCategory } from "./categories";
 import { approvalLeftActionStopped } from "./approval-outcome";
 import {
@@ -380,6 +382,10 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
   if (request.artifact_type === "native_bash_request") {
     return "Run this script?";
   }
+  const mcpCall = explainMcpCall(request);
+  if (mcpCall !== null) {
+    return mcpCall.headline;
+  }
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
@@ -410,7 +416,11 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
   }
 }
 
+export const UNREVIEWED_MCP_TOOL ="Guard asks before a tool it has not reviewed runs.";
+
 export function whyPaused(request: GuardApprovalRequest): string {
+  // A list row arrives without its envelope but still names the tool.
+  const mcpCall = explainMcpCall(request) !== null || listedMcpRef(request) !== null;
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
@@ -434,8 +444,9 @@ export function whyPaused(request: GuardApprovalRequest): string {
         || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";
       }
-      return "This uses an outside tool. Guard stops new tools by default.";
+      return mcpCall ? UNREVIEWED_MCP_TOOL : "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (mcpCall) return UNREVIEWED_MCP_TOOL;
       if (isPackageDependencyMutationRequest(request)) {
         return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
       }

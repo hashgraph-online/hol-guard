@@ -45,7 +45,7 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # runtime decides what the program found from it may reach.
         "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
         # Payload-reference metadata validation; the native edge reads bytes.
-        "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
+        "src/codex_plugin_scanner/guard/native_payload_facts.py",
         # Archive-inspection transport: lease, request binding, and the
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
@@ -144,6 +144,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
         "src/codex_plugin_scanner/guard/native_pretool.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
+        # Decodes the bounded resident windows_private_state envelope; the file
+        # op and its owner/DACL checks run in Rust and the answer is returned as is.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_resident.py",
         # Resident-op dispatch bridge: decodes the bounded native response and
         # returns a DTO; it does not interpret response content into a decision.
         "src/codex_plugin_scanner/guard/native_execution.py",
@@ -271,7 +274,7 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
     }
 )
 _PERSISTENCE_PATH_PREFIXES: Final = (
-    "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
+    "src/codex_plugin_scanner/guard/route_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
     "src/codex_plugin_scanner/guard/store_base.py",
@@ -286,7 +289,6 @@ _PRESENTATION_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/contained_sink_command.py",
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
-        "src/codex_plugin_scanner/guard/codex_app_server.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
         "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
         "src/codex_plugin_scanner/guard/edge_events.py",

@@ -131,3 +131,76 @@ pub(super) fn hooks_are_inert(
         .iter()
         .all(|hook| hook_file_inert(&path.join(hook), hook, husky_directory_reached))
 }
+
+/// Whether any of the words a step takes may open an entry at the root of
+/// the tree `reference` names, in the repository the add's directory belongs
+/// to. An entry counts when it ends a word or one of its `=` parts, which
+/// covers operands and option values given apart or attached. A
+/// case-insensitive file system opens `readme.md` as `README.md`, and Windows
+/// drops trailing dots and spaces, so names are compared that way. `None` is
+/// doubt, including a root listing too large to read.
+pub(in crate::pretool) fn tree_names_any(
+    executable: &str,
+    leading: &[String],
+    reference: &str,
+    names: &[&str],
+    context: super::super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<bool> {
+    const ROOT_LISTING_LIMIT: u64 = 256 * 1024;
+    let (base, _, _, _) = super::prepared_git_command(executable, context, execution_environment)?;
+    let deadline = Instant::now() + super::super::git_probe::PROBE_BUDGET;
+    let arguments = [
+        "--no-pager",
+        "ls-tree",
+        "-z",
+        "--full-tree",
+        "--name-only",
+        reference,
+    ];
+    let (status, output) =
+        git_query_with_args(&base, leading, &arguments, deadline, ROOT_LISTING_LIMIT)?;
+    if !status.success() {
+        return None;
+    }
+    // Unicode case and normalization, NTFS streams (`name:stream`) and
+    // Windows short names (`README~1.MD`) fold further than this comparison
+    // models, so such a name, or a non-ASCII entry, counts as held.
+    if names
+        .iter()
+        .any(|name| !name.is_ascii() || name.contains([':', '~']))
+    {
+        return Some(true);
+    }
+    // Each word and each of its `=` parts, within a budget past which the
+    // step is doubt rather than a long comparison.
+    const WORD_BUDGET: usize = 256;
+    let mut words = Vec::new();
+    for name in names {
+        words.push(opened(name.as_bytes()));
+        if name.contains('=') {
+            words.extend(name.split('=').map(|part| opened(part.as_bytes())));
+        }
+        if words.len() > WORD_BUDGET {
+            return None;
+        }
+    }
+    Some(output.split(|byte| *byte == 0).any(|entry| {
+        let entry = opened(entry);
+        !entry.is_empty()
+            && (!entry.is_ascii()
+                || words.iter().any(|word| {
+                    word.len() >= entry.len()
+                        && word[word.len() - entry.len()..].eq_ignore_ascii_case(entry)
+                }))
+    }))
+}
+
+/// The name a Windows file system opens: trailing dots and spaces dropped.
+fn opened(name: &[u8]) -> &[u8] {
+    let end = name
+        .iter()
+        .rposition(|byte| !matches!(byte, b'.' | b' '))
+        .map_or(0, |last| last + 1);
+    &name[..end]
+}

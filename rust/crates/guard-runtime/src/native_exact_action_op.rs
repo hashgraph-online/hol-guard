@@ -62,7 +62,7 @@ mod git_push;
 #[allow(dead_code)]
 mod git_windows;
 mod hook_review;
-pub(crate) use hook_review::policy_binding_holds;
+pub(crate) use hook_review::{policy_binding_holds, policy_binding_value};
 mod launch;
 mod launch_evidence;
 pub(crate) use launch::is_safe_single_invocation;

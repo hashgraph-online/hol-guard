@@ -105,6 +105,59 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
     assert store.calls == 1
 
 
+def test_a_pending_migration_backoff_keeps_refresh_from_blocking(tmp_path, monkeypatch) -> None:
+    sentinel = object()
+    clock = [100.0]
+    attempts = 0
+
+    def fail_migration(*_args, **_kwargs) -> bool:
+        nonlocal attempts
+        attempts += 1
+        return False
+
+    server = SimpleNamespace(
+        store=SimpleNamespace(guard_home=tmp_path),
+        _installed_authority_pending=True,
+        _installed_authority_retry_at=0.0,
+        runtime=SimpleNamespace(current=lambda: sentinel),
+    )
+    monkeypatch.setattr(extension_control_host, "migrate_installed_authority", fail_migration)
+    monkeypatch.setattr(extension_control_host.time, "monotonic", lambda: clock[0])
+    server._migrate_installed_authority = lambda: ExtensionControlHost._migrate_installed_authority(server)
+
+    assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert server._installed_authority_retry_at == 105.0
+    assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert attempts == 1
+
+
+def test_a_busy_migration_turn_reports_busy_without_marking_failure(tmp_path) -> None:
+    store = _SlowStore(tmp_path, seconds=0.0)
+    busy: list[bool] = []
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held is True
+        assert migrate_installed_authority(store, wait_seconds=0.0, on_busy=lambda: busy.append(True)) is False
+
+    assert busy == [True]
+    assert store.calls == 0
+
+
+def test_a_failed_migration_starts_backoff_after_the_attempt(tmp_path, monkeypatch) -> None:
+    server = SimpleNamespace(
+        store=SimpleNamespace(guard_home=tmp_path),
+        _installed_authority_pending=False,
+        _installed_authority_retry_at=0.0,
+    )
+    monkeypatch.setattr(extension_control_host, "migrate_installed_authority", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(extension_control_host.time, "monotonic", lambda: 10.0)
+
+    with pytest.raises(_InstalledAuthorityMigrationError):
+        ExtensionControlHost._migrate_installed_authority(server)  # pyright: ignore[reportArgumentType]
+
+    assert server._installed_authority_retry_at == 15.0
+
+
 def test_the_worker_host_waits_for_another_process_to_finish(tmp_path) -> None:
     store = _SlowStore(tmp_path, seconds=0.0)
     ready = tmp_path / "held"
@@ -181,3 +234,93 @@ def test_a_failed_migration_records_how_long_it_ran(tmp_path, recorded) -> None:
     [(event, detail)] = recorded
     assert event == "installed_authority_migration_failed"
     assert " elapsed_ms=" in detail
+
+
+def test_the_bundle_check_runs_while_another_process_holds_the_turn(tmp_path, monkeypatch) -> None:
+    # At a cold start the artifact reconcile usually holds the turn; checking
+    # the installed bundle first overlaps that wait instead of following it.
+    checks: list[str] = []
+    steps: list[str] = []
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: checks.append("bundle"))
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held
+        assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
+
+    assert checks == ["bundle"]
+    assert steps == ["bundle_checked"]
+    assert store.calls == 0
+
+    assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is True  # pyright: ignore[reportArgumentType]
+    assert steps == ["bundle_checked", "bundle_checked", "turn_held"]
+    assert store.calls == 1
+
+
+def test_a_caller_that_will_not_wait_skips_the_early_bundle_check(tmp_path, monkeypatch) -> None:
+    # An extension-control host gives up on a taken turn at once; checking
+    # the bundle first would only delay its fallback.
+    checks: list[str] = []
+    steps: list[str] = []
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: checks.append("bundle"))
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held
+        assert migrate_installed_authority(store, wait_seconds=0.0, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
+
+    assert checks == []
+    assert steps == []
+    assert store.calls == 0
+
+
+def test_a_failed_early_bundle_check_leaves_the_failure_to_the_migration(tmp_path, recorded, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
+
+    def unverifiable():
+        raise ValueError("installed bundle metadata unavailable")
+
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", unverifiable)
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    assert migrate_installed_authority(store) is True  # pyright: ignore[reportArgumentType]
+    assert store.calls == 1
+    assert recorded == []
+
+
+def test_a_failing_phase_reporter_does_not_skip_the_migration(tmp_path, monkeypatch) -> None:
+    def broken(_step: str) -> None:
+        raise BrokenPipeError
+
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    assert migrate_installed_authority(store, on_phase=broken) is True  # pyright: ignore[reportArgumentType]
+    assert store.calls == 1
+
+
+def test_the_early_bundle_check_waits_for_the_one_the_worker_host_started(monkeypatch) -> None:
+    # The daemon's worker host starts the check before its imports; the
+    # migration's early check then waits for it instead of loading again.
+    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers
+
+    loads: list[str] = []
+    release = threading.Event()
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", lambda: loads.append("load"))
+
+    def started_check() -> None:
+        release.wait(5)
+        loads.append("early")
+
+    early = threading.Thread(target=started_check, daemon=True)
+    early.start()
+    monkeypatch.setattr(desktop_daemon_workers, "_bundle_check", early)
+    release.set()
+
+    extension_control_host._verify_installed_bundle_early()
+
+    assert loads == ["early"]
+    # A later attempt checks for itself.
+    extension_control_host._verify_installed_bundle_early()
+    assert loads == ["early", "load"]

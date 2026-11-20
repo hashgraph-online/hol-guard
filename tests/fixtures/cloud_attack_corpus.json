@@ -6493,11 +6493,13 @@
       "class": "destructive_other",
       "actionId": "quickbooks.invoices.delete",
       "arguments": {
-        "realm_id": "9341453050206514",
         "invoice_id": "130",
         "sync_token": "2"
       },
-      "expect": "review"
+      "expect": "review",
+      "connection": {
+        "realm_id": "9341453050206514"
+      }
     },
     {
       "id": "a261",
@@ -6537,11 +6539,13 @@
       "class": "first_contact_send",
       "actionId": "quickbooks.invoices.send",
       "arguments": {
-        "realm_id": "9341453050206514",
         "invoice_id": "130",
         "send_to": "ap@contoso-mail.test"
       },
-      "expect": "review"
+      "expect": "review",
+      "connection": {
+        "realm_id": "9341453050206514"
+      }
     },
     {
       "id": "a265",

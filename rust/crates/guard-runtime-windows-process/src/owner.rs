@@ -39,6 +39,28 @@ pub fn owned_by_current_user(path: &Path) -> bool {
     })
 }
 
+/// A stronger ownership proof for *workspace identity*: only the calling
+/// process's own SID qualifies, not LocalSystem or Administrators. Those
+/// privileged owners are accepted by the separate mutability checks above,
+/// but may also own unrelated shared and system directories.
+/// An unreadable or absent owner fails closed.
+pub fn owned_exactly_by_current_user(path: &Path) -> bool {
+    let Ok(current) = current_process_sid() else {
+        return false;
+    };
+    GetNamedSecurityInfo(
+        path.as_os_str(),
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Owner,
+    )
+    .ok()
+    .is_some_and(|descriptor| {
+        descriptor
+            .owner()
+            .is_some_and(|owner| owner == current.as_ref())
+    })
+}
+
 /// Access rights that change an object or what it contains: write, append,
 /// extended attributes, delete child, attributes, delete, change access,
 /// take ownership, and the generic write and all rights.

@@ -5,17 +5,24 @@
 //! past the hook's decision budget. Every proof within one evaluation shares
 //! a single walk of each tree. The memo is dropped when the evaluation
 //! returns, so the next evaluation walks the tree again.
+//!
+//! Both memos are hash maps. A wide glob such as `__tests__/*.ts` proves
+//! every file it names as a root of its own, so one evaluation can remember
+//! thousands of walks; a list searched from the front made each new root
+//! cost a comparison with every root before it, and five thousand test files
+//! ran the decision past the hook's budget.
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 type WalkKey = (PathBuf, Vec<String>, Vec<String>, bool, bool, bool);
-type Memo = Option<Vec<(WalkKey, bool)>>;
+type Memo = Option<HashMap<WalkKey, bool>>;
 
 /// Walks whose answer depends on more than the tree: the pattern a content
 /// walk clears files with, or the globs an include walk selects by. Each is
 /// remembered under a key that spells every input it read, beside the
 /// two counters a content walk leaves its clearance at.
-type KeyedMemo = Option<Vec<(String, KeyedAnswer)>>;
+type KeyedMemo = Option<HashMap<String, KeyedAnswer>>;
 
 /// A remembered walk: its answer and what it left its clearance's byte and
 /// file counters at, zero for a walk that charges none.
@@ -57,8 +64,8 @@ pub(in crate::pretool) fn with_walk_memo<T>(evaluate: impl FnOnce() -> T) -> T {
         }
     }
     let _restore = Restore(
-        MEMO.with(|memo| memo.replace(Some(Vec::new()))),
-        KEYED.with(|memo| memo.replace(Some(Vec::new()))),
+        MEMO.with(|memo| memo.replace(Some(HashMap::new()))),
+        KEYED.with(|memo| memo.replace(Some(HashMap::new()))),
     );
     evaluate()
 }
@@ -89,12 +96,9 @@ pub(super) fn memoized(
         skip_hidden,
     );
     let cached = MEMO.with(|memo| {
-        memo.borrow().as_ref().map(|entries| {
-            entries
-                .iter()
-                .find(|(entry, _)| *entry == key)
-                .map(|(_, value)| *value)
-        })
+        memo.borrow()
+            .as_ref()
+            .map(|entries| entries.get(&key).copied())
     });
     match cached {
         Some(Some(value)) => value,
@@ -102,7 +106,7 @@ pub(super) fn memoized(
             let value = walk();
             MEMO.with(|memo| {
                 if let Some(entries) = memo.borrow_mut().as_mut() {
-                    entries.push((key, value));
+                    entries.insert(key, value);
                 }
             });
             value
@@ -145,12 +149,9 @@ fn keyed(
     keep: impl FnOnce(bool) -> bool,
 ) -> KeyedAnswer {
     let cached = KEYED.with(|memo| {
-        memo.borrow().as_ref().map(|entries| {
-            entries
-                .iter()
-                .find(|(entry, _)| *entry == key)
-                .map(|(_, value)| *value)
-        })
+        memo.borrow()
+            .as_ref()
+            .map(|entries| entries.get(&key).copied())
     });
     match cached {
         Some(Some(value)) => value,
@@ -159,7 +160,7 @@ fn keyed(
             if keep(value.0) {
                 KEYED.with(|memo| {
                     if let Some(entries) = memo.borrow_mut().as_mut() {
-                        entries.push((key, value));
+                        entries.insert(key, value);
                     }
                 });
             }

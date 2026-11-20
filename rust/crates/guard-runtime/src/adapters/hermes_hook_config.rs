@@ -27,6 +27,7 @@ const PRETOOL_EVENT: &str = "pre_tool_call";
 const GUARD_HOOK_ID: &str = "hol-guard-pretool";
 const BOUNDED_HOOK_FLAG: &str = "__guard-bounded-hook";
 const BOUNDED_BRIDGE_MODULE: &str = "bounded_cli_hook_bridge";
+const NATIVE_BRIDGE_COMMAND: &str = "bounded-hook-bridge";
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let fields = args_object(args)?;
@@ -168,6 +169,11 @@ fn legacy_command(command: Option<&Value>, expected: Option<&str>, cwd: Option<&
     };
     if tokens.iter().any(|token| token == BOUNDED_HOOK_FLAG) {
         return true;
+    }
+    if let [runtime, bridge, config] = tokens.as_slice() {
+        if !runtime.is_empty() && bridge == NATIVE_BRIDGE_COMMAND {
+            return config.contains("\"harness\":\"hermes\"");
+        }
     }
     if let Some(inline) = tokens.iter().position(|token| token == "-c") {
         if tokens

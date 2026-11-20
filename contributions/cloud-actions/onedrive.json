@@ -18,6 +18,14 @@
       "https://graph.microsoft.com/Files.ReadWrite"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "one_drive"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "onedrive.items.list",

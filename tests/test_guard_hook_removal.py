@@ -4,18 +4,19 @@ import json
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import hook_removal_sweep
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import lifecycle_gate_requirement
-from codex_plugin_scanner.guard.codex_config import dump_toml, tomllib
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from codex_plugin_scanner.guard.hook_removal import remove_all_guard_hooks
 from codex_plugin_scanner.guard.hook_removal_presence import CONFIRMATION_PHRASE, require_typed_presence
 from codex_plugin_scanner.guard.hook_removal_sweep import finalize_backups, sweep_config_file
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_toml_support import dump_toml
 
 GUARD_COMMAND = "hol-guard hook --harness claude-code --event PreToolUse"
 USER_COMMAND = "/usr/local/bin/my-audit-hook --log"

@@ -177,3 +177,75 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A build tool keeps its cache in a hidden folder of the project, and an
+/// agent checks for one file in it before deciding whether to rebuild:
+/// `ls <project>/.next/tsconfig.tsbuildinfo 2>/dev/null`. Listing `.next`
+/// itself was already allowed, so the probe for one missing name below it
+/// says no more than that listing did.
+#[test]
+fn a_missing_name_in_a_project_build_folder_reads_nothing() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/absent-listing-fixtures")
+        .join(format!("build-folder-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for directory in [
+        "app/.git",
+        "app/.next/cache",
+        "app/node_modules/.pnpm",
+        "work",
+    ] {
+        std::fs::create_dir_all(root.join(directory)).unwrap();
+    }
+    let root = std::fs::canonicalize(&root).unwrap();
+    std::fs::write(root.join("app/.git/HEAD"), "ref: refs/heads/main\n").unwrap();
+    std::fs::write(root.join("app/.next/build-manifest.json"), "{}\n").unwrap();
+    let home = root.to_str().unwrap();
+    let app = root.join("app");
+    let app = app.to_str().unwrap();
+    for cwd in [app.to_string(), format!("{home}/work")] {
+        for (command, allowed) in [
+            (
+                format!("ls -la {app}/.next/tsconfig.tsbuildinfo 2>/dev/null"),
+                true,
+            ),
+            (
+                "ls ~/app/.next/tsconfig.tsbuildinfo 2>/dev/null".to_string(),
+                true,
+            ),
+            (format!("ls {app}/.next/cache/webpack/missing"), true),
+            (
+                format!(
+                    "ls -la {app}/tsconfig.tsbuildinfo 2>/dev/null; \
+                     ls {app}/.next/tsconfig.tsbuildinfo 2>/dev/null; echo \"---\""
+                ),
+                true,
+            ),
+            // A dot-leaf below the folder still spells a hidden name.
+            (format!("ls {app}/.next/.env.local"), false),
+            // A package store keeps the review it always had.
+            (
+                format!("ls {app}/node_modules/.pnpm/registry.npmjs.org"),
+                false,
+            ),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                "claude-code",
+                "PreToolUse",
+                &json!({"tool_name":"Bash", "tool_input":{"command":command}}),
+                None,
+                None,
+                Some(home),
+                Some(&cwd),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{cwd}: {command} => {} / {}",
+                result.minimum_action,
+                result.reason_code
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

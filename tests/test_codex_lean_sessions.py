@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.guard import codex_lean_sessions as lean
 from codex_plugin_scanner.guard.cli import commands_router
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 
-tomllib = lean.tomllib
 SIZE = 100_000
 
 USER_CONFIG = """# my Codex settings
@@ -36,6 +38,20 @@ def write_config(home: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def recorded(guard: Path, path: Path) -> int | None:
+    record = guard / "codex-lean-sessions.json"
+    if not record.exists():
+        return None
+    configs = json.loads(record.read_text(encoding="utf-8")).get("configs", {})
+    return configs.get(str(path.absolute()))
+
+
+def seed_record(guard: Path, path: Path, limit: int) -> None:
+    guard.mkdir(parents=True, exist_ok=True)
+    payload = {"configs": {str(path.absolute()): limit}}
+    (guard / "codex-lean-sessions.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_on_adds_the_limit_and_keeps_the_users_file(tmp_path: Path) -> None:
@@ -138,55 +154,27 @@ def test_guards_value_in_one_codex_home_is_not_claimed_in_another(tmp_path: Path
     assert lean.disable(home, guard, environ)["state"] == "off"
 
 
-def test_a_failed_config_write_leaves_no_ownership_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home, guard = homes(tmp_path)
-    path = write_config(home, USER_CONFIG)
-
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise PermissionError("read-only")
-
-    monkeypatch.setattr(lean, "_write_config", refuse)
-    with pytest.raises(PermissionError):
-        lean.enable(home, guard, limit=SIZE)
-
-    assert lean._recorded(guard, path) is None
-    assert path.read_text(encoding="utf-8") == USER_CONFIG
-
-
-def test_a_failed_record_removal_puts_the_config_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home, guard = homes(tmp_path)
-    path = write_config(home, USER_CONFIG)
-    lean.enable(home, guard, limit=SIZE)
-    turned_on = path.read_text(encoding="utf-8")
-
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise PermissionError("read-only")
-
-    monkeypatch.setattr(lean, "_write_record", refuse)
-    with pytest.raises(PermissionError):
-        lean.disable(home, guard)
-
-    assert path.read_text(encoding="utf-8") == turned_on
-    assert lean.status(home, guard)["state"] == "on"
-
-
 def test_an_interrupted_hook_install_stops_the_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import codex_hook_recovery
+    from codex_plugin_scanner.guard import native_owned
     from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 
     home, guard = homes(tmp_path)
     path = write_config(home, USER_CONFIG)
 
-    def blocked(_home: Path) -> bool:
+    @contextlib.contextmanager
+    def blocked(*_args: object, **fields: object) -> Iterator[None]:
+        # The runtime recovers while it takes the lock, so a refusal arrives as the lock is taken.
+        assert fields["recover"] is True
         raise CodexHookIntegrityError("codex_hook_recovery_config_conflict", "needs recovery")
+        yield
 
-    monkeypatch.setattr(codex_hook_recovery, "recover_hook_publication", blocked)
+    monkeypatch.setattr(native_owned, "codex_install_transaction", blocked)
     with pytest.raises(lean.LeanSessionsError) as raised:
         lean.enable(home, guard, limit=SIZE)
 
     assert raised.value.code == "codex_hooks_need_recovery"
     assert path.read_text(encoding="utf-8") == USER_CONFIG
-    assert lean._recorded(guard, path) is None
+    assert recorded(guard, path) is None
 
 
 def run(argv: list[str], home: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[int, str]:
@@ -241,7 +229,7 @@ def test_on_without_a_size_the_user_picked_writes_nothing(tmp_path: Path, limit:
 
     assert raised.value.code == ("codex_lean_limit_required" if limit is None else "codex_lean_limit_invalid")
     assert path.read_text(encoding="utf-8") == USER_CONFIG
-    assert lean._recorded(guard, path) is None
+    assert recorded(guard, path) is None
 
 
 def test_cli_on_without_a_limit_names_the_flag_and_changes_nothing(
@@ -262,30 +250,22 @@ def test_a_limit_an_earlier_guard_wrote_still_turns_off(tmp_path: Path) -> None:
 
     home, guard = homes(tmp_path)
     path = write_config(home, f"{lean.KEY} = 30000\n" + USER_CONFIG)
-    lean._write_record(guard, path, 30_000)
+    seed_record(guard, path, 30_000)
 
     assert lean.status(home, guard) == {**lean.status(home, guard), "state": "on", "limit": 30_000}
     assert lean.disable(home, guard)["state"] == "off"
     assert tomllib.loads(path.read_text(encoding="utf-8")) == tomllib.loads(USER_CONFIG)
 
 
-def test_on_with_a_new_size_replaces_the_size_guard_wrote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_on_with_a_new_size_replaces_the_size_guard_wrote(tmp_path: Path) -> None:
     home, guard = homes(tmp_path)
     path = write_config(home, f"{lean.KEY} = 30000\n" + USER_CONFIG)
-    lean._write_record(guard, path, 30_000)
+    seed_record(guard, path, 30_000)
 
     assert lean.enable(home, guard, limit=SIZE)["limit"] == SIZE
     assert tomllib.loads(path.read_text(encoding="utf-8"))[lean.KEY] == SIZE
     assert lean.status(home, guard)["state"] == "on"
-
-    def refuse(*_args: object, **_kwargs: object) -> None:
-        raise PermissionError("read-only")
-
-    monkeypatch.setattr(lean, "_write_config", refuse)
-    with pytest.raises(PermissionError):
-        lean.enable(home, guard, limit=200_000)
-    assert lean._recorded(guard, path) == SIZE
-    assert lean.status(home, guard) == {**lean.status(home, guard), "state": "on", "limit": SIZE}
+    assert recorded(guard, path) == SIZE
 
 
 def test_on_with_a_new_size_leaves_a_size_the_user_set(tmp_path: Path) -> None:
@@ -293,7 +273,7 @@ def test_on_with_a_new_size_leaves_a_size_the_user_set(tmp_path: Path) -> None:
     path = write_config(home, f"{lean.KEY} = 50000\n" + USER_CONFIG)
 
     assert lean.enable(home, guard, limit=SIZE) == {**lean.status(home, guard), "state": "yours", "limit": 50_000}
-    assert lean._recorded(guard, path) is None
+    assert recorded(guard, path) is None
 
 
 def test_cli_json_reports_a_guard_home_it_cannot_resolve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

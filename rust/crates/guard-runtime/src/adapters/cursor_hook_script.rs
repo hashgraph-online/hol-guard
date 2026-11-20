@@ -195,7 +195,7 @@ fn recovery(map: &Map<String, Value>) -> KindResult {
     let home = py_repr(text(&map["home"])?);
     let bootstrap = format!(
         "import json,sys;sys.path[:0]={roots};from pathlib import Path;\
-         from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;\
+         from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure;\
          recover_guard_daemon_after_hook_failure(Path({guard_home}),\
          home_dir=Path({home}),failure_kind=sys.argv[1])"
     );
@@ -241,3 +241,7 @@ fn py_repr(text: &str) -> String {
 #[cfg(test)]
 #[path = "cursor_hook_script_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "hook_python_imports_tests.rs"]
+mod python_imports_tests;

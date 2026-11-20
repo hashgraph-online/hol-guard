@@ -46,7 +46,7 @@ const NOT_SYSTEM_STATE: &[&str] = &[
 
 /// `path` with `.` and `..` components resolved, as the kernel would resolve
 /// them before following any link.
-fn lexical(path: &str) -> String {
+pub(super) fn lexical(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for part in path.split('/') {
         match part {

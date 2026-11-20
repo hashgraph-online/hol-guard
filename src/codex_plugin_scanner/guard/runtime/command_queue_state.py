@@ -10,26 +10,22 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...version import __version__
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
+from ..native_command_state import CommandStateUnavailableError, native_command_state
 from ..store import GuardStore
 from .command_capability import (
-    CommandCapabilityError,
     command_capability_operations,
     command_capability_status,
     command_environment_allows_queue,
 )
-from .command_executors import COMMAND_OPERATION_SCHEMA_VERSIONS, SUPPORTED_COMMAND_OPERATIONS
+from .command_executors import SUPPORTED_COMMAND_OPERATIONS
 from .command_queue_activation import (
     COMMAND_QUEUE_LEASE_WAIT_MS_ENV,
     command_queue_is_enabled,
-    command_queue_lease_wait_ms,
 )
-from .command_queue_authority import command_queue_oauth_target
 from .command_queue_protocol import redacted_error
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
-    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     exact_cloud_review_operations,
     exact_cloud_review_status,
 )
@@ -225,60 +221,28 @@ def command_queue_brief_status(store: GuardStore) -> dict[str, object]:
 
 
 def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
-    state = load_command_queue_state(store)
-    repaired: list[str] = []
-    if state.get("active_job") is not None and not isinstance(state.get("active_job"), dict):
-        state.pop("active_job", None)
-        repaired.append("active_job")
-    pending_result = state.get("pending_result")
-    if pending_result is not None:
-        pending_valid = (
-            isinstance(pending_result, dict)
-            and isinstance(pending_result.get("job"), dict)
-            and isinstance(pending_result.get("payload"), dict)
-        )
-        if not pending_valid:
-            state.pop("pending_result", None)
-            repaired.append("pending_result")
-    if repaired:
-        state.update({"state": "idle", "last_error": None})
-        save_command_queue_state(store, state)
+    """Drop the lane's damaged queue fields and report which ones went.
+
+    The runtime reads the lane's state row, drops an ``active_job`` that is not
+    an object and a ``pending_result`` without an object job and payload, and
+    writes the row back idle, all in one transaction, so a queue worker saving
+    the same row cannot lose its write. Raises ``CommandStateUnavailableError``
+    when no capable runtime answers and ``CommandStateRefusedError`` when the
+    row cannot be read.
+    """
+
+    guard_home = getattr(store, "guard_home", None)
+    if not isinstance(guard_home, Path):
+        raise CommandStateUnavailableError
+    answer = native_command_state(
+        guard_home,
+        "queue_repair",
+        now=command_queue_now(),
+        state_key=current_command_queue_lane().state_key,
+    )
+    listed = answer.get("repaired") if isinstance(answer, dict) else None
+    repaired = [field for field in listed if isinstance(field, str)] if isinstance(listed, list) else []
     return {"repaired": repaired, "repaired_count": len(repaired), "status": command_queue_status(store)}
-
-
-def command_queue_lease_payload(
-    store: GuardStore,
-    *,
-    operations: tuple[str, ...] | None = None,
-    wait_ms: int | None = None,
-    max_jobs: int = 1,
-    operation_resolver: Callable[[GuardStore], tuple[str, ...]] = command_queue_operations,
-) -> dict[str, object]:
-    machine_id, workspace_id = command_queue_oauth_target(store)
-    operations = operation_resolver(store) if operations is None else operations
-    if not operations:
-        raise CommandCapabilityError("command_capability_required")
-    capabilities: dict[str, object] = {"operations": list(operations)}
-    schema_versions = {
-        operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation]
-        for operation in operations
-        if operation != EXACT_CLOUD_REVIEW_OPERATION and operation in COMMAND_OPERATION_SCHEMA_VERSIONS
-    }
-    if schema_versions:
-        capabilities["schemaVersions"] = schema_versions
-    exact_only = operations == (EXACT_CLOUD_REVIEW_OPERATION,)
-    payload: dict[str, object] = {
-        "workspaceId": workspace_id,
-        "deviceId": machine_id,
-        "daemonVersion": __version__,
-        "capabilities": capabilities,
-        # Only the exact Review route leases more than one job at a time.
-        "maxJobs": max_jobs if exact_only else 1,
-        "waitMs": command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
-    }
-    if exact_only:
-        payload["protocolVersion"] = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    return payload
 
 
 def default_command_context(store: GuardStore) -> HarnessContext:
@@ -293,7 +257,6 @@ __all__ = [
     "clear_exact_route_failure",
     "command_queue_brief_status",
     "command_queue_enabled",
-    "command_queue_lease_payload",
     "command_queue_now",
     "command_queue_operations",
     "command_queue_status",

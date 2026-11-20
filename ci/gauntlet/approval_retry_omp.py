@@ -26,6 +26,7 @@ from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
 from .approval_retry_persistent import write_package_review_config
 from .approval_retry_relay import (
+    DESKTOP_RELAY_CASE,
     RELAY_MARKER,
     RELAY_ORACLE,
     SIGNED_LINK_REDACTIONS,
@@ -64,7 +65,7 @@ class OmpReview:
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
         if scenario.oracle == RELAY_ORACLE:
-            case["review_policy"] = write_relay_config(self.guard_home)
+            case["review_policy"] = write_relay_config(self.guard_home, desktop=scenario.id == DESKTOP_RELAY_CASE)
         elif scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES:
             case["review_policy"] = write_package_review_config(self.guard_home)
         else:

@@ -14,7 +14,9 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::files::{self, path_value, text, Doc};
-use super::{detection, path_answer, path_text, Ctx, Failure, Spec, Step};
+use super::{
+    attested_cli, detection, hook_config, path_answer, path_text, Ctx, Failure, Spec, Step,
+};
 use crate::aibom_paths::py_path;
 use crate::copilot_detect::{strip_jsonc, universal_newlines};
 use crate::opencode_plugin_render::{dumps, dumps_unmapping};
@@ -25,6 +27,8 @@ pub(super) const COMPANION_PREFIX: &str = "hol-guard::";
 pub(super) const PROXY: &str = "opencode-mcp-proxy";
 const PLUGIN_FILE: &str = "hol-guard-pretool.ts";
 pub(super) const RUNTIME_ENV_VAR: &str = "OPENCODE_CONFIG_CONTENT";
+/// The budget the plugin's bounded bridge answers a hook within.
+const HOOK_TIMEOUT_SECONDS: i64 = 25;
 
 pub(crate) fn dispatch(
     spec: &Spec,
@@ -38,17 +42,83 @@ pub(crate) fn dispatch(
             None => global_dir(ctx).join(CONFIG_NAMES[0]),
         }),
         "detect" => detect(spec, ctx),
-        "install_detection" => super::opencode_install::install_detection(spec, ctx),
         "prepare_install" => super::opencode_install::prepare_install(ctx, fields),
         "prepare_uninstall" => prepare_uninstall(ctx),
         "finish_uninstall" => finish_uninstall(ctx, fields),
         "runtime_probe" => Ok(runtime_probe(spec, ctx)),
         "plugin_refresh" => super::opencode_checks::plugin_refresh(ctx, fields),
-        "protection" => super::opencode_checks::protection(ctx, fields),
-        "refresh_scan" => super::opencode_checks::refresh_scan(ctx),
-        "refresh_apply" => super::opencode_checks::refresh_apply(ctx, fields),
+        "protection" => super::opencode_checks::protection(spec, ctx, fields),
+        "update_refresh" => super::opencode_update::update_refresh(spec, ctx, fields),
+        "refresh_apply" => {
+            let _config = super::install_apply::opencode_lock(spec, ctx)?;
+            super::opencode_checks::refresh_apply(ctx)
+        }
         _ => super::common(spec, op, ctx),
     }
+}
+
+/// `plugin_render_args`: the attested Guard CLI the pretool plugin runs. The
+/// interpreter (or frozen launcher) identity, the import roots a Python Guard
+/// runs from and the system `taskkill` a Windows hook stops its tree with.
+/// `scoped` runs a Python probe in a directory this request owns, as an
+/// install does (`disposable_guard_hook_probe`).
+fn plugin_render_args(ctx: &Ctx, scoped: bool) -> Step<Value> {
+    let attested = attested_cli::attested(ctx, scoped)?.map_err(Failure::Runtime)?;
+    let import_roots = attested
+        .python
+        .as_ref()
+        .map(|python| python.import_roots.clone())
+        .unwrap_or_default();
+    Ok(json!({
+        "guard_home": path_text(&ctx.resolved(&ctx.guard_home)),
+        "python": attested.interpreter.to_json().ok_or(Failure::Invalid)?,
+        "frozen": attested.python.is_none(),
+        "import_roots": import_roots,
+        "taskkill_path": taskkill_path(),
+    }))
+}
+
+#[cfg(windows)]
+fn taskkill_path() -> Option<String> {
+    let windows = guard_runtime_windows_process::kernel_windows_directory()?;
+    Some(format!(
+        "{}\\System32\\taskkill.exe",
+        windows.trim_end_matches(['\\', '/'])
+    ))
+}
+
+#[cfg(not(windows))]
+fn taskkill_path() -> Option<String> {
+    None
+}
+
+/// The plugin render arguments, with the bounded native hook argv
+/// `[runtime, "bounded-hook-bridge", config]` the plugin starts. A frozen
+/// caller names none: the plugin runs its frozen launcher. Any other caller
+/// needs the native runtime that carries the bridge. Unit tests hand in the
+/// arguments a Python caller cannot attest there.
+pub(super) fn plugin_args(ctx: &Ctx, fields: &Map<String, Value>, scoped: bool) -> Step<Value> {
+    let mut args = match fields.get("plugin") {
+        Some(given @ Value::Object(_)) if cfg!(test) => given.clone(),
+        _ => plugin_render_args(ctx, scoped)?,
+    };
+    let fields = args.as_object_mut().ok_or(Failure::Invalid)?;
+    let frozen = fields
+        .get("frozen")
+        .and_then(Value::as_bool)
+        .ok_or(Failure::Invalid)?;
+    let bridge = if frozen {
+        Value::Null
+    } else {
+        json!(hook_config::hook_argv(
+            ctx,
+            "opencode",
+            &[],
+            HOOK_TIMEOUT_SECONDS
+        )?)
+    };
+    fields.insert("native_bridge_argv".to_owned(), bridge);
+    Ok(args)
 }
 
 pub(super) fn global_dir(ctx: &Ctx) -> PathBuf {
@@ -197,7 +267,7 @@ pub(super) fn command_available(spec: &Spec, ctx: &Ctx) -> bool {
 
 /// `detect`: every readable, non-empty config as written. Python adds the
 /// MCP skill firewall facts when the answer says `firewall`.
-fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
+pub(super) fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     let configs: Vec<(PathBuf, &str, String)> = config_paths(ctx)
         .into_iter()
         .filter_map(|path| {
@@ -211,9 +281,7 @@ fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
         })
         .collect();
     let found = crate::opencode_detect::detect(&detect_request(ctx, &configs, true));
-    let mut answer = detection(spec, found, command_available(spec, ctx))?;
-    answer["firewall"] = json!(true);
-    Ok(answer)
+    super::firewall::enrich(detection(spec, found, command_available(spec, ctx))?)
 }
 
 fn runtime_probe(spec: &Spec, ctx: &Ctx) -> Value {

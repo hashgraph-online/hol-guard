@@ -5,10 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-import pytest
-
-from codex_plugin_scanner.guard.hook_review import hook_managed_install_state as state
-from codex_plugin_scanner.guard.managed_install_revision import bump_managed_install_revision
+from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_managed_install_unmanaged
 
 
 class _Store:
@@ -16,100 +13,52 @@ class _Store:
         self.path = "/tmp/guard-test-store"
         self.installs = installs
         self.reads = 0
+        self.revision = 0
 
     @contextmanager
     def connection_scope(self) -> Iterator[None]:
         yield
 
-    def get_managed_install(self, harness: str) -> dict[str, object] | None:
+    def _native_store_call(self, method: str, args: dict[str, object]) -> object:
+        assert method == "hook_managed_install_admission"
         self.reads += 1
-        if harness not in self.installs:
-            return None
-        return {"harness": harness, "active": self.installs[harness]}
-
-    def list_managed_installs(self) -> list[dict[str, object]]:
-        self.reads += 1
-        return [{"harness": name, "active": active} for name, active in self.installs.items()]
-
-
-@pytest.fixture(autouse=True)
-def _clear_remembered_answers() -> Iterator[None]:
-    state._protected_until.clear()
-    state._refresh_locks.clear()
-    yield
-    state._protected_until.clear()
-    state._refresh_locks.clear()
+        harness = str(args["harness"])
+        if harness in self.installs:
+            unmanaged = self.installs[harness] is False
+        else:
+            unmanaged = any(active and name != harness for name, active in self.installs.items())
+        return {"unmanaged": unmanaged, "revision": self.revision}
 
 
 def _server(store: _Store) -> SimpleNamespace:
     return SimpleNamespace(store=store)
 
 
-def test_protected_answer_is_remembered_between_hooks() -> None:
+def test_active_answer_is_read_from_the_resident() -> None:
     store = _Store({"pi": True})
-    server = _server(store)
-    assert state._hook_harness_is_unmanaged(server, "pi") is False
-    assert state._hook_harness_is_unmanaged(server, "pi") is False
+    assert _native_managed_install_unmanaged(store, "pi") is False
     assert store.reads == 1
 
 
-def test_local_managed_install_write_drops_remembered_answer() -> None:
-    store = _Store({"pi": True})
-    server = _server(store)
-    assert state._hook_harness_is_unmanaged(server, "pi") is False
-    store.installs["pi"] = False
-    bump_managed_install_revision()
-    assert state._hook_harness_is_unmanaged(server, "pi") is True
-
-
-def test_remembered_answer_expires(monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _Store({"pi": True})
-    server = _server(store)
-    now = [1000.0]
-    monkeypatch.setattr(state.time, "monotonic", lambda: now[0])
-    assert state._hook_harness_is_unmanaged(server, "pi") is False
-    now[0] += state._PROTECTED_ANSWER_TTL_SECONDS + 0.1
-    store.installs["pi"] = False
-    assert state._hook_harness_is_unmanaged(server, "pi") is True
-
-
-def test_unmanaged_answer_is_never_remembered() -> None:
+def test_inactive_direct_row_is_unmanaged() -> None:
     store = _Store({"pi": False})
-    server = _server(store)
-    assert state._hook_harness_is_unmanaged(server, "pi") is True
-    store.installs["pi"] = True
-    assert state._hook_harness_is_unmanaged(server, "pi") is False
+    assert _native_managed_install_unmanaged(store, "pi") is True
 
 
-def test_other_active_harness_makes_unmanaged_without_remembering() -> None:
+def test_other_active_harness_is_unmanaged() -> None:
     store = _Store({"claude-code": True})
-    server = _server(store)
-    assert state._hook_harness_is_unmanaged(server, "pi") is True
-    assert state._hook_harness_is_unmanaged(server, "pi") is True
-    assert store.reads == 4
+    assert _native_managed_install_unmanaged(store, "pi") is True
 
 
-def test_store_failure_stays_protected_and_is_not_remembered() -> None:
-    class _Broken(_Store):
-        def get_managed_install(self, harness: str) -> dict[str, object] | None:
-            raise RuntimeError("boom")
-
-    store = _Broken({})
-    server = _server(store)
-    assert state._hook_harness_is_unmanaged(server, "pi") is False
-    assert not state._protected_until
-
-
-def test_concurrent_hooks_share_one_store_read_when_the_remembered_answer_expires() -> None:
+def test_concurrent_reads_are_each_bounded_native_calls() -> None:
     store = _Store({"pi": True})
-    server = _server(store)
-    workers = 16
+    workers = 8
     barrier = threading.Barrier(workers)
     answers: list[bool] = []
 
     def hook() -> None:
         barrier.wait()
-        answers.append(state._hook_harness_is_unmanaged(server, "pi"))
+        answers.append(_native_managed_install_unmanaged(store, "pi"))
 
     threads = [threading.Thread(target=hook) for _ in range(workers)]
     for thread in threads:
@@ -117,24 +66,12 @@ def test_concurrent_hooks_share_one_store_read_when_the_remembered_answer_expire
     for thread in threads:
         thread.join()
     assert answers == [False] * workers
-    assert store.reads == 1
-
-
-def test_concurrent_hooks_each_read_the_store_for_an_unmanaged_harness() -> None:
-    store = _Store({"pi": False})
-    server = _server(store)
-    workers = 8
-    barrier = threading.Barrier(workers)
-    answers: list[bool] = []
-
-    def hook() -> None:
-        barrier.wait()
-        answers.append(state._hook_harness_is_unmanaged(server, "pi"))
-
-    threads = [threading.Thread(target=hook) for _ in range(workers)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert answers == [True] * workers
     assert store.reads == workers
+
+
+def test_store_failure_stays_protected() -> None:
+    class Broken:
+        def _native_store_call(self, _method: str, _args: dict[str, object]) -> object:
+            raise RuntimeError("resident unavailable")
+
+    assert _native_managed_install_unmanaged(Broken(), "pi") is False

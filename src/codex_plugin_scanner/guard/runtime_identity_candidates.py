@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .adapters.mcp_servers import observable_stdio_servers_with_proxy
+from .mcp_server_client import observable_stdio_servers_with_proxy
 from .models import HarnessDetection
 from .runtime_identity_assessment import RuntimeIdentityError
 from .runtime_identity_probe import RuntimeProbe, probe_runtime_launches

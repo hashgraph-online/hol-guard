@@ -110,6 +110,15 @@ pub(crate) fn policy_binding_holds(
     policy_binding(harness, result, receipt) != NativePolicyBindingV1::Invalid
 }
 
+/// Return the validated policy binding for a resident transport caller.
+pub(crate) fn policy_binding_value(
+    harness: &str,
+    result: &Map<String, Value>,
+    receipt: Option<&Map<String, Value>>,
+) -> NativePolicyBindingV1 {
+    policy_binding(harness, result, receipt)
+}
+
 /// A verdict that claims no extension policy, on either the verdict or its
 /// receipt, binds none. One that does binds only through a receipt that
 /// records this very `PreToolUse` result and carries a well-formed command

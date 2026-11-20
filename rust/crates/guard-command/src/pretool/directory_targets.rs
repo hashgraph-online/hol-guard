@@ -676,6 +676,8 @@ impl<'a> super::PathContext<'a> {
             // command model is in hand.
             creates_nothing: false,
             psql_environment,
+            // Only the hook knows which Guard home it reported.
+            guard_home: None,
         }
     }
 }

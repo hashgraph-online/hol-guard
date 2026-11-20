@@ -36,6 +36,7 @@ use serde_json::{Map, Value};
 
 use crate::hook_direct_evidence::DirectEvidenceQueue;
 use crate::hook_evidence_writer_op as writer_op;
+use crate::policy_store::PolicySnapshotStore;
 
 /// The resident feature under which an envelope may ask for this.
 pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
@@ -59,11 +60,37 @@ const APPROVAL_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
 /// outside the resident's own edge request, which never records.
 pub(crate) fn encode(
     envelope: &GuardHookEnvelopeV2,
+    origin_store: Option<&PolicySnapshotStore>,
+    edge: GuardHookEdgeResultV2,
+    started: Instant,
+) -> Result<Vec<u8>, String> {
+    encode_inner(
+        envelope,
+        origin_store.is_some(),
+        edge,
+        started,
+        origin_store,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn encode_for_test(
+    envelope: &GuardHookEnvelopeV2,
     resident: bool,
     edge: GuardHookEdgeResultV2,
     started: Instant,
 ) -> Result<Vec<u8>, String> {
-    let mut edge = crate::edge_structured::attached(envelope, edge, started);
+    encode_inner(envelope, resident, edge, started, None)
+}
+
+fn encode_inner(
+    envelope: &GuardHookEnvelopeV2,
+    resident: bool,
+    edge: GuardHookEdgeResultV2,
+    started: Instant,
+    origin_store: Option<&PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
+    let mut edge = crate::edge_structured::attached(envelope, edge, started, origin_store);
     if resident && envelope.record_receipt && !budget_spent(envelope, started) {
         let activity = edge_activity(envelope, &edge);
         edge.receipt_recorded = true;

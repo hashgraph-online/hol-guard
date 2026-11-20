@@ -248,6 +248,7 @@ fn a_live_command_mismatch_preserves_state_and_prevents_replacement() {
             answer,
             json!({
                 "kind": "runtime", "error": "Stale Guard daemon could not be retired safely.",
+                "code": "daemon_stale_generation",
             })
         );
         assert_eq!(fs::read(&state_path).unwrap(), before);

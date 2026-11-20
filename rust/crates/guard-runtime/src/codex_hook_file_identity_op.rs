@@ -357,7 +357,7 @@ pub(crate) fn failed(role: &str, kind: &str, private_group_question: Option<Valu
 /// itself refuses to resolve a link standing where a regular file belongs, and
 /// does not block on a pipe or device standing there, so neither can be
 /// swapped in after the name was checked.
-fn open_regular(path: &Path) -> Option<(FileFacts, fs::File)> {
+pub(crate) fn open_regular(path: &Path) -> Option<(FileFacts, fs::File)> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -450,7 +450,7 @@ fn digest_matches(file: fs::File, size: u64, expected: &str) -> bool {
 /// writer extending the file underneath the read cannot hold the worker past
 /// the length that was measured, and one truncating it hashes short, which the
 /// comparison answers as the mismatch it is.
-fn sha256_file(file: fs::File, size: u64) -> Option<String> {
+pub(crate) fn sha256_file(file: fs::File, size: u64) -> Option<String> {
     let mut file = file.take(size);
     let mut digest = Sha256::new();
     // A manifest names hook scripts far more often than interpreters, so the

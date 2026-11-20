@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.audit_workspace import audit_workspace_is_bound_to_context
 from codex_plugin_scanner.guard.runtime.command_executors import (
     APP_OPERATIONS,
     execute_guard_command_job,
 )
+
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
 
 
 def _make_context(tmp_path: Path) -> HarnessContext:
@@ -179,156 +181,3 @@ def test_cloud_audit_executes_relative_dot_in_active_workspace(tmp_path: Path, m
     assert result["data"]["audit_proof_recorded"] is False
     assert result["data"]["audit_proof_error"] == "native_shim_admin_unavailable"
     assert audit.call_args.kwargs["workspace_dir"] == context.workspace_dir.resolve()
-
-
-class TestAutoUpdateThrottle:
-    """Verify auto-update throttling in maybe_auto_update."""
-
-    def test_auto_update_skipped_within_throttle_window(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        recent = datetime.now(timezone.utc)
-        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = {"last_check_at": recent.isoformat()}
-        with patch.object(auto_update, "build_guard_update_status_payload") as mock:
-            auto_update.maybe_auto_update(store, context)
-        mock.assert_not_called()
-
-    def test_auto_update_runs_after_throttle_window(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        old = datetime(2026, 7, 3, 0, 0, 0, tzinfo=timezone.utc)
-        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = {"last_check_at": old.isoformat()}
-        status = {
-            "current_version": "2.0.967",
-            "latest_version": "2.0.970",
-            "auto_updatable": True,
-            "update_available": True,
-            "blocked_reason": None,
-        }
-        with (
-            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
-            patch.object(auto_update, "run_guard_update", return_value=({"changed": True}, 0)) as mock_update,
-        ):
-            auto_update.maybe_auto_update(store, context)
-        mock_update.assert_called_once()
-
-    def test_auto_update_skipped_when_not_auto_updatable(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        status = {
-            "current_version": "2.0.967",
-            "latest_version": "2.0.970",
-            "auto_updatable": False,
-            "update_available": True,
-            "blocked_reason": "This install was set up from local source code.",
-        }
-        with (
-            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
-            patch.object(auto_update, "run_guard_update") as mock_update,
-        ):
-            auto_update.maybe_auto_update(store, context)
-        mock_update.assert_not_called()
-
-    @pytest.mark.parametrize("mode", ["ask", "off"])
-    def test_auto_update_respects_user_update_mode(self, tmp_path: Path, mode: str) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        status = {
-            "current_version": "2.0.967",
-            "latest_version": "2.0.970",
-            "auto_updatable": True,
-            "update_available": True,
-            "update_mode": mode,
-            "blocked_reason": None,
-        }
-        with (
-            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
-            patch.object(auto_update, "run_guard_update") as mock_update,
-        ):
-            auto_update.maybe_auto_update(store, context)
-        mock_update.assert_not_called()
-
-    def test_auto_update_does_not_retry_failed_target_version(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = {"failed_version": "2.0.970"}
-        status = {
-            "current_version": "2.0.967",
-            "latest_version": "2.0.970",
-            "auto_updatable": True,
-            "update_available": True,
-            "update_mode": "automatic",
-            "blocked_reason": None,
-        }
-        with (
-            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
-            patch.object(auto_update, "run_guard_update") as mock_update,
-        ):
-            auto_update.maybe_auto_update(store, context)
-        mock_update.assert_not_called()
-
-    def test_auto_update_records_failed_target_version(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        status = {
-            "current_version": "2.0.967",
-            "latest_version": "2.0.970",
-            "auto_updatable": True,
-            "update_available": True,
-            "update_mode": "automatic",
-            "blocked_reason": None,
-        }
-        with (
-            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
-            patch.object(auto_update, "run_guard_update", return_value=({"status": "failed"}, 1)),
-        ):
-            auto_update.maybe_auto_update(store, context)
-        assert store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY]["failed_version"] == "2.0.970"
-
-    def test_auto_update_skipped_when_no_update_available(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        status = {
-            "current_version": "2.0.970",
-            "latest_version": "2.0.970",
-            "auto_updatable": True,
-            "update_available": False,
-            "blocked_reason": None,
-        }
-        with (
-            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
-            patch.object(auto_update, "run_guard_update") as mock_update,
-        ):
-            auto_update.maybe_auto_update(store, context)
-        mock_update.assert_not_called()
-
-    def test_auto_update_handles_malformed_state(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import auto_update
-
-        context = _make_context(tmp_path)
-        store = _FakeStore()
-        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = "not valid json{{"
-        status = {
-            "current_version": "2.0.970",
-            "latest_version": "2.0.970",
-            "auto_updatable": True,
-            "update_available": False,
-            "blocked_reason": None,
-        }
-        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
-            auto_update.maybe_auto_update(store, context)
-        # Should not crash — malformed state is treated as empty

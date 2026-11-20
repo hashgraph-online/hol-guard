@@ -250,7 +250,8 @@ class StorePolicyDocumentMixin:
             return
         if not isinstance(next_control_state, dict):
             raise RuntimeError("Guard policy integrity control state is invalid.")
-        self._finalize_policy_integrity_control_state(next_control_state)
+        if self._finalize_policy_integrity_control_state(next_control_state) is False:
+            raise RuntimeError("Guard policy integrity control state could not be finalized.")
 
     def _normalize_compiled_rows(
         self,
@@ -387,8 +388,11 @@ class StorePolicyDocumentMixin:
                         force_sign_decision_ids=inserted_ids,
                     )
 
-        if next_control_state is not None:
-            self._finalize_policy_integrity_control_state(next_control_state)
+        if (
+            next_control_state is not None
+            and self._finalize_policy_integrity_control_state(next_control_state) is False
+        ):
+            raise RuntimeError("Guard policy integrity control state could not be finalized.")
         return PolicyDocumentImportResult(
             document_id=document.metadata.id,
             digest=digest,

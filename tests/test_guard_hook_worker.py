@@ -537,7 +537,7 @@ class TestHookWorkerOutputScanning:
         assert result["continue"] is True
         assert result["stopReason"] == result["reason"]
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_credential_echo_with_forged_auth_role_remains_blocked(
@@ -566,7 +566,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["decision"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_documentation_demo_secret_output_blocks(
@@ -590,7 +590,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_documentation_fixture_prefixed_secret_output_blocks(
@@ -614,7 +614,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_mixed_docs_and_source_paths_keep_secret_retry(
@@ -638,7 +638,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_shell_output_uses_scan_fast_path(

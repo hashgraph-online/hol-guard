@@ -11,6 +11,7 @@ module manufactures that history and then checks what the install left behind.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,12 @@ from .installed_registration import guard_handlers, handler_argv, read_config
 
 #: A path an older build could plausibly have registered and that no longer
 #: exists. If the install joins rather than prunes, this stays behind and the
-#: harness ends up calling a command that is not there.
-STALE_COMMAND = "/opt/hol-guard-previous/bin/hol-guard"
+#: harness ends up calling a command that is not there. It has to be absolute
+#: on the host that runs the lane: Windows reads ``/opt/...`` as relative to the
+#: current drive, and Guard rightly leaves a relative command alone.
+STALE_COMMAND = (
+    r"C:\hol-guard-previous\bin\hol-guard.exe" if os.name == "nt" else "/opt/hol-guard-previous/bin/hol-guard"
+)
 
 #: The marker Guard puts in its own Claude hook argv, spelled here rather than
 #: imported so the lane keeps its own copy of what a previous build wrote. A
@@ -28,6 +33,12 @@ STALE_COMMAND = "/opt/hol-guard-previous/bin/hol-guard"
 CLAUDE_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 #: The subcommand that marker travels with in a previous build's registration.
 CLAUDE_HOOK_BRIDGE_COMMAND = "claude-hook-bridge"
+
+#: The status message every Codex hook Guard wrote before its manifest carried.
+#: Guard attributes a pre-manifest Codex handler to itself by this message, and
+#: leaves a handler without it alone as a third party's, so a seed missing it
+#: would demand a removal the product rightly refuses.
+CODEX_LEGACY_STATUS_MESSAGE = "HOL Guard checking Bash command"
 
 
 def age_home(home: Path) -> dict[str, Any]:
@@ -69,9 +80,16 @@ def age_home(home: Path) -> dict[str, Any]:
                 "hooks": {
                     "PreToolUse": [
                         {
+                            "matcher": "Bash",
                             "hooks": [
-                                {"type": "command", "command": STALE_COMMAND, "args": ["hook", "--harness", "codex"]}
-                            ]
+                                {
+                                    "type": "command",
+                                    "command": STALE_COMMAND,
+                                    "args": ["hook", "--harness", "codex"],
+                                    "timeoutSec": 30,
+                                    "statusMessage": CODEX_LEGACY_STATUS_MESSAGE,
+                                }
+                            ],
                         }
                     ]
                 }

@@ -87,6 +87,26 @@ fn guard_proxies_replay_the_python_recognizer() {
 }
 
 #[test]
+fn only_launches_with_argument_lists_are_read() {
+    let servers = json!({
+        "proxy": { "command": "hol-guard", "args": ["codex-mcp-proxy", 1] },
+        "plain": { "command": 7, "args": [] },
+        "no-args": { "command": "npx" },
+        "bad-args": { "command": "hol-guard", "args": "codex-mcp-proxy" },
+        "not-a-table": "x",
+    });
+    let answer = dispatch(&json!({ "op": "guard_proxies", "servers": servers }))
+        .expect("guard_proxies answers");
+    assert_eq!(answer, json!({ "names": ["proxy"] }));
+    assert_eq!(
+        dispatch(&json!({ "op": "guard_proxies", "servers": {
+            "x": { "command": "npx" }
+        } })),
+        Ok(json!({ "names": [] }))
+    );
+}
+
+#[test]
 fn malformed_requests_are_refused() {
     for request in [
         json!({ "op": "shell_blocks" }),
@@ -94,9 +114,6 @@ fn malformed_requests_are_refused() {
         json!({ "op": "shell_blocks", "content": "\u{100}" }),
         json!({ "op": "shell_blocks", "content": "", "extra": 1 }),
         json!({ "op": "guard_proxies", "servers": [] }),
-        json!({ "op": "guard_proxies", "servers": { "a": { "command": 1, "args": [] } } }),
-        json!({ "op": "guard_proxies", "servers": { "a": { "command": null, "args": [1] } } }),
-        json!({ "op": "guard_proxies", "servers": { "a": { "command": null } } }),
         json!({ "op": "unknown" }),
     ] {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");

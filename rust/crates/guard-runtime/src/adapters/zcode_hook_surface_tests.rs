@@ -24,7 +24,12 @@ fn replays_vectors_recorded_from_the_python_adapter() {
             assert_eq!(&answer, expected, "{name}");
             continue;
         }
-        assert_eq!(answer["text"], expected["text"], "{name}");
+        assert_same_file(
+            &case["request"]["text"],
+            &answer["text"],
+            &expected["text"],
+            name,
+        );
         match expected.get("enabled") {
             Some(record) => {
                 let text = answer["enabled"].as_str().expect("enabled text");
@@ -32,9 +37,29 @@ fn replays_vectors_recorded_from_the_python_adapter() {
                 assert_eq!(&enabled, record, "{name}");
                 assert_eq!(answer.as_object().map(|map| map.len()), Some(2), "{name}");
             }
-            None => assert_eq!(answer, json!({ "text": expected["text"] }), "{name}"),
+            None => assert_eq!(answer.as_object().map(|map| map.len()), Some(1), "{name}"),
         }
     }
+}
+
+/// A new file is Python's exact render. A rewrite keeps the user's own
+/// formatting, so it matches Python's value rather than its bytes.
+fn assert_same_file(request: &Value, answer: &Value, expected: &Value, name: &str) {
+    if request.is_null() || expected.is_null() {
+        assert_eq!(answer, expected, "{name}");
+        return;
+    }
+    let parsed = |text: &Value| {
+        let text = text.as_str().unwrap_or_else(|| panic!("{name}: text"));
+        crate::pyjson::parse_marking_lone_surrogates(text)
+            .unwrap_or_else(|_| panic!("{name}: json"))
+    };
+    // Canonical text, so a NaN compares equal to itself.
+    assert_eq!(
+        parsed(answer).canonical_key(),
+        parsed(expected).canonical_key(),
+        "{name}"
+    );
 }
 
 fn install_request(text: Value) -> Value {
@@ -90,7 +115,15 @@ fn renders_the_handler_and_the_live_record() {
   "plugins": {}
 }
 "#;
-    assert_eq!(answer["text"], want);
+    let text = answer["text"].as_str().expect("text");
+    assert_eq!(
+        serde_json::from_str::<Value>(text).expect("json"),
+        serde_json::from_str::<Value>(want).expect("json")
+    );
+    assert!(
+        text.starts_with("{\"hooks\": {\"enabled\": true, \"events\": {\n"),
+        "{text}"
+    );
     assert_eq!(
         answer["enabled"],
         "{\n  \"present\": true,\n  \"value\": 1.0\n}"
@@ -114,10 +147,11 @@ fn refuses_a_lone_surrogate_it_would_write_back() {
 fn keeps_a_genuine_noncharacter_and_refuses_a_lone_surrogate_key() {
     for text in [r#"{"theme": "\ufdd0"}"#, "{\"theme\": \"\u{fdd0}\"}"] {
         let answer = dispatch(&install_request(json!(text))).expect("rendered");
-        assert!(answer["text"]
-            .as_str()
-            .expect("text")
-            .contains("\"theme\": \"\\ufdd0\""));
+        // The untouched member keeps the user's own spelling of it.
+        let written = answer["text"].as_str().expect("text");
+        assert!(written.starts_with(&text[..text.len() - 1]), "{written}");
+        let theme: Value = serde_json::from_str(written).expect("json");
+        assert_eq!(theme["theme"], "\u{fdd0}");
     }
     let key = json!(r#"{"\udc00": 1}"#);
     assert_eq!(dispatch(&install_request(key)), Err(ERR_INVALID));
@@ -174,4 +208,34 @@ fn refuses_malformed_requests() {
     for request in cases {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
+}
+
+#[test]
+fn install_then_uninstall_gives_back_the_user_bytes() {
+    let user = "{\n  \"syntheticUserSetting\": \"keep-me\",\n  \"nested\": {\"value\": 1}\n}\n";
+    let installed = dispatch(&install_request(json!(user))).expect("installed");
+    let record: Value =
+        serde_json::from_str(installed["enabled"].as_str().expect("record")).expect("json");
+    let installed = installed["text"].as_str().expect("text").to_owned();
+    assert!(
+        installed.contains("  \"nested\": {\"value\": 1}"),
+        "{installed}"
+    );
+    let mut uninstall = install_request(json!(installed));
+    let map = uninstall.as_object_mut().expect("request");
+    for key in ["desktop", "matchers", "command", "timeouts"] {
+        map.remove(key);
+    }
+    map.insert("op".to_owned(), json!("uninstall"));
+    map.insert("history".to_owned(), record);
+    let path = map["path"].clone();
+    map.insert("managed_config_path".to_owned(), path);
+    let answer = dispatch(&uninstall).expect("uninstalled");
+    // Hooks are gone; the Desktop objects install added are removed by the
+    // adapter's own `without_added_keys` step, which splices the same way.
+    let text = answer["text"].as_str().expect("text");
+    assert_eq!(
+        text,
+        "{\n  \"syntheticUserSetting\": \"keep-me\",\n  \"nested\": {\"value\": 1},\n  \"mcp\": {},\n  \"plugins\": {}\n}\n"
+    );
 }

@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.codex import _remove_managed_shell_guard_blocks
-from codex_plugin_scanner.guard.adapters.mcp_servers import is_guard_proxy_command
+from codex_plugin_scanner.guard.mcp_server_client import is_guard_proxy_command
 
 BEGIN = b"# >>> HOL Guard Codex shell guard >>>"
 END = b"# <<< HOL Guard Codex shell guard <<<"

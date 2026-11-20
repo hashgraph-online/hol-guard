@@ -971,20 +971,6 @@ def test_git_head_follows_symbolic_and_packed_refs(tmp_path: Path) -> None:
     assert install.git_head(tmp_path / "repo") is None
 
 
-def test_telemetry_marks_only_listings_guard_installed(guard_home: Path) -> None:
-    install.record(guard_home, "acme/toolgate", "codex", installed=True, spec=SPEC)
-    report = {
-        "entries": [
-            {"slug": "acme/toolgate", "runtime": "codex", "version": None, "key": "a" * 64},
-            {"slug": "acme/toolgate", "runtime": "claude-code", "version": None, "key": "b" * 64},
-            {"slug": "other/plugin", "runtime": "codex", "version": None, "key": "c" * 64},
-        ]
-    }
-    marked = install.mark_guard_installs(report, guard_home)["entries"]
-    assert [entry.get("via") for entry in marked] == ["hol-guard", None, None]
-    assert "via" not in report["entries"][0]
-
-
 @pytest.fixture
 def local_portal() -> Iterator[tuple[str, list[str]]]:
     """A loopback install-spec endpoint serving SPEC with its listing on the same origin."""

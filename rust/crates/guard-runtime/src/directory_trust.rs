@@ -300,8 +300,9 @@ fn trusted_workspace(
 /// so readiness failed and each review lost its working directory.
 ///
 /// Only an existing directory owned by the current user qualifies, so `/`,
-/// system directories and another user's tree stay refused. A platform with
-/// no owner to compare keeps the stricter roots.
+/// system directories and another user's tree stay refused. On Windows the
+/// owner SID decides; a platform with no owner to compare keeps the stricter
+/// roots.
 fn owned_hook_workspace(value: &str, home_dir: &str) -> Option<PathBuf> {
     let expanded = guard_paths::expanduser(value, home_dir).ok()?;
     let canonical = guard_paths::python_realpath_lax(Path::new(&expanded)).ok()?;
@@ -413,3 +414,7 @@ mod tests;
 #[cfg(all(test, unix))]
 #[path = "directory_trust_hook_workspace_tests.rs"]
 mod hook_workspace_tests;
+
+#[cfg(all(test, windows))]
+#[path = "directory_trust_hook_workspace_windows_tests.rs"]
+mod hook_workspace_windows_tests;

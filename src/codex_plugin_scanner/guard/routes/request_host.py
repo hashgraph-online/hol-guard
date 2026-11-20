@@ -186,12 +186,6 @@ def _replay_server_class() -> type:
         def package_firewall_connect_state(self, value: dict[str, object] | None) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
             self._replay_state.set("package_firewall_connect_state", value)
 
-        @cached_property
-        def network_supervisor(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from ..runtime.network_supervisor import NetworkSupervisor
-
-            return NetworkSupervisor()
-
         # The extension-control service is the resident's, one per Guard home.
         @property
         def extension_control_api(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -228,22 +222,22 @@ def _replay_server_class() -> type:
 
         @cached_property
         def hook_worker(self) -> Any:
-            from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
-            from ..hook_review.hook_direct_counters import bind_hook_counter_sink
             from ..hook_review.hook_worker import HookWorker
-            from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+            from ..resident_evidence_client import ResidentEvidenceClient
+            from ..resident_evidence_dispatch import ResidentEvidenceDispatch
+            from ..resident_route_counters import bind_route_counter_sink
 
-            self.runtime_hook_evidence_writer = NativeHookEvidenceWriter(store=self.store)
-            self.runtime_hook_evidence_dispatch = HookEvidenceDispatch()
+            self.runtime_hook_evidence_writer = ResidentEvidenceClient(store=self.store)
+            self.runtime_resident_evidence_dispatch = ResidentEvidenceDispatch()
             worker = HookWorker(
                 store=self.store,
                 workspace=self.workspace_dir,
                 home_dir=self.home_dir,
                 activity_writer=self.runtime_hook_evidence_writer,
-                evidence_dispatch=self.runtime_hook_evidence_dispatch,
+                evidence_dispatch=self.runtime_resident_evidence_dispatch,
                 capture_writer=None,
             )
-            bind_hook_counter_sink(worker, self.diagnostics)
+            bind_route_counter_sink(worker, self.diagnostics)
             return worker
 
         def classify_connection(self, request: Any) -> None:

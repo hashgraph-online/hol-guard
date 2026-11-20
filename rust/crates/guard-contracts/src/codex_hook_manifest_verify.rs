@@ -103,10 +103,13 @@ pub struct CodexHookManifestVerifyRequestV1 {
     /// Manifest paths that sit under the asking interpreter's package roots.
     #[serde(default)]
     pub installed_python_package_files: Vec<String>,
-    /// Handler command line to the argv the asking interpreter splits it
-    /// into, or `null` where it refuses to.
+    /// Whether handler command lines use Windows syntax on the asking host.
     #[serde(default)]
-    pub command_argvs: BTreeMap<String, Option<Vec<String>>>,
+    pub windows: bool,
+    /// Each 8.3 short path a handler command names, to its long form, which
+    /// only the asking host can look up.
+    #[serde(default)]
+    pub long_paths: BTreeMap<String, String>,
     /// Answers to the private-group questions an earlier reply asked.
     #[serde(default)]
     pub private_groups: Vec<CodexHookPrivateGroupAnswerV1>,

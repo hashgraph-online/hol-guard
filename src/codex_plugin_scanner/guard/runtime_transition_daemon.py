@@ -6,14 +6,12 @@ daemon liveness for functional protection admission.
 
 from __future__ import annotations
 
-import hashlib
 import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol, cast
 
 from . import native_daemon_manage as manager
-from .codex_hook_integrity import canonical_manifest_bytes
 from .live_process_identity import process_start_token
 from .native_daemon_manage import guard_daemon_start_lock, load_authenticated_daemon_state
 from .native_daemon_peer import DaemonArtifactBinding, verified_live_guard_daemon_identity
@@ -41,11 +39,12 @@ class TransitionDaemonDriver:
         home_dir: Path,
         observe_hook: TransitionHookObserver,
     ):
-        payload = plan.payload()
+        # The payload and subject the runtime accepted, not a Python recomputation.
+        payload, subject = plan.checked()
         self.runtime: RuntimeTransition = runtime
         self.home_dir: Path = home_dir
         self.operation_id: str = plan.operation_id
-        self.subject: str = hashlib.sha256(canonical_manifest_bytes(payload)).hexdigest()
+        self.subject: str = subject
         self.artifacts: dict[str, dict[str, object]] = {
             side: cast(dict[str, object], payload[side]) for side in ("candidate", "predecessor")
         }

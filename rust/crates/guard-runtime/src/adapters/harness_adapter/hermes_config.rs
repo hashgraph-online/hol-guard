@@ -206,52 +206,26 @@ fn stdio(sources: &[Source]) -> impl Iterator<Item = &Source> {
     })
 }
 
-/// The `launchers` reply: each stdio server's `ManagedMcpServer` fields.
-fn launcher_requests(sources: &[Source]) -> Value {
-    let requests = stdio(sources).map(|(key, server)| {
-        json!({
-            "name": str_or(field(server, "name"), key),
-            "config_path": str_or(field(server, "config_path"), ""),
-            "command": field(server, "command").and_then(PyVal::as_str),
-            "args": manifest_args(server),
-            "env": manifest_env(server).into_iter().map(|(key, value)| [key, value]).collect::<Vec<_>>(),
+/// `proxy_launcher_entry` for each stdio server under `hermes-mcp-proxy`,
+/// and the Guard CLI launcher.
+fn launchers(ctx: &Ctx, sources: &[Source]) -> Step<(String, Vec<Entries>)> {
+    let entries = stdio(sources)
+        .map(|(key, server)| {
+            let fields = json!({
+                "harness": "hermes",
+                "name": str_or(field(server, "name"), key),
+                "source_scope": "global",
+                "config_path": str_or(field(server, "config_path"), ""),
+                "command": field(server, "command").and_then(PyVal::as_str),
+                "args": manifest_args(server),
+                "transport": "stdio",
+                "env": manifest_env(server).into_iter().map(|(key, value)| [key, value]).collect::<Vec<_>>(),
+            });
+            let fields = fields.as_object().ok_or(Failure::Invalid)?;
+            super::proxy_launch::entry(ctx, "hermes-mcp-proxy", fields)
         })
-    });
-    Value::Array(requests.collect())
-}
-
-/// `proxy_launcher_entry` for each stdio server and the Guard CLI launcher,
-/// as Python answered the `launchers` reply for these exact requests.
-fn launchers(
-    fields: &serde_json::Map<String, Value>,
-    sources: &[Source],
-) -> Step<(String, Vec<Entries>)> {
-    let requests = launcher_requests(sources);
-    let answer = fields
-        .get("launchers")
-        .and_then(Value::as_str)
-        .and_then(|answer| pyjson::parse(answer).ok())
-        .filter(|answer| {
-            answer.get("requests").and_then(PyVal::to_json).as_ref() == Some(&requests)
-        });
-    let Some(answer) = answer else {
-        return Err(Failure::Reply(json!({ "launchers": requests })));
-    };
-    let guard_cli = answer
-        .get("guard_cli")
-        .and_then(PyVal::as_str)
-        .ok_or(Failure::Invalid)?;
-    let entries = answer
-        .get("entries")
-        .and_then(PyVal::as_list)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|entry| entry.as_dict().map(<[_]>::to_vec).ok_or(Failure::Invalid))
         .collect::<Step<Vec<_>>>()?;
-    if entries.len() != requests.as_array().map_or(0, Vec::len) {
-        return Err(Failure::Invalid);
-    }
-    Ok((guard_cli.to_owned(), entries))
+    Ok((super::caller::launcher(ctx)?.to_owned(), entries))
 }
 
 /// The `hermes mcp-proxy` launch for a remote server or one without a command.
@@ -278,15 +252,11 @@ fn proxy_args(ctx: &Ctx, key: &str) -> PyVal {
 }
 
 /// `_overlay_servers`: the overlay entry for each source under its overlay name.
-pub(super) fn overlay(
-    ctx: &Ctx,
-    fields: &serde_json::Map<String, Value>,
-    sources: &[Source],
-) -> Step<Entries> {
+pub(super) fn overlay(ctx: &Ctx, sources: &[Source]) -> Step<Entries> {
     if sources.is_empty() {
         return Ok(Vec::new());
     }
-    let (guard_cli, entries) = launchers(fields, sources)?;
+    let (guard_cli, entries) = launchers(ctx, sources)?;
     let request: Vec<Value> = sources
         .iter()
         .map(|(key, server)| json!([key, field(server, "name").and_then(PyVal::as_str)]))

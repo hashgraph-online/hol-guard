@@ -151,5 +151,7 @@ fn managed_prohibition_refuses_enrollment_before_any_selected_runtime_read_or_la
         enroll_with_source(request, &source).unwrap_err(),
         "native_context_assistance_policy_restricted"
     );
-    assert!(list(&fixture.0).unwrap().is_empty());
+    let options = list(&fixture.0).unwrap();
+    assert_eq!(options.len(), 1);
+    assert_eq!(options[0]["runtime_id"], BUILTIN_ID);
 }

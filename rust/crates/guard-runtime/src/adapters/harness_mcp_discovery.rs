@@ -74,8 +74,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("group") => group(map),
         Some("match") => matching(map),
         Some("upstream") => upstream::upstream(map),
-        Some(op @ ("select" | "server_id" | "launch_env")) => select::dispatch(op, map),
-        _ => Err(ERR_INVALID),
+        Some(op) => select::dispatch(op, map),
+        None => Err(ERR_INVALID),
     }
 }
 

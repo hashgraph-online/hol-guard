@@ -136,6 +136,7 @@ fn action(layout: &Layout, home: &str, command: &str) -> String {
         None,
         guard_command::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir: Some(home),
             cwd: Some(&cwd),
             cdpath_unset: false,

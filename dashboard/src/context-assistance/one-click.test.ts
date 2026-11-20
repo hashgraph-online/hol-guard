@@ -80,6 +80,14 @@ assert.deepEqual(reuse.kind === "run" && reuse.stages, ["download", "check", "st
 const installed = planCigarSetup(data({ installations: [installation] }), open);
 assert.ok(installed.kind === "run" && installed.runtime_id === "cigar:installed" && installed.build_id === null);
 assert.deepEqual(installed.kind === "run" && installed.stages, ["check", "start"]);
+const builtin = { runtime_id: "builtin", qualification: "guard_builtin" as const, python_version: null, platform: "darwin-arm64",
+  worker_fingerprint: "a".repeat(64), sdk_version: "0.14.2", core_version: "0.14.2", build_id: null,
+  adapter_id: "guard-cigar-builtin-v1", adapter_revision: 1, managed: false, builtin: true };
+const firstSetup = planCigarSetup(data({ installations: [builtin, installation] }), open);
+assert.ok(firstSetup.kind === "run" && firstSetup.runtime_id === "builtin" && firstSetup.build_id === null
+  && firstSetup.python_build_id === null, "a first setup starts the engine built into Guard, with no download or Python");
+const keepsPython = planCigarSetup(data({ installations: [builtin, installation], state: { ...off, preferences: { ...off.preferences, runtime_id: "cigar:installed" } } }), open);
+assert.ok(keepsPython.kind === "run" && keepsPython.runtime_id === "cigar:installed", "an existing selection is kept");
 const selected = { ...off, preferences: { ...off.preferences, runtime_id: "cigar:installed" } };
 const selectedPlan = planCigarSetup(data({ installations: [installation], state: selected }), open);
 assert.deepEqual(selectedPlan.kind === "run" && [selectedPlan.stages, selectedPlan.approval], [["start"], true],

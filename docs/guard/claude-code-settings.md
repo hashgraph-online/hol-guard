@@ -17,9 +17,32 @@ groups come from `src/codex_plugin_scanner/guard/contracts/claude-hook-groups.v1
 Hooks are always written to the user settings file, even when you install from a workspace. The workspace
 only scopes the hook URL and the Guard policy. Install says so in its output.
 
+Before it writes anything, `hol-guard install claude-code --dry-run` (and `hol-guard apps connect
+claude-code --dry-run`) prints a **Claude Code settings** panel with:
+
+- the one file Guard writes and its scope (`user`);
+- with `--workspace`, a line saying the project's `.claude` directory is not written;
+- every settings file Claude Code reads, highest precedence first, with Guard's file marked;
+- that headless `claude -p` and Remote Control sessions, which run on this machine, read the same file,
+  that cloud sessions (Claude Code on the web) do not, that sessions started with `--bare` or with
+  setting sources that leave out `user` skip Guard's hooks, and that background sessions
+  (`claude --bg`) run them but are not qualified with Guard (see
+  [Claude Code session modes](claude-code-sessions.md));
+- the undo command, `hol-guard uninstall claude-code`, and what it removes. When the install used `--home` or `--guard-home`, the printed command carries the same options, so it undoes this install and not another one;
+- a warning for each setting that would stop Claude Code running Guard's hooks (see
+  [Settings that turn Guard's hooks off](#settings-that-turn-guards-hooks-off)). Install reads only the
+  managed and user settings files, the project files when you pass `--workspace`, and its own
+  environment. It cannot warn about a setting passed when a session starts, such as
+  `claude --settings '{"disableAllHooks": true}'`. For `disableAllHooks` it reports the value from the
+  highest-precedence file that sets it, as Claude Code does;
+- on Windows, the undo command is quoted for PowerShell.
+
+The real install repeats the file, the undo command and any warning in its notes.
+
 Guard does not follow `CLAUDE_CONFIG_DIR`. It writes `~/.claude/settings.json` under your home directory
 even when that variable is set. If Claude Code runs with `CLAUDE_CONFIG_DIR` pointing elsewhere, it does
-not read the file Guard wrote, and Guard's hooks do not run.
+not read the file Guard wrote, and Guard's hooks do not run. Install warns when the variable is set in its
+own environment and points somewhere else; it cannot see a value set only in the shell that starts Claude.
 
 Install, refresh and uninstall never write a project's `.claude/settings.json` or
 `.claude/settings.local.json`, managed settings, or `~/.claude.json`. Guard reads project files for
@@ -74,8 +97,9 @@ events, so a missing `UserPromptSubmit` or `Stop` handler is not reported. Run `
 
 - removes Guard's handlers from `SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`,
   `UserPromptSubmit`, `Notification` and `Stop`, and from the retired events;
-- writes each of those events back, as an empty list when no other handler is left. It does this even
-  for an event that was not in the file before;
+- keeps every other handler on those events, and removes an event Guard's removal leaves empty, so
+  the file holds no empty list the user never had. When no event is left, it removes the `hooks`
+  object as well;
 - does nothing to the file when it has no `hooks` object, or when it cannot be read as a JSON object.
   The second case leaves any Guard entries in place; `hooks remove --all` reports them;
 - removes the launcher shim and marks the install inactive.
@@ -100,13 +124,24 @@ To restore a file, copy it back from the backup directory. To put Guard back, ru
 Claude Code reads hooks from managed, user, project and local settings and runs the handlers from all of
 them together. Guard relies only on the user file. It does not raise its own precedence.
 
+### Settings that turn Guard's hooks off
+
 Two settings can stop Claude from running Guard's handlers:
 
-- `disableAllHooks: true` in any settings file Claude reads;
-- a managed policy that lets only managed hooks run.
+- `disableAllHooks: true` in the highest-precedence settings file that sets the key (a project `false`
+  overrides a user `true`);
+- `allowManagedHooksOnly: true` in managed settings, which lets only managed hooks run.
 
-Guard does not detect either setting yet. Doctor can then report Guard's entries as present while Claude
-ignores them. Treat a Claude Code protection state as proven only from a live block on the same machine.
+Install reads, and never writes, the managed settings file (`/Library/Application Support/ClaudeCode/`
+on macOS, `/etc/claude-code/` on Linux, `%ProgramFiles%\ClaudeCode\` on Windows, each
+`managed-settings.json`), the user file, and, with `--workspace`, the project's `settings.json` and
+`settings.local.json`. It warns for each of these settings that takes effect. A file that is missing, unreadable,
+not JSON, not a regular file or larger than 1 MiB is not reported. Doctor does not run this check, so it can still report Guard's entries as
+present while Claude ignores them. Treat a Claude Code protection state as proven only from a live block
+on the same machine.
 
 A project's own hooks run alongside Guard's. They do not replace them. The workspace hook scan reviews
 hook commands it finds in the project's `.claude/settings.json` and `.claude/settings.local.json`.
+
+Sessions started with `--bare`, or with setting sources that leave out `user`, never load Guard's
+hooks. See [Claude Code session modes](./claude-code-sessions.md) for each way of starting Claude Code.

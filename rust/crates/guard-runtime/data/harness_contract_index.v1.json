@@ -12,6 +12,7 @@
           "prompt",
           "mcp_tool",
           "file_read",
+          "file_write",
           "tool_result"
         ],
         "native_approval": true,
@@ -46,7 +47,7 @@
         "native_approval": true,
         "browser_fallback": true,
         "resume_support": true,
-        "known_blind_spots": "Background agent sessions without an active terminal may not surface hook events.",
+        "known_blind_spots": "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks. Background sessions (claude --bg) are not qualified.",
         "harness": "claude-code",
         "display_name": "Claude Code",
         "can_pre_block": true,

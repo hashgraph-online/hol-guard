@@ -274,6 +274,10 @@ def _dispatch_guard_command(
         from .runtime_posture_command import run_runtime_posture_command
 
         return run_runtime_posture_command(args, context=context, output_stream=output_stream)
+    if args.guard_command == "doctor" and getattr(args, "harness", None) == "reliability":
+        from .doctor_reliability import run_reliability_command
+
+        return run_reliability_command(args, guard_home=guard_home, home_dir=home_dir, output_stream=output_stream)
     if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):
         from .doctor_incident import run_codex_incident_export
 

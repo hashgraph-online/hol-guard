@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
-from codex_plugin_scanner.guard.runtime.composio_workflows import ComposioWorkflowProposal
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import record_composio_discovery
+from tests.python_oracles.composio_discovery import ComposioActionSchema
+from tests.python_oracles.composio_workflows import ComposioWorkflowProposal
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 _TOOL = "mcp__codex_apps__composio__composio_search_tools"
 _FIRST = "2026-09-27T12:00:00Z"

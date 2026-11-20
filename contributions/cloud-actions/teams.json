@@ -24,6 +24,14 @@
       "https://graph.microsoft.com/Team.ReadBasic.All"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "microsoft_teams"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "teams.teams.list",

@@ -31,16 +31,12 @@ def _post_json(
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    from .runner import _guard_sync_request, _urlopen_json_with_timeout_retry
+    from . import cloud_bundle_sync
 
-    request = _guard_sync_request(
+    return cloud_bundle_sync.cloud_json_request(
         auth_context,
-        request_url=_resolve_sync_url(auth_context, path),
-        method="POST",
-        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-    )
-    return _urlopen_json_with_timeout_retry(
-        request=request,
+        url=_resolve_sync_url(auth_context, path),
+        body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
         timeout_seconds=35,
         retry_timeout_seconds=60,
     )

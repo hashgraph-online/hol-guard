@@ -133,10 +133,10 @@ def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bund
 
 
 def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, object]:
-    from ..adapters import get_adapter
     from ..approval_gate import ApprovalGateError, require_high_risk
     from ..approval_gate import input_from_mapping as gate_input_from_mapping
     from ..config import VALID_RECEIPT_REDACTION_LEVELS
+    from ..native_harness_client import canonical_harness
     from ..native_policy_bundle import (
         NATIVE_UNAVAILABLE_REJECTION,
         PolicyBundleNativeError,
@@ -163,7 +163,7 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
     if harness is None:
         return _reply({"error": "missing_harness"}, 400)
     try:
-        adapter = get_adapter(harness)
+        harness = canonical_harness(harness)
     except ValueError:
         return _reply({"error": "unknown_harness"}, 404)
     try:
@@ -275,7 +275,7 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
         {
             "bundle_hash": str(validated["bundleHash"]),
             "bundle_version": str(validated["bundleVersion"]),
-            "harness": adapter.harness,
+            "harness": harness,
             "operation": "policy_sync",
             "status": "completed",
         }

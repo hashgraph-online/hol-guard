@@ -311,6 +311,7 @@ pub(crate) fn edge_floor(
             crate::network_protection::is_review_finding(code)
                 || crate::runtime_known_vulnerable::is_review_finding(code)
                 || crate::edge_exact_command_review::is_review_finding(code)
+                || crate::git_rules::is_review_finding(code)
         });
         action = network_review
             .then(|| action.map_or(GuardAction::Review, |a| a.max(GuardAction::Review)));

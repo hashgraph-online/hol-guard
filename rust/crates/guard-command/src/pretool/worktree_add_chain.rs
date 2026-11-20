@@ -321,15 +321,22 @@ pub(crate) fn new_checkout_route(
 
 /// The `cd` segments that enter exactly the checkout an earlier
 /// `git worktree add` of the same command creates, when every command after
-/// them is `git` or `gh`.
+/// them is `git` or `gh`, or an action the user's own permission covers.
 ///
 /// Entering the new checkout is what `git -C <path>` does for one step, so an
 /// extension Allow that covers the add and each Git or GitHub step after it
 /// covers the `cd` as well; those steps keep their own rules and floors.
 /// Their repository is the same one either way, because a linked worktree
-/// shares it. Any other command after the `cd` would have its paths judged
-/// against the shell's directory instead of the checkout, so it leaves the
-/// `cd` uncovered and the command keeps its review.
+/// shares it.
+///
+/// `permitted` names the other steps whose own permission the user enabled:
+/// an extension action such as a model runner's `rm`. The user's consent to
+/// that action does not depend on the directory it runs in, so it may follow
+/// the `cd` too, when its shape names nothing the `cd` could change (see
+/// `chain_route::permitted_step_shape`). Any other command after the `cd`
+/// (a path read, a write, a build) would have its paths judged against the
+/// shell's directory instead of the checkout, so it leaves the `cd` uncovered
+/// and the command keeps its review.
 ///
 /// The bounded `head`, `tail` or `wc` stages of the steps after the `cd` are
 /// named too. They read only what the stage before them prints and name no
@@ -340,8 +347,9 @@ pub(crate) fn entered_checkouts(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    permitted: &dyn Fn(usize) -> bool,
 ) -> Vec<usize> {
-    let Some((_, cd)) = entered_checkout(model, context, execution_environment) else {
+    let Some((_, cd)) = entered_checkout(model, context, execution_environment, permitted) else {
         return Vec::new();
     };
     // A `git` or `gh` stage keeps its own permission; only the stages that
@@ -365,13 +373,22 @@ pub(crate) fn entered_checkouts(
 /// configuration, every include and any filter the checked-out tree could
 /// select, so the new checkout reads the same configuration as the
 /// repository it shares, and a read helper-free here is helper-free there.
+///
+/// This floor reads no extension controls, so it lets through any step of
+/// the shape a permission may cover after the `cd`. That only places the
+/// probe. A step the floor cannot prove leaves the read unsettled, and only an
+/// Allow settles it; that Allow must cover the step, which
+/// [`entered_checkouts`] answers with the user's permissions in hand.
 pub(in super::super) fn reads_in_entered_checkout(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
-    let Some((add, _)) = entered_checkout(model, context, execution_environment) else {
+    let left_to_the_allow = |_: usize| true;
+    let Some((add, _)) =
+        entered_checkout(model, context, execution_environment, &left_to_the_allow)
+    else {
         return false;
     };
     // Anything before the add may move the start point, so the proof then
@@ -394,6 +411,7 @@ fn entered_checkout(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    permitted: &dyn Fn(usize) -> bool,
 ) -> Option<(usize, usize)> {
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
@@ -413,7 +431,7 @@ fn entered_checkout(
         if segment.pipeline_index != 0 || !is(segment, &["git"]) {
             continue;
         }
-        let Some((_, destination, _)) = super::planned_checkout(segment, context) else {
+        let Some((spec, destination, chdir)) = super::planned_checkout(segment, context) else {
             continue;
         };
         // After the `cd` the shell looks up `git` and `gh` again, and a
@@ -433,13 +451,51 @@ fn entered_checkout(
             .is_some_and(|separator| matches!(separator, "&&" | ";"));
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
-        let rest_is_git = model.segments[after + 1..].iter().all(|later| {
-            super::chain_route::resolved_outside(later, &destination)
-                && (is(later, &["git", "gh"])
-                    || super::chain_route::inert_step(later)
-                    || (later.pipeline_index > 0
-                        && super::chain_route::stdin_stage(later, context, execution_environment)))
-        });
+        // A permitted action must also have a shape whose meaning the `cd`
+        // cannot change (see `chain_route::permitted_step_shape`). A bare
+        // word it takes is judged against the shell's directory but opened in
+        // the checkout, so it must name nothing the checkout holds: no entry
+        // of the tree the add checks out, which every step before it left
+        // unchanged. Anything before the add may move that reference.
+        let permitted_action = |index: usize, later: &CommandSegmentV1| {
+            if !super::chain_route::permitted_step_shape(later) || !permitted(index) {
+                return false;
+            }
+            let names = super::chain_route::bare_names(later);
+            if names.is_empty() {
+                return true;
+            }
+            add == 0
+                && model.segments[after + 1..index]
+                    .iter()
+                    .all(|step| !super::super::tree_writers::may_rewrite_tree(step))
+                && super::super::git_worktree::tree_names_any(
+                    segment.executable.as_deref().unwrap_or("git"),
+                    &spec.leading,
+                    spec.reference.unwrap_or("HEAD"),
+                    &names,
+                    super::super::PathContext {
+                        cwd: chdir.as_deref().or(context.cwd),
+                        ..context
+                    },
+                    execution_environment,
+                ) == Some(false)
+        };
+        let rest_is_git = model.segments[after + 1..]
+            .iter()
+            .enumerate()
+            .all(|(offset, later)| {
+                super::chain_route::resolved_outside(later, &destination)
+                    && (is(later, &["git", "gh"])
+                        || super::chain_route::inert_step(later)
+                        || permitted_action(after + 1 + offset, later)
+                        || (later.pipeline_index > 0
+                            && super::chain_route::stdin_stage(
+                                later,
+                                context,
+                                execution_environment,
+                            )))
+            });
         // If the add fails, the `cd` fails too and a `git` or `gh` step after
         // `;` runs in the original checkout, judged by its own permission with
         // its reads probed there. No proof here follows `||`.

@@ -62,6 +62,7 @@ fn open_lane(label: &str, extra: Value, allow_policy: bool) -> Lane {
     bound["harness_postures"] = json!({});
     bound["local_cli_block_rules"] = json!(false);
     bound["evidence_drain"] = json!(true);
+    bound["review_oauth_source"] = json!("default");
     for (key, value) in extra.as_object().unwrap() {
         bound[key] = value.clone();
     }

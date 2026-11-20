@@ -167,7 +167,7 @@ fn connector_text<'a>(
 
 /// `validated_connector_setup_hint`: a shape-checked copy of a stored
 /// connector setup hint, rebuilt from the keys it knows.
-pub(super) fn validated_setup_hint(value: &Value) -> Option<Value> {
+pub(crate) fn validated_setup_hint(value: &Value) -> Option<Value> {
     let fields = value.as_object()?;
     if fields.get("schema").and_then(Value::as_str) != Some(HINT_SCHEMA) {
         return None;
@@ -203,4 +203,15 @@ pub(super) fn validated_setup_hint(value: &Value) -> Option<Value> {
         "card_recommendation": {"state": "allowed", "capabilities": capabilities},
         "risk_classes": risk_classes,
     }))
+}
+
+/// The connector-setup hint for a connector-setup review the daemon queues
+/// itself, as `extension_review_hint` answers it: the connector `_setup_connector`
+/// accepts and the risk classes the paused evidence observed. A connector this
+/// lane would not accept, or evidence whose risk classes the resident cannot
+/// read, answers no hint.
+pub(crate) fn queued_setup_hint(connector: &Value, paused: &Object) -> Option<Value> {
+    let connector = Connector::parse(connector)?;
+    let risk_classes = observed_risk_classes(paused).ok()?;
+    Some(setup_hint(&connector, &risk_classes)).filter(|hint| !hint.is_null())
 }

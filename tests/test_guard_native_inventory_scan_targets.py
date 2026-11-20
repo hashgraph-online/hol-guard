@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_inventory_scan_targets as bridge
-from codex_plugin_scanner.guard.adapters.base import GuardArtifact
+from codex_plugin_scanner.guard.models import GuardArtifact
 
 
 def _resident(monkeypatch: pytest.MonkeyPatch, reply) -> list[dict[str, object]]:

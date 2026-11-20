@@ -30,7 +30,7 @@ from ...argparse_utils import FriendlyArgumentParser
 from .commands_parser_helpers import _add_guard_common_args
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
+    from ..harness_context import HarnessContext
 
 
 def configure_runtime_parser(guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -63,7 +63,7 @@ def run_runtime_posture_command(
     context: HarnessContext,
     output_stream: TextIO | None = None,
 ) -> int:
-    from ..adapters.harness_mcp_discovery import configured_harness_detections
+    from ..mcp_discovery_client import configured_harness_detections
     from ..runtime_advisory_bundle import BUNDLE_UNREADABLE, cached_advisory_bundle
     from ..runtime_posture import build_runtime_posture
     from ..store import GuardStore
@@ -216,7 +216,7 @@ def run_runtime_status_command(
     reaches no network, and it produces no verdict of its own.
     """
 
-    from ..adapters.diagnostic_probes import without_command_probes
+    from ..command_probes import without_command_probes
     from .doctor_native_runtime import native_runtime_section
 
     stream = output_stream if output_stream is not None else sys.stdout

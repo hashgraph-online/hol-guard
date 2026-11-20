@@ -18,6 +18,14 @@
       "boards:write"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "monday"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "monday.items.create",

@@ -10,6 +10,18 @@ fn network_status_reports_no_protection_without_a_backend() {
     assert_eq!(body["backends"].as_array().unwrap().len(), 4);
 }
 
+#[test]
+fn supervisor_health_is_the_unavailable_phase() {
+    let health = supervisor_health();
+    assert_eq!(health["phase"], "unavailable");
+    assert_eq!(health["effective_grade"], "unavailable");
+    assert_eq!(health["permits_enforcement"], false);
+    assert_eq!(health["independently_observed"], false);
+    let (_, body) = status().unwrap();
+    assert_eq!(body["supervisor"]["phase"], "unavailable");
+    assert_eq!(body["supervisor"]["permits_enforcement"], false);
+}
+
 fn config(fingerprint: Option<&str>) -> ReadConfig {
     let mut handshake = json!({
         "schema": super::super::HANDSHAKE_SCHEMA,

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..repair_engine import broken_hook_harnesses, repair_native_runtime, repair_onefile_leaks
 
 if TYPE_CHECKING:

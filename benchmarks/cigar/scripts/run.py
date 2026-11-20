@@ -7,6 +7,7 @@ Keep the prompts and checks as they are: the stored baseline was measured with e
 """
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -159,47 +160,56 @@ def plan(seed, steps, repo=None, frozen=True):
     if not any(k in ("bug", "bug2") for k in picks):
         picks[rng.randrange(len(picks))] = "bug"
     used = {"mutations": set(), "stubs": set(), "renames": set(), "docs": set(), "questions": set()}
-    touched = set()
+    touched, taken, renamed = set(), set(), []
 
-    taken = set()
+    def stale(t):
+        # A name an earlier step renamed is gone from the tree, so code that quotes it no longer matches.
+        # Long plans only: six-step plans keep the picks their recorded runs used.
+        text = t.get("orig") or t.get("body") or ""
+        return steps > 6 and any(re.search(rf"\b{re.escape(old)}\b", text) for old in renamed)
 
     def take(key, avoid_paths=True):
-        # A pool can list one mutation twice; the same target is never set up twice.
+        # The same target is never set up twice; a long plan drops a step with no fresh target left.
         sig = lambda t: (key, t.get("path"), t.get("line"), t.get("orig"), t.get("qual"), t.get("old"))
-        fresh = [i for i, t in enumerate(pool[key]) if i not in used[key] and sig(t) not in taken]
+        fresh = [i for i, t in enumerate(pool[key]) if i not in used[key] and sig(t) not in taken and not stale(t)]
         items = [i for i in fresh if not (avoid_paths and pool[key][i].get("path") in touched)] or fresh
-        if not items:
-            items = [i for i, t in enumerate(pool[key]) if i not in used[key]]
+        if not items and steps > 6:
+            raise LookupError(key)
+        items = items or [i for i, t in enumerate(pool[key]) if i not in used[key]]
         i = rng.choice(items)
         used[key].add(i)
         taken.add(sig(pool[key][i]))
         touched.add(pool[key][i].get("path"))
+        if key == "renames":
+            renamed.append(pool[key][i]["old"])
         return pool[key][i]
 
-    tasks = []
-    for k in picks:
+    def task_for(k):
         if k == "bug":
             m = take("mutations")
-            p = rng.choice(BUG_PROMPTS)
-            tasks.append(
-                {"kind": k, "setup": [m], "prompt": p.format(test="`" + m["failing"][0] + "`", qual=f"`{m['qual']}`")}
-            )
+            prompt = rng.choice(BUG_PROMPTS).format(test=f"`{m['failing'][0]}`", qual=f"`{m['qual']}`")
+            return {"kind": k, "setup": [m], "prompt": prompt}
         elif k == "bug2":
             a = take("mutations")
             b = take("mutations")
-            tasks.append({"kind": k, "setup": [a, b], "prompt": BUG2_PROMPT})
+            return {"kind": k, "setup": [a, b], "prompt": BUG2_PROMPT}
         elif k == "stub":
             s = take("stubs")
-            tasks.append({"kind": k, "stub": s, "prompt": rng.choice(STUB_PROMPTS).format(**s)})
+            return {"kind": k, "stub": s, "prompt": rng.choice(STUB_PROMPTS).format(**s)}
         elif k == "rename":
             r = take("renames", avoid_paths=False)
-            tasks.append({"kind": k, "rename": r, "prompt": RENAME_PROMPT.format(**r)})
+            return {"kind": k, "rename": r, "prompt": RENAME_PROMPT.format(**r)}
         elif k == "doc":
             d = take("docs")
-            tasks.append({"kind": k, "doc": d, "prompt": DOC_PROMPT.format(**d)})
+            return {"kind": k, "doc": d, "prompt": DOC_PROMPT.format(**d)}
         elif k == "question":
             q = take("questions", avoid_paths=False)
-            tasks.append({"kind": k, "question": q, "prompt": QUESTION_PROMPT.format(**q)})
+            return {"kind": k, "question": q, "prompt": QUESTION_PROMPT.format(**q)}
+
+    tasks = []
+    for k in picks:
+        with contextlib.suppress(LookupError):
+            tasks.append(task_for(k))
     tasks.append({"kind": "review", "prompt": REVIEW_PROMPT})
     if heldout:
         prng = random.Random(f"freeform-{seed}")
@@ -218,28 +228,24 @@ def plan(seed, steps, repo=None, frozen=True):
 def apply_setup(project, task):
     """Change the tree before a step (the teammate's commit). Returns False if it cannot apply cleanly."""
     if task["kind"] in ("bug", "bug2"):
-        for m in task["setup"]:
-            f = project / m["path"]
-            text = f.read_text()
-            if text.count(m["orig"]) != 1:
-                return False
-            f.write_text(text.replace(m["orig"], m["new"], 1))
-        commit_all(project, "Tidy up conditions" if task["kind"] == "bug" else "Small cleanups")
+        edits, message = [(m["path"], m["orig"], m["line"], m["new"]) for m in task["setup"]], "Tidy up conditions"
+        message = message if task["kind"] == "bug" else "Small cleanups"
     elif task["kind"] == "stub":
         s = task["stub"]
-        f = project / s["path"]
-        text = f.read_text()
-        # Classes can share a body word for word (cachetools' FIFO, LRU and MRU popitem); take the copy
-        # nearest the stub's recorded line.
-        starts, at = [], text.find(s["body"])
-        while at != -1:
-            starts.append(at)
-            at = text.find(s["body"], at + 1)
+        edits = [(s["path"], s["body"], s["body_start"], " " * s["indent"] + "raise NotImplementedError\n")]
+        message = f"Drop old {s['qual'].split('.')[-1]} implementation for rewrite"
+    else:
+        return True
+    for path, old, line, new in edits:
+        # A body or line can appear twice (cachetools' FIFO, LRU and MRU popitem, or a copy the agent wrote
+        # in an earlier step); change the copy nearest the recorded line.
+        text = (project / path).read_text()
+        starts = [i for i in range(len(text)) if text.startswith(old, i)]
         if not starts:
             return False
-        at = min(starts, key=lambda o: abs(text.count("\n", 0, o) + 1 - s["body_start"]))
-        f.write_text(text[:at] + " " * s["indent"] + "raise NotImplementedError\n" + text[at + len(s["body"]) :])
-        commit_all(project, f"Drop old {s['qual'].split('.')[-1]} implementation for rewrite")
+        at = min(starts, key=lambda o: abs(text.count("\n", 0, o) + 1 - line))
+        (project / path).write_text(text[:at] + new + text[at + len(old) :])
+    commit_all(project, message)
     return True
 
 

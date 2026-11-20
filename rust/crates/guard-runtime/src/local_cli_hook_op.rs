@@ -34,6 +34,9 @@ use crate::local_cli_identify::{identify, launch_arguments, Request};
 use crate::local_store_read;
 use crate::native_exact_action_op::runner_bin::runner_split;
 
+#[path = "local_cli_hook_op_compound.rs"]
+mod compound;
+
 const IDENTIFY_BUDGET_MS: u64 = 2_000;
 const ROOT_COMMAND_ID: &str = "root";
 const OTHER_COMMAND_ID: &str = "other";
@@ -154,9 +157,13 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
             ..Refined::default()
         };
     }
-    contained::refine(request, grant(request, package), || {
+    let answer = grant(request, package);
+    // No single CLI launch: a compound command, or one that launches none.
+    let no_single_launch = matches!(answer, Ok((None, None, _)));
+    let refined = contained::refine(request, answer, || {
         contained::unverified_action(request).to_owned()
-    })
+    });
+    compound::with_changed_connector(request, package, no_single_launch, refined)
 }
 
 /// The launch observation: the package script identity, else every CLI a

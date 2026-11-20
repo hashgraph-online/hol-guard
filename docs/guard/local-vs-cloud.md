@@ -185,6 +185,7 @@ Local tightening remains valid.
 - [Managed Controls release notes](./managed-controls-release-notes.md)
 - [Managed Controls support runbook](./managed-controls-support-runbook.md)
 - [Fleet posture](./fleet-posture.md)
+- [How Guard Cloud protects connected services](./cloud-connected-services.md)
 - [Get started](./get-started.md)
 - [Harness support](./harness-support.md)
 - [Remediation](./remediation.md)

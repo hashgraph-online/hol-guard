@@ -177,7 +177,14 @@ pub fn bridge_response(response: &Object, event_name: &str) -> (Option<Object>, 
             document.insert("reason".into(), json!(reason(response, action)));
             return (Some(document), 0);
         }
-        return match additional_context(response) {
+        // A prompt Guard flagged but sends on (`warn`) carries its notice in
+        // the reason; without it the prompt would go through in silence.
+        let context = additional_context(response).or_else(|| {
+            (action == Some(GuardAction::Warn))
+                .then(|| non_empty(response, "reason"))
+                .flatten()
+        });
+        return match context {
             Some(context) => (
                 Some(specific(
                     "UserPromptSubmit",

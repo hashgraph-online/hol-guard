@@ -22,8 +22,11 @@ pub(crate) fn validate_request(
     action: &PackAction,
     request: &RequestTemplate,
     hosts: &BTreeSet<&str>,
+    connection: Option<&crate::cloud_pack_connection::Connection>,
 ) -> Result<(), Fail> {
-    let args = &action.arguments;
+    // A connection value is used where a required, bounded string argument is.
+    let bound = crate::cloud_pack_connection::bound_arguments(&action.arguments, connection);
+    let args = bound.as_ref();
     if !hosts.contains(request.host.as_str()) {
         return fail("cloud_pack_request_host_undeclared", "/host");
     }

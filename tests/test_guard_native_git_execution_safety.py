@@ -131,7 +131,7 @@ def test_unavailable_transport_is_refused_and_recorded(recorder: _Recorder) -> N
 
 
 def test_overloaded_resident_is_refused(recorder: _Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(resident, "_native_error", lambda _envelope: "native_overloaded")
+    monkeypatch.setattr(resident, "_native_error", lambda _envelope, **_kwargs: "native_overloaded")
     recorder.answer = False
     recorder.raw_output = b"{}"
 

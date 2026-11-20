@@ -20,12 +20,12 @@ from cryptography.hazmat.primitives import serialization
 from codex_plugin_scanner.guard.native_context import _resolve_digest_home, ensure_resident_prerequisite
 from codex_plugin_scanner.guard.native_execution import _resident_request
 from codex_plugin_scanner.guard.native_store_policy import _payload
-from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
     _normalize_pem,
 )
+from tests.python_oracles.evidence_hash import guard_evidence_hash
 
 TRUST_ATTESTATION_VERIFY_FEATURE = "trust-attestation-verify-v1"
 _REQUEST_SCHEMA = "guard-trust-attestation-verify-request.v1"

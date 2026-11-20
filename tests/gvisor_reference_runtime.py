@@ -18,8 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, final
 
-from codex_plugin_scanner.guard.runtime.execution_assurance_contract import framed_digest
-from codex_plugin_scanner.guard.runtime.isolation_provider import ProviderPlanError
+from tests.execution_assurance_contract import framed_digest
+
+
+class ProviderPlanError(ValueError):
+    """Raised when the reference runtime rejects a bundle or runtime binary."""
+
 
 _CONTAINER_ID: Final = re.compile(r"\Aguard-[a-z0-9][a-z0-9-]{0,62}\Z")
 _MAX_CAPTURE_BYTES: Final = 1_048_576

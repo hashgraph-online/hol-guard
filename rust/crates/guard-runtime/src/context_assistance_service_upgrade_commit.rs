@@ -165,6 +165,7 @@ impl Cutover<'_> {
         }
         self.deadline.finish();
         state.settings = self.settings.target_settings().clone();
+        publish_chosen(&state);
         let mut checked = self.candidate.actor.status();
         checked.active = false;
         state.last_check = Some(checked);

@@ -106,6 +106,8 @@ const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "package_install",
     "low_trust_artifact",
     "runtime_known_vulnerable",
+    "git_hook_bypass",
+    "git_stage_all",
     // Native-only classifications used to preserve a strong intrinsic floor
     // even when a future policy snapshot elects to tune a broader action
     // class.

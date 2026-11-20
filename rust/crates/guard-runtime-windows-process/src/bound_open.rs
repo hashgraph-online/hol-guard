@@ -66,13 +66,15 @@ struct HandleInfo {
 ///
 /// The times are raw `FILETIME` ticks. `file_index` is the little-endian
 /// `FILE_ID_INFO` identifier, or the 64-bit `nFileIndex` on file systems
-/// without one, as CPython's `win32_xstat` fills `st_ino`.
+/// without one, as CPython's `win32_xstat` fills `st_ino`; `volume_serial`
+/// is the serial it fills `st_dev` with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PathStat {
     pub last_write_time: u64,
     pub creation_time: u64,
     pub size: u64,
     pub file_index: u128,
+    pub volume_serial: u64,
 }
 
 /// Read one handle's identity. `require_tag` refuses a handle whose reparse
@@ -195,11 +197,23 @@ pub fn regular_file_id(path: &Path, follow_leaf: bool) -> io::Result<(FileId, u3
 /// directory is read through one handle, as CPython's `win32_xstat` slow
 /// path opens it.
 pub fn path_stat(path: &Path) -> io::Result<PathStat> {
+    stat_with_flags(path, FILE_FLAG_BACKUP_SEMANTICS)
+}
+
+/// `os.lstat` for `path`: a link at the leaf is read itself, not followed.
+pub fn link_stat(path: &Path) -> io::Result<PathStat> {
+    stat_with_flags(
+        path,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+    )
+}
+
+fn stat_with_flags(path: &Path, flags: DWORD) -> io::Result<PathStat> {
     let file = open_raw_with_flags(
         path,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         FILE_READ_ATTRIBUTES,
-        FILE_FLAG_BACKUP_SEMANTICS,
+        flags,
     )?;
     let info = handle_info(&file, false)?;
     Ok(PathStat {
@@ -207,6 +221,7 @@ pub fn path_stat(path: &Path) -> io::Result<PathStat> {
         creation_time: info.creation_time,
         size: info.size,
         file_index: u128::from_le_bytes(info.id.id),
+        volume_serial: info.id.volume_serial,
     })
 }
 

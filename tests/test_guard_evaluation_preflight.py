@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 import pytest
 
 from codex_plugin_scanner.guard import evaluation_preflight as preflight_module
-from codex_plugin_scanner.guard.adapters import hook_python_subprocess as probe_module
+from codex_plugin_scanner.guard import probe_subprocess as probe_module
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.evaluation_contracts import EvaluationResult
 from codex_plugin_scanner.guard.evaluation_preflight import (

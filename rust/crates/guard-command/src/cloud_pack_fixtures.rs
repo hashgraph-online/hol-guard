@@ -8,7 +8,7 @@
 
 use crate::cloud_pack::{CloudActionPack, PackAction};
 use crate::cloud_pack_facts::extract;
-use crate::cloud_pack_request::{check_arguments, render};
+use crate::cloud_pack_request::{check_arguments, render_connected};
 use crate::cloud_pack_response::project;
 use crate::cloud_policy_pack::{shipped, FactCall, Preset};
 use crate::effect_decision::GuardAction;
@@ -30,6 +30,9 @@ pub struct Fixture {
     pub name: String,
     pub kind: FixtureKind,
     pub arguments: Value,
+    /// Values of the connection the call is sent on, for a pack that declares them.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub connection: serde_json::Map<String, Value>,
     pub expect: FixtureExpect,
 }
 
@@ -85,7 +88,7 @@ pub fn run(pack: &CloudActionPack) -> FixtureReport {
         .iter()
         .flat_map(|action| action.fixtures.iter().map(move |fixture| (action, fixture)))
         .map(|(action, fixture)| {
-            let failure = check(&pack.provider.id, action, fixture).err();
+            let failure = check(pack, action, fixture).err();
             FixtureResult {
                 action_id: action.action_id.clone(),
                 fixture: fixture.name.clone(),
@@ -104,8 +107,12 @@ pub fn run(pack: &CloudActionPack) -> FixtureReport {
     }
 }
 
-fn check(provider: &str, action: &PackAction, fixture: &Fixture) -> Result<(), String> {
+fn check(pack: &CloudActionPack, action: &PackAction, fixture: &Fixture) -> Result<(), String> {
+    let provider = pack.provider.id.as_str();
     let expect = &fixture.expect;
+    let render = |action: &PackAction, args: &Value| {
+        render_connected(pack.connection.as_ref(), action, args, &fixture.connection)
+    };
     let checked = check_arguments(action, &fixture.arguments);
     if let Some(code) = &expect.error {
         let got = match &checked {

@@ -7,12 +7,12 @@ from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
     MAX_OBSERVED_MCP_TOOLS,
     discover_observed_mcp_tools,
-    observed_mcp_tool,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .observed_mcp_history_rows import seed_observed_mcp_history
+from .python_oracles.observed_mcp_tools import observed_command_id, observed_mcp_tool
 
 
 def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
@@ -33,7 +33,7 @@ def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     result = service.recognize({"command": tool.identity.example_label, "cli_id": tool.identity.cli_id})
     item = result["item"]
     assert item["cli_id"] == tool.identity.cli_id
-    assert item["commands"][0]["command_id"] == tool.command_id
+    assert item["commands"][0]["command_id"] == observed_command_id(tool)
     assert result["help_status"] == "ok"
     payload = {
         "cli_id": item["cli_id"],
@@ -44,7 +44,7 @@ def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
         "state": "allowed",
         "previous_revision": 0,
         "session_nonce": "test-enrollment",
-        "commands": [{"command_id": tool.command_id, "state": "allow"}],
+        "commands": [{"command_id": observed_command_id(tool), "state": "allow"}],
     }
     assert service.preview(payload)["next_revision"] == 1
     with pytest.raises(LocalCliApiError):
@@ -84,7 +84,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
         state="allowed",
         expected_revision=0,
         updated_at="2026-01-01T00:00:01Z",
-        command_states={tool.command_id: "allow"},
+        command_states={observed_command_id(tool): "allow"},
     )
     refresh = threading.Event()
     entered = threading.Event()
@@ -131,7 +131,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
             "state": state,
             "previous_revision": 1,
             "session_nonce": "isolated-permission-fence",
-            "commands": [{"command_id": tool.command_id, "state": "block"}],
+            "commands": [{"command_id": observed_command_id(tool), "state": "block"}],
         }
         service = api_module.LocalCliApiService(store=store)
         if rollback:
@@ -162,30 +162,6 @@ def test_composio_keeps_its_connector_namespace() -> None:
     assert claude.identity.identity_hash != tool.identity.identity_hash
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "composio",
-        "mcp__",
-        "mcp__server__",
-        "mcp__server__tool; rm",
-        "mcp__server__tool\n",
-        "mcp__codex_apps____tool",
-        "mcp__server__" + "a" * 150,
-    ],
-)
-def test_malformed_or_unbounded_names_are_not_discovered(name: str) -> None:
-    assert observed_mcp_tool("codex", name) is None
-
-
-def test_names_that_slug_alike_keep_separate_commands() -> None:
-    first = observed_mcp_tool("codex", "mcp__server__read_file")
-    second = observed_mcp_tool("codex", "mcp__server__read-file")
-    assert first is not None and second is not None
-    assert first.identity.identity_hash == second.identity.identity_hash
-    assert first.command_id != second.command_id
-
-
 def test_discovery_preserves_choices_and_never_approves_new_tools(
     tmp_path: Path,
 ) -> None:
@@ -201,13 +177,13 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
         state="allowed",
         expected_revision=0,
         updated_at="2026-01-01T00:00:01Z",
-        command_states={tool.command_id: "allow"},
+        command_states={observed_command_id(tool): "allow"},
     )
     seed_observed_mcp_history(
         store, receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"}]
     )
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:02Z")
-    assert store.read_local_cli_command_states(tool.identity.cli_id)[tool.command_id] == "allow"
+    assert store.read_local_cli_command_states(tool.identity.cli_id)[observed_command_id(tool)] == "allow"
     assert store.read_observed_mcp_tool_actions() == {"codex:" + tool.qualified_name: "allow"}
     assert store.read_local_cli_revision() == 1
     from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
@@ -301,7 +277,10 @@ def test_concurrent_catalog_growth_preserves_all_tools(tmp_path: Path) -> None:
             first.identity.cli_id,
             [
                 LocalCliCommand(
-                    command_id=tool.command_id, name=tool.name, usage=tool.qualified_name, description="Observed tool"
+                    command_id=observed_command_id(tool),
+                    name=tool.name,
+                    usage=tool.qualified_name,
+                    description="Observed tool",
                 )
             ],
             limit=128,
@@ -334,7 +313,7 @@ def test_saturated_observed_connector_is_reported_without_blocking_other_connect
         first.identity.cli_id,
         [
             LocalCliCommand(
-                command_id=tool.command_id, name=tool.name, usage=tool.qualified_name, description="Observed"
+                command_id=observed_command_id(tool), name=tool.name, usage=tool.qualified_name, description="Observed"
             )
             for tool in existing
             if tool is not None
@@ -453,3 +432,17 @@ def test_a_heavy_history_still_discovers_every_connector(tmp_path: Path) -> None
 
     assert discover_observed_mcp_tools(store, seen_at="2026-10-21T00:00:00Z") == 0
     assert sorted(str(item["name"]) for item in store.list_local_cli_items()) == sorted(servers)
+
+
+@pytest.mark.parametrize("command_id", ["", 7, None])
+def test_discovery_refuses_a_tool_without_a_native_command_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command_id: object
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    tool: dict[str, object] = {"name": "read", "qualified_name": "mcp__server__read"}
+    if command_id is not None:
+        tool["command_id"] = command_id
+    connector = {"harness": "codex", "namespace": "mcp__server__", "server_name": "server", "seen_at": None}
+    monkeypatch.setattr(store, "_native_store_call", lambda op, args: {"connectors": [{**connector, "tools": [tool]}]})
+    with pytest.raises(sqlite3.DatabaseError, match="native_observed_mcp_discovery_invalid"):
+        store.observed_mcp_discovery(configured_servers={})

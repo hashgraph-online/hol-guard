@@ -8,23 +8,40 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.opencode_runtime import opencode_config_lock
+from tests import harness_ops_support as harness_support
+from tests.opencode_test_support import refresh_opencode_proxy_launchers
+
+LOCK = Path(".config") / "opencode" / ".hol-guard-config.lock"
 
 
-def test_lock_excludes_other_processes_and_releases_after_error(tmp_path: Path) -> None:
+@pytest.fixture(autouse=True)
+def _skip_codex_owner_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The install owner check runs before the native call; the lock is what is under test.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_owned.require_codex_install_owner",
+        lambda *_args, **_kwargs: None,
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX flock")
+def test_install_cleanup_and_refresh_wait_for_another_process_holding_the_lock(tmp_path: Path) -> None:
+    from tests.test_opencode_pretool import _ctx
+
+    context = _ctx(tmp_path)
+    lock_path = context.home_dir / LOCK
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     child = subprocess.Popen(
         [
             sys.executable,
             "-c",
             textwrap.dedent("""
-                from pathlib import Path
-                import sys
-                from codex_plugin_scanner.guard.adapters.opencode_runtime import opencode_config_lock
-                with opencode_config_lock(Path(sys.argv[1])):
-                    print('locked', flush=True)
+                import fcntl, sys
+                with open(sys.argv[1], "a+") as handle:
+                    fcntl.flock(handle, fcntl.LOCK_EX)
+                    print("locked", flush=True)
                     sys.stdin.readline()
             """),
-            str(tmp_path),
+            str(lock_path),
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -33,65 +50,31 @@ def test_lock_excludes_other_processes_and_releases_after_error(tmp_path: Path) 
     try:
         assert child.stdout is not None
         assert child.stdout.readline().strip() == "locked"
-        with pytest.raises(TimeoutError, match="Another Guard operation"), opencode_config_lock(tmp_path, timeout=0.1):
-            pytest.fail("entered another process's critical section")
+        for operation in (
+            lambda ctx: harness_support.install("opencode", ctx),
+            lambda ctx: harness_support.uninstall("opencode", ctx),
+            refresh_opencode_proxy_launchers,
+        ):
+            with pytest.raises(RuntimeError, match="Another Guard operation"):
+                operation(context)
     finally:
         assert child.stdin is not None
         child.stdin.write("release\n")
         child.stdin.flush()
         child.communicate(timeout=10)
     assert child.returncode == 0
-    with pytest.raises(RuntimeError, match="transaction failed"), opencode_config_lock(tmp_path):
-        raise RuntimeError("transaction failed")
-    with opencode_config_lock(tmp_path, timeout=0.1):
-        pass
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink support")
-def test_lock_rejects_symlink_without_touching_target(tmp_path: Path) -> None:
-    target = tmp_path / "target"
-    target.write_text("unchanged", encoding="utf-8")
-    lock_path = tmp_path / ".config" / "opencode" / ".hol-guard-config.lock"
-    lock_path.parent.mkdir(parents=True)
-    lock_path.symlink_to(target)
-    with pytest.raises(ValueError, match="symlink"), opencode_config_lock(tmp_path):
-        pytest.fail("entered symlink lock")
-    assert target.read_text(encoding="utf-8") == "unchanged"
-
-
-def test_install_cleanup_and_refresh_read_under_same_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.adapters import opencode_runtime
+def test_install_refuses_a_symlinked_lock_without_touching_its_target(tmp_path: Path) -> None:
     from tests.test_opencode_pretool import _ctx
 
     context = _ctx(tmp_path)
-    adapter = opencode_runtime.OpenCodeHarnessAdapter()
-
-    class ReachedReadError(Exception):
-        pass
-
-    def checked_read(*args: object, **kwargs: object) -> None:
-        with pytest.raises(TimeoutError), opencode_config_lock(context.home_dir, timeout=0):
-            pytest.fail("config reader ran without the shared lock")
-        raise ReachedReadError
-
-    monkeypatch.setattr(adapter, "_ask", checked_read)
-    monkeypatch.setattr(opencode_runtime, "ask", checked_read)
-    for operation in (adapter.install, adapter.uninstall, opencode_runtime.refresh_opencode_proxy_launchers):
-        with pytest.raises(ReachedReadError):
-            operation(context)
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX symlink fixture exercises the no-O_NOFOLLOW fallback")
-def test_lock_rejects_symlink_swapped_during_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    target = tmp_path / "untouched"
+    target = tmp_path / "target"
     target.write_text("unchanged", encoding="utf-8")
-    original_open = os.open
-
-    def swapped_open(path: Path, flags: int, mode: int) -> int:
-        path.symlink_to(target)
-        return original_open(path, flags & ~getattr(os, "O_NOFOLLOW", 0), mode)
-
-    monkeypatch.setattr(os, "open", swapped_open)
-    with pytest.raises(ValueError, match="lock path changed"), opencode_config_lock(tmp_path):
-        pytest.fail("entered substituted lock")
+    lock_path = context.home_dir / LOCK
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.symlink_to(target)
+    with pytest.raises(ValueError):
+        harness_support.install("opencode", context)
     assert target.read_text(encoding="utf-8") == "unchanged"

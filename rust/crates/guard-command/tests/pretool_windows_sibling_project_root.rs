@@ -117,6 +117,7 @@ fn tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows() {
             None,
             guard_command::pretool::PathContext {
                 literal_words: &[],
+                guard_home: None,
                 home_dir: Some(&home_text),
                 cwd: Some(&cwd),
                 cdpath_unset: false,

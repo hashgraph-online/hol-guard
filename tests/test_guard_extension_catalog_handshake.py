@@ -8,6 +8,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime import extension_catalog_handshake as handshake_module
 from codex_plugin_scanner.guard.runtime import extension_catalog_sync as runner_sync
 from codex_plugin_scanner.guard.runtime import runner
+from tests.support import cloud_sync_transport
 
 # The negotiation verdicts (summary, upload decision, upload URL, acknowledgement) are
 # judged by the resident; their decision tests are in
@@ -36,7 +37,7 @@ def test_runtime_catalog_handshake_skips_known_catalog_without_upload(
         guard_version=runner.__version__, generated_at="2026-08-25T00:00:00Z", guard_home=tmp_path
     )
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: pytest.fail("known catalog must not be uploaded"),
     )
@@ -71,9 +72,9 @@ def test_runtime_catalog_handshake_uploads_unknown_builtin_catalog_once(
         requests.append(request)
         return request
 
-    monkeypatch.setattr(runner, "_guard_sync_request", fake_request)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", fake_request)
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {
             "schemaVersion": "guard.extension-catalog-sync.v1",
@@ -329,9 +330,11 @@ def test_unreachable_resident_leaves_the_upload_unverified_and_downgrades(
         return real(action, **fields)
 
     monkeypatch.setattr(handshake_module, "native_wire_call", resident)
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
-        runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: _acknowledgement(catalogDigest=digest)
+        cloud_sync_transport,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: _acknowledgement(catalogDigest=digest),
     )
     summary = runner._sync_extension_catalog_from_runtime_handshake(
         guard_home=tmp_path,

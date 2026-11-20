@@ -7,11 +7,19 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..adapters.harness_mcp_discovery import (
+from ..approval_gate import (
+    ApprovalGateError,
+    consume_local_cli_trust_grant,
+    input_from_mapping,
+    require_local_cli_trust,
+)
+from ..local_cli_errors import LocalCliCatalogLimitError
+from ..local_cli_trust import utc_now
+from ..mcp_discovery_client import (
     DiscoveredHarnessMcpServer,
     DiscoveredRemoteMcpServer,
     apply_source_labels,
@@ -24,14 +32,6 @@ from ..adapters.harness_mcp_discovery import (
     persist_discovered_harness_mcp_servers,
     remote_scan_harnesses,
 )
-from ..approval_gate import (
-    ApprovalGateError,
-    consume_local_cli_trust_grant,
-    input_from_mapping,
-    require_local_cli_trust,
-)
-from ..local_cli_errors import LocalCliCatalogLimitError
-from ..local_cli_trust import utc_now
 from ..native_skill_workflow_preflight import (
     NativeSkillWorkflowPreflightError,
     native_skill_preflight,
@@ -49,7 +49,6 @@ from ..runtime.local_cli_commands import (
 from ..runtime.local_cli_help import (
     discover_local_cli_commands,
     help_invocation_for_command,
-    run_cli_help,
 )
 from ..runtime.local_cli_identity import (
     UnlistedCliIdentity,
@@ -1104,6 +1103,7 @@ class LocalCliApiService:
                 workspace_dir=workspace_dir,
                 detections=detections,
             )
+            configured_names = configured_mcp_server_names(detections)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
             # A failed read leaves no remote snapshot to reconcile against.
             self._remote_discovery_cache = None
@@ -1121,7 +1121,7 @@ class LocalCliApiService:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return ()
         self._discovery_cache = (now, servers)
-        self._configured_names = configured_mcp_server_names(detections)
+        self._configured_names = configured_names
         try:
             remote = discover_remote_mcp_servers(
                 home_dir=home_dir,
@@ -1406,19 +1406,12 @@ def _discover_from_command(
     *,
     cancel: threading.Event | None = None,
 ) -> tuple[tuple[LocalCliCommand, ...], str, str | None]:
-    """Discover ``identity``'s commands through ``guard_home``'s own resident.
+    """Discover ``identity``'s commands with the native ``local-cli-discover`` command.
 
     ``guard_home`` is the daemon's store home, not the operator's home
-    directory. A daemon started on an overridden home must read help text
-    through the resident that home runs; the default home's resident may not
-    exist, and provisioning one there would touch an install this daemon does
-    not serve.
-
-    Once ``cancel`` is set, no further --help process starts.
+    directory; it decides which paths Guard may probe. Setting ``cancel``
+    stops the native command and every --help run it started.
     """
-
-    def probe(argv: Sequence[str]) -> str:
-        return "" if cancel is not None and cancel.is_set() else run_cli_help(argv)
 
     source_path: str | None = None
     for candidate in local_cli_recognition_candidates(command, cwd=cwd, home_dir=home_dir, guard_home=guard_home):
@@ -1439,6 +1432,6 @@ def _discover_from_command(
         if tool_path is None:
             continue
         source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else tool_path
-        commands, help_status = discover_local_cli_commands(matched, argv, runner=probe, guard_home=guard_home)
+        commands, help_status = discover_local_cli_commands(matched, argv, cancel=cancel)
         return commands, help_status, source_path
     return default_local_cli_commands(identity.name), "failed", source_path

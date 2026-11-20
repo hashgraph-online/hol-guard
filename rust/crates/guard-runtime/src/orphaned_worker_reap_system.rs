@@ -115,6 +115,26 @@ impl Host for SystemHost {
         );
     }
 
+    fn owned_by_caller(&self, pid: u32, timeout: Duration) -> bool {
+        let Some(output) = run_ps(
+            &["-p", &pid.to_string(), "-o", "uid="],
+            timeout.min(COMMAND_TIMEOUT),
+            COMMAND_LIMIT,
+        ) else {
+            return false;
+        };
+        super::py_strip(&output)
+            .parse::<u32>()
+            .is_ok_and(|uid| uid == nix::unistd::geteuid().as_raw())
+    }
+
+    fn path_absent(&self, path: &str) -> bool {
+        matches!(
+            std::fs::symlink_metadata(path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        )
+    }
+
     fn now(&self) -> Instant {
         Instant::now()
     }

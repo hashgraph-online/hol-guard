@@ -21,12 +21,32 @@ mod claude;
 pub(super) use claude::claude_grep_directory_scope_proven;
 #[path = "search_scope_grok.rs"]
 mod grok;
-pub(super) use grok::grok_grep_directory_scope_proven;
+use grok::grok_grep_directory_scope_proven;
+#[path = "search_scope_cursor.rs"]
+mod cursor;
+use cursor::cursor_grep_directory_scope_proven;
 #[path = "search_scope_grep_include.rs"]
 mod grep_include;
 pub(super) use grep_include::{grep_include_scope_proven, grep_include_walk_proven};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
+
+/// True when a harness's own search tool provably reaches no sensitive file.
+pub(super) fn harness_search_scope_proven(
+    harness: &str,
+    tool: Option<&str>,
+    payload: &Value,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match (harness, tool) {
+        ("claude-code", Some("Grep")) => claude_grep_directory_scope_proven(payload, home_dir, cwd),
+        ("claude-code", Some("Glob")) => claude_glob_scope_proven(payload, home_dir, cwd),
+        ("grok", Some("Grep" | "grep")) => grok_grep_directory_scope_proven(payload, home_dir, cwd),
+        ("cursor", Some("Grep")) => cursor_grep_directory_scope_proven(payload, home_dir, cwd),
+        _ => false,
+    }
+}
 
 /// Links into the main checkout one names-only walk may follow and prove.
 const MAX_CHECKOUT_LINK_WALKS: usize = 8;
@@ -69,16 +89,21 @@ pub(super) fn rg_glob_scope_proven(
     roots.iter().all(
         |target| match verified_directory_root(target, home_dir, cwd) {
             Some(root) => {
-                // ripgrep matches a path-shaped glob against the path from
-                // its match base, the working directory. Only a walk that
-                // starts there renders the same path, so a search target of
-                // its own leaves such a glob unmodeled.
-                (!filter.is_path_shaped()
-                    || working_directory_root(home_dir, cwd).as_deref() == Some(root.as_path()))
-                    && !super::read_paths::inside_agent_state_tree(&root, home_dir)
+                // ripgrep matches a path-shaped glob against the path from its
+                // match base, the working directory, so the walk renders each
+                // entry under the root's own path from there.
+                let Some(base) = super::search_scope_glob::glob_match_base(
+                    target,
+                    &root,
+                    filter.is_path_shaped(),
+                    verified_directory_root(".", home_dir, cwd).as_deref(),
+                ) else {
+                    return false;
+                };
+                !super::read_paths::inside_agent_state_tree(&root, home_dir)
                     && walk_scope(
                         &root,
-                        &filter,
+                        &filter.rooted_at(base),
                         Ignores::RipgrepGlob,
                         false,
                         home_dir,
@@ -398,7 +423,9 @@ fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
 /// the snake-case values and the input was not truncated.
 fn grep_input(payload: &Value, mirrored: bool) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
-    if root.get("tool_name").and_then(Value::as_str) != Some("Grep") {
+    // Grok names its tool `grep`; Claude Code names it `Grep`.
+    let name = root.get("tool_name").and_then(Value::as_str);
+    if name != Some("Grep") && !(mirrored && name == Some("grep")) {
         return None;
     }
     let input = root.get("tool_input")?.as_object()?;
@@ -463,11 +490,6 @@ fn verified_directory_root(
     }
     let canonical = std::fs::canonicalize(candidate).ok()?;
     canonical.is_dir().then_some(canonical)
-}
-
-/// The directory ripgrep matches a path-shaped glob against.
-fn working_directory_root(home_dir: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
-    verified_directory_root(".", home_dir, cwd)
 }
 
 #[cfg(test)]

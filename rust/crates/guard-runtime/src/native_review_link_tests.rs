@@ -248,6 +248,54 @@ fn a_reason_that_already_has_a_short_link_is_not_signed_twice() {
             later,
         )
         .expect("reason");
-        assert_eq!(signed, reason, "{harness}");
+        assert_eq!(signed, format!("{reason} {RELAY_SIGNED_LINK}"), "{harness}");
     }
+}
+
+#[test]
+fn a_signed_link_tells_the_agent_to_pass_it_on_whole() {
+    let now = 1_800_000_000 * 1_000_000;
+    for harness in ["codex", "claude-code", "zcode", "omp", "mcp"] {
+        let first = native_review_reason(
+            harness,
+            "Review this.",
+            HANDOFF_REVIEW_URL,
+            Some("vector-auth"),
+            now,
+        )
+        .expect("reason");
+        assert!(first.ends_with(RELAY_SIGNED_LINK), "{harness}: {first}");
+        let again = native_review_reason(
+            harness,
+            &first,
+            HANDOFF_REVIEW_URL,
+            Some("vector-auth"),
+            now,
+        )
+        .expect("reason");
+        assert_eq!(
+            again.matches(RELAY_SIGNED_LINK).count(),
+            1,
+            "{harness}: {again}"
+        );
+    }
+}
+
+#[test]
+fn an_unsigned_link_gets_no_relay_note() {
+    let now = 1_800_000_000 * 1_000_000;
+    for harness in ["codex", "claude-code"] {
+        let reason = native_review_reason(harness, "Review this.", HANDOFF_REVIEW_URL, None, now)
+            .expect("reason");
+        assert!(!reason.contains(RELAY_SIGNED_LINK), "{harness}: {reason}");
+    }
+    let external = native_review_reason(
+        "claude-code",
+        "Review this.",
+        "https://hol.org/guard/requests/20fce09561634ecab2055b539113c618",
+        Some("vector-auth"),
+        now,
+    )
+    .expect("reason");
+    assert!(!external.contains(RELAY_SIGNED_LINK), "{external}");
 }

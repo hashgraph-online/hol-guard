@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.hook_review import hook_worker, hook_worker_structured
+from codex_plugin_scanner.guard.hook_review import hook_worker, hook_worker_unavailable
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.structured_output_mediation_support import _config
 
@@ -24,7 +24,7 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
     # The native resolution is what says whether the managed policy covers this
     # harness; pin it so the result does not depend on an installed runtime.
     monkeypatch.setattr(
-        hook_worker_structured,
+        hook_worker_unavailable,
         "content_query",
         lambda *_args, **_kwargs: {
             "binding": None,

@@ -3,27 +3,30 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
-    discover_remote_mcp_servers,
-    persist_discovered_harness_mcp_servers,
-)
 from codex_plugin_scanner.guard.cli.inventory_list_commands import mcp_list_payload
 from codex_plugin_scanner.guard.cli.render_connectors import connector_setup_line
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_discovery_client import (
+    discover_remote_mcp_servers,
+    persist_discovered_harness_mcp_servers,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.connector_setup_items import connector_setup_href, connector_setup_status
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.python_oracles.observed_mcp_tools import observed_mcp_tool
 
 pytestmark = [pytest.mark.usefixtures("native_hook_force")]
 
-_NOW = "2026-10-17T12:00:00Z"
+# A day before the run. `mcp list` ages out an observed server after 30 days,
+# so a fixed date makes these tests fail a month after it was written.
+_NOW = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str]:
@@ -259,7 +262,7 @@ def test_mcp_list_shows_markup_in_names_literally(tmp_path: Path, capsys: pytest
 def _declare_remote(
     store: GuardStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *servers: HarnessDetection
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
+    from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
 
     # `mcp list` scans the configs again; this one is what the scan finds.
     monkeypatch.setattr(harness_mcp_discovery, "_safe_detections", lambda *_args: list(servers))
@@ -329,7 +332,7 @@ def test_mcp_list_records_no_stdio_server(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A stdio observation can carry a legacy denial into a new grant; listing must not.
-    from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
+    from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
 
     def no_stdio(_detections: object) -> list[object]:
         raise AssertionError("mcp list recorded a stdio server")

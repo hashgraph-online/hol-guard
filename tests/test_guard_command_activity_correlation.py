@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
+from tests.command_activity_correlation_key_support import write_correlation_key
+from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
+from tests.python_oracles.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
     derive_proven_request_correlation,
     load_existing_installation_correlation_key,
 )
-from codex_plugin_scanner.guard.runtime.command_activity_privacy import InstallationCorrelationKey
-from tests.command_activity_correlation_key_support import write_correlation_key
-from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
+from tests.python_oracles.command_activity_privacy import InstallationCorrelationKey
 
 _STRONG_ID = "01J3ABCD9XYZ7NATIVEID"
 

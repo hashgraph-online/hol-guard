@@ -258,8 +258,31 @@ def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
     assert [name for name in _HELP_PATH_FORBIDDEN_MODULES if name in loaded] == []
 
 
+def test_worker_host_import_leaves_the_cryptography_backend_unloaded() -> None:
+    """The worker host imports the store; neither needs the cryptography backend to start."""
+
+    import json
+    import subprocess
+
+    probe = (
+        "import json, sys\n"
+        "import codex_plugin_scanner.guard.workers.host\n"
+        "print(json.dumps(sorted(name for name in sys.modules if name.split('.')[0] == 'cryptography')))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", probe],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == []
+
+
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -273,7 +296,7 @@ def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
 
 
 def test_resolve_targets_keeps_single_harness_contract(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",

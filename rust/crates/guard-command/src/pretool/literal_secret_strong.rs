@@ -22,7 +22,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::value::{decode_base64, placeholder, placeholder_within};
+use super::value::{decode_base64, entropy, placeholder, placeholder_within};
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("strong literal secret pattern compiles")
@@ -44,23 +44,6 @@ patterns! {
     PADDED_BASE64 = r"^[A-Za-z0-9+/]{14,}={1,2}$";
     FILLER = r"(?i)\$\{|\{\{|\$\(|%\(|<[^>]*>|x{4,}|\*{3,}|change_?me|example|dummy|fake|placeholder|redacted|your[_\-]?|insert|replace";
     SEQUENTIAL = r"(?i)0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef|defg|qwer|asdf";
-}
-
-/// Shannon entropy of `value` in bits per character.
-fn entropy(value: &str) -> f64 {
-    let mut counts = std::collections::HashMap::new();
-    let mut total = 0usize;
-    for ch in value.chars() {
-        *counts.entry(ch).or_insert(0usize) += 1;
-        total += 1;
-    }
-    counts
-        .values()
-        .map(|&count| {
-            let share = count as f64 / total as f64;
-            -share * share.log2()
-        })
-        .sum()
 }
 
 /// Whether `value` is a whole `$NAME` or `%NAME%` reference to another

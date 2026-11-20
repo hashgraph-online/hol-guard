@@ -1,5 +1,5 @@
 //! Parity with the Python hook stamp and remaining-time hint, from vectors
-//! recorded by `scripts/ci/record_claude_hook_bridge_vectors.py`.
+//! the retired Python Claude bridge recorded.
 
 use std::ffi::OsString;
 use std::sync::OnceLock;

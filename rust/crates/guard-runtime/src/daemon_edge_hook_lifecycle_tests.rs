@@ -134,6 +134,7 @@ fn the_reply_is_read_as_the_python_settlement_read_it() {
     let save = json!({
         "outcome": "save",
         "artifact_id": "a",
+        "pending_artifact_hash": "h",
         "reason": "r",
         "source": "s",
         "plan": {},
@@ -143,7 +144,7 @@ fn the_reply_is_read_as_the_python_settlement_read_it() {
     };
     assert_eq!(
         Value::Object(fields),
-        json!({"artifact_id": "a", "reason": "r", "source": "s", "plan": {}})
+        json!({"artifact_id": "a", "pending_artifact_hash": "h", "reason": "r", "source": "s", "plan": {}})
     );
     let mut empty = save.clone();
     empty["reason"] = json!("");

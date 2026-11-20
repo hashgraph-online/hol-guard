@@ -65,6 +65,7 @@ def claim_rows(contract: dict[str, object]) -> list[dict[str, object]]:
                 {
                     "harness": entry["harness"],
                     "event": event["event"],
+                    "tools": list(event.get("tools", [])),
                     "transport": event["transport"],
                     "mode": event["mode"],
                     "surface": event["surface"],
@@ -95,6 +96,7 @@ def non_coverage(rows: list[dict[str, object]]) -> list[dict[str, object]]:
         {
             "harness": row["harness"],
             "event": row["event"],
+            "tools": row["tools"],
             "surface": row["surface"],
             "failure_behavior": row["failure_behavior"],
             "state": row["state"],
@@ -116,6 +118,17 @@ def render_json(contract: dict[str, object]) -> str:
         "non_coverage": non_coverage(rows),
     }
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+
+
+def row_label(row: dict[str, object]) -> str:
+    """``harness event [tools] (transport)``, naming tools only when the row splits its event by tool."""
+    tools = ", ".join(row["tools"])  # type: ignore[arg-type]
+    return f"{row['harness']} {row['event']}{f' [{tools}]' if tools else ''} ({row['transport']})"
+
+
+def _event_cell(row: dict[str, object]) -> str:
+    tools = ", ".join(f"`{tool}`" for tool in row["tools"])  # type: ignore[union-attr]
+    return f"`{row['event']}`" + (f": {tools}" if tools else "")
 
 
 def _cell(value: str) -> str:
@@ -161,7 +174,7 @@ def render_markdown(contract: dict[str, object]) -> str:
                 + " | ".join(
                     _cell(str(value))
                     for value in (
-                        f"`{row['event']}`",
+                        _event_cell(row),
                         row["surface"],
                         f"`{row['transport']}`",
                         f"`{row['mode']}`",
@@ -189,7 +202,7 @@ def render_markdown(contract: dict[str, object]) -> str:
                 _cell(str(value))
                 for value in (
                     row["harness"],
-                    f"`{row['event']}`",
+                    _event_cell(row),
                     row["surface"],
                     FAILURE_TEXT[str(row["failure_behavior"])],
                     " ".join(notes) or "None named.",
@@ -211,7 +224,7 @@ def expired(contract: dict[str, object], as_of: str) -> list[str]:
     for row in claim_rows(contract):
         if row["state"] not in EVIDENCE_STATES:
             continue
-        label = f"{row['harness']} {row['event']} ({row['transport']})"
+        label = row_label(row)
         expires_at = row["expires_at"]
         if not valid_timestamp(expires_at):
             failures.append(f"{label} claims {row['state']} without a valid expires_at")

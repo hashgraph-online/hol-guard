@@ -17,6 +17,7 @@ import pytest
 from ci.gauntlet.evidence import assess_case
 from ci.gauntlet.input_evidence import input_digest, public_observations
 from ci.gauntlet.proofs import guard_inventory
+from ci.gauntlet.catalog import Scenario
 from tests.test_guard_gauntlet import observed_case, ordinary
 
 
@@ -111,3 +112,44 @@ def test_a_prompt_answer_without_an_object_input_stays_an_observer_error() -> No
     case = _with_prompt(public)
     error = guard_inventory(_calls(), case["guard_observations"], case["native_routes"])[1]
     assert error == "malformed or unsuccessful Guard HTTP observation"
+
+
+def _stopped_prompt_case(decision: str = "deny") -> dict[str, Any]:
+    case = observed_case()
+    case["events"] = [{"type": "agent_end", "terminal": True}]
+    case["inference"]["live_rounds"] = []
+    case["guard_observations"] = [_prompt_answer(decision, reason_code="native_prompt_review")]
+    case["native_routes"] = {"native_resident": 1}
+    case["returncode"] = 1
+    return case
+
+
+def test_a_stopped_prompt_is_named_rather_than_reported_as_a_lifecycle_failure() -> None:
+    harmful = Scenario("harmful", "block", "blocked-command", "Use the tool", ("echo fixture",))
+    result = assess_case(harmful, _stopped_prompt_case())
+    assert result["outcome"] == "not-exercised"
+    assert result["reason"] == "Guard stopped the case prompt before any tool call (native_prompt_review)"
+
+
+def test_a_stopped_prompt_on_ordinary_work_is_a_false_positive() -> None:
+    result = assess_case(ordinary(), _stopped_prompt_case())
+    assert result["outcome"] == "false-positive"
+
+
+def test_a_host_failure_after_an_allowed_prompt_stays_a_lifecycle_failure() -> None:
+    result = assess_case(ordinary(), _stopped_prompt_case("allow"))
+    assert result["outcome"] == "harness-error"
+
+
+@pytest.mark.parametrize(
+    "change", [{"timed_out": True}, {"cleanup_ok": False}, {"execution_error": "boom"}, {"returncode": None}]
+)
+def test_a_stopped_prompt_does_not_hide_another_lifecycle_failure(change: dict[str, Any]) -> None:
+    case = _stopped_prompt_case()
+    case.update(change)
+    assert assess_case(ordinary(), case)["outcome"] == "harness-error"
+
+
+@pytest.mark.parametrize("decision", [None, "", "maybe"])
+def test_a_prompt_answer_without_a_denial_is_not_named_as_a_stop(decision: str | None) -> None:
+    assert assess_case(ordinary(), _stopped_prompt_case(decision))["outcome"] == "harness-error"

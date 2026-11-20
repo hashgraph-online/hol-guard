@@ -22,8 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -31,7 +30,7 @@ from codex_plugin_scanner.guard.approval_gate import (
     update_settings,
 )
 from codex_plugin_scanner.guard.cli.desktop_runtime_transition import run_desktop_runtime_transition
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_daemon_manage import (
@@ -41,6 +40,7 @@ from codex_plugin_scanner.guard.native_daemon_manage import (
     load_authenticated_daemon_state,
 )
 from codex_plugin_scanner.guard.native_daemon_peer import verified_live_guard_daemon_identity
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, native_runtime_status
 from codex_plugin_scanner.guard.runtime_transition import (
@@ -55,6 +55,7 @@ from codex_plugin_scanner.guard.runtime_transition_codex_observer import observe
 from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
 from codex_plugin_scanner.guard.runtime_transition_daemon import TransitionDaemonDriver
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 
 from .test_runtime_transition import core_dependencies, transition  # noqa: F401
 
@@ -90,7 +91,7 @@ home.mkdir(mode=0o700, exist_ok=True)
 guard.mkdir(mode=0o700, exist_ok=True)
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
 commands_lifecycle_gate.canonical_lifecycle_home = lambda: guard
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
@@ -190,12 +191,13 @@ try:
         runtime.restore_files(operation_id, first_cause="candidate_hook_failed")
         if phase == "inverse-restored":
             finish()
-        original = runtime._write
-        def crash_after_previous(payload):
-            original(payload)
-            if payload.get("phase") == "PreviousFunctional":
+        original = runtime._commit
+        def crash_after_previous(*args, **kwargs):
+            phase_now = original(*args, **kwargs)
+            if phase_now == "PreviousFunctional":
                 finish()
-        runtime._write = crash_after_previous
+            return phase_now
+        runtime._commit = crash_after_previous
         runtime.finish_rollback(operation_id, functional_proof=proof(predecessor_generation))
     raise SystemExit("crash boundary was not reached")
 finally:
@@ -540,8 +542,7 @@ def test_candidate_start_failure_restores_configured_hook_allow_and_deny(
     workspace.mkdir(mode=0o700)
     context = HarnessContext(home, workspace, guard, home_override_explicit=True, workspace_override_explicit=True)
     store = GuardStore(guard)
-    adapter = CodexHarnessAdapter()
-    manifest = adapter.install(context)
+    manifest = harness_support.install("codex", context)
     store.set_managed_install("codex", True, str(workspace), manifest, "isolated-production-driver")
     identity = _bundled_runtime(packaged_executable())
     candidate = tmp_path / "candidate-core"
@@ -580,7 +581,7 @@ def test_candidate_start_failure_restores_configured_hook_allow_and_deny(
         _retire_isolated_daemon(guard)
         before_row = store.get_managed_install("codex")
         assert before_row is not None
-        prepared = adapter.prepare_install(context)
+        prepared = harness_install_ops.prepare_install("codex", context)
         assert any(change.before != change.after for change in prepared.files)
         before_files = {change.path: change.before for change in prepared.files if change.expected_digest is None}
         after_row = {**before_row, "manifest": prepared.manifest, "updated_at": "candidate-production-driver"}

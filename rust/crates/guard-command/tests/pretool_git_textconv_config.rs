@@ -108,6 +108,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
             None,
             guard_command::pretool::PathContext {
                 literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,

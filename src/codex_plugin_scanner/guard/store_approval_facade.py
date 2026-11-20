@@ -24,6 +24,12 @@ class StoreApprovalsMixin:
     def settle_native_review_reuse(self, **identity: object) -> object:
         return self._native_store_call("settle_native_review_reuse", identity)
 
+    def record_native_admitted_call(self, *, harness: str, payload: object, now: str) -> object:
+        # The resident derives the call's witness key; see native_admitted_call.rs.
+        return self._native_store_call(
+            "record_native_admitted_call", {"harness": harness, "payload": payload, "now": now}
+        )
+
     def consume_native_review_approval(
         self,
         *,
@@ -109,7 +115,7 @@ class StoreApprovalsMixin:
         hook renders it itself.
 
         ``connector_lookup`` is the launch of a review Guard did not recognise
-        (``native_review_connector_lookup``). The resident looks up the
+        (``native_connector_lookup``). The resident looks up the
         connector it waits on, queues the review under that connector's group
         with its setup hint and wording, and keeps the review's context with
         it in the same write. The row carries what it found as

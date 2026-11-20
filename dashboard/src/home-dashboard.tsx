@@ -27,15 +27,14 @@ import { ContextHomeStatus } from "./context-assistance/home-status";
 import { HomeHero, buildHomeHeroModel } from "./home-hero";
 import { HomeHowGuardWorks, useHowGuardWorksReveal } from "./home-how-guard-works";
 import { HomeSetupCard, WhatStaysLocalCard, resolveSetupApps } from "./home-setup-card";
-import { approvalProofRequiresPassword } from "./approval-proof-inline";
+import { approvalProofRequiresPassword, approvalProofUsesPulse } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 import { WatchProtectionBanner } from "./watch-protection-banner";
-import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
-import { updateSettings } from "./guard-api";
+import { watchBannerModel } from "./harness-posture-ui";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
@@ -197,19 +196,10 @@ export function HomeWorkspace(props: {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
 
-  const handleTurnProtectionOn = useCallback(() => {
-    const current = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
-    void updateSettings(current === null ? { protection_posture: "protected" } : turnProtectionOnUpdate(current))
-      .then(async () => {
-        await props.onRefreshRuntime?.();
-        props.onOpenSettings();
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Unable to turn protection on.";
-        showToast(message);
-        props.onOpenSettings();
-      });
-  }, [props.onOpenSettings, props.onRefreshRuntime, props.runtime, showToast]);
+  const handleProtectionTurnedOn = useCallback(async () => {
+    showToast("Protection is on.");
+    await props.onRefreshRuntime?.();
+  }, [props.onRefreshRuntime, showToast]);
 
   const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setClearPassword(event.target.value);
@@ -226,10 +216,13 @@ export function HomeWorkspace(props: {
     setClearSubmitting(true);
     setClearError(null);
     try {
-      await props.onConfirmClear({
-        ...(clearPassword ? { approval_password: clearPassword } : {}),
-        ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
-      });
+      const credentials = approvalProofUsesPulse(props.approvalGate)
+        ? undefined
+        : {
+          ...(clearPassword ? { approval_password: clearPassword } : {}),
+          ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
+        };
+      await props.onConfirmClear(credentials);
       setClearPassword("");
       setClearTotpCode("");
       if (confirm?.harness) {
@@ -242,7 +235,7 @@ export function HomeWorkspace(props: {
     } finally {
       setClearSubmitting(false);
     }
-  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
+  }, [clearPassword, clearTotpCode, props.approvalGate, props.clearConfirm, props.onConfirmClear, showToast]);
 
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = resolveHomeQueuedCount({
@@ -351,7 +344,11 @@ export function HomeWorkspace(props: {
   return (
     <div className="space-y-6">
       {watchBanner !== null ? (
-        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
+        <WatchProtectionBanner
+          model={watchBanner}
+          onTurnedOn={handleProtectionTurnedOn}
+          onOpenSettings={props.onOpenSettings}
+        />
       ) : null}
       {shareOpen && analyticsState.kind === "ready" ? (
         <EvidenceInsightsShareModal
@@ -531,6 +528,20 @@ export function HomeWorkspace(props: {
   );
 }
 
+/** Which proof fields the "Clear remembered decisions?" window shows. */
+export function resolveClearDecisionsProof(
+  gate: GuardApprovalGatePublicConfig | null,
+  password: string,
+  totpCode: string,
+): { usesPulse: boolean; needsProof: boolean; needsPassword: boolean; proofIncomplete: boolean } {
+  const usesPulse = approvalProofUsesPulse(gate);
+  // With Yanez Pulse the YID app is the proof, so there is no field to fill.
+  const needsProof = gate?.enabled === true && gate.configured === true && !usesPulse;
+  const needsPassword = approvalProofRequiresPassword(gate);
+  const proofIncomplete = needsProof && (needsPassword ? password.trim() === "" : totpCode.trim() === "");
+  return { usesPulse, needsProof, needsPassword, proofIncomplete };
+}
+
 function ClearConfirmDialog(props: {
   clearConfirm: { harness?: string; all?: boolean };
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -545,10 +556,11 @@ function ClearConfirmDialog(props: {
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, dialogRef);
-  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
-  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  const proofIncomplete = needsProof
-    && (needsPassword ? props.clearPassword.trim() === "" : props.clearTotpCode.trim() === "");
+  const { usesPulse, needsProof, needsPassword, proofIncomplete } = resolveClearDecisionsProof(
+    props.approvalGate,
+    props.clearPassword,
+    props.clearTotpCode,
+  );
 
   return (
     <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
@@ -562,6 +574,11 @@ function ClearConfirmDialog(props: {
                 <p className="mt-2 text-sm text-muted-foreground">
                   This will remove {props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`}. Guard will ask again next time matching actions run.
                 </p>
+                {usesPulse && (
+                  <p className="mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 px-3 py-2 text-sm text-brand-dark">
+                    You will approve this in the YID app with a face scan.
+                  </p>
+                )}
                 {needsProof && (
                   <div className="mt-4 grid gap-3">
                     {needsPassword ? (

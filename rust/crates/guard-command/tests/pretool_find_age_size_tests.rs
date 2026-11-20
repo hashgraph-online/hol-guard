@@ -73,7 +73,7 @@ fn malformed_or_reading_operands_keep_review() {
     let fixture = fixture("reviewed");
     for harness in ["claude-code", "codex", "omp"] {
         for command in [
-            // `-newer` reads another path's metadata.
+            // `-newer` against a system path keeps the review.
             "find src -newer /etc/passwd",
             "find src -mtime",
             "find src -mtime +1d",

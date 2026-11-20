@@ -17,6 +17,7 @@ use source_lines::code_lines;
 mod argv;
 mod destructive_git;
 pub(in crate::pretool) mod fed;
+pub(in crate::pretool) mod host_reach;
 mod launch;
 mod loopback;
 mod loopback_bases;
@@ -123,6 +124,10 @@ pub(super) struct Findings {
     /// only network use is loopback HTTP, the literal ports the workspace
     /// sandbox grants it.
     pub(super) loopback: Option<BTreeSet<u16>>,
+    /// Python fed on standard input as text that reaches past the
+    /// workspace, itself or through a local module it imports
+    /// (`host_reach`).
+    pub(super) host_reach: bool,
     /// The program's source and the local modules read with it.
     pub(super) sources: Vec<String>,
     /// The language the program is written in.
@@ -687,6 +692,7 @@ fn assess_programs(
                 .flatten()
         };
         let inline = matches!(program, Program::Inline(_)) && !remote;
+        let mut fed_text = false;
         let script_file = matches!(program, Program::Script(_));
         let entry = match program {
             Program::Script(script) if scripts && !remote && reachable(script) => {
@@ -701,10 +707,13 @@ fn assess_programs(
                 directory: imports_from(),
             },
             Program::Stdin => match stdin.source(segments, index) {
-                Some(Fed::Text(source)) => Entry::Text {
-                    source,
-                    directory: imports_from(),
-                },
+                Some(Fed::Text(source)) => {
+                    fed_text = true;
+                    Entry::Text {
+                        source,
+                        directory: imports_from(),
+                    }
+                }
                 Some(Fed::File(file)) if reachable(&file) => {
                     let Some(path) = resolve(&file, context) else {
                         continue;
@@ -734,6 +743,7 @@ fn assess_programs(
             }
             Entry::Text { .. } => false,
         };
+        let fed_python = fed_text && language == Language::Python;
         let Some((sources, complete)) = read_graph(language, entry) else {
             continue;
         };
@@ -745,7 +755,10 @@ fn assess_programs(
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
+            found.host_reach |= fed_python && host_reach::python_reaches_host(source);
         }
+        // A local module the graph left unread could reach the host too.
+        found.host_reach |= fed_python && !complete;
         if (inline || workspace_script) && complete && language == Language::Node {
             found.loopback = loopback::program_ports(&sources, context.home_dir);
         }

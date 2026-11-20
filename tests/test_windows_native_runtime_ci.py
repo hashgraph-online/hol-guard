@@ -142,7 +142,10 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
     job = load_ci_workflow()["jobs"]["windows-shim-admin"]
     assert job["runs-on"] == "windows-latest"
     assert job["strategy"]["fail-fast"] is False
-    assert job["strategy"]["matrix"]["shim-gate"] == ["vectors", "native-op", "mcp"]
+    shim_matrix = job["strategy"]["matrix"]["shim-gate"]
+    assert "github.event_name == 'pull_request'" in shim_matrix
+    assert '["vectors", "mcp"]' in shim_matrix
+    assert '["vectors", "native-op", "mcp"]' in shim_matrix
     assert job["env"]["CARGO_PROFILE_TEST_DEBUG"] == "line-tables-only"
     assert not any(
         key in job["env"]
@@ -182,10 +185,7 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
         "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors"
         in vector["run"]
     )
-    assert (
-        "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op"
-        in native_op["run"]
-    )
+    assert "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op" in native_op["run"]
     child_tree = next(
         step for step in steps if step.get("name") == "Contain MCP server process trees in a JobObject on Windows"
     )

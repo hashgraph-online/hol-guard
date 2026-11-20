@@ -488,6 +488,7 @@ fn sensitive_reason(family: &str) -> &'static str {
         "SSH client config" => "Guard treats SSH config as sensitive because it may reveal or shape host credentials.",
         "GnuPG key material" => "Guard treats GnuPG key material as sensitive because it can unlock encrypted assets.",
         "Terraform variable secrets" => "Guard treats Terraform variable files as sensitive because they often contain secrets.",
+        "Wrangler local secrets file" => "Guard treats .dev.vars as sensitive because Wrangler keeps a worker's local secrets there.",
         _ => "Guard treats wallet and private-key files as sensitive because they can authorize account control.",
     }
 }
@@ -985,6 +986,18 @@ mod tests {
         assert_eq!(response.reason_code, "output_too_large");
         assert_eq!(response.reviewed_output_sha256, None);
         assert!(!response.observe_mode);
+    }
+
+    #[test]
+    fn a_test_runner_traceback_with_stand_in_credentials_stays_readable() {
+        let field = ["new_", "password"].concat();
+        let value = ["correct-", "password"].concat();
+        let traceback =
+            format!("tests/test_login.py:742: AssertionError\nkwargs = {{'{field}': '{value}'}}\n");
+
+        let response = review_post_tool(&request(json!({"stdout": traceback, "stderr": ""})));
+
+        assert_eq!(response.decision, "allow");
     }
 
     #[test]

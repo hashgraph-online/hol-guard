@@ -69,7 +69,61 @@ pub(crate) fn validate_facts(
             return Err("cloud_pack_readback_invalid");
         }
     }
+    if let Some(reconcile) = &facts.reconcile_read {
+        let target = pack
+            .action(reconcile)
+            .ok_or("cloud_pack_reconcile_read_invalid")?;
+        if action.safety.effect == crate::cloud_action_binding::ActionEffect::Read
+            || target.safety.effect != crate::cloud_action_binding::ActionEffect::Read
+            || !takes_write_arguments(target, action)
+        {
+            return Err("cloud_pack_reconcile_read_invalid");
+        }
+    }
     Ok(())
+}
+
+/// A reconcile read is called with the write's own arguments, so it must accept every
+/// argument the write can carry under the same bounds, and need none the write may omit.
+fn takes_write_arguments(read: &PackAction, write: &PackAction) -> bool {
+    let carried = write.arguments.iter().all(|(name, spec)| {
+        read.arguments.get(name).is_some_and(|accepted| {
+            same_bounds(accepted, spec) && (!accepted.required() || spec.required())
+        })
+    });
+    let needed = read
+        .arguments
+        .iter()
+        .all(|(name, spec)| !spec.required() || write.arguments.contains_key(name));
+    // Undeclared arguments of the write reach the read too: it must take them openly
+    // and declare nothing of its own that one of them could collide with.
+    let open = match (&write.open_arguments, &read.open_arguments) {
+        (None, _) => true,
+        (Some(sent), Some(taken)) => {
+            taken.max_bytes >= sent.max_bytes
+                && read
+                    .arguments
+                    .keys()
+                    .all(|name| write.arguments.contains_key(name))
+        }
+        (Some(_), None) => false,
+    };
+    carried && needed && open
+}
+
+fn same_bounds(left: &ArgumentSpec, right: &ArgumentSpec) -> bool {
+    fn optional(spec: &ArgumentSpec) -> ArgumentSpec {
+        let mut spec = spec.clone();
+        match &mut spec {
+            ArgumentSpec::String { required, .. }
+            | ArgumentSpec::Integer { required, .. }
+            | ArgumentSpec::Boolean { required }
+            | ArgumentSpec::Array { required, .. }
+            | ArgumentSpec::Json { required, .. } => *required = false,
+        }
+        spec
+    }
+    optional(left) == optional(right)
 }
 
 /// A message built by an `rfc822` body must report exactly its recipient arguments as

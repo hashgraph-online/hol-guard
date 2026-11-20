@@ -430,8 +430,11 @@ class StorePolicyIntegrityAdminMixin:
                             trusted_state=trusted_state,
                         )
                         connection.commit()
-            if next_control_state is not None:
-                self._finalize_policy_integrity_control_state(next_control_state)
+            if (
+                next_control_state is not None
+                and self._finalize_policy_integrity_control_state(next_control_state) is False
+            ):
+                raise RuntimeError("Guard policy integrity control state could not be finalized.")
             state, counts, remaining_items = self._policy_integrity_scan(
                 connection,
                 now=current_time,
@@ -535,8 +538,11 @@ class StorePolicyIntegrityAdminMixin:
                 force_sign_decision_ids=selected_preserved_ids,
             )
             connection.commit()
-            if next_control_state is not None:
-                self._finalize_policy_integrity_control_state(next_control_state)
+            if (
+                next_control_state is not None
+                and self._finalize_policy_integrity_control_state(next_control_state) is False
+            ):
+                raise RuntimeError("Guard policy integrity control state could not be finalized.")
             final_state, counts, items = self._policy_integrity_scan(
                 connection,
                 now=now,
@@ -616,8 +622,11 @@ class StorePolicyIntegrityAdminMixin:
                     force_sign_decision_ids=force_sign_ids,
                 )
                 connection.commit()
-        if next_control_state is not None:
-            self._finalize_policy_integrity_control_state(next_control_state)
+        if (
+            next_control_state is not None
+            and self._finalize_policy_integrity_control_state(next_control_state) is False
+        ):
+            raise RuntimeError("Guard policy integrity control state could not be finalized.")
         if include_items:
             return self.verify_policy_integrity(harness=harness)
         return self.get_policy_integrity_status(harness=harness)
@@ -706,7 +715,8 @@ class StorePolicyIntegrityAdminMixin:
         if next_control_state is not None:
             if not isinstance(next_control_state, dict):
                 raise RuntimeError("Guard policy integrity control state is invalid.")
-            self._finalize_policy_integrity_control_state(next_control_state)
+            if self._finalize_policy_integrity_control_state(next_control_state) is False:
+                raise RuntimeError("Guard policy integrity control state could not be finalized.")
         return int(payload["cleared"])
 
     def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:

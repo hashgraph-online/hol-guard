@@ -73,9 +73,15 @@ _PUBLISH_RETRY_MAX_SECONDS = 5.0
 # next publish usually succeeds. A hook waits for that ACK inside a deadline of
 # a few seconds, so the backoff for these codes stays well under it. Every
 # other failure keeps the exponential delay.
+#
+# ``native_approval_authority_busy`` is the policy write losing a short wait
+# for the approval-authority lock to another Guard process. On a loaded host
+# that wait is easy to miss and the holder releases it within moments, so the
+# hook waits for the next attempt instead of refusing the action at once.
 TRANSIENT_PUBLICATION_ERRORS = frozenset(
     {
         "native_policy_snapshot_resident_changed",
+        "native_approval_authority_busy",
         "native_resident_restart_budget_busy",
         "native_command_control_mutation_in_progress",
         "native_command_control_authority_not_current",

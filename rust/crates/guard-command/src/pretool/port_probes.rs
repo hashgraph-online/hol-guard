@@ -12,6 +12,9 @@
 //!   bytes), proxies (`-x`/`-X`), Unix sockets (`-U`), source binding and any
 //!   option not listed below.
 //! - `ncat` and `socat`, whose option sets differ.
+//!
+//! DNS lookups with `dig`, `nslookup` and `host` are proven here too, in
+//! [`dns_lookups`].
 
 /// Single-letter flags that may be clustered with `-z` (`-zv`, `-vz`).
 const SHORT_FLAGS: &str = "zvn46";
@@ -20,22 +23,90 @@ const SHORT_VALUES: &str = "wG";
 
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "localhost", "::1"];
 
-pub(super) fn safe_nc_segment(
+#[path = "dns_lookups.rs"]
+mod dns_lookups;
+
+/// Whether `program` is a probe this module proves: a loopback `nc -z`, or a
+/// `dig`, `nslookup` or `host` lookup of a fixed name ([`dns_lookups`]).
+pub(super) fn proves(program: &str) -> bool {
+    matches!(program, "nc" | "netcat" | "dig" | "nslookup" | "host")
+}
+
+/// The probe `program` runs, read from the start of its pipeline so that no
+/// standard input reaches it.
+pub(super) fn safe(
+    program: &str,
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
 ) -> bool {
+    match program {
+        "dig" | "nslookup" | "host" => {
+            // The raw text, since the parser folds `$((...))` to a number.
+            model.dialect == "posix"
+                && segment.pipeline_index == 0
+                && !segment.text.contains(['$', '`'])
+                && dns_lookups::safe_lookup_arguments(
+                    program,
+                    &segment.arguments,
+                    no_digrc(context),
+                )
+        }
+        _ => safe_nc_segment(model, segment),
+    }
+}
+
+/// Whether the session's home holds no `.digrc` for `dig` to read.
+fn no_digrc(context: super::PathContext<'_>) -> bool {
+    context.shell_home_matches
+        && context.home_dir.is_some_and(|home| {
+            std::fs::symlink_metadata(std::path::Path::new(home).join(".digrc"))
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        })
+}
+
+#[cfg(test)]
+mod digrc_home_tests {
+    use super::no_digrc;
+    use crate::pretool::PathContext;
+
+    #[test]
+    fn declared_home_is_proven_only_when_shell_home_matches() {
+        let root = tempfile::tempdir().expect("synthetic home");
+        let home = root.path().to_str().expect("UTF-8 synthetic home");
+        let matching = PathContext {
+            home_dir: Some(home),
+            shell_home_matches: true,
+            ..PathContext::default()
+        };
+        assert!(no_digrc(matching));
+
+        let mismatched = PathContext {
+            shell_home_matches: false,
+            ..matching
+        };
+        assert!(!no_digrc(mismatched));
+
+        std::fs::write(root.path().join(".digrc"), "-f synthetic-names.txt\n")
+            .expect("synthetic config");
+        assert!(!no_digrc(matching));
+    }
+}
+
+fn safe_nc_segment(model: &crate::CanonicalCommandV1, segment: &crate::CommandSegmentV1) -> bool {
     model.dialect == "posix" && segment.pipeline_index == 0 && safe_nc_arguments(&segment.arguments)
 }
 
-/// A whole `nc`/`netcat` segment, generic checks included, that the native
-/// proof accepts as a zero-I/O loopback probe. It reads no standard input and
-/// sends nothing, so the compatibility layer does not treat it as an upload.
+/// A whole probe segment, generic checks included, that the native proof
+/// accepts: a zero-I/O loopback `nc` probe or a lookup of a fixed name. Neither
+/// reads standard input or sends anything but the probe itself, so the
+/// compatibility layer does not treat it as an upload.
 pub(crate) fn proven_probe_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
-    matches!(segment.executable.as_deref(), Some("nc" | "netcat"))
+    segment.executable.as_deref().is_some_and(proves)
         && super::segment_proof::exact_safe_segment_with_context(model, segment, false, context)
 }
 

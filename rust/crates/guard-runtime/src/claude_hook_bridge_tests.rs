@@ -76,6 +76,43 @@ fn daemon_answer_is_forwarded_with_its_proof() {
     assert_eq!(body["tool_name"], "Bash");
 }
 
+/// An install run from a Cursor terminal once wrote `runtime-harness=cursor`
+/// into Claude's shared settings, and every Claude Code call after it was
+/// reviewed as Cursor's, under Cursor's posture. A hook that Cursor is not
+/// running reaches the daemon as Claude Code's, whatever the settings say.
+#[test]
+fn a_written_cursor_attribution_does_not_reach_the_daemon() {
+    if crate::claude_hook_bridge_harness::current_cursor_run().is_some() {
+        eprintln!("skipped: this test process runs inside Cursor");
+        return;
+    }
+    let (home, daemon) =
+        home_with_daemon("attribution", vec![Exchange::Hook(200, ALLOW.to_owned())]);
+    let mut config: serde_json::Value =
+        serde_json::from_str(&config_for(&home, fallback_exiting(3), Vec::new())).unwrap();
+    let written = format!(
+        "{}&runtime-harness=cursor",
+        config["query"].as_str().unwrap()
+    );
+    config["query"] = written.into();
+    assert_eq!(respond(&config.to_string(), PRE_TOOL_USE), ALLOW);
+    let hooks = daemon.join().unwrap();
+    let [hook] = hooks.as_slice() else {
+        panic!("one hook request, got {hooks:?}");
+    };
+    assert!(
+        hook.target.starts_with("/v1/hooks/claude-code?guard-home="),
+        "{}",
+        hook.target
+    );
+    let query = hook.target.split_once('?').map_or("", |(_, query)| query);
+    assert!(
+        query_values(query, "runtime-harness").is_empty(),
+        "{}",
+        hook.target
+    );
+}
+
 /// Claude writes the hook body as UTF-8 whatever the console code page is,
 /// so the bridge reads bytes and hands them on as bytes. A path with accents
 /// has to reach the daemon spelled the way the harness sent it.

@@ -1,11 +1,9 @@
 //! Adds the project code a typed prompt is about to the hook's answer, when
-//! someone turned on CIGAR project context for their AI apps.
-//!
-//! The prompt hook answers in time whatever happens here: the walk and the
-//! lookup share what is left of the hook's budget, the lookup runs on its own
-//! thread, a repeat of the same prompt joins the lookup already running, a
-//! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing.
+//! someone turned on CIGAR project context for their AI apps. The prompt hook
+//! answers in time whatever happens here: the walk and the lookup share what
+//! is left of the hook's budget, the lookup runs on its own thread, a repeat
+//! of the same prompt joins the lookup already running, a prompt CIGAR cannot
+//! answer yet gets the matched files, and anything failed or off adds nothing.
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
@@ -15,15 +13,18 @@ use crate::context_assistance_prompt_words::{marked_terms, spellings};
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{lookup, Miss, Request};
+use lookup::{anchored, lookup, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_changes.rs"]
 mod changes;
+#[path = "context_assistance_prompt_chores.rs"]
+mod chores;
 #[path = "context_assistance_prompt_excerpts.rs"]
 mod excerpts;
 use excerpts::render;
@@ -31,7 +32,7 @@ use excerpts::render;
 use excerpts::{fence_for, language};
 #[path = "context_assistance_prompt_ending.rs"]
 mod ending;
-use ending::{end_note, prompt_session};
+use ending::{end_note, fit_note, prompt_session};
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
 #[path = "context_assistance_prompt_map.rs"]
@@ -41,7 +42,7 @@ mod names;
 #[path = "context_assistance_prompt_sections.rs"]
 mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
-mod seen;
+pub(crate) mod seen;
 
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
@@ -94,6 +95,45 @@ pub(crate) fn harness_response(
     store: Option<&PolicySnapshotStore>,
     started: Instant,
 ) -> Option<Value> {
+    let fallback = fallback_response(harness, event, result, envelope.recording_only);
+    advisory_or_fallback(fallback, || {
+        harness_response_inner(envelope, harness, event, result, store, started)
+    })
+}
+
+fn advisory_or_fallback(
+    fallback: Option<Value>,
+    advisory: impl FnOnce() -> Option<Value> + std::panic::UnwindSafe,
+) -> Option<Value> {
+    catch_unwind(AssertUnwindSafe(advisory))
+        .ok()
+        .flatten()
+        .or(fallback)
+}
+
+fn fallback_response(
+    harness: &str,
+    event: &str,
+    result: &Value,
+    recording_only: bool,
+) -> Option<Value> {
+    let mut response =
+        guard_command::hook_responses::render_edge_response(harness, event, result, recording_only)
+            .map(Value::Object)?;
+    if event == "UserPromptSubmit" && harness == "claude-code" && !recording_only {
+        let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
+    }
+    Some(response)
+}
+
+fn harness_response_inner(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event: &str,
+    result: &Value,
+    store: Option<&PolicySnapshotStore>,
+    started: Instant,
+) -> Option<Value> {
     warm(envelope, harness, event, store);
     let mut response = guard_command::hook_responses::render_edge_response(
         harness,
@@ -115,13 +155,22 @@ pub(crate) fn harness_response(
     if let Some(store) = store.filter(|store| !cigar_off(store, workspace, harness)) {
         let slot = envelope.recording_only && open_slot(&mut response);
         let before = context_len(&response);
+        let session = prompt_session(envelope, harness, store);
+        let seen_before = session.as_ref().map(seen::earlier).unwrap_or_default();
         let mut shown = Vec::new();
         attach(&mut response, envelope, harness, store, started, &mut shown);
+        let session = session.as_ref();
+        fit_note(
+            &mut response,
+            harness,
+            before,
+            (session, &seen_before),
+            &mut shown,
+        );
         let added = context_len(&response).saturating_sub(before);
         let payload = &envelope.raw_payload;
         savings::noted(store.guard_home(), payload, harness, added, shown);
-        let session = prompt_session(envelope, harness, store);
-        end_note(&mut response, harness, before, session.as_ref());
+        end_note(&mut response, harness, before, session);
         if harness == "kimi" {
             kimi_message(&mut response);
         }
@@ -148,11 +197,12 @@ fn prompt_cwd(envelope: &GuardHookEnvelopeV2) -> Option<&str> {
         .or_else(|| raw.pointer("/workspaceRoots/0").and_then(Value::as_str))
 }
 
-/// The prompt's text: top-level `prompt`, or Cline's `userPromptSubmit.prompt`.
+/// A typed prompt's text (`prompt` or Cline's `userPromptSubmit.prompt`); none if the app wrote it.
 fn prompt_text(raw: &Value) -> Option<&str> {
     (raw.get("prompt"))
         .or_else(|| raw.pointer("/userPromptSubmit/prompt"))
         .and_then(Value::as_str)
+        .filter(|prompt| !crate::context_assistance_prompt_generated::by_app(prompt))
 }
 
 /// Watch answers some apps' prompts without a context slot; one is opened
@@ -258,6 +308,10 @@ fn attach(
     if let Some(changed) = &changed {
         add_context(response, &changed.text);
     }
+    let chores_by = Instant::now() + left() / 3;
+    if chores::added(response, &root, prompt, &context_on, chores_by) && changed.is_none() {
+        return;
+    }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
@@ -315,6 +369,12 @@ fn attach(
         add_context(response, &context.text);
         return;
     }
+    // With nothing mapped, excerpts ranked on plain words alone ("keep
+    // going", "so is it fixed?") are a guess: mostly a README or changelog.
+    // They need the prompt to name a file, a quoted phrase or code by name.
+    if !anchored(prompt) {
+        return;
+    }
     // An excerpt holding only the quoted text is still about the request.
     words.extend(quoted);
     let request = Request {
@@ -350,8 +410,7 @@ fn attach(
     add_context(response, &context.text);
 }
 
-/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is
-/// starting, busy or late.
+/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is starting, busy or late.
 fn answered(
     lookup: Result<Option<Rendered>, Miss>,
     own_read: impl FnOnce() -> Option<Rendered>,
@@ -432,14 +491,6 @@ fn waiting_time(budget_ms: Option<u64>) -> Duration {
             .saturating_sub(HOOK_MARGIN)
             .min(MAX_WAIT)
     })
-}
-
-fn truncated(text: &str, max_bytes: usize) -> String {
-    let mut end = text.len().min(max_bytes);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
 }
 
 fn add_context(response: &mut Value, context: &str) {

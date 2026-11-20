@@ -40,7 +40,7 @@ pub const HOOK_RENDER_DAEMON_REPLY_MAX_BYTES: usize = 4 * 1024 * 1024;
 pub fn hook_render_max_bytes(kind: &str) -> usize {
     match kind {
         "cli_hook_emit" => HOOK_RENDER_CLI_EMIT_MAX_BYTES,
-        "cursor_shell_route" => HOOK_RENDER_CURSOR_ROUTE_MAX_BYTES,
+        "cursor_shell_route" | "binding_recording_only" => HOOK_RENDER_CURSOR_ROUTE_MAX_BYTES,
         "hermes_bridge" | "muse_bridge" => HOOK_RENDER_DAEMON_REPLY_MAX_BYTES,
         _ => HOOK_RENDER_MAX_BYTES,
     }
@@ -55,7 +55,7 @@ pub struct HookRenderRequestV1 {
     /// `pre_tool`, `pre_tool_review`, `recording_only_pre_tool`, `cli_response`,
     /// `cli_document`, `copilot_hook_response`, `claude_approval_copy`,
     /// `artifact_id`, `terminal_policy_action`, `cursor_after_shell_observed`,
-    /// `cursor_observer_event`, `hermes_bridge`, `muse_bridge` or `cli_hook_emit`.
+    /// `cursor_observer_event`, `binding_recording_only`, `cursor_shell_route`, `hermes_bridge`, `muse_bridge`, `cli_hook_emit` or `availability`.
     pub kind: String,
     pub harness: String,
     /// The verdict to render; absent for `recording_only_pre_tool`.

@@ -14,6 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 
 _AUTH = {"sync_url": "https://hol.org/api/guard/receipts/sync"}
 _SESSION = {
@@ -31,9 +32,9 @@ def _rejected_catalog(**_kwargs: object) -> dict[str, object]:
 
 def _patch_runtime_session_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "_cloud_runtime_session_payload", lambda _store, _session: dict(_SESSION))
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {"generatedAt": "2026-11-05T12:00:00+00:00", "items": [{"sessionId": "runtime-session-1"}]},
     )

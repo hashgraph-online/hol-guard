@@ -3,9 +3,9 @@
 //! `find` only prints names unless an action predicate runs a program, writes
 //! a file, or deletes. Every operand before the expression must be a bounded
 //! directory, and the expression may use only matching, depth and print
-//! predicates. Actions (`-exec*`, `-ok*`, `-delete`, `-fprint*`, `-fls`,
-//! `-printf`), link-following options (`-L`, `-H`, `-follow`) and anything
-//! unrecognised keep review. Skill directories and `~/.agents` may be roots
+//! predicates. Actions (`-exec*`, `-ok*`, `-delete`, `-fprint*`, `-fls`, a
+//! `-printf` format beyond name directives), link-following options (`-L`,
+//! `-H`, `-follow`) and anything unrecognised keep review. Skill directories and `~/.agents` may be roots
 //! because the expression prints names, never contents. The Oh My Pi
 //! `~/.agent` root may be one when its tree clears the walk `ls -R` needs.
 //! Another home dot-directory may be one when `-maxdepth 1` keeps the walk to
@@ -77,7 +77,17 @@ pub(super) fn safe_find_listing_arguments(
                                 selects_ordinary_names,
                             ))))
         })
-        && safe_expression(expression)
+        && safe_expression(expression, &|reference| reference_file(reference, context))
+}
+
+/// Whether `find -newer FILE` may compare against `FILE`. The test reads
+/// only that file's modification time, never its bytes, so a file a plain
+/// read could open clears it. A missing file, a home dot-directory, a
+/// credential store and a path outside the reads Guard proves keep the
+/// review.
+fn reference_file(reference: &str, context: super::PathContext<'_>) -> bool {
+    !reference.starts_with('-')
+        && bounded_read_target(reference, context.home_dir, context.cwd, false)
 }
 
 /// `-maxdepth 0` or `1` bounds `find` to the root and its own entries, the
@@ -98,7 +108,7 @@ fn entries_only(expression: &[String]) -> bool {
                 _ => return false,
             },
             "-name" | "-iname" | "-path" | "-ipath" | "-wholename" | "-iwholename" | "-type"
-            | "-mindepth" => index += 1,
+            | "-mindepth" | "-printf" => index += 1,
             _ => {}
         }
     }
@@ -118,8 +128,9 @@ fn entries_only_bound(expression: &[String]) -> bool {
         index += 1;
         match token.as_str() {
             "-name" | "-iname" => return false,
-            "-print" | "-print0" => return true,
-            "-type" | "-maxdepth" | "-mindepth" => index += 1,
+            "-print" | "-print0" | "-printf" => return true,
+            "-type" | "-maxdepth" | "-mindepth" | "-path" | "-ipath" | "-wholename"
+            | "-iwholename" => index += 1,
             _ => {}
         }
     }
@@ -140,7 +151,11 @@ fn entries_only_bound(expression: &[String]) -> bool {
 /// (`-not -name '*.md'` prints everything else), so the expression must be a
 /// plain conjunction, and it must carry at least one pattern. `-path` and its
 /// spellings match the whole path rather than the entry name, so a directory
-/// prefix alone satisfies them and they bound nothing here.
+/// prefix alone satisfies them and they bound nothing here. Inside a
+/// conjunction they still only narrow what another predicate already bounds:
+/// `find ~/.nvm/versions/node -path '*/lib/node_modules/*' -type d` prints a
+/// subset of the directories `-type d` alone would, so they are read past
+/// rather than refused.
 ///
 /// `-type d` bounds the output the same way without naming anything: it
 /// prints directory names and no file, and a secret is a file. The root is
@@ -165,8 +180,13 @@ fn match_bounded(expression: &[String]) -> bool {
         let token = expression[index].as_str();
         index += 1;
         match token {
-            "!" | "-not" | "-o" | "-or" | "(" | ")" | "-path" | "-ipath" | "-wholename"
-            | "-iwholename" => return false,
+            "!" | "-not" | "-o" | "-or" | "(" | ")" => return false,
+            "-path" | "-ipath" | "-wholename" | "-iwholename" => {
+                if expression.get(index).is_none() {
+                    return false;
+                }
+                index += 1;
+            }
             "-name" | "-iname" => {
                 let Some(pattern) = expression.get(index) else {
                     return false;
@@ -181,7 +201,8 @@ fn match_bounded(expression: &[String]) -> bool {
             // first pattern prints every entry the walk reaches and the
             // pattern after it filters nothing:
             // `find ~/.codex -print -name run.sh` prints the whole tree.
-            "-print" | "-print0" if !bounded => return false,
+            "-print" | "-print0" | "-printf" if !bounded => return false,
+            "-printf" => index += 1,
             "-type" => {
                 if matches!(expression.get(index).map(String::as_str), Some("d" | "l")) {
                     bounded = true;
@@ -306,10 +327,45 @@ pub(super) fn prints_names_only(arguments: &[String]) -> bool {
         .iter()
         .position(|argument| argument.starts_with('-') || matches!(argument.as_str(), "!" | "("))
         .unwrap_or(arguments.len());
-    roots_end > 0 && safe_expression(&arguments[roots_end..])
+    // `-printf '%f'` drops the root prefix, so a printed name could begin
+    // with `-`; callers of this read the output as root-prefixed paths.
+    roots_end > 0
+        && !arguments[roots_end..]
+            .iter()
+            .any(|argument| argument == "-printf")
+        && safe_expression(&arguments[roots_end..], &|_| false)
 }
 
-fn safe_expression(expression: &[String]) -> bool {
+/// Whether a `-printf` format prints only entry names and paths: literal text,
+/// the `\n`, `\0` and `\t` escapes, `%%`, and the `%f`, `%p`, `%P` and `%h`
+/// directives with no width or flags.
+fn names_only_format(format: &str) -> bool {
+    if format.is_empty() || format.len() > MAX_PATTERN_BYTES || format.contains(['\n', '\r', '\0'])
+    {
+        return false;
+    }
+    let mut chars = format.chars();
+    while let Some(character) = chars.next() {
+        match character {
+            '%' => {
+                if !matches!(chars.next(), Some('f' | 'p' | 'P' | 'h' | '%')) {
+                    return false;
+                }
+            }
+            '\\' => {
+                if !matches!(chars.next(), Some('n' | '0' | 't')) {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+/// `reference` answers whether a `-newer` operand is a file the walk may
+/// compare against; a caller that has no paths to check refuses every one.
+fn safe_expression(expression: &[String], reference: &dyn Fn(&str) -> bool) -> bool {
     let mut depth = 0_usize;
     let mut index = 0;
     while index < expression.len() {
@@ -327,7 +383,45 @@ fn safe_expression(expression: &[String]) -> bool {
             | "-empty" => {}
             // Age and size tests compare each entry's own metadata with a
             // number written in the command, so they only narrow which names
-            // are printed. `-newer FILE` is left out: it reads another path.
+            // are printed. `-newer FILE` reads another path's modification
+            // time, so that path must pass `reference` first.
+            "-newer" => {
+                if !expression.get(index).is_some_and(|file| reference(file)) {
+                    return false;
+                }
+                index += 1;
+            }
+            // `-newerXY`: a reference file passes `reference` like `-newer`'s;
+            // `Y` = `t` compares with a date written in the command instead.
+            newer if newer_time_test(newer).is_some() => {
+                let Some(value) = expression.get(index) else {
+                    return false;
+                };
+                let allowed = if newer_time_test(newer) == Some(true) {
+                    written_date(value)
+                } else {
+                    reference(value)
+                };
+                if !allowed {
+                    return false;
+                }
+                index += 1;
+            }
+            // `-printf` writes to standard output like `-print`, and a format
+            // made only of name directives prints nothing `-print` would not:
+            // `%f` the entry name, `%p` and `%P` its path, `%h` its parent.
+            // Every other directive, a link target, owner, size or time among
+            // them, keeps the review, as does a format a caller may treat as
+            // root-prefixed names (see `prints_names_only`).
+            "-printf" => {
+                if !expression
+                    .get(index)
+                    .is_some_and(|format| names_only_format(format))
+                {
+                    return false;
+                }
+                index += 1;
+            }
             "-mtime" | "-mmin" | "-atime" | "-amin" | "-ctime" | "-cmin" | "-size" => {
                 let Some(value) = expression.get(index) else {
                     return false;
@@ -372,6 +466,26 @@ fn safe_expression(expression: &[String]) -> bool {
         }
     }
     depth == 0
+}
+
+/// For a `-newerXY` test, whether `Y` names a written date (`t`) rather than
+/// a reference file. `None` when the token is not such a test.
+fn newer_time_test(token: &str) -> Option<bool> {
+    let times = token.strip_prefix("-newer")?.as_bytes();
+    match times {
+        [own, other] if b"aBcm".contains(own) && b"aBcmt".contains(other) => Some(*other == b't'),
+        _ => None,
+    }
+}
+
+/// A date `find` parses itself, such as `2026-11-18 17:11` or `1 hour ago`.
+fn written_date(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && !value.starts_with('-')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || " -:/+.,T".contains(c))
 }
 
 /// A `find` age or size operand: an optional `+` or `-`, digits, and for

@@ -24,6 +24,14 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         "/v1/cloud-actions/status" => "route.cloud_actions_check",
         "/v1/protection/repair/approval-gate/setup" => "route.approval_gate_setup",
         "/v1/update/channel" => "route.update_channel",
+        _ if pulse_action(path).is_some() => {
+            let mut args = Map::new();
+            args.insert(
+                "action".to_owned(),
+                Value::String(pulse_action(path).unwrap_or_default().to_owned()),
+            );
+            return Some(("route.approval_gate_pulse", args));
+        }
         "/v1/repair" | "/v1/protection/remove-hooks" => {
             let mut args = Map::new();
             args.insert("path".to_owned(), Value::String(path.to_owned()));
@@ -129,7 +137,7 @@ pub(in crate::daemon_edge) fn extension_control_args(
 }
 
 /// `/v1/context-assistance/...` writes, run before the daemon's route classes.
-const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
+const CONTEXT_ASSISTANCE_WRITES: [&str; 10] = [
     "/v1/context-assistance/versions",
     "/v1/context-assistance/recheck",
     "/v1/context-assistance/activate",
@@ -139,6 +147,7 @@ const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
     "/v1/context-assistance/workspace-grant",
     "/v1/context-assistance/folders",
     "/v1/context-assistance/codex-lean",
+    "/v1/context-assistance/codex-short-replies",
 ];
 const HARNESS_VERSION_WRITES: [&str; 3] = [
     "/v1/harness-versions/refresh",
@@ -159,6 +168,14 @@ const SWARM_WRITES: [&str; 3] = ["/v1/swarm/launch", "/v1/swarm/action", "/v1/sw
 
 /// Whether `route.handler_post` runs the daemon's own handler for `path`
 /// (`routes/calls.py`).
+/// The Yanez Pulse setup action of `POST /v1/approval-gate/pulse/<action>`.
+fn pulse_action(path: &str) -> Option<&str> {
+    path.strip_prefix("/v1/approval-gate/pulse/")
+        .filter(|action| PULSE_ACTIONS.contains(action))
+}
+
+const PULSE_ACTIONS: [&str; 5] = ["enroll", "confirm", "poll", "disable", "recover"];
+
 fn runs_handler(path: &str) -> bool {
     if SWARM_WRITES.contains(&path)
         || CONTEXT_ASSISTANCE_WRITES.contains(&path)

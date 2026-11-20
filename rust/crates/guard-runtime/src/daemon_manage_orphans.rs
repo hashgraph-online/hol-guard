@@ -8,7 +8,8 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use super::host::{self, Caller};
+use super::host::Caller;
+use super::leftovers;
 use super::records;
 use super::retire::{self, Deadline};
 
@@ -23,9 +24,9 @@ pub(super) fn release_abandoned_receipt(
 ) {
     if retire::pending_is_abandoned(pending)
         && !records::pending_is_resolved(home)
-        && !retire::resolve_abandoned(caller, pending)
+        && !retire::resolve_abandoned(caller, pending, deadline)
     {
-        retire::retire_all(caller, None, deadline);
+        retire::retire_all(caller, None, "abandoned_receipt", deadline);
     }
 }
 
@@ -35,7 +36,7 @@ pub(super) fn release_abandoned_receipt(
 /// without handing off. Retire it first; a launch then reports anything that
 /// remains.
 pub(super) fn retire_unadopted(caller: &Caller, deadline: Deadline) {
-    if host::daemon_inventory(caller).is_some_and(|inventory| !inventory.is_empty()) {
-        retire::retire_all(caller, None, deadline);
+    if leftovers::inventory(caller, deadline).is_some_and(|inventory| !inventory.is_empty()) {
+        retire::retire_all(caller, None, "unadopted_daemon", deadline);
     }
 }

@@ -100,6 +100,7 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onAcce
     <dl className="swarm-facts"><div><dt>Project</dt><dd>{agent.workspace ?? "Not reported"}</dd></div>
       <div><dt>Control</dt><dd>{agent.origin === "managed" ? "Managed by Swarm" : "In its own app"}</dd></div>
       {agent.model ? <div><dt>Model</dt><dd>{agent.model}</dd></div> : null}
+      {agent.origin === "managed" ? <div><dt>File tools can’t open</dt><dd>{agent.blocked?.length ? agent.blocked.join(", ") : "No limits beyond the CLI’s own settings"}</dd></div> : null}
       {agent.pid ? <div><dt>Process</dt><dd>{agent.pid}</dd></div> : null}</dl>
     </div>
     <div role="tabpanel" id="swarm-panel-Activity" aria-labelledby="swarm-tab-Activity" hidden={tab !== "Activity"}>

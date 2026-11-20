@@ -3,7 +3,16 @@
  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
+  "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
+  "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
+  "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook_claude.py",
@@ -133,6 +142,34 @@
   "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_hook_direct_counters.py::test_harness_slots_match_the_direct_harnesses",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_counters_tests.rs::every_harness_name_has_its_own_slot"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_evidence_dispatch.py::test_evidence_is_submitted_in_the_order_the_hooks_left_it",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/hook_evidence_writer_tests.rs::receipt_handoffs_preserve_submission_order"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_direct_evidence_drain.py::test_a_drained_answer_is_recorded_like_a_daemon_allow",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_drain_tests.rs::an_answer_queues_the_evidence_the_daemon_records"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_direct_evidence_drain_connector_notice.py::test_a_queued_connector_review_raises_its_notice_from_the_stored_row",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_notice_reads_as_the_daemon_writes_it"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "tests/test_guard_command_backup_extensions.py::test_backup_option_parse_limit_fails_secure",
    "source_sha256": "0b192edbae47d6dcc96aa9d27e9ad516b5b62be81239fd1b445a58ef3b31fc12",
@@ -5894,20 +5931,20 @@
    "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_untrusted_fallback_timeout_kills_descendants",
    "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
    "replacement_nodes": [
-    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]"
+    "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair"
    ],
    "status": "obsolete_implementation_assertion",
-   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Killing a timed-out fallback's descendants is unreachable: the shim spawns no unauthenticated child at all. The installed outage canary now asserts the stronger property directly, failing if the bridge executes any child when no runtime resolves beside the Guard home."
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge. Codex now runs the native command directly, so there is no Python launcher that could start a child. Without a native runtime the hook is never installed: Guard refuses and asks for `hol-guard repair`."
   },
   {
    "old_node": "tests/test_codex_managed_fallback_authentication.py::test_authenticated_worker_failure_cannot_launch_unverified_fallback",
    "source_sha256": "c2e6090563b286a50c3de5df9203e6d8ca08262bdec80a2e7e3d5b59bc880384",
    "replacement_nodes": [
-    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]",
+    "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair",
     "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_mismatched_token_fails_closed_before_the_hook_is_sent"
    ],
    "status": "obsolete_implementation_assertion",
-   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. No unverified fallback can be launched because no fallback exists. The runtime fails closed before the hook is sent when the daemon's token does not match its signed state, and the outage canary pins that the shim runs no child."
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge. Codex now runs the native command directly, so there is no Python launcher that could start a child. Without a native runtime the hook is never installed: Guard refuses and asks for `hol-guard repair`."
   },
   {
    "old_node": "tests/test_codex_managed_fallback_authentication.py::test_empty_daemon_result_cannot_skip_managed_launch_validation",
@@ -6183,21 +6220,20 @@
    "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_unusable_managed_launcher_reports_both_causes_without_running_children",
    "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
    "replacement_nodes": [
-    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]",
-    "tests/test_codex_daemon_hook_bridge.py::test_denial_before_the_runtime_names_its_reason_code",
+    "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair",
     "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
    ],
    "status": "obsolete_implementation_assertion",
-   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. No child runs, which the installed outage canary asserts directly. The shim still writes the `hol-guard.codex-bridge-failure.v1` document for the denials it makes before the runtime runs, but with the one reason it knows; a two-cause report belonged to the retired Python review and has no runtime successor."
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge. Codex now runs the native command directly, so there is no Python launcher that could start a child. Without a native runtime the hook is never installed: Guard refuses and asks for `hol-guard repair`."
   },
   {
    "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_total_outage_blocks_mutating_action_without_authenticated_fallback",
    "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
    "replacement_nodes": [
-    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]"
+    "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair"
    ],
    "status": "obsolete_implementation_assertion",
-   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The installed outage canary carries this claim forward against the shim, across both deny shapes and all four recovery-shaped actions."
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge. Codex now runs the native command directly, so there is no Python launcher that could start a child. Without a native runtime the hook is never installed: Guard refuses and asks for `hol-guard repair`."
   },
   {
    "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_validation_failure_preserves_specific_causes_and_redacts_unknown_detail",
@@ -7682,8 +7718,6 @@
   {
    "old_node": "tests/test_structured_output_mediation_routes.py::test_binding_recheck_failure_withholds_without_logging_callback_details",
    "replacement_nodes": [
-    "tests/test_structured_output_mediation_routes.py::test_a_forward_is_withheld_when_the_config_cannot_be_read_again",
-    "tests/test_structured_output_mediation.py::test_a_forward_is_withheld_when_the_view_changed_or_cannot_be_confirmed",
     "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_forwards_only_under_the_binding_the_scan_ran_under"
    ],
    "status": "native_behavior_ported_requires_ci"
@@ -7700,7 +7734,7 @@
   {
    "old_node": "tests/test_structured_output_mediation_routes.py::test_native_route_attaches_adapter_field_after_receipt_without_mutating_native_result",
    "replacement_nodes": [
-    "tests/test_structured_output_mediation_routes.py::test_the_edge_is_sent_the_managed_policy_view_and_its_answer_passes_through",
+    "tests/test_structured_output_mediation_routes.py::test_the_edge_uses_the_authenticated_managed_view_and_passes_its_answer_through",
     "rust/crates/guard-runtime/src/edge_structured_tests.rs::the_edge_answers_the_mediation_the_daemon_asked_for"
    ],
    "status": "obsolete_implementation_assertion",
@@ -7709,7 +7743,6 @@
   {
    "old_node": "tests/test_structured_output_mediation_routes.py::test_native_route_load_error_attaches_fail_closed_mediation",
    "replacement_nodes": [
-    "tests/test_structured_output_mediation_routes.py::test_native_route_load_error_sends_an_unreadable_view_the_edge_withholds_under",
     "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_view_the_edge_cannot_resolve_withholds_as_an_unavailable_authority"
    ],
    "status": "native_behavior_ported_requires_ci"
@@ -7760,7 +7793,7 @@
   },
   {
    "old_node": "tests/test_native_approval_bridge.py::test_decoders_reject_floor_lowering_unknown_fields_duplicate_json_and_unknown_errors",
-   "new_node": "tests/test_native_response_decoder.py::test_approval_decoders_reject_floor_lowering_and_tampering",
+   "new_node": "tests/test_native_transport_error.py::test_approval_decoders_reject_floor_lowering_and_tampering",
    "reason": "Decoder floor-lowering and tamper negatives cover the live native_approval_protocol surface; bridge-specific assertions were retired."
   },
   {
@@ -8025,17 +8058,17 @@
   },
   {
    "old_node": "tests/test_codex_daemon_hook_bridge.py::test_launcher_integrity_failure_does_not_stop_user_prompt",
-   "new_node": "tests/test_codex_daemon_hook_bridge.py::test_unresolvable_native_runtime_does_not_stop_user_prompt",
+   "new_node": "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair",
    "reason": "Same claim against the shim: a UserPromptSubmit hook is never stopped when the native runtime cannot be resolved. Renamed because launcher integrity is no longer the reason it cannot be."
   },
   {
    "old_node": "tests/test_codex_daemon_hook_bridge.py::test_launcher_integrity_failure_denies_unrelated_pretool_use",
-   "new_node": "tests/test_codex_daemon_hook_bridge.py::test_unresolvable_native_runtime_denies_pretool_use",
+   "new_node": "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair",
    "reason": "Same claim against the shim: a PreToolUse hook is denied when no native runtime resolves beside the Guard home."
   },
   {
    "old_node": "tests/test_codex_daemon_hook_bridge.py::test_launcher_integrity_failure_denies_permission_request",
-   "new_node": "tests/test_codex_daemon_hook_bridge.py::test_unresolvable_native_runtime_denies_permission_request",
+   "new_node": "rust/crates/guard-runtime/src/adapters/harness_adapter/tests_codex.rs::argv_without_a_native_runtime_asks_for_repair",
    "reason": "Same claim against the shim: a PermissionRequest is denied in its own deny shape when no native runtime resolves."
   },
   {
@@ -8698,6 +8731,26 @@
    ],
    "base_commit": "647fb01f6455b97b6fb15ebc296ecc1fd363cb3c",
    "remaining_role": "Applies the resident's review settlement to the native verdict and renders it; which evaluator verdict lets a planned install continue, stops it with guidance, or blocks it is decided in Rust."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
+   "source_sha256": "b0ed04428be6e5d8f210cfb33671db7556a4be365bab0de66a87a31c96658b27",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_managed_installs.rs",
+    "rust/crates/guard-runtime/src/guard_store_op.rs"
+   ],
+   "base_commit": "570b7ebc46",
+   "remaining_role": "The Python cache and fallback scan are retired; hook admission asks the resident for one transactional managed-install answer."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+   "source_sha256": "ccd0fcfbeedb1ad80b53e41c4be722bd7c66e48f956a03b4433dec9a99bd9f8c",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/edge_structured.rs",
+    "rust/crates/guard-runtime/src/policy_store.rs"
+   ],
+   "base_commit": "bf1d3e5e57",
+   "remaining_role": "The outage-only structured destination overlay remains in hook_worker_unavailable.py; normal mediation and binding freshness are resident-owned."
   }
  ],
  "retired_bodies": [

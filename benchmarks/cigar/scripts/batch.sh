@@ -29,10 +29,12 @@ release() {
 }
 trap release EXIT
 jobs_max=${CIGAR_GAUNTLET_JOBS:-4}
+# CIGAR_GAUNTLET_STEPS=N plans N steps per session (default 6, the frozen short set; 24 is the long set).
+steps=${CIGAR_GAUNTLET_STEPS:-6}
 for s in $seeds; do
   for a in $arms; do
     while [ "$jobs_max" -gt 0 ] && [ "$(jobs -rp | wc -l)" -ge "$jobs_max" ]; do sleep 5; done
-    CIGAR_GAUNTLET_WORK=$W python3 "$HERE/run.py" --arm "$a" --seed "$s" --tag "$tag" > "$logs/$a-$s.log" 2>&1 &
+    CIGAR_GAUNTLET_WORK=$W python3 "$HERE/run.py" --arm "$a" --seed "$s" --tag "$tag" --steps "$steps" > "$logs/$a-$s.log" 2>&1 &
   done
 done
 wait

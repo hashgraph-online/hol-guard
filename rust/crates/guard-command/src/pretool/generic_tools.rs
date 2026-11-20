@@ -45,6 +45,9 @@ fn is_mcp_tool(tool: &str) -> bool {
         || lowered == "mcp"
         || lowered == "mcptool"
         || lowered == "mcp_tool"
+        // Grok's MCP dispatchers: the tool they call is in their input.
+        || lowered == "use_tool"
+        || lowered == "callmcptool"
         || lowered.contains("filesystem__")
         || (tool.contains('/') && !tool.starts_with('/'))
 }

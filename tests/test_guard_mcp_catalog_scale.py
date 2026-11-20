@@ -20,8 +20,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import MAX_MCP_PROBE_TOOLS, McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.python_oracles.observed_mcp_tools import observed_command_id, observed_mcp_tool
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .native_policy_snapshot_test_fixtures import _ack, _status
@@ -159,7 +159,10 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
         )
         store.replace_local_cli_commands(
             identity.cli_id,
-            tuple(LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Fixture tool") for tool in tools),
+            tuple(
+                LocalCliCommand(observed_command_id(tool), tool.name, tool.qualified_name, "Fixture tool")
+                for tool in tools
+            ),
             mcp_catalog=McpCatalogResult(
                 tuple({"name": tool.qualified_name, "inputSchema": {"type": "object"}} for tool in tools),
                 complete=True,
@@ -175,7 +178,7 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
             updated_at=seen_at,
             expected_revision=store.read_local_cli_revision(),
             command_states={
-                tool.command_id: "allow" if tool_index % 2 == 0 else "block"
+                observed_command_id(tool): "allow" if tool_index % 2 == 0 else "block"
                 for tool_index, tool in enumerate(tools[:10])
             },
         )
@@ -203,7 +206,7 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
                 state="allowed",
                 updated_at=seen_at,
                 expected_revision=store.read_local_cli_revision(),
-                command_states={tool.command_id: "block" for tool in tools},
+                command_states={observed_command_id(tool): "block" for tool in tools},
             )
         publisher.request_publish()
         publisher._publish_once()
@@ -211,6 +214,8 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
         assert publisher.last_error == "native_mcp_permission_capacity_exceeded"
         assert publisher.local_cli_publication_receipt(store.read_local_cli_revision()) is None
         for identity, _server, tools in connections[:6]:
-            assert store.read_local_cli_command_states(identity.cli_id) == {tool.command_id: "block" for tool in tools}
+            assert store.read_local_cli_command_states(identity.cli_id) == {
+                observed_command_id(tool): "block" for tool in tools
+            }
     finally:
         publisher.close()

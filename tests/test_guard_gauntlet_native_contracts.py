@@ -52,6 +52,25 @@ def test_other_lanes_leave_the_github_tool_out_of_the_inventory(tmp_path: Path) 
     assert "github" not in json.loads((tmp_path / "agent" / "config.yml").read_text())
 
 
+def test_loop_lane_turns_off_the_harness_loop_guard(tmp_path: Path) -> None:
+    write_agent_configuration(
+        tmp_path / "agent",
+        SimpleNamespace(base_url="http://127.0.0.1:1234", reasoning_effort=None),
+        tool_call_loop_guard=False,
+    )
+    config = json.loads((tmp_path / "agent" / "config.yml").read_text())
+    # Oh My Pi steers the model away from the fifth identical call, so the
+    # sixth call Guard is meant to stop would never be made.
+    assert config["model"] == {"toolCallLoopGuard": {"enabled": False}}
+
+
+def test_other_lanes_keep_the_harness_loop_guard_default(tmp_path: Path) -> None:
+    write_agent_configuration(
+        tmp_path / "agent", SimpleNamespace(base_url="http://127.0.0.1:1234", reasoning_effort=None)
+    )
+    assert "model" not in json.loads((tmp_path / "agent" / "config.yml").read_text())
+
+
 def test_github_scenarios_declare_the_tool_that_drives_the_toggle() -> None:
     scenarios = {scenario.id: scenario for scenario in load_catalog()}
     scenario = scenarios["omp-native-github-search-prs"]

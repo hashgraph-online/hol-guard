@@ -77,6 +77,7 @@ fn home_result(
         None,
         crate::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             shell_home_matches: true,
@@ -196,6 +197,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
     worktree_packages(&main, &tree);
     let context = crate::pretool::PathContext {
         literal_words: &[],
+        guard_home: None,
         home_dir: home.to_str(),
         cwd: main.to_str(),
         shell_home_matches: true,

@@ -18,8 +18,8 @@ from codex_plugin_scanner.guard.native_policy_bundle import NATIVE_UNAVAILABLE_R
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.policy_document_types import PolicyCompilationError
 from codex_plugin_scanner.guard.runtime import runner
-from codex_plugin_scanner.guard.runtime import runner_native_authority as authority
 from codex_plugin_scanner.guard.runtime import runner_native_sync as native_sync
+from codex_plugin_scanner.guard.runtime import runner_policy_shadow as shadow
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_headless_daemon_api import _seed_guard_cloud
 from tests.test_policy_bundle_delivery_daemon import _enable, _fixture, _sync
@@ -59,16 +59,38 @@ def test_daemon_refuses_a_candidate_the_resident_cannot_shadow(
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
 
-    def _no_verdict(*_args: object, **_kwargs: object) -> tuple[str, ...]:
+    def _no_verdict(*_args: object, **_kwargs: object) -> tuple[tuple[str, ...], str | None]:
         raise NativeRunnerAuthorityError("unavailable")
 
-    monkeypatch.setattr(authority, "policy_shadow_mismatch", _no_verdict)
+    monkeypatch.setattr(shadow, "policy_shadow_verdict", _no_verdict)
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
     assert status == 400, response
     assert response["error"] == "native_shadow_unavailable"
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_ack") is None
+
+
+def test_daemon_applies_an_evaluate_candidate_without_asking_for_a_verdict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable(monkeypatch)
+    store = _store(tmp_path)
+    bundle, delivery = _fixture(store)
+    asked: list[object] = []
+
+    def _no_verdict(*args: object, **_kwargs: object) -> tuple[tuple[str, ...], str | None]:
+        asked.append(args)
+        raise NativeRunnerAuthorityError("unavailable")
+
+    monkeypatch.setattr(shadow, "policy_shadow_source", lambda *_args, **_kwargs: (None, True))
+    monkeypatch.setattr(shadow, "policy_shadow_verdict", _no_verdict)
+    status, response = _sync(store, bundle=bundle, delivery=delivery)
+
+    assert status == 200, response
+    assert asked == []
+    assert isinstance(store.get_sync_payload("policy_bundle_ack"), dict)
 
 
 def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
@@ -79,9 +101,9 @@ def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
     monkeypatch.setattr(
-        authority,
-        "policy_shadow_mismatch",
-        lambda *_args, **_kwargs: ("decision_rows_differ",),
+        shadow,
+        "policy_shadow_verdict",
+        lambda *_args, **_kwargs: (("decision_rows_differ",), "canonical_shadow_mismatch"),
     )
     monkeypatch.setattr(native_sync, "canonical_policy_enforcement_enabled", lambda **_kwargs: True)
     status, response = _sync(store, bundle=bundle, delivery=delivery)

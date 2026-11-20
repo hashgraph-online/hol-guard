@@ -411,6 +411,10 @@ use prompt::{
     prompt_injection_intent, prompt_sensitive_text, subprocess_prompt_intent,
 };
 
+pub(super) fn prompt_asks_for_local_secrets(prompt: &str) -> bool {
+    prompt_sensitive_text(prompt)
+}
+
 #[path = "generic_nested_json.rs"]
 mod nested_json;
 pub(super) use nested_json::parse_strict_nested_json;

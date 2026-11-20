@@ -57,7 +57,9 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
   const selected = state.preferences.runtime_id;
   const installed = data.installations;
   const current = selected && installed.some((item) => item.runtime_id === selected) ? selected : null;
-  const reusable = current ?? (installed.find((item) => item.qualification === "guard_qualified") ?? installed[0])?.runtime_id ?? null;
+  // The engine built into Guard needs no download and no Python, so a first setup starts it.
+  const reusable = current ?? (installed.find((item) => item.builtin === true)
+    ?? installed.find((item) => item.qualification === "guard_qualified") ?? installed[0])?.runtime_id ?? null;
   const tail: CigarSetupStage[] = reusable === current && current !== null ? ["start"] : ["check", "start"];
   if (reusable) {
     return { kind: "run", runtime_id: reusable, build_id: null, interpreter_id: null, python_build_id: null, stages: tail,

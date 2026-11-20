@@ -14,12 +14,12 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cloud_control.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
     build_local_review_request_claim,
@@ -48,6 +48,9 @@ from tests.guard_review_signing_helpers import (
     sign_review_payload,
 )
 from tests.local_request_snapshots_client import cloud_safe_local_request_payload
+
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
 
 
 @pytest.fixture(autouse=True)
@@ -82,7 +85,6 @@ def _isolate_legacy_queue_mechanics(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(command_queue, "command_identity_digest", lambda *_args, **_kwargs: "identity-digest-1")
     monkeypatch.setattr(command_queue, "consume_local_command_approval", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(command_queue, "mark_command_job_consumed", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(command_queue, "audit_command_decision", lambda *_args, **_kwargs: None)
 
 
@@ -1155,111 +1157,6 @@ def test_poll_once_posts_a_failure_when_the_shared_scope_raises_after_the_job_ra
     assert result_payloads[0]["failureCode"] == "execution_error"
 
 
-def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:
-    store = FakeStore(tmp_path / "guard-home")
-    result_payloads: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        command_queue,
-        "_resolve_guard_sync_auth_context",
-        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
-    )
-    monkeypatch.setattr(
-        command_executors,
-        "package_shim_status",
-        lambda context: (_ for _ in ()).throw(RuntimeError("shim status failed")),
-    )
-
-    def fake_json_request(
-        auth_context: dict[str, object],
-        *,
-        method: str,
-        path: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        if path == "/lease":
-            return {
-                "item": {
-                    "id": "job-5",
-                    "leaseId": "lease-5",
-                    "operation": "guard.packageShims.status",
-                }
-            }
-        if path.endswith("/result"):
-            result_payloads.append(payload)
-        return {"ok": True}
-
-    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
-
-    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
-
-    assert status["state"] == "idle"
-    assert result_payloads[0]["status"] == "failed"
-    assert result_payloads[0]["failureCode"] == "execution_error"
-    assert "shim status failed" in str(result_payloads[0]["failureMessage"])
-
-
-def test_poll_once_posts_waiting_local_confirm_result_for_destructive_job(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    store = FakeStore(tmp_path / "guard-home")
-    result_payloads: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        command_queue,
-        "_resolve_guard_sync_auth_context",
-        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
-    )
-
-    def fake_json_request(
-        auth_context: dict[str, object],
-        *,
-        method: str,
-        path: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        if path == "/lease":
-            return {
-                "item": {
-                    "id": "job-6",
-                    "leaseId": "lease-6",
-                    "operation": "guard.packageShims.remove",
-                    "payload": {"managers": ["npm"]},
-                }
-            }
-        if path.endswith("/result"):
-            result_payloads.append(payload)
-        return {"ok": True}
-
-    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
-
-    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
-
-    assert status["state"] == "idle"
-    assert result_payloads[0]["status"] == "waiting_local_confirm"
-    assert result_payloads[0]["idempotencyKey"] == "job-6:lease-6:waiting_local_confirm"
-    result = result_payloads[0]["result"]
-    assert isinstance(result, dict)
-    assert "waitingLocalConfirm" not in result
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert data["confirm_command"] == "hol-guard package-shims uninstall --manager npm"
-    assert data["summary"] == (
-        "Run the local package-shim uninstall command on this machine to confirm removal for npm."
-    )
-
-
-def test_result_payload_reuses_stable_success_idempotency_key() -> None:
-    job = {"id": "job-duplicate-result", "leaseId": "lease-duplicate-result"}
-    execution = {"data": {"ok": True}}
-
-    first = command_queue._result_payload(job, execution)
-    second = command_queue._result_payload(job, execution)
-
-    assert first["status"] == "succeeded"
-    assert first["idempotencyKey"] == "job-duplicate-result:lease-duplicate-result:succeeded"
-    assert second["idempotencyKey"] == first["idempotencyKey"]
-
-
 def test_poll_once_retries_pending_result_before_leasing(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
     store.set_sync_payload(
@@ -1776,29 +1673,6 @@ def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, mon
     assert payload["state"] == "idle"
     assert payload["enabled"] is True
     assert payload["supported_operations"] == list(command_executors.SUPPORTED_COMMAND_OPERATIONS)
-
-
-def test_doctor_repair_clears_malformed_command_queue_state(tmp_path: Path, capsys) -> None:
-    guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
-    store.set_sync_payload(
-        command_queue.COMMAND_QUEUE_STATE_KEY,
-        {"state": "result_pending", "active_job": "bad", "pending_result": {"job": "bad"}},
-        "2026-06-13T00:00:00+00:00",
-    )
-
-    rc = main(["guard", "doctor", "--guard-home", str(guard_home), "--repair", "--json"])
-
-    assert rc == 0
-    payload = json.loads(capsys.readouterr().out)
-    repair = payload["command_queue"]["repair"]
-    assert repair["repaired_count"] == 2
-    assert sorted(repair["repaired"]) == ["active_job", "pending_result"]
-    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
-    assert isinstance(state, dict)
-    assert state["state"] == "idle"
-    assert "active_job" not in state
-    assert "pending_result" not in state
 
 
 def test_executor_rejects_duplicate_package_managers(tmp_path: Path) -> None:

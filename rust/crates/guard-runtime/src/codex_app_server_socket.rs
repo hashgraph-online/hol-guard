@@ -52,11 +52,7 @@ pub(crate) fn exchange(
         return Err(Failure::Error("ValueError"));
     }
     let stream = connect(socket, deadline)?;
-    let mut connection = Connection {
-        stream,
-        pending: Vec::new(),
-        deadline,
-    };
+    let mut connection = Connection::new(stream, deadline);
     connection.handshake()?;
     for message in messages {
         let text = serde_json::to_string(message).map_err(|_| Failure::Error("ValueError"))?;
@@ -154,7 +150,7 @@ pub(crate) fn connect(
 }
 
 #[cfg(unix)]
-struct Connection {
+pub(crate) struct Connection {
     stream: std::os::unix::net::UnixStream,
     pending: Vec<u8>,
     deadline: Instant,
@@ -162,6 +158,15 @@ struct Connection {
 
 #[cfg(unix)]
 impl Connection {
+    /// A connected, not yet upgraded socket that every wait on is bound by `deadline`.
+    pub(crate) fn new(stream: std::os::unix::net::UnixStream, deadline: Instant) -> Self {
+        Self {
+            stream,
+            pending: Vec::new(),
+            deadline,
+        }
+    }
+
     fn remaining(&self) -> Result<std::time::Duration, Failure> {
         let remaining = self.deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
@@ -215,7 +220,7 @@ impl Connection {
     }
 
     /// `_send_websocket_handshake`.
-    fn handshake(&mut self) -> Result<(), Failure> {
+    pub(crate) fn handshake(&mut self) -> Result<(), Failure> {
         let mut nonce = [0_u8; 16];
         getrandom::fill(&mut nonce).map_err(|_| Failure::Error("OSError"))?;
         let key = Base64::encode_string(&nonce);
@@ -251,7 +256,7 @@ impl Connection {
     }
 
     /// `_send_websocket_frame`: one masked client frame.
-    fn send_frame(&mut self, opcode: u8, payload: &[u8]) -> Result<(), Failure> {
+    pub(crate) fn send_frame(&mut self, opcode: u8, payload: &[u8]) -> Result<(), Failure> {
         let mut mask = [0_u8; 4];
         getrandom::fill(&mut mask).map_err(|_| Failure::Error("OSError"))?;
         let mut frame = vec![0x80 | opcode];
@@ -277,7 +282,7 @@ impl Connection {
     }
 
     /// `_read_websocket_frame`.
-    fn read_frame(&mut self) -> Result<(u8, Vec<u8>), Failure> {
+    pub(crate) fn read_frame(&mut self) -> Result<(u8, Vec<u8>), Failure> {
         let header = self.read_exact(2)?;
         let opcode = header[0] & 0x0F;
         let mut length = u64::from(header[1] & 0x7F);

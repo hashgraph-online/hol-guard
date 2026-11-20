@@ -240,6 +240,15 @@ fn context_is_appended_after_any_existing_context() {
 }
 
 #[test]
+fn an_advisory_panic_keeps_the_settled_harness_response() {
+    let fallback = json!({"decision": "allow", "reason_code": "guard_settled"});
+    let response = advisory_or_fallback(Some(fallback.clone()), || -> Option<Value> {
+        panic!("CIGAR fixture failure")
+    });
+    assert_eq!(response, Some(fallback));
+}
+
+#[test]
 fn the_wait_leaves_the_hook_time_to_answer() {
     assert_eq!(waiting_time(None), DEFAULT_WAIT);
     assert_eq!(waiting_time(Some(9_000)), MAX_WAIT);

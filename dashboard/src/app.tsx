@@ -83,6 +83,7 @@ import type {
   GuardInventoryItem,
   DecisionScope,
 } from "./guard-types";
+import { PulseApprovalOverlay } from "./pulse-approval-overlay";
 
 type RequestState =
   | { kind: "loading" }
@@ -863,6 +864,7 @@ export function App() {
         approval_password: gateCredentials.approval_password,
         approval_totp_code: gateCredentials.approval_totp_code,
         approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
+        approval_gate_pulse: gateCredentials.approval_gate_pulse,
       });
       await refreshStateAfterAction();
       if (result.failed.length > 0) {
@@ -1042,6 +1044,7 @@ export function App() {
 
   return (
     <>
+      <PulseApprovalOverlay />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-brand-blue focus:px-4 focus:py-2 focus:text-white focus:outline-none"

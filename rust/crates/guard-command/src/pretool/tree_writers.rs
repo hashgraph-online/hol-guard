@@ -139,7 +139,37 @@ pub(crate) fn may_rewrite_tree(segment: &crate::CommandSegmentV1) -> bool {
     if basename == "git" {
         return !super::step_preserves_later_programs(segment);
     }
+    // A case-insensitive file system runs `CHMOD` as `chmod`, and the
+    // command matchers fold case too, so the name is folded before lookup.
+    let folded = basename.to_ascii_lowercase();
+    if folded == "git" {
+        return true;
+    }
     // Versioned names (`python3.12`, `pip3`) belong to the same program.
-    let stem = basename.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
-    TREE_WRITERS.contains(&basename) || TREE_WRITERS.contains(&stem)
+    let stem = folded.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
+    TREE_WRITERS.contains(&folded.as_str()) || TREE_WRITERS.contains(&stem)
+}
+
+#[cfg(test)]
+mod tests {
+    /// A case-insensitive file system runs `CHMOD` as `chmod`, so the folded
+    /// name decides whether a step may rewrite the tree.
+    #[test]
+    fn a_tree_writer_is_recognized_in_any_letter_case() {
+        for source in [
+            "chmod -R 777 docs",
+            "CHMOD -R 777 docs",
+            "Rm -rf docs",
+            "GIT checkout .",
+        ] {
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: source.to_owned(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            assert!(super::may_rewrite_tree(&model.segments[0]), "{source}");
+        }
+    }
 }

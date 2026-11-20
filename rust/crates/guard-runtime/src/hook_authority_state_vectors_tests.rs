@@ -47,8 +47,11 @@ pub(super) fn owned_rows(connection: &Connection) -> BTreeMap<String, (Value, St
         .expect("query")
         .map(|row| {
             let (key, text, updated_at) = row.expect("row");
-            let payload =
+            let mut payload =
                 serde_json::from_str(&text).unwrap_or_else(|_| json!({ "__raw__": text }));
+            if let Some(object) = payload.as_object_mut() {
+                object.remove("pending_id");
+            }
             (key, (payload, updated_at))
         })
         .collect()

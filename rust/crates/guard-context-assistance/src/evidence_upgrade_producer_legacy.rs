@@ -1,7 +1,9 @@
 //! An enrolled producer can only be described through a real verified runtime.
 use super::*;
-use crate::evidence_cache::upgrade::producer_binding::EnrolledEvidenceBinding;
-use crate::{RuntimeStatus, VerifiedRuntime};
+use crate::evidence_cache::upgrade::producer_binding::{
+    BuiltinEvidenceBinding, EnrolledEvidenceBinding,
+};
+use crate::{BundleApproval, RuntimeStatus, VerifiedRuntime};
 use guard_cigar_release::{legacy_candidate_profile, Feature};
 
 impl EvidenceUpgradeProducer {
@@ -12,6 +14,9 @@ impl EvidenceUpgradeProducer {
         let status = runtime.status();
         if !status.active || !status.compile_verified || status.release.is_some() {
             return Err(RuntimeError::ApprovalMismatch);
+        }
+        if runtime.is_builtin() {
+            return Self::builtin_description(runtime.bundle_approval(), status);
         }
         Self::enrolled_description(runtime.bundle_approval(), status)
     }
@@ -42,9 +47,39 @@ impl EvidenceUpgradeProducer {
             approval: approval.clone(),
             interpreter: status.interpreter.clone(),
         }));
+        Self::described("guard-cigar-enrolled-evidence-producer.v1", binding, status)
+    }
+
+    fn builtin_description(
+        approval: &BundleApproval,
+        status: &RuntimeStatus,
+    ) -> Result<Self, RuntimeError> {
+        if *approval != crate::builtin_approval()
+            || status.core_version != guard_cigar_native::CORE_VERSION
+            || status.protocol != guard_cigar_native::WORKER_PROTOCOL
+            || status.worker_fingerprint != approval.worker_sha256
+        {
+            return Err(RuntimeError::ApprovalMismatch);
+        }
+        let binding = EvidenceProducerBinding::Builtin(Box::new(BuiltinEvidenceBinding {
+            schema: BuiltinEvidenceBinding::SCHEMA.into(),
+            core_version: status.core_version.clone(),
+            worker_protocol: status.protocol.clone(),
+            broker_protocol: guard_cigar_native::BROKER_PROTOCOL.into(),
+            platform: approval.platform.clone(),
+            worker_sha256: approval.worker_sha256.clone(),
+        }));
+        Self::described(BuiltinEvidenceBinding::SCHEMA, binding, status)
+    }
+
+    fn described(
+        schema: &str,
+        binding: EvidenceProducerBinding,
+        status: &RuntimeStatus,
+    ) -> Result<Self, RuntimeError> {
         binding.validate()?;
-        let bytes = serde_json::to_vec(&("guard-cigar-enrolled-evidence-producer.v1", &binding))
-            .map_err(|_| RuntimeError::RequestInvalid)?;
+        let bytes =
+            serde_json::to_vec(&(schema, &binding)).map_err(|_| RuntimeError::RequestInvalid)?;
         let mut features = vec![Feature::Graph];
         for (verified, feature) in [
             (status.shared_compile_verified, Feature::Sharing),

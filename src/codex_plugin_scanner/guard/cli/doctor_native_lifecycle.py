@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 from typing_extensions import TypedDict
 
-from ..adapters.diagnostic_probes import skipped_command_probe
+from ..command_probes import command_probes_enabled
 from ..native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
 
 # JSON has no integer bound; the runtime writes every count as a u32.
@@ -124,7 +124,7 @@ def native_resident_lifecycle(guard_home: Path | None) -> NativeResidentLifecycl
 
     if guard_home is None:
         return None
-    if skipped_command_probe(["hol-guard-runtime", "resident-health", "--state-dir"]) is not None:
+    if not command_probes_enabled():
         return None
 
     from ..native_runtime import _run_native_process, native_runtime_status

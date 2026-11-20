@@ -12,19 +12,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
-    adapter_state_is_authenticated,
-    authenticate_adapter_state,
-)
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
 
 def _servers_left_after_uninstall(context: HarnessContext, config_path: Path) -> list[str]:
     """The servers a Hermes uninstall without a manifest leaves in ``config.yaml``."""
 
-    HermesHarnessAdapter().uninstall(context)
+    harness_support.uninstall("hermes", context)
     return list(yaml.safe_load(config_path.read_text(encoding="utf-8"))["mcp_servers"])
 
 
@@ -35,7 +31,6 @@ def _write_json(path: Path, payload: Mapping[str, object]) -> None:
 
 def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CopilotHarnessAdapter()
     target = context.home_dir / ".copilot" / "mcp-config.json"
     digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:12]
     backup = context.guard_home / "managed" / "copilot" / f"{digest}.backup.json"
@@ -52,7 +47,7 @@ def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) 
         },
     )
 
-    adapter.uninstall(context)
+    harness_support.uninstall("copilot", context)
 
     assert json.loads(target.read_text(encoding="utf-8")) == {"owned": "user"}
     assert backup.exists()
@@ -73,45 +68,17 @@ def test_adapter_state_key_rejects_symlinked_managed_directory(
     (guard_home / "managed").symlink_to(alternate, target_is_directory=True)
 
     with pytest.raises(ValueError, match="unusable"):
-        authenticate_adapter_state(guard_home, harness="copilot", payload={"scope": "global"})
+        native_adapter_state_integrity(
+            action="authenticate",
+            harness="copilot",
+            payload={"scope": "global"},
+            key_home=guard_home,
+            create_key=True,
+            guard_home=guard_home,
+        )
 
     assert stat.S_IMODE(alternate.stat().st_mode) == original_mode
     assert (alternate / "adapter-state.key").exists() is False
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX no-follow directory descriptors")
-def test_adapter_state_verification_does_not_create_or_chmod_key_directory(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    managed = guard_home / "managed"
-    managed.mkdir(parents=True)
-    managed.chmod(0o755)
-    authentication = {
-        "algorithm": "hmac-sha256",
-        "key_id": "missing",
-        "mac": "0" * 64,
-        "schema_version": 1,
-    }
-
-    assert (
-        adapter_state_is_authenticated(
-            guard_home,
-            harness="copilot",
-            payload={"state_authentication": authentication},
-        )
-        is False
-    )
-    assert stat.S_IMODE(managed.stat().st_mode) == 0o755
-
-    missing_guard_home = tmp_path / "missing-guard-home"
-    assert (
-        adapter_state_is_authenticated(
-            missing_guard_home,
-            harness="copilot",
-            payload={"state_authentication": authentication},
-        )
-        is False
-    )
-    assert (missing_guard_home / "managed").exists() is False
 
 
 def test_hermes_legacy_cleanup_accepts_resolved_guard_home_marker(tmp_path: Path) -> None:

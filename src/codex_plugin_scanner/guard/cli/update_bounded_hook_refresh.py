@@ -1,101 +1,26 @@
-"""Refresh managed bounded hook clients after a Guard package update."""
+"""Move bounded hooks that still run a managed client script onto the native runtime."""
 
 from __future__ import annotations
 
-import json
-import sqlite3
-from collections.abc import Callable
-from pathlib import Path
-
-from ..adapters import copilot
-from ..adapters.base import HarnessContext
-from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
+from ..harness_context import HarnessContext
 from ..store import GuardStore
-
-
-def _native_hook_timeout(harness: str) -> Callable[[HarnessContext], float]:
-    """The timeout the native ``harness_adapter`` kind renders into ``harness``'s hook."""
-
-    def timeout(context: HarnessContext) -> float:
-        from ..adapters.native_harness import ask
-
-        value = ask("hook_spec", context, harness=harness).get("timeout_seconds")
-        if not isinstance(value, int):
-            raise ValueError("Harness adapter answer is malformed")
-        return value
-
-    return timeout
-
-
-# Harnesses whose managed hook command points at a stable client script under
-# ``managed/bounded-hooks``. The command line never changes across releases, so
-# reinstall checks that compare commands miss a stale client body. Grok is
-# refreshed by its own repair path.
-# A timeout may be a constant or, where install derives it from the approval
-# wait, a callable that recomputes the same value for this context. Rendering a
-# constant for such a harness would shorten its approval wait on every update.
-_BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float | Callable[[HarnessContext], float]], ...] = (
-    ("zcode", "ZCode", _native_hook_timeout("zcode")),
-    ("devin", "Devin", _native_hook_timeout("devin")),
-    ("kimi", "Kimi", _native_hook_timeout("kimi")),
-    ("copilot", "Copilot", copilot._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("openclaw", "OpenClaw", _native_hook_timeout("openclaw")),
-    ("hermes", "Hermes", _native_hook_timeout("hermes")),
-    ("muse", "Muse", _native_hook_timeout("muse")),
-)
-
-
-def _crosses_symlink(guard_home: Path, script_path: Path) -> bool:
-    """Return whether any path component below the Guard home is a symlink."""
-
-    current = guard_home
-    for part in script_path.relative_to(guard_home).parts:
-        current = current / part
-        if current.is_symlink():
-            return True
-    return False
+from .native_managed_update import native_update_repair
 
 
 def refresh_bounded_hook_clients(
     *,
     context: HarnessContext,
     store: GuardStore,
+    workspace: str | None,
+    now: str,
 ) -> tuple[list[dict[str, object]], list[str]]:
-    """Rewrite stale bounded hook clients for active installs; return refreshed installs and warnings."""
+    """Reinstall active hooks that still name a client script; return reinstalled installs and warnings.
 
-    refreshed: list[dict[str, object]] = []
-    warnings: list[str] = []
-    for harness, display_name, timeout_seconds in _BOUNDED_HOOK_TIMEOUTS:
-        try:
-            managed_install = store.get_managed_install(harness)
-        except (json.JSONDecodeError, sqlite3.Error):
-            continue
-        if managed_install is None or not bool(managed_install.get("active")):
-            continue
-        script_path = bounded_hook_script_path(context.guard_home, harness)
-        if script_path is None or _crosses_symlink(context.guard_home, script_path) or not script_path.is_file():
-            continue
-        try:
-            resolved_timeout = timeout_seconds(context) if callable(timeout_seconds) else timeout_seconds
-        except (OSError, RuntimeError, ValueError) as error:
-            warnings.append(f"Could not refresh {display_name} hook client during update: {error}")
-            continue
-        expected = _render_bounded_hook_script(
-            guard_home=context.guard_home,
-            harness=harness,
-            timeout_seconds=resolved_timeout,
-        )
-        try:
-            if script_path.read_text(encoding="utf-8") == expected:
-                continue
-            from ..adapters.adapter_safe_output import write_text_at_authorized_path
+    The native runtime names the harnesses whose old client is still a regular file, reinstalls each active one
+    under its own installation transaction and removes each client once its install has moved.
+    """
 
-            write_text_at_authorized_path(script_path, expected)
-        except (OSError, RuntimeError, ValueError) as error:
-            warnings.append(f"Could not refresh {display_name} hook client during update: {error}")
-            continue
-        refreshed.append(dict(managed_install))
-    return refreshed, warnings
+    return native_update_repair("bounded", context=context, store=store, workspace=workspace, now=now)
 
 
 __all__ = ["refresh_bounded_hook_clients"]

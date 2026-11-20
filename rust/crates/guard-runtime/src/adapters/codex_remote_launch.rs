@@ -5,8 +5,8 @@
 //! `_socket_is_live` and the tracked-process handling in
 //! `_start_direct_app_server` before they moved here).
 //!
-//! Python starts processes: it runs `codex remote-control start`, starts a
-//! direct app-server and records its pid. The resident reads that pid back,
+//! `prepare` (in `codex_remote_prepare`) decides the launch sequence and `run`
+//! (in `codex_remote_run`) starts the processes it names. The resident reads the pid back,
 //! checks the process is the server listening on the socket and stops a stale
 //! one. The resident runs as the launching user, so its uid is the one the
 //! socket must belong to and the one allowed to signal the server.
@@ -48,8 +48,8 @@ const MAX_WAIT_SECONDS: f64 = 5.0;
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(unix)]
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(200);
-/// Written beside the socket by Python when it starts a direct app-server.
-const PID_FILE: &str = "hol-guard-app-server.pid";
+/// Written beside the socket when a direct app-server starts.
+pub(super) const PID_FILE: &str = "hol-guard-app-server.pid";
 const MAX_PID_FILE_BYTES: u64 = 64;
 #[cfg(unix)]
 const STOP_TIMEOUT: Duration = Duration::from_secs(1);
@@ -62,8 +62,11 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let map = args_object(args)?;
     match map.get("op").and_then(Value::as_str) {
         Some("plan") if map.len() == 3 => plan(map),
+        Some("launch") if map.len() == 4 => launch(map),
         Some("wait") if map.len() == 3 => wait(map),
         Some("reclaim") if map.len() == 3 => reclaim(map),
+        Some("prepare") => super::codex_remote_prepare::prepare(map),
+        Some("run") => super::codex_remote_run::run(map),
         _ => Err(ERR_INVALID),
     }
 }
@@ -76,21 +79,100 @@ fn text<'a>(map: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static 
 /// preference order: the remote TUI first when the arguments allow it, then
 /// the arguments unchanged.
 fn plan(map: &Map<String, Value>) -> KindResult {
-    let args = map
-        .get("args")
+    let args = string_list(map.get("args"))?;
+    let socket = text(map, "socket")?;
+    Ok(json!({ "tails": tails(&args, socket) }))
+}
+
+pub(super) fn string_list(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
+    value
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?
         .iter()
-        .map(|arg| arg.as_str().ok_or(ERR_INVALID))
-        .collect::<Result<Vec<&str>, _>>()?;
-    let socket = text(map, "socket")?;
-    if !supports_remote_tui(&args) {
-        return Ok(json!({ "tails": [args] }));
+        .map(|item| item.as_str().ok_or(ERR_INVALID))
+        .collect()
+}
+
+fn tails(args: &[&str], socket: &str) -> Vec<Vec<String>> {
+    let plain: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+    if !supports_remote_tui(args) {
+        return vec![plain];
     }
-    let listener = format!("unix://{socket}");
-    let mut remote = vec!["--remote", listener.as_str()];
-    remote.extend(&args);
-    Ok(json!({ "tails": [remote, args] }))
+    let mut remote = vec!["--remote".to_owned(), format!("unix://{socket}")];
+    remote.extend(plain.iter().cloned());
+    vec![remote, plain]
+}
+
+const PREFIX_REFUSAL: &str = "Codex launch preparation requires a canonical executable prefix.";
+const SHARED_REFUSAL: &str =
+    "Codex launch candidates do not share one authorized executable prefix.";
+
+/// A home's Codex home: `<home>/.codex`.
+fn codex_home(home: &str) -> std::path::PathBuf {
+    Path::new(home)
+        .components()
+        .collect::<std::path::PathBuf>()
+        .join(".codex")
+}
+
+/// `default_codex_control_socket`.
+fn control_socket(home: &str) -> String {
+    codex_home(home)
+        .join("app-server-control")
+        .join("app-server-control.sock")
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Everything a launch needs before any process starts: the one authorized
+/// executable prefix (a refusal when the candidates do not share exactly one,
+/// or it is not canonical), the control socket under `home_dir`, the Codex
+/// home the launch runs with, the ordinary command, the remote command when
+/// the arguments allow the remote TUI, whether the client should run
+/// `prepare` at all (it should exactly when there is a remote command), and
+/// every command preparation may select, remote first.
+pub(super) fn launch(map: &Map<String, Value>) -> KindResult {
+    let mut chosen: Vec<Vec<&str>> = Vec::new();
+    for prefix in map
+        .get("prefixes")
+        .and_then(Value::as_array)
+        .ok_or(ERR_INVALID)?
+    {
+        let parts = string_list(Some(prefix))?;
+        if !parts.is_empty() && !chosen.contains(&parts) {
+            chosen.push(parts);
+        }
+    }
+    let refusal = |message: &str| -> KindResult { Ok(json!({ "refusal": message })) };
+    let [prefix] = chosen.as_slice() else {
+        return refusal(SHARED_REFUSAL);
+    };
+    if prefix.iter().any(|part| part.is_empty()) {
+        return refusal(PREFIX_REFUSAL);
+    }
+    let args = string_list(map.get("args"))?;
+    let home = text(map, "home_dir")?;
+    let socket = control_socket(home);
+    let candidates: Vec<Vec<String>> = tails(&args, &socket)
+        .into_iter()
+        .map(|tail| {
+            prefix
+                .iter()
+                .map(|part| (*part).to_owned())
+                .chain(tail)
+                .collect()
+        })
+        .collect();
+    let remote = (candidates.len() >= 2).then(|| candidates[0].clone());
+    Ok(json!({
+        "prepare": remote.is_some(),
+        "socket": socket,
+        "prefix": prefix,
+        "env": { "CODEX_HOME": codex_home(home).to_string_lossy() },
+        "plain": candidates.last(),
+        "remote": remote,
+        "candidates": candidates,
+    }))
 }
 
 /// A launch that already names a remote, only prints information, or runs a
@@ -127,7 +209,7 @@ fn wait(map: &Map<String, Value>) -> KindResult {
 }
 
 /// Polls every 50 milliseconds, for at most five seconds.
-fn wait_ready(socket: &Path, seconds: f64) -> bool {
+pub(super) fn wait_ready(socket: &Path, seconds: f64) -> bool {
     let deadline = Instant::now() + Duration::from_secs_f64(seconds.min(MAX_WAIT_SECONDS));
     while Instant::now() < deadline {
         if ready(socket) {
@@ -149,7 +231,7 @@ fn reclaim(map: &Map<String, Value>) -> KindResult {
 }
 
 #[cfg(unix)]
-fn reclaim_state(socket: &str, seconds: f64) -> &'static str {
+pub(super) fn reclaim_state(socket: &str, seconds: f64) -> &'static str {
     use nix::errno::Errno;
     use nix::sys::signal::{kill, Signal};
     use nix::unistd::Pid;
@@ -186,7 +268,7 @@ fn reclaim_state(socket: &str, seconds: f64) -> &'static str {
 }
 
 #[cfg(not(unix))]
-fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str {
+pub(super) fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str {
     let _ = (PID_FILE, MAX_PID_FILE_BYTES);
     "busy"
 }

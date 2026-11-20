@@ -15,6 +15,7 @@ from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSE
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
+from ..native_payload_facts import native_connector_lookup, native_hook_facts
 from .hook_fail_closed import (
     canonical_harness,
     render_accepted_allow,
@@ -24,13 +25,10 @@ from .hook_fail_closed import (
 )
 from .hook_native_exact_action import review_evidence_parts
 from .hook_native_package_review import native_package_review_response
-from .hook_native_review_binding import native_review_policy_binding, native_review_settle
+from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
 from .hook_native_saved_approval import native_exact_command_block_response, native_saved_decision_response
-from .hook_request_parsing import native_review_launch_target as _native_review_launch_target
-from .hook_request_parsing import native_review_tool_name as _native_review_tool_name
-from .hook_request_parsing import pre_tool_command
 from .native_review_allow_hint import native_review_hint_ask
-from .native_review_connector import native_review_connector_lookup, raise_connector_setup_notice
+from .native_review_connector import raise_connector_setup_notice
 from .native_review_records import native_review_approval_center_url
 
 if TYPE_CHECKING:
@@ -70,12 +68,15 @@ def pause_native_pre_tool_for_approval(
     exact_command_block: object = None,
 ) -> dict[str, object]:
     """Answer a native review from the edge's custom extension rule and review evidence."""
-    launch_target = _native_review_launch_target(payload)
-    tool_name = _native_review_tool_name(payload)
     # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
     custom = None if local_cli_rule is None else cast("dict[str, object]", local_cli_rule["harness_response"])
     if local_cli_rule is not None and local_cli_rule["blocked"] is True:
         return cast("dict[str, object]", custom)
+    facts = native_hook_facts(payload, guard_home, deadline=deadline)
+    if facts is None:
+        return _policy_binding_failed(harness, native_result, guard_home)
+    launch_target = facts.launch_target
+    tool_name = facts.tool_name
     # A custom block denies whatever the policy binding holds, so it settles
     # before the binding is checked. The edge answered the receipt's policy
     # binding, the retry binding and the exact-action token in the same round
@@ -93,7 +94,7 @@ def pause_native_pre_tool_for_approval(
     command_block = native_exact_command_block_response(
         store,
         harness=harness,
-        command=pre_tool_command(payload),
+        command=facts.command,
         native_result=native_result,
         workspace=workspace,
         edge_hint=exact_command_block,
@@ -109,9 +110,9 @@ def pause_native_pre_tool_for_approval(
         workspace=workspace,
     )
     if saved is not None:
-        return saved
+        return admit_accepted_call(store, harness=harness, payload=payload, response=saved)
     if custom is not None:
-        return custom
+        return admit_accepted_call(store, harness=harness, payload=payload, response=custom)
     # The Keep blocked check, a claimed once-approval and the approve-once
     # spend run in one resident call.
     reuse = native_review_settle(
@@ -146,8 +147,9 @@ def pause_native_pre_tool_for_approval(
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
         allowed["policy_action"] = "allow"
-        return render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
-    settled = native_package_review_response(
+        accepted = render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
+        return admit_accepted_call(store, harness=harness, payload=payload, response=accepted)
+    package_review = native_package_review_response(
         store,
         harness=harness,
         payload=payload,
@@ -157,8 +159,11 @@ def pause_native_pre_tool_for_approval(
         home_dir=home_dir,
         deadline=deadline,
     )
-    if settled is not None:
-        return settled
+    if package_review.response is not None:
+        return admit_accepted_call(store, harness=harness, payload=payload, response=package_review.response)
+    # An Always allow on the queued review is saved under the install's package
+    # key too, so the identical install in a linked worktree reuses it.
+    package_approval = package_review.package_approval
     from ..blocked_request_mode import asks_for_approval
     from ..config import load_guard_config
 
@@ -170,8 +175,13 @@ def pause_native_pre_tool_for_approval(
     # The queue call looks up the connector a non-recognition review waits on
     # and answers the agent with its setup text; the row keeps the native
     # reason as evidence.
-    connector_lookup = native_review_connector_lookup(
-        payload=payload, native_result=native_result, workspace=workspace, home_dir=home_dir
+    connector_lookup = native_connector_lookup(
+        payload,
+        guard_home,
+        reason_code=native_result.get("reason_code"),
+        workspace=workspace,
+        home_dir=home_dir,
+        deadline=deadline,
     )
     if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
@@ -195,6 +205,7 @@ def pause_native_pre_tool_for_approval(
             approval_center_url=approval_center_url,
             review_binding=identity,
             connector_lookup=connector_lookup,
+            package_approval=package_approval,
             policy_binding_verified=True,
             # A block that links its approval holds the Codex bridge's wait;
             # the resident links that wait only for such a block, so approving
@@ -240,6 +251,7 @@ def pause_native_pre_tool_for_approval(
         approval_center_url=approval_center_url,
         review_binding=identity,
         connector_lookup=connector_lookup,
+        package_approval=package_approval,
         policy_binding_verified=True,
         claude_notice=canonical_harness(harness) == "claude-code",
         codex_live_wait=canonical_harness(harness) == "codex",
@@ -287,6 +299,7 @@ def queue_native_pre_tool_review(
     approval_center_url: str | None = None,
     connector_lookup: dict[str, object] | None = None,
     bound_bash: Mapping[str, object] | None = None,
+    package_approval: Mapping[str, str] | None = None,
     claude_notice: bool = False,
     policy_binding_verified: bool = False,
     codex_live_wait: bool = False,
@@ -295,7 +308,13 @@ def queue_native_pre_tool_review(
 ) -> dict[str, object] | None:
     if not policy_binding_verified:
         try:
-            native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+            native_review_policy_binding(
+                harness=harness,
+                native_result=native_result,
+                verified_receipt=native_receipt,
+                guard_home=guard_home,
+                deadline=deadline,
+            )
         except ValueError:
             return None
     queue = getattr(store, "queue_native_review", None)
@@ -319,6 +338,8 @@ def queue_native_pre_tool_review(
         # The resident queues a prepared Bash review only as the reply the
         # native Bash owner prepared, with the receipt's policy binding.
         "bound_bash": None if bound_bash is None else dict(bound_bash),
+        # The package key an Always allow on this review is also saved under.
+        "package_approval": None if package_approval is None or exact_token is None else dict(package_approval),
     }
     try:
         query = native_review_query(harness, payload, review, workspace=workspace, home_dir=home_dir)

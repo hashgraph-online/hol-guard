@@ -277,10 +277,79 @@ mod sockets {
     }
 }
 
+fn launch(prefixes: Value, args: Value) -> Value {
+    let request = json!({
+        "op": "launch", "prefixes": prefixes, "home_dir": "/home/user", "args": args,
+    });
+    dispatch(&request).unwrap()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_launch_names_its_socket_environment_and_every_command() {
+    let answer = launch(json!([["/usr/bin/codex"]]), json!(["Fix it."]));
+    assert_eq!(answer["socket"], json!(SOCKET));
+    assert_eq!(answer["env"], json!({ "CODEX_HOME": "/home/user/.codex" }));
+    assert_eq!(answer["prefix"], json!(["/usr/bin/codex"]));
+    assert_eq!(answer["prepare"], json!(true));
+    assert_eq!(answer["plain"], json!(["/usr/bin/codex", "Fix it."]));
+    assert_eq!(
+        answer["remote"],
+        json!([
+            "/usr/bin/codex",
+            "--remote",
+            format!("unix://{SOCKET}"),
+            "Fix it."
+        ])
+    );
+    assert_eq!(
+        answer["candidates"],
+        json!([answer["remote"], answer["plain"]])
+    );
+}
+
+#[test]
+fn a_launch_that_cannot_use_the_remote_tui_has_only_the_ordinary_command() {
+    let answer = launch(json!([["/usr/bin/codex"]]), json!(["exec", "Fix it."]));
+    assert_eq!(answer["remote"], Value::Null);
+    assert_eq!(answer["prepare"], json!(false));
+    assert_eq!(answer["candidates"], json!([answer["plain"]]));
+}
+
+#[test]
+fn an_authorized_prefix_keeps_its_launcher_and_dedupes() {
+    let prefix = json!(["/usr/bin/node", "/opt/codex.js"]);
+    let answer = launch(json!([prefix, [], prefix]), json!([]));
+    assert_eq!(answer["plain"], json!(["/usr/bin/node", "/opt/codex.js"]));
+}
+
+#[test]
+fn a_launch_refuses_prefixes_that_are_not_one_canonical_prefix() {
+    let shared = "Codex launch candidates do not share one authorized executable prefix.";
+    let canonical = "Codex launch preparation requires a canonical executable prefix.";
+    for (prefixes, message) in [
+        (json!([]), shared),
+        (json!([[]]), shared),
+        (json!([["/a/codex"], ["/b/codex"]]), shared),
+        (json!([[""]]), canonical),
+        (json!([["/usr/bin/node", ""]]), canonical),
+    ] {
+        assert_eq!(
+            launch(prefixes.clone(), json!([])),
+            json!({ "refusal": message }),
+            "{prefixes}"
+        );
+    }
+}
+
 #[test]
 fn refuses_malformed_requests() {
     for request in [
         json!([]),
+        json!({ "op": "launch", "prefixes": [["codex"]], "home_dir": "/h" }),
+        json!({ "op": "launch", "prefixes": "codex", "home_dir": "/h", "args": [] }),
+        json!({ "op": "launch", "prefixes": [[1]], "home_dir": "/h", "args": [] }),
+        json!({ "op": "launch", "prefixes": [["codex"]], "home_dir": 1, "args": [] }),
         json!({ "op": "plan", "args": ["x"] }),
         json!({ "op": "plan", "args": "x", "socket": SOCKET }),
         json!({ "op": "plan", "args": [1], "socket": SOCKET }),

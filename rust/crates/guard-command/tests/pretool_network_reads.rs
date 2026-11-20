@@ -240,6 +240,72 @@ fn secret_reads_mutations_and_untrusted_configs_stay_reviewed() {
     }
 }
 
+/// `KUBECONFIG=~/kubeconfig.yaml kubectl get pods` is how an agent picks a
+/// cluster config kept in the home directory. The shell expands the tilde in
+/// the assignment, so the config is the one under home, and it passes the same
+/// trust check as the spelled-out path.
+#[test]
+fn a_home_tilde_kubeconfig_setting_reads_like_the_spelled_out_path() {
+    let (space, _cleanup) = space("kubectl-tilde");
+    for command in [
+        "KUBECONFIG=~/kubeconfig.yaml kubectl get pods -A -o wide",
+        "KUBECONFIG=~/kubeconfig.yaml kubectl get deploy,pods -n web | grep -i web",
+        "sleep 1; KUBECONFIG=~/kubeconfig.yaml kubectl get deploy web -n web -o jsonpath='{.spec.replicas}'",
+    ] {
+        let result = decide(&space, command);
+        assert_eq!(result.decision, "allow", "{command}: {}", result.reason_code);
+    }
+    for command in [
+        // A quoted or escaped tilde is not expanded, so these name a `~`
+        // directory below the working directory.
+        "KUBECONFIG=\"~/kubeconfig.yaml\" kubectl get pods",
+        "KUBECONFIG='~/kubeconfig.yaml' kubectl get pods",
+        "KUBECONFIG=~\"/kubeconfig.yaml\" kubectl get pods",
+        "KUBECONFIG=\\~/kubeconfig.yaml kubectl get pods",
+        // A config that runs a plugin from inside a checkout keeps its review
+        // however the path is spelled.
+        "KUBECONFIG=~/Code/org/app-portal/kubeconfig.yaml kubectl get pods",
+        // The setting does not make a write or a secret read safe.
+        "KUBECONFIG=~/kubeconfig.yaml kubectl delete pod web-0",
+        "KUBECONFIG=~/kubeconfig.yaml kubectl get secrets -A",
+    ] {
+        let result = decide(&space, command);
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+    // The shell keeps HOME for ~//tmp/..., while Path::join would discard
+    // HOME for an absolute remainder. The harmless decoy must never license
+    // an executable plugin config at a different location.
+    let decoy = space.home.parent().unwrap().join("shadow-kubeconfig.yaml");
+    std::fs::write(&decoy, INERT_KUBECONFIG).unwrap();
+    let real = space
+        .home
+        .join(decoy.to_str().unwrap().trim_start_matches('/'));
+    std::fs::create_dir_all(real.parent().unwrap()).unwrap();
+    std::fs::write(&real, PLUGIN_KUBECONFIG).unwrap();
+    let command = format!("KUBECONFIG=~/{} kubectl get pods", decoy.display());
+    let result = decide(&space, &command);
+    assert_ne!(
+        result.decision, "allow",
+        "{command}: {}",
+        result.reason_code
+    );
+
+    // When the shell's HOME is some other directory, `~` names that one.
+    let home = space.home.to_str();
+    let cwd = space.cwd.to_str();
+    let result = crate::git_helper_fixture::evaluate_with_shell_home(
+        "codex",
+        "PreToolUse",
+        &json!({"tool_name": "Bash", "tool_input": {"command": "KUBECONFIG=~/kubeconfig.yaml kubectl get pods"}}),
+        None,
+        None,
+        home,
+        cwd,
+        false,
+    );
+    assert_ne!(result.decision, "allow", "{}", result.reason_code);
+}
+
 #[test]
 fn urls_carrying_credential_shapes_stay_reviewed() {
     let (space, _cleanup) = space("curl-secret-url");

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
+from tests import harness_ops_support as harness_support
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -33,14 +33,13 @@ class TestGrokManagedCompat:
             "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
         )
-        adapter = get_adapter("grok")
-        adapter.install(ctx)
+        harness_support.install("grok", ctx)
         installed = managed.read_text(encoding="utf-8")
         assert installed.count("[compat.claude]") == 1
         assert "skills = true" in installed
         assert installed.count("hooks = false") >= 1
-        adapter.install(ctx)
-        adapter.uninstall(ctx)
+        harness_support.install("grok", ctx)
+        harness_support.uninstall("grok", ctx)
         restored = managed.read_text(encoding="utf-8")
         assert "BEGIN HOL GUARD MANAGED GROK" not in restored
         assert "hooks = true" in restored

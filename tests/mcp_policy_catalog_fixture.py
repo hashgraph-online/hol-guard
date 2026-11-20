@@ -38,6 +38,7 @@ def native_mcp_catalog_admission(request):
         "test_guard_remote_mcp_server_name_fallback",
         "test_guard_kranz_mcp_contribution",
         "test_guard_contributed_mcp_native",
+        "test_guard_mcp_server_contribution",
         "test_guard_direct_mcp_contribution",
     }
     if request.module.__name__.rsplit(".", 1)[-1] not in modules:

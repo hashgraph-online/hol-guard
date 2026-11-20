@@ -316,3 +316,80 @@ fn a_receipt_read_back_outside_the_edge_is_checked_against_its_result() {
         .is_err());
     }
 }
+
+mod transition_probe {
+    use super::*;
+    use crate::transition_hook_observation::observe;
+    use serde_json::json;
+
+    const OPERATION: &str = "12345678-1234-5678-1234-567812345678";
+    const REQUEST: &str = "transition-hook-0123456789abcdef0123456789abcdef";
+    const SCHEMA: &str = "hol-guard.transition-hook-probe.v1";
+
+    fn payload() -> Value {
+        json!({"guard_transition_probe": {
+            "schema": SCHEMA, "operation_id": OPERATION, "request_id": REQUEST}})
+    }
+
+    fn answering(edits: &[(&str, Value)]) -> Value {
+        let mut receipt = serde_json::to_value(&pre_tool().receipt).unwrap();
+        receipt["request_id"] = Value::from(REQUEST);
+        receipt["harness"] = Value::from("codex");
+        for (name, value) in edits {
+            receipt[*name] = value.clone();
+        }
+        let parsed = crate::pyjson::parse(&receipt.to_string()).unwrap();
+        receipt["decision_id"] =
+            Value::from(crate::native_decision_receipt::sealed_decision_id(&parsed));
+        receipt
+    }
+
+    #[test]
+    fn a_receipt_that_answers_the_probe_is_observed() {
+        let receipt = answering(&[]);
+        let answered = observe(&payload(), &receipt).unwrap();
+        assert_eq!(answered["operation_id"], OPERATION);
+        assert_eq!(answered["request_id"], REQUEST);
+        assert_eq!(
+            answered["observation"],
+            json!({
+                "schema": "hol-guard.transition-hook-observation.v1",
+                "operation_id": OPERATION,
+                "request_id": REQUEST,
+                "native_receipt": receipt,
+            })
+        );
+        let omp = answering(&[("harness", Value::from("omp"))]);
+        assert!(observed(&omp).is_some());
+    }
+
+    fn observed(receipt: &Value) -> Option<Value> {
+        let answered = observe(&payload(), receipt)?;
+        Some(answered["observation"].clone()).filter(|value| !value.is_null())
+    }
+
+    #[test]
+    fn nothing_is_observed_without_a_probe_or_an_answering_receipt() {
+        let receipt = answering(&[]);
+        assert_eq!(observe(&json!({}), &receipt), None);
+        assert_eq!(observed(&Value::from("receipt")), None);
+        assert_eq!(observed(&Value::Null), None);
+        assert_eq!(
+            observe(&payload(), &Value::Null).unwrap()["request_id"],
+            REQUEST
+        );
+
+        let mut unsealed = receipt.clone();
+        unsealed["reason_code"] = Value::from("some_other_reason");
+        assert_eq!(observed(&unsealed), None);
+
+        for edits in [
+            vec![("request_id", Value::from("transition-hook-other"))],
+            vec![("event_name", Value::from("PostToolUse"))],
+            vec![("harness", Value::from("claude-code"))],
+            vec![("observe_mode", Value::Bool(true))],
+        ] {
+            assert_eq!(observed(&answering(&edits)), None, "{edits:?}");
+        }
+    }
+}

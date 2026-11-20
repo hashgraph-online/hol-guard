@@ -150,6 +150,21 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     source.as_deref(),
                 )
             }
+            ResidentOperationV1::HookPayloadFacts(request) => {
+                crate::hook_payload_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookReviewBinding(request) => {
+                crate::hook_review_binding_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyAdmission(request) => {
+                crate::hook_policy_admission_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookConnectorFacts(request) => {
+                crate::hook_connector_facts_op::evaluate(&request)
+            }
+            ResidentOperationV1::HookPolicyFenceWindow(request) => {
+                crate::hook_policy_fence_window_op::evaluate(&request)
+            }
             ResidentOperationV1::McpRelayDecide(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -346,6 +361,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 crate::network_protection_verify_op::evaluate_network_protection_verify_request(
                     &request,
                 )
+            }
+            ResidentOperationV1::CommandJobPlan(request) => {
+                crate::command_job_plan_op::evaluate_command_job_plan_request(&request)
             }
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
@@ -619,11 +637,6 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
-            ResidentOperationV1::CodexHookManifestVerify(request) => {
-                crate::codex_hook_manifest_verify_op::evaluate_codex_hook_manifest_verify_request(
-                    &request,
-                )
-            }
             ResidentOperationV1::InventoryScanTargets(request) => {
                 crate::inventory_scan_targets_op::evaluate_inventory_scan_targets_request(&request)
             }
@@ -792,6 +805,12 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ReleaseFeedProject(request) => {
                 crate::release_feed_op::evaluate_release_feed_project(&request)
             }
+            // Owner-private Windows state files inside the pinned Guard home,
+            // through the same held handles as `windows-private-state --stdin`.
+            ResidentOperationV1::WindowsPrivateState(request) => {
+                policy_store.ok_or_else(|| "native_windows_private_state_resident_required".to_owned())?;
+                crate::windows_private_state::resident::evaluate(&request)
+            }
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }
@@ -878,6 +897,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::CatalogReadV2(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogPrepareV1(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogReadPreparedV1(request) => request.guard_home.to_str(),
+        ResidentOperationV1::WindowsPrivateState(request) => Some(&request.guard_home),
         ResidentOperationV1::NativeBashPrepare(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashExecute(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashCancel(request) => Some(&request.guard_home),

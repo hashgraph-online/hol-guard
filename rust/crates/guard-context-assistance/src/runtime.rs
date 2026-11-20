@@ -14,8 +14,15 @@ use std::sync::{
 };
 use std::time::Duration;
 
+#[path = "runtime_builtin.rs"]
+mod builtin;
 #[path = "release_verification.rs"]
 mod release_verification;
+pub(crate) use builtin::BUILTIN_ADAPTER;
+pub use builtin::{
+    builtin_approval, builtin_interpreter, builtin_platform, builtin_selection,
+    BUILTIN_APPROVAL_SCHEMA,
+};
 
 /// The first reply includes interpreter start-up and the SDK import. A cold
 /// start on a slow host (x64 under ARM64 emulation, or a fresh install that
@@ -339,6 +346,15 @@ impl VerifiedRuntime {
     /// Revalidation belongs to explicit setup/recheck and graph activation,
     /// never the synchronous hook decision or approval path.
     pub fn recheck_artifacts(&mut self) -> Result<(), RuntimeError> {
+        // The built-in engine is part of the running executable; there are
+        // no separate bytes to change underneath it.
+        if self.is_builtin() {
+            return if self.status.active {
+                Ok(())
+            } else {
+                Err(RuntimeError::RuntimeClosed)
+            };
+        }
         match crate::artifacts::inspect_cancellable(
             &self.selection,
             &self.approval.platform,
@@ -369,6 +385,9 @@ impl VerifiedRuntime {
         script: &str,
     ) -> Result<JsonProcess, RuntimeError> {
         self.recheck_artifacts()?;
+        if self.is_builtin() {
+            return self.spawn_builtin_client();
+        }
         JsonProcess::spawn_cancellable(&self.selection, script, Arc::clone(&self.cancel))
     }
 }

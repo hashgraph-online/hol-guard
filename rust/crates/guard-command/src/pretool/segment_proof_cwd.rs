@@ -158,10 +158,10 @@ pub(in crate::pretool) fn verified_leading_cd_target(
 /// A later `cd` is absolute, so it names the same directory whether or not an
 /// earlier group was a subshell. `||` does not start that `cd`: it skips the
 /// `cd` when the step before it succeeds, and a later `&&` read would then
-/// run in a directory this proof did not verify. A read after a `)` is
-/// outside the subshell, so it is proved in the directory the command started
-/// in. A read after a brace group stays with the `cd`, because `{ ...; }`
-/// does not restore the directory and the `;` before `}` is not the join.
+/// run in a directory this proof did not verify. A read after `;` or `||`
+/// runs in whichever directory a `cd` that worked last left the shell in: a
+/// failed `cd` or a closed subshell leaves the one before it. So the read is
+/// proved where the command started and in every directory a `cd` entered.
 pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
@@ -170,25 +170,35 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     if model.segments.len() < 2 || model.confidence != "exact" {
         return false;
     }
-    let mut saw_directory = false;
+    let mut entered: Vec<String> = Vec::new();
     let mut index = 0usize;
     while index < model.segments.len() {
         if index > 0 && !reaches_segment(model, index) {
             return false;
         }
         if model.segments[index].executable.as_deref() == Some("cd") {
-            if !take_cd_chunk(model, allow_git_helper_context, context, &mut index) {
+            let Some(cwd) = take_cd_chunk(model, allow_git_helper_context, context, &mut index)
+            else {
                 return false;
-            }
-            saw_directory = true;
+            };
+            entered.push(cwd);
             continue;
         }
-        if !read_in_context(model, index, allow_git_helper_context, context) {
+        let proved = |cwd: &str| {
+            let there = PathContext {
+                cwd: Some(cwd),
+                ..context
+            };
+            read_in_context(model, index, allow_git_helper_context, there)
+        };
+        if !read_in_context(model, index, allow_git_helper_context, context)
+            || !entered.iter().all(|cwd| proved(cwd))
+        {
             return false;
         }
         index += 1;
     }
-    saw_directory
+    !entered.is_empty()
 }
 
 /// `&&` or `;` may start an absolute `cd`. A read that is not a `cd` may also
@@ -209,24 +219,22 @@ fn take_cd_chunk(
     allow_git_helper_context: bool,
     context: PathContext<'_>,
     index: &mut usize,
-) -> bool {
+) -> Option<String> {
     let cd = &model.segments[*index];
     if !cd.environment_names.is_empty()
         || cd.pipeline_index != 0
         || !directory_targets::drive_targets_quoted(cd)
         || !directory_targets::home_targets_unquoted(cd)
     {
-        return false;
+        return None;
     }
     let [target] = cd.arguments.as_slice() else {
-        return false;
+        return None;
     };
     if *index > 0 && !std::path::Path::new(target).is_absolute() {
-        return false;
+        return None;
     }
-    let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
-        return false;
-    };
+    let cwd = safe_reads::verified_cwd_target(target, context)?;
     let proved = PathContext {
         cwd: Some(&cwd),
         ..context
@@ -244,12 +252,12 @@ fn take_cd_chunk(
             break;
         }
         if !read_in_context(model, *index, allow_git_helper_context, proved) {
-            return false;
+            return None;
         }
         reads += 1;
         *index += 1;
     }
-    reads > 0
+    (reads > 0).then_some(cwd)
 }
 
 fn read_in_context(
@@ -365,6 +373,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
             false,
             crate::pretool::PathContext {
                 literal_words: &[],
+                guard_home: context.guard_home,
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
@@ -391,6 +400,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 allow_git_helper_context,
                 crate::pretool::PathContext {
                     literal_words: &[],
+                    guard_home: context.guard_home,
                     home_dir: context.home_dir,
                     cdpath_unset: context.cdpath_unset,
                     rustup_override_absent: context.rustup_override_absent,
@@ -488,6 +498,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "echo"
                 | "printf"
                 | "which"
+                | "whence"
                 | "whoami"
                 | "uname"
                 | "date"
@@ -539,7 +550,8 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
 /// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` and
 /// `sleep 30; cd /tmp/a/app && git status` then get the same decision as
 /// `cd /tmp/a/app && git status`: after `;` the `cd` runs whatever the prefix
-/// returned, and the rest still runs only once it succeeded. The prefix keeps its
+/// returned, and the rest still runs only once it succeeded. A fallback such as
+/// `ls /tmp/a/x || echo none; cd /tmp/a/app && git status` is the same. The prefix keeps its
 /// own proof against the original directory; Git segments stay out of it so
 /// the Git execution floor always sees every Git read with its directory.
 pub(in crate::pretool) fn after_read_prefix(
@@ -566,8 +578,15 @@ pub(in crate::pretool) fn after_read_prefix(
             .skip(pair[0].span.end)
             .take(length)
             .collect();
+        // A `||` inside the prefix only picks which proven read runs. Right
+        // before the `cd` it would group as `(<prefix> || cd <dir>) && <rest>`
+        // and run the rest in the starting folder, and a `|` there runs the
+        // `cd` in a subshell.
         let last = index + 2 == start + 1;
-        if (last && separator.trim() == "|") || !matches!(separator.trim(), "&&" | "|" | ";") {
+        let separator = separator.trim();
+        if (last && matches!(separator, "|" | "||"))
+            || !matches!(separator, "&&" | "|" | ";" | "||")
+        {
             return None;
         }
     }

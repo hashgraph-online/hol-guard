@@ -1352,8 +1352,8 @@ impl SupplyChainStore for ResidentSupplyChainStore {
 ///   * `{"error": "trusted_session_failure"}` — surfaces as
 ///     `EvalError::Internal`, the availability failure (for example a token
 ///     refresh error) that every level routes to review.
-struct ResidentGuardSyncRunner {
-    auth_context_override: Option<Map<String, Value>>,
+pub(crate) struct ResidentGuardSyncRunner {
+    pub(crate) auth_context_override: Option<Map<String, Value>>,
 }
 
 impl GuardSyncRunnerApi for ResidentGuardSyncRunner {

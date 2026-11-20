@@ -15,20 +15,60 @@ use super::dispatch;
 mod claude_family;
 #[path = "tests_cline.rs"]
 mod cline_family;
+#[path = "tests_cline_opencode_apply.rs"]
+mod cline_opencode_apply_family;
 #[path = "tests_codex.rs"]
 mod codex_family;
+#[path = "tests_contract_config_paths.rs"]
+mod contract_config_paths_family;
 #[path = "tests_copilot.rs"]
 mod copilot_family;
 #[path = "tests_cursor.rs"]
 mod cursor_family;
+#[path = "tests_cursor_surfaces.rs"]
+mod cursor_surfaces_family;
+#[path = "tests_detect_merged.rs"]
+mod detect_merged_family;
+#[path = "tests_firewall.rs"]
+mod firewall_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
+#[cfg(unix)]
+#[path = "guard_home_redirect_tests.rs"]
+mod guard_home_redirect_family;
 #[path = "tests_hermes.rs"]
 mod hermes_family;
+#[path = "tests_hook_config.rs"]
+mod hook_config_family;
+#[path = "tests_install_apply.rs"]
+mod install_apply_family;
+#[path = "tests_live_hook_verification.rs"]
+mod live_hook_verification_family;
+#[path = "managed_install_tests.rs"]
+mod managed_install_family;
+#[path = "tests_mcp_servers.rs"]
+mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
+#[path = "tests_probe_run.rs"]
+mod probe_run_family;
+#[path = "tests_round_trip.rs"]
+mod round_trip;
+#[path = "tests_setup_detection.rs"]
+mod setup_detection_family;
+#[path = "tests_shims.rs"]
+mod shim_family;
+#[path = "tests_shims_apply.rs"]
+mod shims_apply_family;
+#[cfg(unix)]
+#[path = "standalone_install_tests.rs"]
+mod standalone_install_family;
+#[path = "update_tests.rs"]
+mod update_family;
+#[path = "update_store_tests.rs"]
+mod update_store_family;
 
 struct Home {
     _dir: TempDir,
@@ -52,7 +92,12 @@ impl Home {
         self.root.join("guard")
     }
 
-    fn context(&self, env: Value) -> Value {
+    fn context(&self, mut env: Value) -> Value {
+        // Never read the host's real Claude Code managed policy.
+        if let Some(env) = env.as_object_mut() {
+            env.entry("HOL_GUARD_TEST_CLAUDE_MANAGED_SETTINGS")
+                .or_insert_with(|| json!(self.root.join("managed-settings.json")));
+        }
         json!({
             "home": self.home(),
             "workspace": null,
@@ -61,6 +106,7 @@ impl Home {
             "cwd": self.root,
             "user_home": self.home(),
             "env": env,
+            "caller": caller(false),
         })
     }
 
@@ -71,10 +117,66 @@ impl Home {
     fn ask_env(&self, harness: &str, op: &str, extra: Value, env: Value) -> Value {
         let mut request = json!({"harness": harness, "op": op, "context": self.context(env)});
         for (key, value) in extra.as_object().unwrap() {
-            request[key] = value.clone();
+            // A test's own `caller` replaces the context's default one.
+            if key == "caller" {
+                request["context"]["caller"] = value.clone();
+            } else {
+                request[key] = value.clone();
+            }
         }
         dispatch(&request).unwrap()
     }
+}
+
+/// `native_caller.caller_identity()` for a source (or `frozen`) Guard.
+fn caller(frozen: bool) -> Value {
+    json!({
+        "executable": "/py",
+        "executable_resolved": "/py",
+        "frozen": frozen,
+        "launcher": if frozen { "/g/bin/hol-guard" } else { "/py" },
+        "frozen_launcher": frozen.then_some("/g/bin/hol-guard-core"),
+        "cli_executable": "/py",
+        "package_root": "/opt/guard/site",
+        "version": "0.0.0",
+        "native_runtime": {
+            "path": "/g/hol-guard-runtime",
+            "size": 3,
+            "sha256": "0".repeat(64),
+            "features": NATIVE_FEATURES,
+        },
+    })
+}
+
+/// What the stamped test runtime advertises: every hook bridge.
+const NATIVE_FEATURES: [&str; 8] = [
+    "codex-hook-bridge-v1",
+    "cursor-hook-bridge-v1",
+    "claude-hook-bridge-v1",
+    "claude-session-start-v1",
+    "cline-hook-worker-v1",
+    "pi-hook-bridge-v1",
+    "bounded-hook-bridge-v1",
+    "bounded-hook-bridge-muse-v1",
+];
+
+/// A frozen `caller` whose native runtime is a real three-byte file, so the
+/// durable copy under the Guard home can be published. Returns the stamp and
+/// the copy's path.
+fn frozen_with_runtime(home: &Home) -> (Value, String) {
+    let runtime = home.root.join("bundle").join("hol-guard-runtime");
+    fs::create_dir_all(runtime.parent().unwrap()).unwrap();
+    fs::write(&runtime, b"abc").unwrap();
+    let sha = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let mut stamp = caller(true);
+    stamp["native_runtime"] =
+        json!({"path": runtime, "size": 3, "sha256": sha, "features": NATIVE_FEATURES});
+    let copy = home
+        .guard()
+        .join("native-runtime")
+        .join(sha)
+        .join("hol-guard-runtime");
+    (stamp, copy.to_string_lossy().into_owned())
 }
 
 fn shim() -> String {
@@ -117,6 +219,37 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "codex"
         ]
     );
+}
+
+#[test]
+fn describe_names_the_hermes_and_copilot_preparation_and_hook_ownership() {
+    let answer = dispatch(&json!({"op": "describe"})).unwrap();
+    let find = |name: &str| {
+        answer["adapters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|adapter| adapter["harness"] == name)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(find("hermes")["prepare"], "unavailable");
+    assert_eq!(find("devin")["prepare"], "plan");
+    let copilot = find("copilot");
+    assert_eq!(copilot["prepare"], "detected");
+    assert_eq!(copilot["launch_op"], "launch_command");
+    assert_eq!(find("grok")["launch_op"], "");
+    // Cursor resolves `cursor-agent` or `cursor agent` itself.
+    assert_eq!(find("cursor")["launch_op"], "launch_command");
+    assert!(copilot["hook_ownership"]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("Guard could not read which Copilot hooks"));
+    assert_eq!(
+        copilot["hook_ownership"]["ops"].as_array().unwrap().len(),
+        7
+    );
+    assert_eq!(find("cursor")["hook_ownership"], Value::Null);
 }
 
 #[test]
@@ -173,6 +306,46 @@ fn devin_install_backs_up_the_config_and_records_state() {
         .as_str()
         .unwrap()
         .ends_with("managed/devin/install.state.json"));
+}
+
+#[test]
+fn apply_uninstall_runs_the_plan_it_prepares_and_journals_managed_writes() {
+    let home = Home::new();
+    let config = home.home().join(".config/devin/config.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "{}\n").unwrap();
+    let install = home.ask(
+        "devin",
+        "prepare_install",
+        json!({"shim": shim(), "hook_argv": ["/py", "hook"]}),
+    );
+    for file in install["files"].as_array().unwrap() {
+        let path = Path::new(file["path"].as_str().unwrap());
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, after(file)).unwrap();
+    }
+    let plan = home.ask("devin", "prepare_uninstall", json!({}));
+    let state = plan["deletes"][0].as_str().unwrap().to_owned();
+    let launcher = home.guard().join("bin/guard-devin");
+    fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+    fs::write(&launcher, "#!/bin/sh\n").unwrap();
+    let applied = home.ask("devin", "apply_uninstall", json!({}));
+    assert!(!launcher.exists());
+    let manifest: Value = serde_json::from_str(applied["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        manifest["removed_paths"][0],
+        json!(launcher.to_string_lossy())
+    );
+    assert!(applied["manifest"].is_string(), "{applied}");
+    assert_eq!(
+        applied["events"][0]["mutation"]["operation"],
+        json!("publish")
+    );
+    assert!(!Path::new(&state).exists());
+    assert_eq!(
+        fs::read_to_string(&config).unwrap(),
+        plan["writes"][0]["text"].as_str().unwrap()
+    );
 }
 
 #[test]
@@ -349,6 +522,42 @@ fn command_lookup_follows_the_callers_path() {
     let env = json!({"PATH": bin});
     let answer = home.ask_env("gemini", "resolved_executable", json!({}), env);
     assert_eq!(Path::new(answer["path"].as_str().unwrap()), gemini);
+    let found = home.ask_env(
+        "codex",
+        "command_available",
+        json!({}),
+        json!({"PATH": bin}),
+    );
+    assert_eq!(found, json!({"available": false}));
+    let found = home.ask_env(
+        "gemini",
+        "command_available",
+        json!({}),
+        json!({"PATH": bin}),
+    );
+    assert_eq!(found, json!({"available": true}));
+
+    let launch = |harness: &str, workspace: Value| {
+        let mut context = home.context(json!({"PATH": bin}));
+        context["workspace"] = workspace;
+        let extra = json!({"args": ["--flag"], "context": context});
+        home.ask_env(harness, "default_launch", extra, json!({}))["argv"].clone()
+    };
+    let workspace = home.root.join("project");
+    assert_eq!(
+        launch("gemini", json!(workspace)),
+        json!([gemini, "--flag"])
+    );
+    assert_eq!(
+        launch("opencode", Value::Null),
+        json!(["opencode", "--flag"])
+    );
+    assert_eq!(
+        launch("opencode", json!(workspace)),
+        json!(["opencode", workspace, "--flag"])
+    );
+    let request = json!({"harness": "gemini", "op": "default_launch", "context": home.context(json!({})), "args": [1]});
+    assert!(dispatch(&request).is_err());
 }
 
 #[test]

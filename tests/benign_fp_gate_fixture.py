@@ -48,19 +48,20 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.edge_clone_fixtures import write_edge_clone
-from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES, HOME_TOOLCHAIN_INIT_TEXT
+from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
-from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG, write_parent_documents, write_sibling_documents
-from tests.benign_fp_gate_connectors import write_connectors
+from tests.benign_fp_gate_configs import write_parent_design_tokens, write_parent_documents
 from tests.benign_fp_gate_cursor_project import cursor_project_path, write_cursor_projects
 from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
 from tests.benign_fp_gate_git import _git, _session_worktree, _signed_checkout, _stopped_rebase
 from tests.benign_fp_gate_hooked_clone import hooked_cwds, write_hooked_clone
+from tests.benign_fp_gate_home_tree import write_home_tree
 from tests.benign_fp_gate_linked_sources import build_linked_sources, linked_sources_path
 from tests.benign_fp_gate_long_lived_clone import write_long_lived_clones
+from tests.benign_fp_gate_org_repos import write_ignore_rule_repos, write_org_repos
 from tests.benign_fp_gate_paths import materialise
 from tests.benign_fp_gate_projects import (
     _INSTALLED_PACKAGES,
@@ -73,11 +74,10 @@ from tests.benign_fp_gate_projects import (
     _node_package,
     _node_toolchain,
     _python_toolchain,
-    _sibling_test_runner,
-    pnpm_monorepo,
     _vendored_toolchain,
     _write,
 )
+from tests.benign_fp_gate_stale_lockfile import stale_lockfile_app_path
 
 
 @dataclass(frozen=True)
@@ -186,6 +186,7 @@ class BenignFixture:
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
+            "stale_lockfile_app": stale_lockfile_app_path(self.home),
             "linked_worktree": self.linked_worktree,
             "linked_sources": linked_sources_path(self.home),
         }[name]
@@ -212,115 +213,7 @@ def build_fixture(root: Path) -> BenignFixture:
     guard_home = root / "guard-home"
     for directory in (home, guard_home):
         directory.mkdir(parents=True)
-    _write(home / ".gitconfig", LFS_GITCONFIG)
-    # `rustup override set nightly` in some other checkout leaves an official
-    # channel in the override table. It must not cost the version banners.
-    _write(
-        home / ".rustup" / "settings.toml",
-        'version = "12"\ndefault_toolchain = "stable"\n\n[overrides]\n"/opt/other-checkout" = "nightly"\n',
-    )
-    _write(home / ".agent" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
-    _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
-    _write(home / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
-    # A skill is its document and the helpers that document names. Reading the
-    # helper before running it is the careful step, so the tree carries one.
-    _write(home / ".agents" / "skills" / "x" / "scripts" / "run.sh", "#!/bin/sh\necho fixture\n")
-    _write(home / ".agents" / "skills" / "x" / "scripts" / "backup.db", "inert fixture bytes\n")
-    # A credential store keeps its review wherever it sits, a skill tree
-    # included, whatever language the file inside it is written in.
-    _write(home / ".agents" / "skills" / "x" / "secrets" / "export.sh", "#!/bin/sh\necho fixture\n")
-    _write(home / ".config" / "app-portal" / "settings.json", '{"theme": "dark"}\n')
-    # A tool Guard knows no name for, with the two trees every one of them
-    # keeps: a skills folder and a lane of dated reports. Agents look both up
-    # by the word they remember, which is the shape `.agents` already covers
-    # and no other home dot directory did.
-    _write(
-        home / ".web-client" / "skills" / "usage-rollup" / "SKILL.md",
-        "---\nname: usage-rollup\n---\nSynthetic home skill body.\n",
-    )
-    _write(
-        home / ".web-client" / "skills" / "usage-rollup" / "scripts" / "collect.sh",
-        "#!/bin/sh\necho fixture\n",
-    )
-    _write(home / ".web-client" / "artifacts" / "2026-10" / "run.log", "inert run log\n")
-    _write(
-        home / ".report-lane" / "usage-rollup" / "2026-10" / "web-client-summary.md",
-        "# Summary\nInert report text.\n",
-    )
-    # Ordinary files below a hidden home directory: a Node toolchain's manifest
-    # and a repository's own workflow. The hidden component is all that sets
-    # them apart from any other read.
-    _write(
-        home / ".nvm/versions/node/v25.2.1/lib/node_modules/inert-pkg/package.json",
-        '{\n  "name": "inert-pkg",\n  "version": "3.1.0"\n}\n',
-    )
-    # The version manager's own init file, which every Node project sources
-    # before it runs anything. Its shape is the point: helper functions, a
-    # pipeline, and tool names the command itself never spells, so no scan can
-    # call its words a tame set of settings the way it can an activation
-    # script's. Sourcing it still has to reach an approval the user can give.
-    _write(home / ".nvm" / "nvm.sh", HOME_TOOLCHAIN_INIT_TEXT)
-    _write(
-        home / ".github/workflows/inert-check.yml",
-        "name: inert-check\non: [push]\njobs:\n  check:\n    runs-on: ubuntu-latest\n",
-    )
-    # Negative controls for the same screen: a credential store nested under
-    # `.config`, and a token-shaped file name in an otherwise ordinary place.
-    _write(home / ".config/gcloud/credentials.db", "synthetic fixture\n")
-    _write(home / ".agents/skills/x/credentials.json", "{}\n")
-    # A directory of local services an agent runs beside its checkouts. The
-    # running server leaves a hidden socket lock in its run directory, which
-    # is all that separates this tree from any other listing.
-    _write(home / "dev-services" / "compose.yaml", "services:\n  db:\n    image: postgres:16\n")
-    _write(home / "dev-services" / "scripts" / "start.sh", "#!/bin/sh\necho start\n")
-    _write(home / "dev-services" / "pg-run" / ".s.PGSQL.5432.lock", "4242\n")
-    _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
-    _write(home / "other-project" / "src" / "report.ts", "export const reportWindow = 'report-window-marker';\n")
-    _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')
-    write_sibling_documents(home / "other-project")
-    # Sibling checkout's committed lockfile: the probe that globs for one has to
-    # find it, or the read is allowed for naming nothing rather than for being safe.
-    _write(
-        home / "other-project" / "package-lock.json",
-        json.dumps({"lockfileVersion": 3, "packages": {"node_modules/left-pad": {"version": "1.3.0"}}}) + "\n",
-    )
-    # A pnpm monorepo part-way through a type checker bump: the root runs
-    # the current release, a package under it is still on the previous one,
-    # and the one lockfile lists both.
-    pnpm_monorepo(home / "Code" / "acme-platform")
-    _git(home / "Code" / "acme-platform", "init", "--quiet", "--initial-branch=main", home=home)
-    _write(home / "Code" / "acme-platform" / ".gitignore", "node_modules/\n")
-    _git(home / "Code" / "acme-platform", "add", "-A", home=home)
-    _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
-    _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
-    _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
-    # A project directory beside the checkout that was never `git init`-ed:
-    # a handed-over tree, an unpacked archive, a scaffold still being set up.
-    # Its hidden files are the ordinary project configuration an agent reads
-    # to match the workspace it is working in.
-    _write(home / "acme-plain" / ".gitattributes", "* text=auto eol=lf\n")
-    _write(home / "acme-plain" / ".npmignore", "src/\ntests/\n")
-    _write(home / "acme-plain" / ".node-version", "22.11.0\n")
-    _write(home / "acme-plain" / ".tool-versions", "nodejs 22.11.0\npython 3.12.7\n")
-    _write(home / "acme-plain" / ".browserslistrc", "defaults\nnot IE 11\n")
-    _write(home / "acme-plain" / ".prettierrc", '{\n  "semi": false\n}\n')
-    _write(home / "acme-plain" / ".eslintrc.json", '{\n  "root": true\n}\n')
-    _write(home / "acme-plain" / ".mocharc.json", '{\n  "spec": "tests/**/*.spec.js"\n}\n')
-    # Negative control for the same directory: a registry file keeps its
-    # review wherever it sits, because that is where a publish token lands.
-    _write(home / "acme-plain" / ".npmrc", "registry=https://registry.npmjs.org/\n")
-    _write(home / "kubeconfig.yaml", KUBECONFIG)
-    # Connectors Guard has no decision for: a local CLI with its state directory, and harness MCP servers.
-    write_connectors(home)
-    _write(home / ".ssh" / "id_rsa", "-----BEGIN FIXTURE KEY-----\nnot-a-real-key\n-----END FIXTURE KEY-----\n")
-    # Sibling repository outside the workspace, as in the live Gauntlet fixture.
-    _git(home / "other-project", "init", "--quiet", "--initial-branch=main", home=home)
-    _git(home / "other-project", "add", "-A", home=home)
-    _git(home / "other-project", "commit", "--quiet", "-m", "sibling base", home=home)
-    sibling_wt = str(home / "other-project-wt")
-    _git(home / "other-project", "worktree", "add", "--quiet", "-b", "fix/report-window", sibling_wt, home=home)
-    # Installed after the baseline commit, as an untracked `npm install` leaves it.
-    _sibling_test_runner(home / "other-project")
+    write_home_tree(home)
 
     parent.mkdir(parents=True)
     _git(parent, "init", "--quiet", "--initial-branch=main", home=home)
@@ -330,7 +223,8 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)
     _write(parent / "src" / "password-reset-email.tsx", "export const Email = ({ password }) => <Field password={password} />;\n")
     _write(parent / "src" / "maintenance-auth.ts", MAINTENANCE_AUTH_SOURCE)
-    _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
+    _write(parent / "app" / "items" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
+    _write(parent / "app" / "(group)" / "blog" / "[slug]" / "page.tsx", "export default function Post() {}\n")
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
     _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)
@@ -346,6 +240,10 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / ".gitignore", "node_modules/\ndashboard/node_modules\n")
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
+    # Untracked on purpose: the credential-name screen these documents
+    # exercise is only reached for a file the walk cannot prove by its
+    # checkout.
+    write_parent_design_tokens(parent)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
     # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
     _git(parent, "branch", "feat/other-branch", home=home)
@@ -464,93 +362,7 @@ def build_fixture(root: Path) -> BenignFixture:
 
     # Repositories below HOME whose shared parent is not a repository.
     org = home / "Code" / "org"
-    for name in ("app-portal", "service-api"):
-        repository = org / name
-        repository.mkdir(parents=True)
-        _git(repository, "init", "--quiet", "--initial-branch=main", home=home)
-        _write(repository / ".github" / "workflows" / "ci.yml", "name: ci\n")
-        # Tracked content a checkout keeps in hidden directories: the manifest
-        # a harness is installed from and the card a web client publishes.
-        _write(repository / ".codex-plugin" / "plugin.json", f'{{"name": "{name}"}}\n')
-        _write(repository / ".well-known" / "agent-card.json", f'{{"name": "{name}"}}\n')
-        # A workflow named after a tool, and a published agent card whose name
-        # is the vendor word on its own.
-        _write(repository / ".github" / "workflows" / "docker.yml", "name: docker\n")
-        _write(repository / ".well-known" / "agent.json", f'{{"name": "{name}"}}\n')
-        # Targets for the negatives beside them: the repository's own
-        # administrative tree, a credential store name and a compiled blob.
-        _write(repository / ".git" / "hooks" / "pre-commit.sh", "#!/bin/sh\nexit 0\n")
-        _write(repository / ".codex-plugin" / "credentials.json", "{}\n")
-        _write(repository / ".codex-plugin" / "runtime.node", "\x00binary\n")
-        # A tool's own tree, a config file spelled as a directory and a
-        # credential store holding a file named as source.
-        # Tooling settings the checkout keeps under its own hidden
-        # directories. Their stems name a credential store as often as they
-        # name an ordinary project document, so the file is read rather than
-        # refused on its name alone.
-        _write(repository / ".circleci" / "config.yml", "version: 2.1\njobs: {}\n")
-        _write(repository / ".changeset" / "config.json", '{"changelog": "@changesets/cli/changelog"}\n')
-        _write(repository / ".storybook" / "settings.json", '{"framework": "react"}\n')
-        # A credential written across several lines, and one quoted word that
-        # a document writes bare when it means "nothing here".
-        _write(
-            repository / ".storybook" / "config.toml",
-            '[registry]\ntoken = """\nhunter2\n"""\n',
-        )
-        _write(repository / ".changeset" / "settings.json", '{"npmAuthToken": "null"}\n')
-        # A mapping that leaves its value for the next line, indented deeper.
-        _write(
-            repository / ".storybook" / "config.yml",
-            "database:\n  password:\n    hunter2\n",
-        )
-        # The same stem over a registry credential, for the negative beside it.
-        _write(
-            repository / ".cargo" / "config.toml",
-            '[registries.internal]\ntoken = "' + "AKIA" + "QYLPT3K7" + "R4FXM2WD" + '"\n',
-        )
-        _write(repository / ".cursor" / "mcp.json", '{"mcpServers": {}}\n')
-        _write(repository / ".dockerignore" / "notes.md", "# fixture\n")
-        _write(repository / ".secrets" / "read.py", "TOKEN = 'fixture'\n")
-        _write(repository / "src" / "index.ts", f"export const name = '{name}';\n")
-        _write(repository / "README.md", f"# {name}\n")
-        _write(repository / "src" / "lib.rs", 'pub fn name() -> &\'static str {\n    "fixture"\n}\n')
-        if name == "service-api":
-            _write(repository / "contracts" / "commands.json", '{"commands": []}\n')
-            _write(repository / "validation" / "schema.json", '{"type": "object"}\n')
-            _write(repository / "rust" / "crates" / "catalog" / "src" / "lib.rs", "pub fn catalog_read() {}\n")
-            _write(repository / "src" / "daemon" / "read.py", "print('daemon read')\n")
-            # A real target, so the sibling `.env` negative controls prove a refusal.
-            _write(repository / ".env", "TOKEN=synthetic-not-a-secret\n")
-            _write(repository / ".gitignore", "node_modules/\n")
-            _node_toolchain(repository / "dashboard")
-            _sibling_test_runner(repository)
-        if name == "app-portal":
-            # Installed with pnpm, so the package store and the build cache sit
-            # beside `node_modules/.bin`. The tree itself is written after the
-            # commit below, untracked the way a real install is.
-            _write(repository / ".gitignore", "node_modules/\n")
-        _git(repository, "add", "-A", home=home)
-        _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
-        if name == "service-api":
-            _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
-            _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
-    # The package store and build cache a pnpm install leaves in `app-portal`.
-    # Agents list them to see which manager ran and whether a cache is warm.
-    # The tree itself is installed with the checkout, so only the store entry
-    # and the cache are written here.
-    portal = org / "app-portal"
-    store_entry = f"vitest@{_NODE_PACKAGES['vitest']}"
-    _write(
-        portal / "node_modules" / ".pnpm" / store_entry / "node_modules" / "vitest" / "package.json",
-        '{"name": "vitest"}\n',
-    )
-    _write(portal / "node_modules" / ".cache" / "vite" / "deps" / "_metadata.json", "{}\n")
-    # A sibling checkout that keeps no workflows, where a probe finds nothing.
-    docs_site = org / "docs-site"
-    _write(docs_site / "README.md", "# docs-site\n")
-    _git(docs_site, "init", "--quiet", "--initial-branch=main", home=home)
-    _git(docs_site, "add", "-A", home=home)
-    _git(docs_site, "commit", "--quiet", "-m", "docs-site base", home=home)
+    write_org_repos(org, home)
     _session_worktree(org, home)
     write_developer_checkout(org, home, _git, _write)
     write_hooked_clone(org, home, _git)
@@ -560,28 +372,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _stopped_rebase(org, home, "app-portal-rebase")
     # A rebase started with an `exec` step keeps that program in its saved todo list.
     _stopped_rebase(org, home, "app-portal-rebase-exec", "-x", "true")
-    # Repositories whose `.gitignore` re-includes literal paths: an ordinary
-    # kept file and editor setting, and a `.env` template that stays reviewed.
-    for name, ignore, files in (
-        (
-            "web-console",
-            "dist/\n*.log\n!keep.log\n.vscode/*\n!.vscode/settings.json\n",
-            {"keep.log": "kept\n", ".vscode/settings.json": "{}\n", "src/index.ts": "export const route = 1;\n"},
-        ),
-        (
-            "billing-api",
-            ".env*\n!.env.example\n",
-            {".env.example": "TOKEN=synthetic-not-a-secret\n", "src/index.ts": "export const route = 2;\n"},
-        ),
-    ):
-        repository = home / "Code" / "ignore-rules" / name
-        repository.mkdir(parents=True)
-        _git(repository, "init", "--quiet", "--initial-branch=main", home=home)
-        _write(repository / ".gitignore", ignore)
-        for relative, text in files.items():
-            _write(repository / relative, text)
-        _git(repository, "add", "-A", home=home)
-        _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
+    write_ignore_rule_repos(home)
     build_linked_sources(home, _git)
     # A non-repository parent under /tmp whose repository has a linked worktree beside the parent.
     tmp_org = Path(tempfile.mkdtemp(prefix="org.", dir=_system_tmp())).resolve() / "org"

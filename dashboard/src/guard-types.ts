@@ -975,6 +975,10 @@ export type GuardApprovalGatePublicConfig = {
   strict_all_decisions: boolean;
   totp_enabled?: boolean;
   totp_pending?: boolean; totp_recent_satisfied?: boolean;
+  pulse_enabled?: boolean;
+  pulse_cooldown_seconds?: number;
+  /** Whether the YID app shows the agent's command. Off unless the user opted in. */
+  pulse_show_command?: boolean;
 };
 
 export type GuardProtectionPostureValue = "protected" | "extra_careful" | "watch";

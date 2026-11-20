@@ -34,16 +34,22 @@ impl Env<'_> {
         let notice_key = notice_key(session_id, tool_name);
         let pending_key = claude_pending_key(session_id, artifact_id);
         let masked = mask_tool_call_command(payload);
-        let payload = masked.as_ref().unwrap_or(payload);
-        if !self.store_signed(&pending_key, payload, &CLAUDE_PENDING) {
+        let recorded = masked
+            .as_ref()
+            .and_then(Value::as_object)
+            .cloned()
+            .or_else(|| payload.as_object().cloned())
+            .unwrap_or_default();
+        let payload = Value::Object(recorded);
+        if !self.store_signed(&pending_key, &payload, &CLAUDE_PENDING) {
             return;
         }
         if !self.append_key(&CLAUDE_FAMILY, session_id, &pending_key) {
             self.delete(&pending_key);
             return;
         }
-        if !self.store_signed(&notice_key, payload, &CLAUDE_NOTICE) {
-            self.claude_remove_pending(session_id, &pending_key);
+        if !self.store_signed(&notice_key, &payload, &CLAUDE_NOTICE) {
+            let _ = self.claude_remove_pending(session_id, &pending_key);
         }
     }
 
@@ -181,14 +187,16 @@ impl Env<'_> {
         items.pop()
     }
 
-    pub(super) fn claude_remove_pending(&self, session_id: &str, pending_key: &str) {
-        self.delete(pending_key);
+    pub(super) fn claude_remove_pending(&self, session_id: &str, pending_key: &str) -> bool {
+        if !self.delete(pending_key) {
+            return false;
+        }
         let remaining: Vec<String> = self
             .load_index(&CLAUDE_FAMILY, session_id)
             .into_iter()
             .filter(|key| key != pending_key)
             .collect();
-        self.store_index(&CLAUDE_FAMILY, session_id, &remaining);
+        self.store_index(&CLAUDE_FAMILY, session_id, &remaining)
     }
 
     /// `_discard_claude_pending_permissions`: drops every indexed pending

@@ -34,27 +34,26 @@ from typing import TYPE_CHECKING, Protocol, cast, final
 
 from ..codex_hook_launch_runtime import hook_processes_contained
 from ..config import load_guard_config
-from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
+from ..native_payload_facts import native_hook_event
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
+from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
+from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
-from .hook_direct_counters import HookCounterLog
-from .hook_request_parsing import (
-    runtime_hook_event_name,
-)
 from .hook_worker_native import HookWorkerNativeMixin
 from .hook_worker_readiness import prepare_workspace_policy
+from .hook_worker_unavailable import unavailable_event_response
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
-    from ..evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain
+    from ..resident_evidence_drain import ResidentEvidenceDrain
     from ..store import GuardStore
 
 
@@ -88,7 +87,7 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native
 _PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
 # The Claude hook fields the resident's lifecycle answers read: the session,
 # the prompt's kind and the tool it names.
-_CLAUDE_LIFECYCLE_FIELDS = ("session_id", "notification_type", "tool_name", "message", "title")
+_CLAUDE_LIFECYCLE_FIELDS = ("event_name", "session_id", "notification_type", "tool_name", "message", "title")
 # The prompt copy when the resident cannot answer: it says Guard is holding the
 # request, so an unreachable resident never leaves a prompt reading as though
 # Guard allowed the action.
@@ -109,7 +108,7 @@ class HookWorker(HookWorkerNativeMixin):
         workspace: Path | None = None,
         home_dir: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
-        evidence_dispatch: HookEvidenceDispatch | None = None,
+        evidence_dispatch: ResidentEvidenceDispatch | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
@@ -124,31 +123,43 @@ class HookWorker(HookWorkerNativeMixin):
         self.capture_writer = capture_writer
         self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
-        from .hook_metrics import HookMetricsRecorder
+        from ..route_metrics import RouteMetricsRecorder
 
-        self.metrics = HookMetricsRecorder()
-        self.hook_counters = HookCounterLog()
+        self.metrics = RouteMetricsRecorder()
+        self.hook_counters = RouteCounterLog()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
-        # Resolve adapter modules before a managed hook request starts
+        # Resolve harness modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy
         # readiness remains the enforcement barrier.
-        from ..adapters import list_adapters
+        from ..native_harness_ops import list_harnesses
 
-        _ = list_adapters()
+        _ = list_harnesses()
         self._owns_policy_snapshot_publisher = publish_native_policy
-        self._direct_evidence_drain: DirectHookEvidenceDrain | None = None
-        if self._owns_policy_snapshot_publisher and start_native_policy:
-            bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
-            if home_dir is not None and callable(bind_daemon_home):
-                bind_daemon_home(home_dir)
-            if workspace is not None:
-                self.policy_snapshot_publisher.register_workspace(workspace)
-            self._start_direct_evidence_drain()
-            self.policy_snapshot_publisher.start()
+        self._direct_evidence_drain: ResidentEvidenceDrain | None = None
+        if start_native_policy:
+            self.start_native_policy_publication(home_dir=home_dir, workspace=workspace)
         if wait_for_native_policy and start_native_policy:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
+
+    def start_native_policy_publication(self, *, home_dir: Path | None = None, workspace: Path | None = None) -> None:
+        """Starts publishing native policy, with its direct-lane lease and evidence drain.
+
+        A worker built with ``start_native_policy=False`` publishes nothing
+        until this runs, so its owner can build it early and start it once
+        publishing is safe.
+        """
+
+        if not self._owns_policy_snapshot_publisher:
+            return
+        bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
+        if home_dir is not None and callable(bind_daemon_home):
+            bind_daemon_home(home_dir)
+        if workspace is not None:
+            self.policy_snapshot_publisher.register_workspace(workspace)
+        self._start_direct_evidence_drain()
+        self.policy_snapshot_publisher.start()
 
     def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)
@@ -227,9 +238,9 @@ class HookWorker(HookWorkerNativeMixin):
         enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
         if self.activity_writer is None or not callable(enable):
             return
-        from ..evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain
+        from ..resident_evidence_drain import ResidentEvidenceDrain
 
-        self._direct_evidence_drain = DirectHookEvidenceDrain(self)
+        self._direct_evidence_drain = ResidentEvidenceDrain(self)
         enable(True)
         self._direct_evidence_drain.start()
 
@@ -296,6 +307,7 @@ class HookWorker(HookWorkerNativeMixin):
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None = None,
+        event_name: str | None = None,
         claim_saved_approval: bool = True,
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
@@ -314,20 +326,33 @@ class HookWorker(HookWorkerNativeMixin):
         payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
-        event_name = self._hook_event_name(payload)
+        event_name = event_name or self._hook_event_name(payload, deadline)
+        if event_name is None and harness.strip().lower().replace("_", "-") == "claude-code":
+            candidate = payload.get("hook_event_name")
+            if isinstance(candidate, str) and candidate in {"PermissionRequest", "Stop", "Notification", "PostToolUse"}:
+                event_name = candidate
+        if event_name is None:
+            return unavailable_event_response(
+                self,
+                payload=payload,
+                harness=harness,
+                guard_home=guard_home,
+                workspace=workspace,
+                deadline=deadline,
+            )
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)
             if answered is not None:
                 return answered
         if (
-            event_name == "PermissionRequest"
+            event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
         ):
             # These harnesses ask this only for a call their PreToolUse hook
             # already sent to Guard. A deny here would refuse every approval
             # the harness asks for, so the decision stays with the harness's
             # own approval prompt.
-            return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
+            return {"hookSpecificOutput": {"hookEventName": event_name}}
         if event_name == "PreToolUse" and harness.strip().lower() == "cursor":
             from .cursor_shell_route import cursor_shell_route_response
 
@@ -383,13 +408,11 @@ class HookWorker(HookWorkerNativeMixin):
             from ..cli.commands_support_claude_approval import _settle_claude_guard_question
 
             return None if _settle_claude_guard_question(self.store, payload) is None else {}
-        if event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt":
-            op = "claude_permission_prompt"
-        elif event_name == "PermissionRequest":
-            op = "claude_permission_request"
-        elif event_name == "Stop":
-            op = "claude_turn_stop"
-        else:
+        if not (
+            event_name == "PermissionRequest"
+            or event_name == "Stop"
+            or (event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt")
+        ):
             return None
         from ..cli._commands_shared import _now
         from ..cli.commands_support_runtime_artifacts import _optional_string
@@ -401,16 +424,21 @@ class HookWorker(HookWorkerNativeMixin):
 
         reply = hook_authority_state(
             self.store,
-            op,
+            "claude_lifecycle",
             now=_now(),
             required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
             session_id=_optional_string(payload.get("session_id")),
-            payload={name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name in payload},
+            payload={
+                "event_name": event_name,
+                **{
+                    name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name != "event_name" and name in payload
+                },
+            },
         )
         answered = object_field(reply, "harness_response")
-        if answered is not None or op == "claude_turn_stop":
+        if answered is not None or event_name == "Stop":
             return answered
-        if op == "claude_permission_request":
+        if event_name == "PermissionRequest":
             # Without the resident there is no pending review to present, so
             # the dialog stays Claude's own, as for a session with none.
             return {
@@ -454,7 +482,7 @@ class HookWorker(HookWorkerNativeMixin):
                     succeeded=succeeded,
                 )
 
-        run_hook_evidence(self, record)
+        run_resident_evidence(self, record)
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:
         values = params.get("runtime-harness", [])
@@ -462,8 +490,21 @@ class HookWorker(HookWorkerNativeMixin):
             return values[-1].strip()
         return None
 
-    def _hook_event_name(self, payload: Mapping[str, object]) -> str:
-        return runtime_hook_event_name(payload)
+    def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str | None:
+        # Event identity is a resident-owned fact. A missing fact stays
+        # unavailable so callers can shape an outage response separately. An
+        # explicit wire label still lets the caller reach that bounded
+        # fail-safe path when the resident cannot answer the fact lookup.
+        event = native_hook_event(payload, self.store.guard_home, deadline=deadline)
+        if event is not None:
+            return event
+        from .hook_availability_policy import canonical_hook_event_name
+
+        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return canonical_hook_event_name(payload)
+        return None
 
 
 __all__ = [

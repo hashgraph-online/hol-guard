@@ -39,6 +39,17 @@ pub struct ApprovalGateInputWireV1 {
     pub revoke_cooldown: bool,
     #[serde(default)]
     pub require_fresh_totp: bool,
+    /// Pulse request whose approved receipt the resident holds. The receipt
+    /// itself never crosses the wire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse_request_id: Option<String>,
+    /// `yak_` agent key, only for `begin_pulse_enrollment`. Stored in the
+    /// resident's secret store and never echoed back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse_agent_key: Option<String>,
+    /// One-time Pulse recovery code, only for `recover_pulse`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulse_recovery_code: Option<String>,
 }
 
 /// `ApprovalGateGrant` wire shape — the 15-field frozen proof handle
@@ -115,6 +126,22 @@ pub enum ApprovalGateMethodV1 {
     CreateVerifier,
     /// `audit_payload` — `{"approval_gate": {...}}` envelope.
     AuditPayload,
+    /// `pulse_request` — create a Pulse authorization for one held action,
+    /// or report that an open, matching Pulse cooldown already covers it.
+    PulseRequest,
+    /// `pulse_poll` — one short long-poll of a pending Pulse request. Holds
+    /// no approval-gate lock while it waits.
+    PulsePoll,
+    /// `begin_pulse_enrollment` — check the current factor, resolve the YID
+    /// for the agent key and send a Pulse enrollment request.
+    BeginPulseEnrollment,
+    /// `confirm_pulse_enrollment` — verify the enrollment receipt and switch
+    /// the gate to Pulse.
+    ConfirmPulseEnrollment,
+    /// `disable_pulse` — needs a fresh Pulse grant for `settings_write`.
+    DisablePulse,
+    /// `recover_pulse` — approval password plus the one-time recovery code.
+    RecoverPulse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

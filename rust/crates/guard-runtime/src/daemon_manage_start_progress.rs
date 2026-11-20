@@ -230,6 +230,8 @@ pub(super) fn retire_stalled(
         creation_time,
         start_marker: Some(marker),
         owner_marker: records::owner(&pending).and_then(Value::as_str),
+        reason: Some("stalled_launch"),
+        session_id: None,
     };
     (retire::retire_pid(caller, pid, &expected, deadline)
         || retire::known_foreign_process(caller, pid, &expected, deadline))

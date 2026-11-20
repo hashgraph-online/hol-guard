@@ -150,7 +150,17 @@ fn with_extensions(mut payload: Object, items: Vec<String>) -> Step<Vec<u8>> {
         "extensions",
         PyVal::List(items.into_iter().map(PyVal::Str).collect()),
     );
-    Ok(format!("{}\n", payload.render()?).into_bytes())
+    Ok(payload.render_document("\n")?.into_bytes())
+}
+
+/// The settings without Guard's extension. When it was the only one listed,
+/// the `extensions` key goes too, so uninstall leaves no empty list behind.
+fn without_extension(mut payload: Object, kept: Vec<String>) -> Step<Vec<u8>> {
+    if !kept.is_empty() {
+        return with_extensions(payload, kept);
+    }
+    payload.entries.retain(|(key, _)| key != "extensions");
+    Ok(payload.render_document("\n")?.into_bytes())
 }
 
 /// The settings with the managed reference listed once and no other.
@@ -189,7 +199,7 @@ fn disabled_settings(ctx: &Ctx, settings: &Path, extension: &str) -> Step<Option
         })
         .collect();
     let rendered =
-        String::from_utf8(with_extensions(payload, kept)?).map_err(|_| Failure::Invalid)?;
+        String::from_utf8(without_extension(payload, kept)?).map_err(|_| Failure::Invalid)?;
     Ok(Some(json!({"path": path_text(settings), "text": rendered})))
 }
 

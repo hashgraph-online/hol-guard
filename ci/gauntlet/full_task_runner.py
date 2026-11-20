@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import time
 from collections import Counter
 from dataclasses import dataclass
@@ -40,6 +39,7 @@ from .full_tasks import (
     load_full_tasks,
 )
 from .host_process import clean_environment, realistic_environment, run_process
+from .host_shims import omp_version
 from .input_evidence import Redaction, operator_home_replacements
 from .observed_extension import generate_observed_extension
 from .parallel import validate_jobs
@@ -342,7 +342,7 @@ def run_full_tasks(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    version = subprocess.check_output([executable, "--version"], text=True, timeout=15).strip()
+    version = omp_version(executable)
     package = json.loads((REPO / "ci/pi-exact-continuation/package.json").read_text())
     if version != "omp/" + package["dependencies"]["@oh-my-pi/pi-coding-agent"]:
         raise RuntimeError("Oh My Pi version differs from the repository-pinned SDK")

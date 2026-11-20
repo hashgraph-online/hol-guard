@@ -2,8 +2,9 @@
 
 use super::super::search_pattern_clearance::PatternClearance;
 use super::super::search_scope_filter::SearchFilter;
+use super::super::search_scope_glob::expand_braces;
 use super::{content_search_scope_proven, filtered_content_search_scope_proven, grep_input};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// True when a Grok `Grep` directory search cannot reach a sensitive file.
 ///
@@ -20,9 +21,17 @@ pub(in crate::pretool) fn grok_grep_directory_scope_proven(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    let Some(input) = grep_input(payload, true) else {
-        return false;
-    };
+    grep_input(payload, true).is_some_and(|input| unignored_grep_scope_proven(input, home_dir, cwd))
+}
+
+/// The search of a ripgrep-built `Grep` tool that may open hidden and ignored
+/// files, given its input with Claude's keys. Grok's tool and Cursor's both
+/// search this way.
+pub(super) fn unignored_grep_scope_proven(
+    input: &Map<String, Value>,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     let target = match input.get("path") {
         None => ".",
         Some(Value::String(path)) if !path.is_empty() => path.as_str(),
@@ -64,10 +73,19 @@ fn contained(glob: &str) -> bool {
 /// which is the reading the walk filter models. A glob holding a separator is
 /// matched against a path whose base the host chooses (the folder searched or
 /// the workspace), so it is left unmodeled and the walk screens every file.
-/// A list or a negation would also select files this filter does not, so the
-/// filter refuses those and the walk screens every file then too.
+///
+/// Grok hands the whole glob to `rg --glob`, and its own tool description
+/// gives `*.{ts,tsx}` as an example, so a brace list selects each of its
+/// names and the filter screens every one. A comma or brace still standing
+/// once the list is expanded -- a top-level list such as `*.md,*.json`, an
+/// unpaired brace, or a nested list ripgrep reads differently -- is left
+/// unmodeled, and so is a negation; the walk screens every file then.
 fn name_filter(glob: &str) -> Option<SearchFilter> {
-    if glob.is_empty() || glob.contains(['/', '\\', ',']) || glob.contains(char::is_whitespace) {
+    if glob.is_empty() || glob.contains(['/', '\\']) || glob.contains(char::is_whitespace) {
+        return None;
+    }
+    let names = expand_braces(glob).ok()?;
+    if names.iter().any(|name| name.contains([',', '{', '}'])) {
         return None;
     }
     SearchFilter::from_rg_inclusions(&[glob]).filter(|filter| !filter.is_path_shaped())

@@ -74,9 +74,29 @@ fn running(pid: u32) -> bool {
         return false;
     };
     match kill(Pid::from_raw(raw), None) {
-        Ok(()) | Err(Errno::EPERM) => true,
+        Ok(()) | Err(Errno::EPERM) => !is_another_process_thread(pid),
         Err(_) => false,
     }
+}
+
+/// Linux answers a signal probe for a thread id too. After a reboot a recorded
+/// daemon pid can name a thread of an unrelated program, which is not that
+/// daemon running. An unreadable status leaves the probe's answer as it was.
+#[cfg(target_os = "linux")]
+fn is_another_process_thread(pid: u32) -> bool {
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else {
+        return false;
+    };
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("Tgid:"))
+        .and_then(|tgid| tgid.trim().parse::<u32>().ok())
+        .is_some_and(|tgid| tgid != pid)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn is_another_process_thread(_pid: u32) -> bool {
+    false
 }
 
 #[cfg(not(unix))]

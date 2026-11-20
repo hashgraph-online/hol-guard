@@ -10,11 +10,12 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard import native_runner_authority as authority
-from codex_plugin_scanner.guard.adapters import copilot as copilot_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_steps import HookOwnershipError
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+from tests import harness_ops_support as harness_support
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -36,7 +37,6 @@ def _build_context(tmp_path: Path) -> HarnessContext:
 
 def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     _write_json(context.home_dir / ".copilot" / "config.json", {"trusted_repositories": ["demo"]})
     _write_json(
         context.home_dir / ".copilot" / "mcp-config.json",
@@ -84,7 +84,7 @@ def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path)
         },
     )
 
-    detection = adapter.detect(context).to_dict()
+    detection = harness_ops.detect("copilot", context).to_dict()
 
     assert detection["harness"] == "copilot"
     assert set(detection["config_paths"]) == {
@@ -115,7 +115,6 @@ def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path)
 
 def test_copilot_detect_tolerates_malformed_json(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     malformed_hook = context.workspace_dir / ".github" / "hooks" / "broken.json"
     malformed_hook.parent.mkdir(parents=True, exist_ok=True)
     malformed_hook.write_text("{broken", encoding="utf-8")
@@ -124,7 +123,7 @@ def test_copilot_detect_tolerates_malformed_json(tmp_path):
         {"servers": {"workspace-tool": {"command": "python", "args": ["server.py"]}}},
     )
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("copilot", context)
 
     assert str(malformed_hook) not in detection.config_paths
     assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
@@ -132,12 +131,11 @@ def test_copilot_detect_tolerates_malformed_json(tmp_path):
 
 def test_copilot_install_recovers_malformed_global_config(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text("{broken", encoding="utf-8")
 
-    manifest = adapter.install(context)
+    manifest = harness_support.install("copilot", context)
     payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert manifest["active"] is True
@@ -147,7 +145,6 @@ def test_copilot_install_recovers_malformed_global_config(tmp_path):
 
 def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     unrelated_hook = context.workspace_dir / ".github" / "hooks" / "notes.json"
     _write_json(unrelated_hook, {"message": "not a hook file"})
     _write_json(
@@ -155,7 +152,7 @@ def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):
         {"servers": {"workspace-tool": {"command": "python", "args": ["server.py"]}}},
     )
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("copilot", context)
 
     assert str(unrelated_hook) not in detection.config_paths
     assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
@@ -163,7 +160,6 @@ def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):
 
 def test_copilot_detect_records_bash_and_powershell_hook_commands_separately(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     _write_json(
         context.workspace_dir / ".github" / "hooks" / "custom.json",
         {
@@ -179,7 +175,7 @@ def test_copilot_detect_records_bash_and_powershell_hook_commands_separately(tmp
         },
     )
 
-    detection = adapter.detect(context).to_dict()
+    detection = harness_ops.detect("copilot", context).to_dict()
     artifacts = {item["artifact_id"]: item for item in detection["artifacts"]}
 
     assert "copilot:project:hook:custom:pretooluse:0:bash" in artifacts
@@ -192,7 +188,6 @@ def test_copilot_detect_records_bash_and_powershell_hook_commands_separately(tmp
 
 def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     original_pythonpath = sys.path[0]
     previous_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = original_pythonpath
@@ -211,8 +206,8 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
     )
 
     try:
-        first_install = adapter.install(context)
-        second_install = adapter.install(context)
+        first_install = harness_support.install("copilot", context)
+        second_install = harness_support.install("copilot", context)
         config_payload = json.loads(config_path.read_text(encoding="utf-8"))
         managed_hook_path = context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json"
         managed_hook_payload = json.loads(managed_hook_path.read_text(encoding="utf-8"))
@@ -230,13 +225,13 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
         assert managed_hooks["preToolUse"][0]["cwd"] == str(context.guard_home)
         assert managed_hooks["preToolUse"][0]["timeoutSec"] == 30
         assert managed_hooks["preToolUse"][0]["env"]["PYTHONPATH"] == original_pythonpath
-        assert "bounded_cli_hook_bridge" in managed_hooks["preToolUse"][0]["bash"]
+        assert " bounded-hook-bridge " in managed_hooks["preToolUse"][0]["bash"]
         assert "copilot" in managed_hooks["preToolUse"][0]["bash"]
         assert "--workspace" not in managed_hooks["preToolUse"][0]["bash"]
-        assert "bounded_cli_hook_bridge" in managed_hooks["preToolUse"][0]["powershell"]
-        assert "bounded_cli_hook_bridge" in managed_hooks["userPromptSubmitted"][0]["bash"]
+        assert " bounded-hook-bridge " in managed_hooks["preToolUse"][0]["powershell"]
+        assert " bounded-hook-bridge " in managed_hooks["userPromptSubmitted"][0]["bash"]
         assert managed_hooks["postToolUse"][0]["type"] == "command"
-        assert "bounded_cli_hook_bridge" in managed_hooks["postToolUse"][0]["bash"]
+        assert " bounded-hook-bridge " in managed_hooks["postToolUse"][0]["bash"]
         assert len(managed_workspace_hooks["userPromptSubmitted"]) == 1
         assert len(managed_workspace_hooks["preToolUse"]) == 1
         assert len(managed_workspace_hooks["postToolUse"]) == 1
@@ -251,7 +246,7 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
             },
         }
 
-        uninstall_payload = adapter.uninstall(context)
+        uninstall_payload = harness_support.uninstall("copilot", context)
         restored_payload = json.loads(config_path.read_text(encoding="utf-8"))
 
         assert uninstall_payload["active"] is False
@@ -267,7 +262,6 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
 
 def test_copilot_install_migrates_legacy_workspace_hook_file_out_of_band(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
     managed_hook_path = context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json"
     _write_json(config_path, {"trusted_repositories": ["demo"]})
@@ -279,7 +273,7 @@ def test_copilot_install_migrates_legacy_workspace_hook_file_out_of_band(tmp_pat
         },
     )
 
-    install_payload = adapter.install(context)
+    install_payload = harness_support.install("copilot", context)
     config_payload = json.loads(config_path.read_text(encoding="utf-8"))
     managed_hook_payload = json.loads(managed_hook_path.read_text(encoding="utf-8"))
 
@@ -296,7 +290,6 @@ def test_copilot_install_migrates_legacy_workspace_hook_file_out_of_band(tmp_pat
 
 def test_copilot_install_and_uninstall_preserve_existing_inline_hook_content(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
     _write_json(
         config_path,
@@ -309,14 +302,14 @@ def test_copilot_install_and_uninstall_preserve_existing_inline_hook_content(tmp
         },
     )
 
-    adapter.install(context)
+    harness_support.install("copilot", context)
     managed_payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert managed_payload["hooks"]["sessionStart"] == [{"command": "python banner.py"}]
     assert len(managed_payload["hooks"]["preToolUse"]) == 2
     assert managed_payload["hooks"]["preToolUse"][0] == {"command": "python existing-pre.py"}
 
-    uninstall_payload = adapter.uninstall(context)
+    uninstall_payload = harness_support.uninstall("copilot", context)
     remaining_payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert uninstall_payload["active"] is False
@@ -344,12 +337,11 @@ def _tree(root: Path) -> dict[str, bytes]:
 
 def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monkeypatch: pytest.MonkeyPatch):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     _write_json(
         context.home_dir / ".copilot" / "config.json",
         {"hooks": {"preToolUse": [{"command": "python existing-pre.py"}]}},
     )
-    adapter.install(context)
+    harness_support.install("copilot", context)
     before = _tree(tmp_path)
 
     real = authority.native_runner_authority
@@ -361,18 +353,17 @@ def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monke
 
     monkeypatch.setattr(authority, "native_runner_authority", refused)
 
-    with pytest.raises(copilot_module.CopilotHookOwnershipError, match="hol-guard doctor copilot"):
-        adapter.uninstall(context)
+    with pytest.raises(HookOwnershipError, match="hol-guard doctor copilot"):
+        harness_support.uninstall("copilot", context)
     assert _tree(tmp_path) == before
 
-    with pytest.raises(copilot_module.CopilotHookOwnershipError):
-        adapter.install(context)
+    with pytest.raises(HookOwnershipError):
+        harness_support.install("copilot", context)
     assert _tree(tmp_path) == before
 
 
 def test_copilot_install_and_uninstall_parse_jsonc_config_comments(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
@@ -386,12 +377,12 @@ def test_copilot_install_and_uninstall_parse_jsonc_config_comments(tmp_path):
         encoding="utf-8",
     )
 
-    adapter.install(context)
+    harness_support.install("copilot", context)
     managed_payload = json.loads(config_path.read_text(encoding="utf-8"))
     assert managed_payload["trusted_repositories"] == ["demo"]
     assert len(managed_payload["hooks"]["preToolUse"]) == 2
 
-    uninstall_payload = adapter.uninstall(context)
+    uninstall_payload = harness_support.uninstall("copilot", context)
     remaining_payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert uninstall_payload["active"] is False
@@ -405,7 +396,6 @@ def test_copilot_install_and_uninstall_parse_jsonc_config_comments(tmp_path):
 
 def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
     old_workspace_dir = tmp_path / "old-workspace"
     old_guard_home = tmp_path / "old-guard"
@@ -452,7 +442,7 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
         },
     )
 
-    adapter.install(context)
+    harness_support.install("copilot", context)
     managed_payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert len(managed_payload["hooks"]["preToolUse"]) == 1
@@ -462,7 +452,7 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
     assert "--workspace" not in managed_payload["hooks"]["preToolUse"][0]["bash"]
     assert managed_payload["hooks"]["preToolUse"][0]["cwd"] == str(context.guard_home)
 
-    uninstall_payload = adapter.uninstall(context)
+    uninstall_payload = harness_support.uninstall("copilot", context)
 
     assert uninstall_payload["active"] is False
     assert "hooks" not in json.loads(config_path.read_text(encoding="utf-8"))
@@ -470,7 +460,6 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
 
 def test_copilot_uninstall_keeps_workspace_mcp_config_when_backup_metadata_is_unreadable(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
     original_payload = {
         "mcpServers": {
@@ -482,11 +471,11 @@ def test_copilot_uninstall_keeps_workspace_mcp_config_when_backup_metadata_is_un
     }
     _write_json(workspace_cli_mcp_path, original_payload)
 
-    install_payload = adapter.install(context)
+    install_payload = harness_support.install("copilot", context)
     primary_backup_path = Path(str(install_payload["backup_paths"][0]))
     primary_backup_path.write_text("{\n  bad json\n", encoding="utf-8")
 
-    uninstall_payload = adapter.uninstall(context)
+    uninstall_payload = harness_support.uninstall("copilot", context)
 
     assert uninstall_payload["active"] is False
     assert workspace_cli_mcp_path.exists() is True
@@ -496,7 +485,6 @@ def test_copilot_uninstall_keeps_workspace_mcp_config_when_backup_metadata_is_un
 
 def test_copilot_uninstall_keeps_backup_when_restore_content_is_missing(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
     original_payload = {
         "mcpServers": {
@@ -508,11 +496,11 @@ def test_copilot_uninstall_keeps_backup_when_restore_content_is_missing(tmp_path
     }
     _write_json(workspace_cli_mcp_path, original_payload)
 
-    install_payload = adapter.install(context)
+    install_payload = harness_support.install("copilot", context)
     primary_backup_path = Path(str(install_payload["backup_paths"][0]))
     primary_backup_path.write_text(json.dumps({"existed": True}, indent=2) + "\n", encoding="utf-8")
 
-    uninstall_payload = adapter.uninstall(context)
+    uninstall_payload = harness_support.uninstall("copilot", context)
 
     assert uninstall_payload["active"] is False
     assert workspace_cli_mcp_path.exists() is True
@@ -521,7 +509,6 @@ def test_copilot_uninstall_keeps_backup_when_restore_content_is_missing(tmp_path
 
 def test_copilot_install_manages_workspace_mcp_servers_for_ide(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
     workspace_mcp_path = context.workspace_dir / ".vscode" / "mcp.json"
     _write_json(
@@ -562,7 +549,7 @@ def test_copilot_install_manages_workspace_mcp_servers_for_ide(tmp_path):
         },
     )
 
-    install_payload = adapter.install(context)
+    install_payload = harness_support.install("copilot", context)
     cli_payload = json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8"))
     managed_payload = json.loads(workspace_mcp_path.read_text(encoding="utf-8"))
 
@@ -599,7 +586,6 @@ def test_copilot_install_manages_workspace_mcp_servers_for_ide(tmp_path):
 
 def test_copilot_install_preserves_existing_workspace_mcp_key_schema(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
     _write_json(
         workspace_cli_mcp_path,
@@ -613,7 +599,7 @@ def test_copilot_install_preserves_existing_workspace_mcp_key_schema(tmp_path):
         },
     )
 
-    adapter.install(context)
+    harness_support.install("copilot", context)
     payload = json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8"))
 
     assert "servers" in payload
@@ -623,7 +609,6 @@ def test_copilot_install_preserves_existing_workspace_mcp_key_schema(tmp_path):
 
 def test_copilot_install_keeps_target_specific_workspace_servers_distinct(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
     workspace_mcp_path = context.workspace_dir / ".vscode" / "mcp.json"
     _write_json(
@@ -649,7 +634,7 @@ def test_copilot_install_keeps_target_specific_workspace_servers_distinct(tmp_pa
         },
     )
 
-    install_payload = adapter.install(context)
+    install_payload = harness_support.install("copilot", context)
     cli_payload = json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8"))
     ide_payload = json.loads(workspace_mcp_path.read_text(encoding="utf-8"))
     cli_args = cli_payload["mcpServers"]["danger_lab"]["args"]
@@ -667,7 +652,6 @@ def test_copilot_install_keeps_target_specific_workspace_servers_distinct(tmp_pa
 
 def test_copilot_install_refreshes_existing_guard_proxy_entries_to_current_interpreter(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     original_pythonpath = sys.path[0]
     previous_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = original_pythonpath
@@ -705,7 +689,7 @@ def test_copilot_install_refreshes_existing_guard_proxy_entries_to_current_inter
     )
 
     try:
-        adapter.install(context)
+        harness_support.install("copilot", context)
         cli_payload = json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8"))
 
         assert cli_payload["mcpServers"]["danger_lab"]["command"] == sys.executable
@@ -725,7 +709,6 @@ def test_copilot_install_refreshes_existing_guard_proxy_entries_to_current_inter
 
 def test_copilot_install_refreshes_list_form_guard_proxy_entries_without_losing_args(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
     _write_json(
         workspace_cli_mcp_path,
@@ -758,7 +741,7 @@ def test_copilot_install_refreshes_list_form_guard_proxy_entries_without_losing_
         },
     )
 
-    adapter.install(context)
+    harness_support.install("copilot", context)
     cli_payload = json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8"))
 
     assert cli_payload["mcpServers"]["danger_lab"]["command"] == sys.executable
@@ -772,7 +755,6 @@ def test_copilot_install_refreshes_list_form_guard_proxy_entries_without_losing_
 
 def test_copilot_detect_ignores_guard_managed_proxy_entries(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     _write_json(
         context.workspace_dir / ".mcp.json",
         {
@@ -794,14 +776,13 @@ def test_copilot_detect_ignores_guard_managed_proxy_entries(tmp_path):
         },
     )
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("copilot", context)
 
     assert detection.artifacts == ()
 
 
 def test_copilot_detect_marks_local_cli_install_as_available_when_not_on_path(tmp_path, monkeypatch):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     local_binary = tmp_path / "actual-home" / ".local" / "copilot-cli" / "copilot"
     local_binary.parent.mkdir(parents=True, exist_ok=True)
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -810,7 +791,7 @@ def test_copilot_detect_marks_local_cli_install_as_available_when_not_on_path(tm
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "actual-home")
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("copilot", context)
 
     assert detection.command_available is True
     assert detection.installed is True
@@ -818,7 +799,6 @@ def test_copilot_detect_marks_local_cli_install_as_available_when_not_on_path(tm
 
 def test_copilot_detect_ignores_non_executable_local_cli_candidate_when_not_on_path(tmp_path, monkeypatch):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     local_binary = tmp_path / "actual-home" / ".local" / "copilot-cli" / "copilot"
     local_binary.parent.mkdir(parents=True, exist_ok=True)
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -827,7 +807,7 @@ def test_copilot_detect_ignores_non_executable_local_cli_candidate_when_not_on_p
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "actual-home")
 
-    detection = adapter.detect(context)
+    detection = harness_ops.detect("copilot", context)
 
     assert detection.command_available is False
     assert detection.installed is False
@@ -835,7 +815,6 @@ def test_copilot_detect_ignores_non_executable_local_cli_candidate_when_not_on_p
 
 def test_copilot_launch_command_uses_local_cli_install_when_not_on_path(tmp_path, monkeypatch):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     local_binary = tmp_path / "actual-home" / ".local" / "copilot-cli" / "copilot"
     local_binary.parent.mkdir(parents=True, exist_ok=True)
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -844,7 +823,7 @@ def test_copilot_launch_command_uses_local_cli_install_when_not_on_path(tmp_path
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "actual-home")
 
-    command = adapter.launch_command(context, ["--help"])
+    command = harness_ops.launch_command("copilot", context, ["--help"])
 
     assert command[0] == str(local_binary)
     assert command[1:] == ["--help"]
@@ -857,7 +836,6 @@ def test_copilot_uninstall_restores_install_time_workspace_targets_when_scope_ch
         workspace_dir=None,
         guard_home=workspace_context.guard_home,
     )
-    adapter = CopilotHarnessAdapter()
     workspace_cli_mcp_path = workspace_context.workspace_dir / ".mcp.json"
     workspace_mcp_path = workspace_context.workspace_dir / ".vscode" / "mcp.json"
     cli_payload = {
@@ -879,8 +857,8 @@ def test_copilot_uninstall_restores_install_time_workspace_targets_when_scope_ch
     _write_json(workspace_cli_mcp_path, cli_payload)
     _write_json(workspace_mcp_path, ide_payload)
 
-    install_payload = adapter.install(workspace_context)
-    uninstall_payload = adapter.uninstall(global_context)
+    install_payload = harness_support.install("copilot", workspace_context)
+    uninstall_payload = harness_support.uninstall("copilot", global_context)
 
     assert install_payload["active"] is True
     assert uninstall_payload["active"] is False
@@ -903,11 +881,10 @@ def test_copilot_uninstall_keeps_shared_cli_hook_while_other_workspace_remains_i
         workspace_dir=second_workspace,
         guard_home=first_context.guard_home,
     )
-    adapter = CopilotHarnessAdapter()
 
-    first_install = adapter.install(first_context)
-    second_install = adapter.install(second_context)
-    first_uninstall = adapter.uninstall(first_context)
+    first_install = harness_support.install("copilot", first_context)
+    second_install = harness_support.install("copilot", second_context)
+    first_uninstall = harness_support.uninstall("copilot", first_context)
 
     config_payload = json.loads((first_context.home_dir / ".copilot" / "config.json").read_text(encoding="utf-8"))
     managed_hook_path = second_context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json"
@@ -923,13 +900,12 @@ def test_copilot_uninstall_keeps_shared_cli_hook_while_other_workspace_remains_i
 
 def test_copilot_launch_command_adds_workspace_mcp_config_for_cli_sessions(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     _write_json(
         context.workspace_dir / ".mcp.json",
         {"mcpServers": {"danger_lab": {"command": "python3", "args": ["server.py"]}}},
     )
 
-    command = adapter.launch_command(context, ["--help"])
+    command = harness_ops.launch_command("copilot", context, ["--help"])
 
     assert command[0].endswith("copilot")
     assert command[1:] == [
@@ -941,13 +917,12 @@ def test_copilot_launch_command_adds_workspace_mcp_config_for_cli_sessions(tmp_p
 
 def test_copilot_launch_command_skips_workspace_override_when_cli_mcp_config_is_missing(tmp_path):
     context = _build_context(tmp_path)
-    adapter = CopilotHarnessAdapter()
     _write_json(
         context.workspace_dir / ".vscode" / "mcp.json",
         {"servers": {"danger_lab": {"command": "python3", "args": ["server.py"]}}},
     )
 
-    command = adapter.launch_command(context, ["--help"])
+    command = harness_ops.launch_command("copilot", context, ["--help"])
 
     assert command[0].endswith("copilot")
     assert command[1:] == ["--help"]
@@ -955,12 +930,11 @@ def test_copilot_launch_command_skips_workspace_override_when_cli_mcp_config_is_
 
 def test_corrupt_authenticated_backup_fails_before_target_mutation(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CopilotHarnessAdapter()
     target = context.home_dir / ".copilot" / "mcp-config.json"
     original = {"mcpServers": {"user": {"command": "user-command"}}}
     _write_json(target, original)
 
-    install_payload = adapter.install(context)
+    install_payload = harness_support.install("copilot", context)
     backup_path = Path(str(install_payload["backup_path"]))
     state_path = Path(str(install_payload["state_path"]))
     target_before = target.read_bytes()
@@ -968,7 +942,7 @@ def test_corrupt_authenticated_backup_fails_before_target_mutation(tmp_path: Pat
     backup_path.write_text("{corrupt\n", encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="backup"):
-        adapter.install(context)
+        harness_support.install("copilot", context)
 
     assert target.read_bytes() == target_before
     assert backup_path.read_text(encoding="utf-8") == "{corrupt\n"

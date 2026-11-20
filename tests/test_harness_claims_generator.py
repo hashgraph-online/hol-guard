@@ -110,3 +110,38 @@ def test_a_proof_claim_without_an_expiry_fails_the_release_check() -> None:
 def test_a_malformed_release_time_is_refused() -> None:
     assert _generator().main(["--check", "--as-of", "2026-11-14"]) == 2
     assert _generator().main(["--check", "--as-of", "2026-02-30T00:00:00Z"]) == 2
+
+
+def test_codex_file_writes_are_published_as_their_own_rows() -> None:
+    published = json.loads(_generator().JSON_OUTPUT.read_text(encoding="utf-8"))
+    codex = [row for row in published["claims"] if row["harness"] == "codex" and row["event"] == "PreToolUse"]
+    tools = [tool for row in codex for tool in row["tools"]]
+
+    assert {"apply_patch", "Write", "Edit", "MultiEdit"} <= set(tools)
+    assert len(tools) == len(set(tools))
+    assert all(row["state"] == "configured" for row in codex)
+
+
+def test_a_row_split_by_tool_names_its_tools_in_the_table_and_expiry_label() -> None:
+    generator = _generator()
+    contract = _contract({"state": "live_block_proven", "expires_at": "2026-01-01T00:00:00Z"})
+    contract["contracts"][0]["capability_events"][0]["tools"] = ["apply_patch"]
+
+    assert "| `PreToolUse`: `apply_patch` |" in generator.render_markdown(contract)
+    assert generator.expired(contract, "2026-06-01T00:00:00Z") == [
+        "codex PreToolUse [apply_patch] (native_hook) expired 2026-01-01T00:00:00Z"
+    ]
+
+
+def test_each_cursor_surface_has_its_own_row_and_only_the_editor_enforces() -> None:
+    published = json.loads(_generator().JSON_OUTPUT.read_text(encoding="utf-8"))
+    cursor = [row for row in published["claims"] if row["harness"] == "cursor"]
+    surfaces = {row["surface"] for row in cursor}
+
+    assert {"editor", "cli", "cloud-agent", "terminal"} <= surfaces
+    for row in cursor:
+        if row["surface"] != "editor":
+            assert row["state"] == "unsupported"
+            assert row["mode"] == "unsupported"
+            assert row["known_blind_spots"]
+    assert any(row["surface"] == "editor" and row["failure_behavior"] == "fail_closed" for row in cursor)

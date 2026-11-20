@@ -27,7 +27,7 @@ fn fixture() -> Fixture {
     let home = root.join("home");
     let project = home.join("project");
     for file in [
-        "project/app/registry/[slug]/page.tsx",
+        "project/app/items/[slug]/page.tsx",
         "project/app/[id]/settings.ts",
         "project/app/routes/posts.$slug.tsx",
         "project/CLAUDE.md",
@@ -75,7 +75,7 @@ fn host_write(f: &Fixture, harness: &str, path: &str) -> guard_contracts::PreToo
 #[test]
 fn dynamic_route_files_are_literal_workspace_writes() {
     let f = fixture();
-    let existing = f.project.join("app/registry/[slug]/page.tsx");
+    let existing = f.project.join("app/items/[slug]/page.tsx");
     let new_subtree = f
         .project
         .join("app/api/guard/extensions/[id]/promotion/local-distribution/route.ts");
@@ -149,7 +149,7 @@ fn multi_edit_is_a_write_with_the_write_screens() {
     let f = fixture();
     for harness in ["claude-code", "zcode"] {
         for path in [
-            "app/registry/[slug]/page.tsx",
+            "app/items/[slug]/page.tsx",
             "app/routes/posts.$slug.tsx",
             "app/[id]/settings.ts",
         ] {

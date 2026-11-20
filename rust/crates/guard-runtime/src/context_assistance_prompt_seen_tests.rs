@@ -85,3 +85,31 @@ fn a_session_keeps_its_hint_after_excerpt_eviction() {
     );
     assert_eq!(kept.len(), MAX_SPANS);
 }
+
+/// Claude Code compacted or cleared the session: its agent holds a summary,
+/// not the code, so every span of that session in every project goes.
+#[test]
+fn a_restarted_session_forgets_what_it_was_shown() {
+    let here = session("seen-restarted");
+    let there = Session {
+        root: PathBuf::from("/seen-tests-other"),
+        ..session("seen-restarted")
+    };
+    let other_app = Session {
+        app: "claude-code".into(),
+        ..session("seen-restarted")
+    };
+    let other = session("seen-restarted-other");
+    for kept in [&here, &there, &other_app, &other] {
+        remember(kept, &[span("src/a.py", 1, 9), hint()]);
+    }
+    restarted("codex", "seen-restarted");
+    assert!(earlier(&here).is_empty());
+    assert!(earlier(&there).is_empty(), "every project of the session");
+    assert_eq!(
+        earlier(&other_app).len(),
+        2,
+        "another app's session of that id"
+    );
+    assert_eq!(earlier(&other).len(), 2, "another session");
+}

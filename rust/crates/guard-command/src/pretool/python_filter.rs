@@ -169,7 +169,8 @@ fn path_outside_workspace(executable: &str, cwd: Option<&str>) -> bool {
 }
 
 /// No variable the interpreter reads can add a module path or startup code:
-/// none is inherited, none prefixes this step, and no other step names one.
+/// none is inherited, none prefixes this step, and no other step names one
+/// beyond a lookup or version probe of the interpreter.
 fn environment_settled(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -184,7 +185,28 @@ fn environment_settled(
             .segments
             .iter()
             .filter(|other| other.span != segment.span)
-            .all(|other| !other.text.to_ascii_uppercase().contains("PYTHON"))
+            .all(|other| {
+                !other.text.to_ascii_uppercase().contains("PYTHON") || names_python_inertly(other)
+            })
+}
+
+/// A step that names Python without being able to bind a variable for the
+/// shell: a lookup such as `which python3`, `command -v python3` or
+/// `type python3`, or a version probe such as `python3 --version`. A lookup
+/// only prints where a name resolves and a probe runs as its own process, so
+/// neither can set `PYTHONPATH` for the filter that follows. The step must
+/// carry no prefix assignment, wrapper, `=`, `$` or backtick, so
+/// `export PYTHONPATH=...` and `echo $PYTHONPATH` still count.
+fn names_python_inertly(other: &crate::CommandSegmentV1) -> bool {
+    // A parser-approved trailing stderr merge changes no shell variables.
+    let normalized = super::segment_proof::without_stderr_merge(other);
+    let other = normalized.as_ref().unwrap_or(other);
+    let basename = super::executable_basename(other.executable.as_deref().unwrap_or(""));
+    other.environment_names.is_empty()
+        && other.wrapper_chain.is_empty()
+        && !other.text.contains(['=', '$', '`'])
+        && (super::lookup_reads::safe_path_lookup(basename, &other.arguments)
+            || super::version_probes::lone_probe_segment(other))
 }
 
 /// Whether an inherited environment leaves the interpreter's module path and
@@ -225,11 +247,14 @@ fn working_directory_clean(
     };
     // The interpreter may write once it runs, but nothing it writes exists
     // before it looks up a module; every other step must create nothing,
-    // and only a leading `cd`, already folded into `cwd`, may move.
+    // and only a leading `cd`, already folded into `cwd`, may move. A lone
+    // version probe such as `python3 --version` writes nothing unless it is
+    // redirected.
     let peers_settled = model.segments.iter().enumerate().all(|(index, other)| {
         let basename = super::executable_basename(other.executable.as_deref().unwrap_or(""));
         other.span == segment.span
             || ((super::search::grep::creates_nothing(other)
+                || quiet_version_probe(other)
                 || peer_proven_read_only(model, other, basename, context))
                 && (index == 0 || !matches!(basename, "cd" | "pushd" | "popd")))
     });
@@ -255,6 +280,57 @@ fn working_directory_clean(
         if names::shadows_standard_library(stem) && importable(&entry.path(), &name) {
             return false;
         }
+    }
+    true
+}
+
+/// A lone version probe such as `python3 --version` that writes nothing:
+/// its output goes to the terminal or `/dev/null`, never to a file such as
+/// `json.py` the filter would import, and no wrapper or `PATH` change picks
+/// another program. The same screen `creates_nothing` applies.
+fn quiet_version_probe(other: &crate::CommandSegmentV1) -> bool {
+    // Normalize only the parser-verified stderr merge. Check the original
+    // text for file redirects so a write to json.py cannot become an allow.
+    let normalized = super::segment_proof::without_stderr_merge(other);
+    let probe = normalized.as_ref().unwrap_or(other);
+    other.wrapper_chain.is_empty()
+        && !other.path_overridden
+        && redirects_only_to_null_or_stdout(&other.text)
+        && super::version_probes::lone_probe_segment(probe)
+}
+
+/// Accept the spaced and compact shell spellings of a discard redirect,
+/// but never strip a substring from a different filename: `>/dev/nulljson.py`
+/// is a file write, not a redirect to the null device. A Python version
+/// probe followed by such a write can shadow an imported module.
+fn redirects_only_to_null_or_stdout(text: &str) -> bool {
+    let mut rest = text;
+    while let Some(position) = rest.find('>') {
+        let before = &rest[..position];
+        let tail = rest[position + 1..].trim_start_matches([' ', '\t']);
+        let suffix = if let Some(suffix) = tail.strip_prefix("/dev/null") {
+            suffix
+        } else if before.ends_with('2')
+            && before[..before.len() - 1]
+                .chars()
+                .last()
+                .is_some_and(char::is_whitespace)
+        {
+            let Some(suffix) = tail.strip_prefix("&1") else {
+                return false;
+            };
+            suffix
+        } else {
+            return false;
+        };
+        if suffix
+            .chars()
+            .next()
+            .is_some_and(|next| !next.is_whitespace())
+        {
+            return false;
+        }
+        rest = suffix;
     }
     true
 }

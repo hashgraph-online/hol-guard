@@ -17,10 +17,10 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-const CONTRACT: &str = include_str!(
+pub(crate) const CONTRACT: &str = include_str!(
     "../../../../src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
 );
-const SCHEMA: &str = "hol-guard.harness-protection-contracts.v1";
+pub(crate) const SCHEMA: &str = "hol-guard.harness-protection-contracts.v1";
 const PAYLOAD_SCHEMA: &str = "hol-guard.harness-protection-contract-check.v1";
 
 const SURFACES: [&str; 6] = [
@@ -67,6 +67,11 @@ struct Contract {
 #[derive(Deserialize)]
 struct Event {
     event: String,
+    /// Host tool names this row covers, when one event serves several kinds
+    /// of action. A trailing `*` stands for any suffix. Empty means every
+    /// tool the event's matcher sends.
+    #[serde(default)]
+    tools: Vec<String>,
     transport: String,
     mode: String,
     #[serde(default)]
@@ -257,6 +262,16 @@ fn check_claim(claim: &Claim, problems: &mut Vec<String>) {
 /// Problems with one capability row. Empty when the row is well formed.
 fn check_event(event: &Event) -> Vec<String> {
     let mut problems = Vec::new();
+    let mut named = std::collections::BTreeSet::new();
+    for tool in &event.tools {
+        let pattern = tool.strip_suffix('*').unwrap_or(tool);
+        if pattern.is_empty() || pattern.contains(['*', ' ', '|']) {
+            problems.push(format!("tool {tool:?} is not a tool name or name prefix"));
+        }
+        if !named.insert(tool) {
+            problems.push(format!("tool {tool:?} is listed twice"));
+        }
+    }
     match event.surface.as_deref() {
         None => problems.push("missing surface".to_owned()),
         Some(surface) if !SURFACES.contains(&surface) => {
@@ -312,6 +327,17 @@ fn check_event(event: &Event) -> Vec<String> {
     problems
 }
 
+/// Whether two tool entries can name the same tool. A trailing `*` matches
+/// any suffix, so `mcp__*` overlaps `mcp__server__tool` and `mcp__s*`.
+fn tools_overlap(a: &str, b: &str) -> bool {
+    match (a.strip_suffix('*'), b.strip_suffix('*')) {
+        (Some(p), Some(q)) => p.starts_with(q) || q.starts_with(p),
+        (Some(p), None) => b.starts_with(p),
+        (None, Some(q)) => a.starts_with(q),
+        (None, None) => a == b,
+    }
+}
+
 fn check_document(text: &str) -> (usize, Vec<String>) {
     let document: Document = match serde_json::from_str(text) {
         Ok(document) => document,
@@ -327,10 +353,31 @@ fn check_document(text: &str) -> (usize, Vec<String>) {
         for event in &contract.capability_events {
             rows += 1;
             if !seen.insert((&event.event, &event.transport, &event.surface)) {
-                problems.push(format!(
-                    "{} {} ({}): declared twice for one surface",
-                    contract.harness, event.event, event.transport
-                ));
+                // Rows for one event and surface may split it by tool, but
+                // only when each names its tools and no tool falls in two
+                // rows, counting `mcp__*` as covering every `mcp__` name.
+                let split: Vec<&Event> = contract
+                    .capability_events
+                    .iter()
+                    .filter(|other| {
+                        (&other.event, &other.transport, &other.surface)
+                            == (&event.event, &event.transport, &event.surface)
+                    })
+                    .collect();
+                let disjoint = split.iter().all(|row| !row.tools.is_empty())
+                    && split.iter().enumerate().all(|(index, row)| {
+                        split[index + 1..].iter().all(|other| {
+                            !row.tools.iter().any(|tool| {
+                                other.tools.iter().any(|theirs| tools_overlap(tool, theirs))
+                            })
+                        })
+                    });
+                if !disjoint {
+                    problems.push(format!(
+                        "{} {} ({}): declared twice for one surface",
+                        contract.harness, event.event, event.transport
+                    ));
+                }
             }
             problems.extend(check_event(event).into_iter().map(|problem| {
                 format!(
@@ -376,6 +423,7 @@ fn claims(text: &str, now: Option<&str>) -> Vec<Value> {
             rows.push(json!({
                 "harness": contract.harness,
                 "event": event.event,
+                "tools": event.tools,
                 "transport": event.transport,
                 "mode": event.mode,
                 "surface": event.surface,
@@ -391,6 +439,25 @@ fn claims(text: &str, now: Option<&str>) -> Vec<Value> {
     rows
 }
 
+/// `harness event [tools] (transport)`, naming the tools only when the row
+/// splits its event by tool.
+fn row_label(row: &Value) -> String {
+    let tools: Vec<&str> = row["tools"]
+        .as_array()
+        .map(|tools| tools.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let tools = if tools.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", tools.join(", "))
+    };
+    format!(
+        "{} {}{tools} ({})",
+        row["harness"], row["event"], row["transport"]
+    )
+    .replace('"', "")
+}
+
 /// The check result and claim rows for the contract built into this runtime.
 /// With `now`, evidence that has expired by then is listed and shown `stale`.
 pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str> {
@@ -402,9 +469,7 @@ pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str>
     let expired: Vec<String> = claims
         .iter()
         .filter(|row| row["effective_state"] == "stale" && row["state"] != "stale")
-        .map(|row| {
-            format!("{} {} ({})", row["harness"], row["event"], row["transport"]).replace('"', "")
-        })
+        .map(row_label)
         .collect();
     Ok(json!({
         "schema": PAYLOAD_SCHEMA,
@@ -423,6 +488,10 @@ pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str>
 pub(crate) fn check_payload() -> Value {
     check_payload_at(None).unwrap_or(Value::Null)
 }
+
+#[path = "harness_claim_promotion.rs"]
+mod promotion;
+pub(crate) use promotion::promotion_payload;
 
 #[cfg(test)]
 #[path = "harness_protection_contract_tests.rs"]

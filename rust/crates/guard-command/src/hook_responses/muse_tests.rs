@@ -233,3 +233,57 @@ fn an_event_name_is_read_however_the_harness_spells_it() {
         (None, 0)
     );
 }
+
+#[test]
+fn a_flagged_prompt_sent_on_carries_its_notice() {
+    let notice = "HOL Guard noticed this prompt asks for sensitive local data.";
+    let (document, exit_code) = render(
+        json!({
+            "policy_action": "warn",
+            "decision": "allow",
+            "reason": notice,
+            "reason_code": "native_sensitive_prompt",
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+        }),
+        "UserPromptSubmit",
+    );
+    assert_eq!(exit_code, 0);
+    assert_eq!(
+        document.expect("document")["hookSpecificOutput"]["additionalContext"],
+        json!(notice)
+    );
+}
+
+#[test]
+fn a_plain_allowed_prompt_stays_silent() {
+    assert_eq!(
+        render(
+            json!({"policy_action": "allow", "reason": "ordinary"}),
+            "UserPromptSubmit"
+        ),
+        (None, 0)
+    );
+    assert_eq!(
+        render(json!({"policy_action": "warn"}), "UserPromptSubmit"),
+        (None, 0)
+    );
+}
+
+#[test]
+fn the_daemons_flagged_prompt_reply_reaches_muse_with_its_notice() {
+    let notice = "HOL Guard noticed this prompt asks for a local .env file.";
+    let result = object(json!({
+        "decision": "allow",
+        "minimum_action": "warn",
+        "reason": notice,
+        "reason_code": "native_prompt_review_notice",
+        "prompt_risk_classes": ["local_env_read"],
+    }));
+    let reply = super::super::prompt("muse", &result);
+    let (document, exit_code) = bridge_response(&reply, "UserPromptSubmit");
+    assert_eq!(exit_code, 0);
+    assert_eq!(
+        document.expect("document")["hookSpecificOutput"]["additionalContext"],
+        json!(notice)
+    );
+}

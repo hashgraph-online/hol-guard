@@ -18,6 +18,14 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value};
 
+#[path = "literal_secret_bare.rs"]
+mod bare;
+#[path = "literal_secret_code.rs"]
+mod code;
+#[path = "literal_secret_letters.rs"]
+mod letters;
+#[path = "literal_secret_oauth.rs"]
+mod oauth;
 #[path = "literal_secret_pairs.rs"]
 mod pairs;
 #[path = "literal_secret_strong.rs"]
@@ -220,6 +228,9 @@ fn holds_spelled_secret(text: &str) -> bool {
             && !NOT_A_SECRET_NAME.is_match(&found["k"])
             && value.is_some_and(|value| looks_random(value.as_str()))
     }) || strong::holds_proven_secret(text)
+        || oauth::holds_oauth_credential(text)
+        || bare::holds_bare_secret(text)
+        || code::holds_code_secret(text)
 }
 
 /// The rows a patch adds: a Codex `apply_patch` body in `command`, or an Oh
@@ -406,7 +417,18 @@ pub(super) fn review_command(
     request: &crate::CommandModelRequestV1,
     decision: super::PreToolDecisionV1,
 ) -> super::PreToolDecisionV1 {
-    if decision.minimum_action != "allow" || !holds_literal_secret(&request.command) {
+    if decision.minimum_action != "allow" {
+        return decision;
+    }
+    if super::literal_ssn_echo::echoes_ssn(&request.command) {
+        return super::pretool_decision(
+            decision.command_model,
+            "review",
+            "native_command_review_required",
+            "This command prints what looks like a real Social Security number. Once it runs, the number is in the transcript and the shell history.",
+        );
+    }
+    if !holds_literal_secret(&request.command) {
         return decision;
     }
     super::pretool_decision(

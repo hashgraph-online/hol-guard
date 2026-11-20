@@ -112,6 +112,14 @@ def test_a_saved_answer_carries_its_plan(monkeypatch: pytest.MonkeyPatch) -> Non
     assert call["payload"] == expected
 
 
+def test_a_saved_answer_may_carry_the_pending_identifier(monkeypatch: pytest.MonkeyPatch) -> None:
+    case = next(case for case in _CASES if case["name"] == "answers-keyed-allow-once")
+
+    settled, _call = _settle(monkeypatch, {**_SAVE, "pending_id": "pending-1"}, case["payload"])
+
+    assert settled == {**_SAVE, "pending_id": "pending-1"}
+
+
 def test_other_tools_never_reach_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
     case = next(case for case in _CASES if case["name"] == "answers-keyed-allow-once")
     calls: list[str] = []

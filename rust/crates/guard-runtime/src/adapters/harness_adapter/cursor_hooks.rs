@@ -194,7 +194,12 @@ pub(super) fn merge(
         }
         hooks.push((event.clone(), PyVal::List(merged)));
     }
-    let mut doc = Doc::default();
+    // Keep the user's other top-level keys in a nested config; a legacy flat
+    // config holds only events at the top level, so it has none to keep.
+    let mut doc = match nested {
+        Some(_) => Doc(payload.to_vec()),
+        None => Doc::default(),
+    };
     doc.set("version", version).set("hooks", PyVal::Dict(hooks));
     Ok(doc.value())
 }
@@ -304,7 +309,12 @@ pub(super) fn without_managed(
     if !managed {
         return Ok((Some(payload.clone()), false));
     }
-    if !others {
+    // Delete the file only when Guard's hooks were all it held. Any other
+    // top-level key is the user's and keeps the file, with an empty `hooks`.
+    let user_keys = top
+        .iter()
+        .any(|(key, _)| key != "hooks" && key != "version");
+    if !others && !user_keys {
         return Ok((None, true));
     }
     let mut doc = Doc(top.clone());

@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import lease_next_job
+from tests.support.command_lease_transport import lease_over
 
 
 def test_lease_hands_both_routes_policy_revision_to_the_observer() -> None:
@@ -29,8 +30,7 @@ def test_lease_hands_both_routes_policy_revision_to_the_observer() -> None:
         lease_next_job(
             operations=(EXACT_CLOUD_REVIEW_OPERATION, "guard.app.status"),
             wait_ms=0,
-            exact_request=lambda _options: exact_response,
-            queue_request=lambda _options: queue_response,
+            lease=lease_over(lambda _body: exact_response, lambda _body: queue_response),
             observe_response=seen.append,
         )
         is None

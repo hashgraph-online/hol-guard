@@ -10,7 +10,8 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
+from codex_plugin_scanner.guard.approval_handoff_link import handoff_code_is_valid
 from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
     attach_primary_approval_link,
@@ -21,6 +22,7 @@ from codex_plugin_scanner.guard.approvals import (
 )
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _preferred_approval_review_url
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -667,6 +669,38 @@ class TestApprovalsOpenLaunch:
         assert opened == []
         assert output["opened"] is False
         assert output["approval_url"] == f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}"
+        assert "signed_approval_url" not in output
+        assert "guard-token" not in json.dumps(output)
+
+    def test_no_open_gives_an_agent_the_short_signed_link(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+        monkeypatch.setattr(approval_hook_copy_module, "load_guard_daemon_auth_token", lambda _home: "daemon-secret")
+        monkeypatch.setattr(approval_commands_module, "open_browser_url", lambda url: pytest.fail(url))
+        monkeypatch.setattr(approval_commands_module, "open_app_url", lambda url: pytest.fail(url))
+
+        rc = main(["guard", "approvals", "open", _QUEUE_REQUEST_ID, "--home", str(home_dir), "--json", "--no-open"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        signed = str(output["signed_approval_url"])
+        base = f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}/"
+        assert signed.startswith(base)
+        assert handoff_code_is_valid(request_id=_QUEUE_REQUEST_ID, code=signed[len(base) :], auth_token="daemon-secret")
+        assert "guard-token" not in json.dumps(output)
+        assert "daemon-secret" not in json.dumps(output)
+
+    def test_no_open_text_output_leads_with_the_signed_link(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+        monkeypatch.setattr(approval_hook_copy_module, "load_guard_daemon_auth_token", lambda _home: "daemon-secret")
+
+        rc = main(["guard", "approvals", "open", _QUEUE_REQUEST_ID, "--home", str(home_dir), "--no-open"])
+        text = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Signed link" in text
+        assert "Share this one" in text
 
 
 class TestApprovalsAutoOpenCommand:

@@ -11,8 +11,14 @@ use super::*;
 #[path = "routine_local_runner_lockfile_tests.rs"]
 mod lockfile_tests;
 
+#[path = "routine_local_runner_yarn_lockfile_tests.rs"]
+mod yarn_lockfile_tests;
+
 #[path = "routine_local_runner_importer_tests.rs"]
 mod importer_tests;
+
+#[path = "routine_local_runner_local_only_tests.rs"]
+mod local_only_tests;
 
 const INSTALLED_VERSION: &str = "9.1.0";
 const DECLARED_VERSION: &str = "^9.0.0";

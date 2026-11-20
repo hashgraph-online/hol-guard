@@ -44,8 +44,9 @@ pub(super) fn settle(
     harness: &str,
     event_name: &str,
     result: &Value,
+    step: &compound::Step<'_>,
 ) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
-    settle_within(envelope, harness, event_name, result, RULE_WAIT)
+    settle_within(envelope, harness, event_name, result, step, RULE_WAIT)
 }
 
 fn settle_within(
@@ -53,6 +54,7 @@ fn settle_within(
     harness: &str,
     event_name: &str,
     result: &Value,
+    step: &compound::Step<'_>,
     wait: Duration,
 ) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
     let (Some(rules), "PreToolUse", Some(result)) = (
@@ -91,26 +93,42 @@ fn settle_within(
             &envelope.source.guard_home,
         )
     {
-        match checked(envelope, result, "review", wait) {
-            Some(RuleVerdict::Blocked(name)) => (true, custom_block(harness, result, &name, false)),
-            Some(RuleVerdict::Allowed) => {
-                let mut allowed = result.clone();
-                for key in ["decision", "minimum_action", "policy_action"] {
-                    allowed.insert(key.to_owned(), json!("allow"));
-                }
-                // An allow too large to render leaves the review standing.
-                let Some(response) =
-                    crate::hook_direct::saved_decision::render(harness, &allowed, "accepted")
-                else {
-                    return Ok(None);
-                };
-                (false, Some(response))
+        let started = std::time::Instant::now();
+        let allowed = match checked(envelope, result, "review", wait) {
+            Some(RuleVerdict::Blocked(name)) => {
+                return finish(true, custom_block(harness, result, &name, false));
             }
-            _ => return Ok(None),
+            Some(RuleVerdict::Allowed) => true,
+            // The single launch read found no script it lifts: a chained
+            // command's steps are judged alone, within what is left of the
+            // wait. A read that did not answer in time leaves no time.
+            Some(_) => compound::lifts(envelope, result, step, started + wait),
+            None => false,
+        };
+        if !allowed {
+            return Ok(None);
         }
+        let mut allowed = result.clone();
+        for key in ["decision", "minimum_action", "policy_action"] {
+            allowed.insert(key.to_owned(), json!("allow"));
+        }
+        // An allow too large to render leaves the review standing.
+        let Some(response) =
+            crate::hook_direct::saved_decision::render(harness, &allowed, "accepted")
+        else {
+            return Ok(None);
+        };
+        (false, Some(response))
     } else {
         return Ok(None);
     };
+    finish(blocked, harness_response)
+}
+
+fn finish(
+    blocked: bool,
+    harness_response: Option<Value>,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
     let harness_response =
         harness_response.ok_or_else(|| "native_hook_edge_response_invalid".to_owned())?;
     Ok(Some(GuardHookLocalCliRuleV1 {
@@ -237,6 +255,9 @@ fn checked(
         .ok()?;
     receiver.recv_timeout(wait).ok()
 }
+
+#[path = "edge_local_cli_compound.rs"]
+mod compound;
 
 #[cfg(test)]
 #[path = "edge_local_cli_tests.rs"]

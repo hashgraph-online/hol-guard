@@ -6,6 +6,11 @@
     {
       "harness": "codex",
       "event": "PreToolUse",
+      "tools": [
+        "Bash",
+        "Read",
+        "mcp__*"
+      ],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -20,7 +25,50 @@
     },
     {
       "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "apply_patch"
+      ],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Edits the model applies without an apply_patch tool call are not visible to Guard.",
+        "PostToolUse does not match apply_patch, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "Write",
+        "Edit",
+        "MultiEdit"
+      ],
+      "transport": "native_hook",
+      "mode": "blocking",
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them.",
+        "PostToolUse does not match these tools, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "codex",
       "event": "PermissionRequest",
+      "tools": [],
       "transport": "native_hook",
       "mode": "approval",
       "surface": "foreground",
@@ -36,6 +84,7 @@
     {
       "harness": "codex",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "native_hook",
       "mode": "screening",
       "surface": "foreground",
@@ -51,6 +100,7 @@
     {
       "harness": "codex",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -66,6 +116,7 @@
     {
       "harness": "claude-code",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -74,13 +125,15 @@
       "expires_at": null,
       "limitations": [],
       "known_blind_spots": [
-        "Background sessions without an active terminal may not surface hook events."
+        "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+        "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
       ],
       "evidence": {}
     },
     {
       "harness": "claude-code",
       "event": "PermissionRequest",
+      "tools": [],
       "transport": "native_hook",
       "mode": "approval",
       "surface": "foreground",
@@ -96,6 +149,7 @@
     {
       "harness": "claude-code",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -111,6 +165,7 @@
     {
       "harness": "claude-code",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "native_hook",
       "mode": "screening",
       "surface": "foreground",
@@ -126,6 +181,7 @@
     {
       "harness": "opencode",
       "event": "shell",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -141,6 +197,7 @@
     {
       "harness": "opencode",
       "event": "mcp_tool",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -156,6 +213,7 @@
     {
       "harness": "opencode",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "none",
       "mode": "unsupported",
       "surface": "foreground",
@@ -171,6 +229,7 @@
     {
       "harness": "copilot",
       "event": "shell",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -186,6 +245,7 @@
     {
       "harness": "copilot",
       "event": "prompt",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -201,6 +261,7 @@
     {
       "harness": "cursor",
       "event": "beforeShellExecution",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "editor",
@@ -216,6 +277,7 @@
     {
       "harness": "cursor",
       "event": "beforeMCPExecution",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "editor",
@@ -231,6 +293,7 @@
     {
       "harness": "cursor",
       "event": "beforeReadFile",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "editor",
@@ -246,6 +309,7 @@
     {
       "harness": "cursor",
       "event": "preToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "editor",
@@ -261,6 +325,7 @@
     {
       "harness": "cursor",
       "event": "afterShellExecution",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "editor",
@@ -276,6 +341,7 @@
     {
       "harness": "cursor",
       "event": "afterMCPExecution",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "editor",
@@ -291,6 +357,7 @@
     {
       "harness": "cursor",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "none",
       "mode": "unsupported",
       "surface": "editor",
@@ -304,8 +371,58 @@
       "evidence": {}
     },
     {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "cli",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+        "Running cursor-agent directly instead of the Guard shim skips the launch check."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "cloud-agent",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "terminal",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+      ],
+      "evidence": {}
+    },
+    {
       "harness": "cline",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -322,6 +439,7 @@
     {
       "harness": "cline",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "agent_plugin",
       "mode": "blocking",
       "surface": "foreground",
@@ -337,6 +455,7 @@
     {
       "harness": "cline",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -352,6 +471,7 @@
     {
       "harness": "cline",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "agent_plugin",
       "mode": "replace_or_withhold",
       "surface": "foreground",
@@ -367,6 +487,7 @@
     {
       "harness": "cline",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -382,6 +503,7 @@
     {
       "harness": "cline",
       "event": "TaskStart",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -397,6 +519,7 @@
     {
       "harness": "cline",
       "event": "TaskError",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -412,6 +535,7 @@
     {
       "harness": "cline",
       "event": "SessionShutdown",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -427,6 +551,7 @@
     {
       "harness": "gemini",
       "event": "shell",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -442,6 +567,7 @@
     {
       "harness": "gemini",
       "event": "mcp_tool",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -457,6 +583,7 @@
     {
       "harness": "hermes",
       "event": "shell",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -472,6 +599,7 @@
     {
       "harness": "hermes",
       "event": "mcp_tool",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -487,6 +615,7 @@
     {
       "harness": "hermes",
       "event": "prompt",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -502,6 +631,7 @@
     {
       "harness": "openclaw",
       "event": "mcp_tool",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -517,6 +647,7 @@
     {
       "harness": "antigravity",
       "event": "mcp_tool",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "editor",
@@ -532,6 +663,7 @@
     {
       "harness": "antigravity",
       "event": "prompt",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "editor",
@@ -547,6 +679,7 @@
     {
       "harness": "kimi",
       "event": "shell",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -562,6 +695,7 @@
     {
       "harness": "kimi",
       "event": "prompt",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -577,6 +711,7 @@
     {
       "harness": "grok",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -592,6 +727,7 @@
     {
       "harness": "grok",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -607,6 +743,7 @@
     {
       "harness": "grok",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -622,6 +759,7 @@
     {
       "harness": "pi",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "managed_extension",
       "mode": "screening",
       "surface": "foreground",
@@ -637,6 +775,7 @@
     {
       "harness": "pi",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "managed_extension",
       "mode": "blocking",
       "surface": "foreground",
@@ -652,6 +791,7 @@
     {
       "harness": "pi",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "managed_extension",
       "mode": "replace_or_withhold",
       "surface": "foreground",
@@ -667,6 +807,7 @@
     {
       "harness": "omp",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "managed_extension",
       "mode": "screening",
       "surface": "foreground",
@@ -682,6 +823,7 @@
     {
       "harness": "omp",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "managed_extension",
       "mode": "blocking",
       "surface": "foreground",
@@ -697,6 +839,7 @@
     {
       "harness": "omp",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "managed_extension",
       "mode": "replace_or_withhold",
       "surface": "foreground",
@@ -712,6 +855,7 @@
     {
       "harness": "zcode",
       "event": "shell",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -727,6 +871,7 @@
     {
       "harness": "zcode",
       "event": "prompt",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -742,6 +887,7 @@
     {
       "harness": "zcode",
       "event": "mcp_tool",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -757,6 +903,7 @@
     {
       "harness": "zcode",
       "event": "file_read",
+      "tools": [],
       "transport": "adapter_declared",
       "mode": "declared",
       "surface": "foreground",
@@ -772,6 +919,7 @@
     {
       "harness": "devin",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -787,6 +935,7 @@
     {
       "harness": "devin",
       "event": "PermissionRequest",
+      "tools": [],
       "transport": "native_hook",
       "mode": "approval",
       "surface": "foreground",
@@ -802,6 +951,7 @@
     {
       "harness": "devin",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "native_hook",
       "mode": "screening",
       "surface": "foreground",
@@ -817,6 +967,7 @@
     {
       "harness": "devin",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -832,6 +983,7 @@
     {
       "harness": "muse",
       "event": "PreToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "blocking",
       "surface": "foreground",
@@ -847,6 +999,7 @@
     {
       "harness": "muse",
       "event": "PermissionRequest",
+      "tools": [],
       "transport": "native_hook",
       "mode": "approval",
       "surface": "foreground",
@@ -862,6 +1015,7 @@
     {
       "harness": "muse",
       "event": "UserPromptSubmit",
+      "tools": [],
       "transport": "native_hook",
       "mode": "screening",
       "surface": "foreground",
@@ -877,6 +1031,7 @@
     {
       "harness": "muse",
       "event": "PostToolUse",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -892,6 +1047,7 @@
     {
       "harness": "muse",
       "event": "SessionStart",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -907,6 +1063,7 @@
     {
       "harness": "muse",
       "event": "Stop",
+      "tools": [],
       "transport": "native_hook",
       "mode": "observe",
       "surface": "foreground",
@@ -922,6 +1079,7 @@
     {
       "harness": "paseo",
       "event": "*",
+      "tools": [],
       "transport": "none",
       "mode": "unsupported",
       "surface": "foreground",
@@ -939,6 +1097,11 @@
     {
       "harness": "codex",
       "event": "PreToolUse",
+      "tools": [
+        "Bash",
+        "Read",
+        "mcp__*"
+      ],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -949,7 +1112,42 @@
     },
     {
       "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "apply_patch"
+      ],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Edits the model applies without an apply_patch tool call are not visible to Guard.",
+        "PostToolUse does not match apply_patch, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
+      "event": "PreToolUse",
+      "tools": [
+        "Write",
+        "Edit",
+        "MultiEdit"
+      ],
+      "surface": "foreground",
+      "failure_behavior": "fail_closed",
+      "state": "configured",
+      "known_blind_spots": [
+        "Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them.",
+        "PostToolUse does not match these tools, so the written result is not observed.",
+        "A source declaration does not prove that a live Codex process honored a deny response."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "codex",
       "event": "PermissionRequest",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -961,6 +1159,7 @@
     {
       "harness": "codex",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -972,6 +1171,7 @@
     {
       "harness": "codex",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -983,17 +1183,20 @@
     {
       "harness": "claude-code",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
       "known_blind_spots": [
-        "Background sessions without an active terminal may not surface hook events."
+        "Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected.",
+        "Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session."
       ],
       "limitations": []
     },
     {
       "harness": "claude-code",
       "event": "PermissionRequest",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1005,6 +1208,7 @@
     {
       "harness": "claude-code",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1016,6 +1220,7 @@
     {
       "harness": "claude-code",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_open",
       "state": "configured",
@@ -1027,6 +1232,7 @@
     {
       "harness": "opencode",
       "event": "shell",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1038,6 +1244,7 @@
     {
       "harness": "opencode",
       "event": "mcp_tool",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1049,6 +1256,7 @@
     {
       "harness": "opencode",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1060,6 +1268,7 @@
     {
       "harness": "copilot",
       "event": "shell",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1071,6 +1280,7 @@
     {
       "harness": "copilot",
       "event": "prompt",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1082,6 +1292,7 @@
     {
       "harness": "cursor",
       "event": "beforeShellExecution",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1093,6 +1304,7 @@
     {
       "harness": "cursor",
       "event": "beforeMCPExecution",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1104,6 +1316,7 @@
     {
       "harness": "cursor",
       "event": "beforeReadFile",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1115,6 +1328,7 @@
     {
       "harness": "cursor",
       "event": "preToolUse",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1126,6 +1340,7 @@
     {
       "harness": "cursor",
       "event": "afterShellExecution",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1137,6 +1352,7 @@
     {
       "harness": "cursor",
       "event": "afterMCPExecution",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1148,6 +1364,7 @@
     {
       "harness": "cursor",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1157,8 +1374,46 @@
       "limitations": []
     },
     {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "cli",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+        "Running cursor-agent directly instead of the Guard shim skips the launch check."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "cloud-agent",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "terminal",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+      ],
+      "limitations": []
+    },
+    {
       "harness": "cline",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1171,6 +1426,7 @@
     {
       "harness": "cline",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1182,6 +1438,7 @@
     {
       "harness": "cline",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1193,6 +1450,7 @@
     {
       "harness": "cline",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1204,6 +1462,7 @@
     {
       "harness": "cline",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1215,6 +1474,7 @@
     {
       "harness": "cline",
       "event": "TaskStart",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1226,6 +1486,7 @@
     {
       "harness": "cline",
       "event": "TaskError",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1237,6 +1498,7 @@
     {
       "harness": "cline",
       "event": "SessionShutdown",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1248,6 +1510,7 @@
     {
       "harness": "gemini",
       "event": "shell",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1259,6 +1522,7 @@
     {
       "harness": "gemini",
       "event": "mcp_tool",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1270,6 +1534,7 @@
     {
       "harness": "hermes",
       "event": "shell",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1281,6 +1546,7 @@
     {
       "harness": "hermes",
       "event": "mcp_tool",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1292,6 +1558,7 @@
     {
       "harness": "hermes",
       "event": "prompt",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1303,6 +1570,7 @@
     {
       "harness": "openclaw",
       "event": "mcp_tool",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1314,6 +1582,7 @@
     {
       "harness": "antigravity",
       "event": "mcp_tool",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1325,6 +1594,7 @@
     {
       "harness": "antigravity",
       "event": "prompt",
+      "tools": [],
       "surface": "editor",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1336,6 +1606,7 @@
     {
       "harness": "kimi",
       "event": "shell",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1347,6 +1618,7 @@
     {
       "harness": "kimi",
       "event": "prompt",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1358,6 +1630,7 @@
     {
       "harness": "grok",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1369,6 +1642,7 @@
     {
       "harness": "grok",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_open",
       "state": "configured",
@@ -1380,6 +1654,7 @@
     {
       "harness": "grok",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1391,6 +1666,7 @@
     {
       "harness": "pi",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1402,6 +1678,7 @@
     {
       "harness": "pi",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1413,6 +1690,7 @@
     {
       "harness": "pi",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1424,6 +1702,7 @@
     {
       "harness": "omp",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1435,6 +1714,7 @@
     {
       "harness": "omp",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1446,6 +1726,7 @@
     {
       "harness": "omp",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1457,6 +1738,7 @@
     {
       "harness": "zcode",
       "event": "shell",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1468,6 +1750,7 @@
     {
       "harness": "zcode",
       "event": "prompt",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1479,6 +1762,7 @@
     {
       "harness": "zcode",
       "event": "mcp_tool",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1490,6 +1774,7 @@
     {
       "harness": "zcode",
       "event": "file_read",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",
@@ -1501,6 +1786,7 @@
     {
       "harness": "devin",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1512,6 +1798,7 @@
     {
       "harness": "devin",
       "event": "PermissionRequest",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1523,6 +1810,7 @@
     {
       "harness": "devin",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1534,6 +1822,7 @@
     {
       "harness": "devin",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1545,6 +1834,7 @@
     {
       "harness": "muse",
       "event": "PreToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1556,6 +1846,7 @@
     {
       "harness": "muse",
       "event": "PermissionRequest",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1567,6 +1858,7 @@
     {
       "harness": "muse",
       "event": "UserPromptSubmit",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "fail_closed",
       "state": "configured",
@@ -1578,6 +1870,7 @@
     {
       "harness": "muse",
       "event": "PostToolUse",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1589,6 +1882,7 @@
     {
       "harness": "muse",
       "event": "SessionStart",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1600,6 +1894,7 @@
     {
       "harness": "muse",
       "event": "Stop",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "observe_only",
       "state": "observe_only",
@@ -1611,6 +1906,7 @@
     {
       "harness": "paseo",
       "event": "*",
+      "tools": [],
       "surface": "foreground",
       "failure_behavior": "unsupported",
       "state": "unsupported",

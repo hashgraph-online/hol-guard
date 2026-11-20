@@ -17,7 +17,9 @@ The machine-readable copy is [`generated/harness-claims.v1.json`](generated/harn
 
 | Event | Surface | Transport | Mode | If Guard fails | Claim | Expires |
 | --- | --- | --- | --- | --- | --- | --- |
-| `PreToolUse` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `PreToolUse`: `Bash`, `Read`, `mcp__*` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `PreToolUse`: `apply_patch` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `PreToolUse`: `Write`, `Edit`, `MultiEdit` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
 | `PermissionRequest` | foreground | `native_hook` | `approval` | Stops the action | `configured` | n/a |
 | `UserPromptSubmit` | foreground | `native_hook` | `screening` | Stops the action | `configured` | n/a |
 | `PostToolUse` | foreground | `native_hook` | `observe` | Records only | `observe_only` | n/a |
@@ -57,6 +59,9 @@ The machine-readable copy is [`generated/harness-claims.v1.json`](generated/harn
 | `afterShellExecution` | editor | `native_hook` | `observe` | Records only | `observe_only` | n/a |
 | `afterMCPExecution` | editor | `native_hook` | `observe` | Records only | `observe_only` | n/a |
 | `UserPromptSubmit` | editor | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
+| `*` | cli | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
+| `*` | cloud-agent | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
+| `*` | terminal | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
 
 ## cline
 
@@ -171,11 +176,13 @@ Rows that do not stop the action when Guard fails, and the blind spots each row 
 
 | Harness | Event | Surface | If Guard fails | Blind spots and limitations |
 | --- | --- | --- | --- | --- |
-| codex | `PreToolUse` | foreground | Stops the action | A source declaration does not prove that a live Codex process honored a deny response. |
+| codex | `PreToolUse`: `Bash`, `Read`, `mcp__*` | foreground | Stops the action | A source declaration does not prove that a live Codex process honored a deny response. |
+| codex | `PreToolUse`: `apply_patch` | foreground | Stops the action | Edits the model applies without an apply_patch tool call are not visible to Guard. PostToolUse does not match apply_patch, so the written result is not observed. A source declaration does not prove that a live Codex process honored a deny response. |
+| codex | `PreToolUse`: `Write`, `Edit`, `MultiEdit` | foreground | Stops the action | Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them. PostToolUse does not match these tools, so the written result is not observed. A source declaration does not prove that a live Codex process honored a deny response. |
 | codex | `PermissionRequest` | foreground | Stops the action | Native approval UX and Guard evidence still require a live host/version check. |
 | codex | `UserPromptSubmit` | foreground | Stops the action | Prompt screening does not prove downstream model or host request rewriting. |
 | codex | `PostToolUse` | foreground | Records only | Native post-tool observation does not prove model-visible output replacement. |
-| claude-code | `PreToolUse` | foreground | Stops the action | Background sessions without an active terminal may not surface hook events. |
+| claude-code | `PreToolUse` | foreground | Stops the action | Sessions started with --bare, or with a --setting-sources or Agent SDK settingSources list that leaves out user, never load Guard's hooks and are unprotected. Background sessions (claude --bg) load the same hooks but are not qualified with Guard. A review waits at Claude Code's confirmation prompt until someone attaches to the session. |
 | claude-code | `PermissionRequest` | foreground | Stops the action | Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary. |
 | claude-code | `PostToolUse` | foreground | Records only | Native PostToolUse is not a general model-visible result replacement boundary. |
 | claude-code | `UserPromptSubmit` | foreground | Lets the action continue | Prompt screening does not prove downstream model or host request rewriting. |
@@ -191,6 +198,9 @@ Rows that do not stop the action when Guard fails, and the blind spots each row 
 | cursor | `afterShellExecution` | editor | Records only | Observation does not block or undo the completed shell command. |
 | cursor | `afterMCPExecution` | editor | Records only | Observation does not block or replace a result already returned by Cursor. |
 | cursor | `UserPromptSubmit` | editor | No enforcement | Prompt submission is not surfaced through the declared Cursor hooks. |
+| cursor | `*` | cli | No enforcement | Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them. Running cursor-agent directly instead of the Guard shim skips the launch check. |
+| cursor | `*` | cloud-agent | No enforcement | Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there. |
+| cursor | `*` | terminal | No enforcement | Commands typed into Cursor's built-in terminal outside an agent session bypass Guard. |
 | cline | `PreToolUse` | foreground | Stops the action | Emergency-safe inspection actions can continue during Guard authority failure. JetBrains protection remains unverified until a live pre-tool deny proof is observed. |
 | cline | `PreToolUse` | foreground | Stops the action | Plugin load and live pre-tool suppression still require an installed-host proof. |
 | cline | `PostToolUse` | foreground | Records only | Native Cline PostToolUse is observation-only and cannot provide model-visible replacement. |

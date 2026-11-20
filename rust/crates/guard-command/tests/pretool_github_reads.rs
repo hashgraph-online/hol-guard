@@ -134,6 +134,22 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
                 "gh pr view 1 --json title --jq '. as $t | $t # \"\n| $ENV # \"'",
                 false,
             ),
+            // jq reads a newline as a space, so a filter written over several
+            // lines settles exactly as it would on one.
+            (
+                "gh pr list --json number,author -q '\n[.[] |\n  . as $p |\n  ($p.author.login) as $a |\n  select($a != \"renovate[bot]\") |\n  \"\\($p.number)\\t\\($a)\"\n] | .[]'",
+                true,
+            ),
+            ("gh api repos/owner/repo/pulls --jq '.[] |\n  . as $p |\n  $p.number'", true),
+            ("gh api repos/owner/repo/pulls --jq '.[] |\n  .number'", true),
+            // A comment, the environment, a carriage return and a filter the
+            // shell expands keep their review across lines too.
+            ("gh api repos/owner/repo/pulls --jq '.[] # \"\n| @sh \"x\"'", false),
+            ("gh api repos/owner/repo/pulls --jq '.[] # note\n| .number'", false),
+            ("gh pr list --json number -q '.[] |\n  $ENV.HOME'", false),
+            ("gh api repos/owner/repo/pulls --jq '.[] |\n  env'", false),
+            ("gh pr list --json number -q '. as $p |\r  $p'", false),
+            ("gh pr list --json number -q \".[] |\n  . as $p | $p\"", false),
             ("gh pr view 1 --json title || echo unavailable", true),
             ("gh api repos/owner/repo/compare/base...main | head -1", true),
             ("gh api repos/owner/repo | jq .name", true),

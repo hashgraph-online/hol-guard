@@ -9,9 +9,9 @@ from dataclasses import replace
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import codex_hook_repair as repair
-from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.approval_gate import (
 )
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate as lifecycle
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture
@@ -56,11 +56,7 @@ def _protected_tree(root):
     # artifacts. The native resident writes operational lock/lease files under
     # ``native-runtime/`` (mtime + content churn on every spawn) which are not
     # part of the protected surface — exclude them from the snapshot.
-    return {
-        rel: meta
-        for rel, meta in _tree(root).items()
-        if "/native-runtime" not in rel
-    }
+    return {rel: meta for rel, meta in _tree(root).items() if "/native-runtime" not in rel}
 
 
 def test_exact_repair_grant_is_owner_bound_and_read_only(prepared_repair, tmp_path):

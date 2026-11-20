@@ -16,13 +16,8 @@ use crate::guard_config_update_value::py_eq;
 
 /// `HOOK_MANIFEST_SCHEMA_VERSION`.
 pub(super) const MANIFEST_SCHEMA_VERSION: u64 = 2;
-pub(super) const TRANSPORT_ROLES: [&str; 5] = [
-    "bridge",
-    "bridge_runtime",
-    "launch_runtime",
-    "runtime_trust",
-    "windows_job",
-];
+pub(super) const TRANSPORT_ROLES: [&str; 4] =
+    ["bridge", "launch_runtime", "runtime_trust", "windows_job"];
 pub(super) const REPAIR: &str = "repair the installation.";
 
 /// One integrity failure: a stable reason and the message status shows.

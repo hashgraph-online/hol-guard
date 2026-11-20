@@ -3,169 +3,74 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.native_install_checks import (
-    _grok_managed_config_is_active,
+    _grok_hook_command_is_guard,
     _grok_protection_checks,
 )
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.native_bounded_runtime import use_bounded_runtime
 
-from .grok_test_support import _ctx, grok_hook_command_parts
+from .grok_test_support import grok_hook_command_parts
+
+
+@pytest.fixture
+def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The host's native runtime, as install and validation both find it."""
+    path = tmp_path / "hol-guard-runtime"
+    use_bounded_runtime(monkeypatch, path)
+    return path
 
 
 def _command(tmp_path: Path) -> tuple[str, ...]:
     """Use the real generator so validation remains compatible with installed hooks."""
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
-    with patch(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python", return_value=None
-    ):
-        return grok_hook_command_parts(context)
+    return grok_hook_command_parts(context)
 
 
-def test_generated_grok_bridge_is_recognized(tmp_path: Path) -> None:
-    """The current interpreter, isolated bootstrap, and Grok arguments are accepted."""
-    assert is_grok_hook_command(_shell_command(_command(tmp_path))) is True
+def test_generated_grok_hook_is_recognized(tmp_path: Path, runtime: Path) -> None:
+    """The host runtime, the bridge command and the Grok config are accepted."""
+    command = _command(tmp_path)
+    assert command[:2] == (str(runtime), "bounded-hook-bridge")
+    assert _grok_hook_command_is_guard(_shell_command(command)) is True
 
 
-@pytest.mark.parametrize("mutation", ["bootstrap", "executable", "harness", "home", "extra", "shell", "malformed"])
-def test_grok_bridge_rejects_marker_only_or_modified_invocations(tmp_path: Path, mutation: str) -> None:
-    """Marker strings cannot make an ineffective or redirected command report ready."""
-    command = list(_command(tmp_path))
-    config = json.loads(command[-1])
-    if mutation == "bootstrap":
-        command[3] = "print('bounded_cli_hook_bridge hol-guard hook')"
-    elif mutation == "executable":
-        command[0] = config["python_executable"] = "/bin/echo"
-    elif mutation == "harness":
-        config["cli_args"][5] = "pi"
-    elif mutation == "home":
-        config["guard_home"] = str(tmp_path / "another")
-    elif mutation == "extra":
-        config["cli_args"] += ["--help"]
-    elif mutation == "shell":
-        command = ["sh", "-c", "echo hol-guard hook"]
-    elif mutation == "malformed":
-        return_value = is_grok_hook_command("'unterminated")
-        assert return_value is False
-        return
-    if mutation != "shell":
-        command[-1] = json.dumps(config)
-    assert is_grok_hook_command(_shell_command(tuple(command))) is False
-
-
-def test_frozen_generated_grok_bridge_is_recognized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Packaged Core hooks retain the supported frozen bridge form."""
+def test_frozen_generated_grok_hook_is_recognized(
+    tmp_path: Path, runtime: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Packaged Core hooks name the same runtime with a frozen config."""
+    del runtime
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: None,
-    )
-    assert is_grok_hook_command(_shell_command(_command(tmp_path))) is True
+    command = _command(tmp_path)
+    assert json.loads(command[-1])["frozen_launcher"] is True
+    # A frozen hook names the durable runtime copy under its Guard home.
+    context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
+    assert _grok_hook_command_is_guard(_shell_command(command), context) is True
 
 
-@pytest.mark.parametrize("frozen", [False, True])
-def test_isolated_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, frozen: bool) -> None:
-    """Wheel and frozen installs validate the same trusted managed client."""
-    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
-    monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: "/usr/bin/python3",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python",
-        lambda: "/usr/bin/python3",
-    )
-    runtime = tmp_path / "hol-guard-runtime"
-    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
-        monkeypatch.setattr(
-            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
-            lambda *_args, **_kwargs: runtime,
-        )
+def test_grok_hook_is_bound_to_its_owner(tmp_path: Path, runtime: Path) -> None:
+    """Another home or Guard store does not own the hook."""
+    del runtime
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
     command = grok_hook_command_parts(context)
-    assert command[:4] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I")
-    assert is_grok_hook_command(_shell_command(command), context) is True
+    assert _grok_hook_command_is_guard(_shell_command(command), context) is True
     other = HarnessContext(tmp_path / "other", None, tmp_path / "other-guard")
-    assert is_grok_hook_command(_shell_command(command), other) is False
+    assert _grok_hook_command_is_guard(_shell_command(command), other) is False
 
 
-@pytest.mark.skipif(os.name == "nt", reason="macOS signed proxy uses POSIX shell serialization")
-def test_desktop_grok_proxy_requires_all_signatures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The known proxy script needs matching verified bundle, proxy, and Core teams."""
-    from codex_plugin_scanner.guard.adapters import desktop_hook_proxy as proxy
-
-    base = _command(tmp_path)
-    config = json.loads(base[-1])
-    bundle = tmp_path / "Guard.app"
-    candidate = bundle / "Contents/MacOS/proxy"
-    core = candidate.with_name("core")
-    config.update(frozen_launcher=True, python_executable=str(core))
-    command = (
-        "/bin/sh",
-        "-c",
-        proxy._DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
-        str(candidate),
-        "TEAM123",
-        str(bundle),
-        json.dumps(config),
-        str(core),
-    )
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(proxy, "_trusted_desktop_path", lambda _path: True)
-    monkeypatch.setattr(proxy, "_codesign_team", lambda _path: "TEAM123")
-    assert is_grok_hook_command(_shell_command(command)) is True
-    monkeypatch.setattr(proxy, "_codesign_team", lambda path: None if path == core else "TEAM123")
-    assert is_grok_hook_command(_shell_command(command)) is False
-    altered = (*command[:2], "echo hol-guard hook", *command[3:])
-    assert is_grok_hook_command(_shell_command(altered)) is False
-
-
-@pytest.mark.parametrize(
-    "table",
-    [
-        '[permission]\nallow = ["Read(**/.grok/auth/**)"]',
-        '[other]\ndeny = ["Read(**/.grok/auth/**)"]',
-        'deny = ["Read(**/.grok/auth/**)"]',
-        "[permission]\ndeny = [] # Read(**/.grok/auth/**)",
-        '[permission]\ndeny = "Read(**/.grok/auth/**)"',
-        '[permission]\ndeny = ["Read(**/.grok/auth/**)"',
-    ],
-)
-def test_grok_readiness_requires_real_permission_deny_list(table: str, tmp_path: Path) -> None:
-    """Rules in allow, unrelated tables, comments, or invalid TOML do not protect secrets."""
-    managed = f"# BEGIN HOL GUARD MANAGED GROK\n{table}\n# END HOL GUARD MANAGED GROK\n"
-    assert _grok_managed_config_is_active(managed, _ctx(tmp_path)) is False
-
-
-@pytest.mark.parametrize("error", ["unicode", "io"])
-def test_unreadable_grok_managed_config_returns_repair_warning(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: str
-) -> None:
+def test_unreadable_grok_managed_config_returns_repair_warning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Unreadable settings degrade readiness rather than breaking status/repair callers."""
     context = HarnessContext(tmp_path / "home", None, tmp_path / "guard")
     monkeypatch.delenv("GROK_HOME", raising=False)
     path = context.home_dir / ".grok/config.toml"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"\xff")
-    original = Path.read_text
-
-    def read(candidate: Path, *args: object, **kwargs: object) -> str:
-        """Make only the managed TOML path fail as an unreadable file."""
-        if candidate == path and error == "io":
-            raise OSError("unreadable")
-        return original(candidate, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", read)
     checks = _grok_protection_checks(context)
     assert checks["ready"] is False
     assert any("could not be read" in warning for warning in checks["warnings"])

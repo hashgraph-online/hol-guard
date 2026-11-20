@@ -5,7 +5,7 @@ description: Run HOL Guard scanner and guard operations via `uv run hol-guard`. 
 
 # HOL Guard
 
-HOL Guard is an AI Antivirus scanner that checks plugins, MCP servers, skills, and local AI harnesses for security, quality, and ecosystem compliance.
+HOL Guard is an AI Antivirus scanner that checks plugins, MCP servers, skills, and local AI harnesses for security, quality, and ecosystem compliance. Its runtime protection covers only the tool events a supported harness sends through Guard's hooks; it does not scan the whole machine. See `docs/guard/harness-support.md` for what each harness and version covers.
 
 ## Prerequisites
 

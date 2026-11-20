@@ -58,13 +58,12 @@ def test_publisher_close_cancels_native_helpers_mid_pass(tmp_path: Path, monkeyp
     publisher = NativePolicySnapshotPublisher(store=GuardStore(tmp_path / "guard-home"))
     helper_running = threading.Event()
     spawned: list[object] = []
-    real_spawn = launch_runtime._spawn_hook_process
+    real_exchange = launch_runtime._exchange
 
-    def counting_spawn(*args, **kwargs):
-        spawned.append(args[0])
-        result = real_spawn(*args, **kwargs)
+    def counting_exchange(launcher, request, **kwargs):
+        spawned.append(request)
         helper_running.set()
-        return result
+        return real_exchange(launcher, request, **kwargs)
 
     def reconcile_with_helpers(_publisher) -> None:
         # Each helper would outlive the close budget unless it is killed.
@@ -73,7 +72,7 @@ def test_publisher_close_cancels_native_helpers_mid_pass(tmp_path: Path, monkeyp
                 Path(sys.executable), ("-c", "import time; time.sleep(30)"), input_text="", timeout_seconds=30
             )
 
-    monkeypatch.setattr(launch_runtime, "_spawn_hook_process", counting_spawn)
+    monkeypatch.setattr(launch_runtime, "_exchange", counting_exchange)
     monkeypatch.setattr(publication, "reconcile_policy_inputs", reconcile_with_helpers)
     thread = threading.Thread(target=publisher._run, daemon=True)
     publisher._thread = thread

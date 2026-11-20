@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..adapters.mcp_servers import ManagedMcpServer, proxy_process_env, stable_mcp_server_identifier
+from ..mcp_server_client import ManagedMcpServer, proxy_process_env, stable_mcp_server_identifier
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
@@ -25,7 +25,7 @@ def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
 
 def _canonical_harness_name(harness: str) -> str:
     try:
-        return get_adapter(harness).harness
+        return resolve_harness(harness)
     except ValueError:
         return harness
 

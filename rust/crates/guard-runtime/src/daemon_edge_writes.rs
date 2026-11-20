@@ -43,10 +43,10 @@ mod gate_config;
 #[path = "daemon_edge_headless.rs"]
 pub(super) mod headless;
 #[path = "daemon_edge_policy_write.rs"]
-mod policy_write;
+pub(super) mod policy_write;
 #[path = "daemon_edge_protection_repair.rs"]
 mod protection_repair;
-pub(super) use protection_repair::record_diagnostic;
+pub(in crate::daemon_edge) use protection_repair::record_diagnostic;
 #[path = "daemon_edge_reconnect.rs"]
 mod reconnect;
 #[path = "daemon_edge_resolve.rs"]

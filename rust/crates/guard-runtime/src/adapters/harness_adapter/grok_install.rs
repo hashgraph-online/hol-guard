@@ -12,8 +12,10 @@ use super::grok::{
     backup_path, config_path, grok_home, hooks_dir, legacy_path, observe_hook, pretool_hook,
     state_path, PRETOOL_FILE, PROMPT_FILE,
 };
+use super::grok_hook_command::Checker;
 use super::kimi::{hook_command, utf8};
 use super::{path_text, Ctx, Failure, Spec, Step};
+use crate::native_install_verdict::SystemRunner;
 use crate::pyjson::PyVal;
 
 const LABEL: &str = "Grok";
@@ -27,8 +29,8 @@ const STATE_KEYS: [&str; 5] = [
     "hook_command",
     "prior_compat_hooks",
 ];
-const MISSING_OWNERSHIP_NOTE: &str = "Guard settings may remain in .grok/config.toml because \
-                                      ownership records are missing; review them manually.";
+const MISSING_OWNERSHIP_NOTE: &str =
+    "Guard settings remain in .grok/config.toml because ownership records are missing; review the file manually.";
 
 /// `parse_install_state`: the recorded state, `{}` when there is none.
 fn install_state(bytes: Option<&[u8]>) -> Step<Vec<(String, PyVal)>> {
@@ -128,23 +130,40 @@ fn merge_inputs(ctx: &Ctx, config: &Path) -> Step<(String, Value, State)> {
     Ok((existing, previous, state))
 }
 
-/// Generated hook clients the user config still names; Python keeps the ones
-/// whose client no longer exists and sends them back as `retired_commands`.
-pub(super) fn hook_candidates(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let (config, _) = guard_settings_paths(ctx)?;
-    let (existing, previous, _) = merge_inputs(ctx, &config)?;
+/// The generated hook clients the user config still names.
+fn candidate_commands(existing: &str, previous: &Value) -> Step<Vec<String>> {
     let answer = user_config(json!({
         "existing_text": existing,
         "previous_state": previous,
         "mode": "candidates",
     }))?;
-    match answer.get("commands") {
-        Some(Value::Array(commands)) if commands.iter().all(Value::is_string) => Ok(json!({
-            "hook_command": hook_command(ctx, fields)?,
-            "commands": commands,
-        })),
-        _ => Err(Failure::Refusal(USER_CONFIG_MALFORMED.to_owned())),
-    }
+    let commands = match answer.get("commands") {
+        Some(Value::Array(commands)) => commands
+            .iter()
+            .map(|command| command.as_str().map(str::to_owned))
+            .collect::<Option<Vec<_>>>(),
+        _ => None,
+    };
+    commands.ok_or_else(|| Failure::Refusal(USER_CONFIG_MALFORMED.to_owned()))
+}
+
+/// The command a hook would run now.
+pub(super) fn hook_candidates(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let (config, _) = guard_settings_paths(ctx)?;
+    let (existing, previous, _) = merge_inputs(ctx, &config)?;
+    candidate_commands(&existing, &previous)?;
+    Ok(json!({ "hook_command": hook_command(ctx, fields)? }))
+}
+
+/// The candidates whose generated client no longer exists, which the merge
+/// drops as retired.
+fn retired_commands(ctx: &Ctx, command: &str, candidates: Vec<String>) -> Vec<String> {
+    let mut runner = SystemRunner;
+    let mut checker = Checker::new(ctx, cfg!(target_os = "macos"), &mut runner);
+    candidates
+        .into_iter()
+        .filter(|candidate| checker.is_missing(candidate, command))
+        .collect()
 }
 
 /// `mode` of an existing file, else the default.
@@ -163,11 +182,6 @@ pub(super) fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value
     let shim = files::shim_manifest(fields)?;
     let (config, legacy) = guard_settings_paths(ctx)?;
     let command = hook_command(ctx, fields)?;
-    let retired = fields
-        .get("retired_commands")
-        .and_then(Value::as_array)
-        .filter(|commands| commands.iter().all(Value::is_string))
-        .ok_or(Failure::Invalid)?;
     let (pretool, prompt) = hook_paths(ctx)?;
     let state = state_path(ctx);
     let paths = [
@@ -182,6 +196,7 @@ pub(super) fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value
         .map(|path| files::snapshot(ctx, path))
         .collect::<Step<Vec<_>>>()?;
     let (existing, previous, recorded) = merge_inputs(ctx, &config)?;
+    let retired = retired_commands(ctx, &command, candidate_commands(&existing, &previous)?);
     let merged = user_config(json!({
         "existing_text": existing,
         "previous_state": previous,
@@ -307,10 +322,10 @@ pub(super) fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
     let config = config_path(ctx);
     let owned = owned_settings(&state);
     let config_present = ctx.absolute(&config).is_file();
-    let mut notes = Vec::new();
+    let cleanup_incomplete = owned.is_none() && config_present;
     let mut writes = Vec::new();
     match owned {
-        None if config_present => notes.push(MISSING_OWNERSHIP_NOTE),
+        None => {}
         Some(owned) if config_present => {
             files::within_root(ctx, &grok_home(ctx), &config, LABEL)?;
             let answer = user_config(json!({
@@ -356,11 +371,13 @@ pub(super) fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
         "Guard hook files and launcher removed.",
         "User .grok/config.toml, auth, skills, plugins, and sessions were preserved.",
     ];
-    finish.extend(notes);
+    if cleanup_incomplete {
+        finish.push(MISSING_OWNERSHIP_NOTE);
+    }
     Ok(json!({
         "writes": writes,
         "copies": copies,
         "deletes": deletes,
-        "finish": {"notes": finish},
+        "finish": {"notes": finish, "cleanup_incomplete": cleanup_incomplete},
     }))
 }

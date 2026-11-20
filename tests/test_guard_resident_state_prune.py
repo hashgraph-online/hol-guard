@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.repair_engine import build_report, repair_onefile_leaks, run_repair
 from codex_plugin_scanner.guard.resident_state_prune import (
     OWNER_LOCK_NAME,
@@ -28,6 +28,9 @@ def _age(path: Path, mtime: float) -> None:
 def _resident(root: Path, name: str, *, pids: tuple[int, int] = (111, 222), mtime: float = OLD) -> Path:
     directory = root / "native-runtime" / f"resident-v3-{name}"
     directory.mkdir(parents=True)
+    # Guard creates its home and runtime state private; the native store refuses anything else.
+    for private in (root, root / "native-runtime"):
+        private.chmod(0o700)
     (directory / "generation-0000000000000001.json").write_text(
         json.dumps({"process_id": pids[0], "owner_process_id": pids[1]})
     )
@@ -107,10 +110,16 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
 
-def test_repair_dry_run_on_custom_home_is_scoped_and_changes_nothing(tmp_path: Path) -> None:
+def test_repair_dry_run_on_custom_home_is_scoped_and_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     stale = _resident(context.guard_home, "d" * 16)
+    # The managed-install rows live in the native store, and the resident
+    # client fails closed on this fixture's skeletal generation file. The
+    # dry run leaves that file in place, so answer the hooks step directly.
+    monkeypatch.setattr(store, "list_managed_installs", lambda: [])
     report = run_repair(guard_home=context.guard_home, context=context, store=store, dry_run=True)
     steps = {item["step"]: item for item in report["steps"]}  # type: ignore[union-attr]
     assert stale.exists()

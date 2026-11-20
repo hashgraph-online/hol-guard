@@ -63,8 +63,12 @@ fn proven(root: &Path, executable: &str) -> bool {
 /// The proof as the command itself spells it, so a quoted `~` is read the way
 /// the shell reads it rather than the way the model records the word.
 fn spelled(root: &Path, command: &str, shell_home_matches: bool) -> bool {
-    let home = root.to_str().unwrap().to_owned();
-    let cwd = root.join("project").to_str().unwrap().to_owned();
+    spelled_from(root, &root.join("project"), command, shell_home_matches)
+}
+
+fn spelled_from(home: &Path, cwd: &Path, command: &str, shell_home_matches: bool) -> bool {
+    let home = home.to_str().unwrap().to_owned();
+    let cwd = cwd.to_str().unwrap().to_owned();
     let model = crate::parse_command(
         &serde_json::from_value(serde_json::json!({
             "command": command,
@@ -192,4 +196,71 @@ fn a_home_spelling_is_proven_only_where_the_shell_expands_it() {
     let absolute = format!("{} get pods", root.join("sdk/bin/kubectl").display());
     assert!(spelled(&root, &absolute, true));
     assert!(spelled(&root, &absolute, false));
+}
+
+/// A prefix above home that the home owner installed into, the way Homebrew
+/// owns `/opt/homebrew/bin`, names the same file the bare word finds on `PATH`.
+/// Any other user who can add a name to the prefix or to a folder above it
+/// could plant the program, so those keep their review.
+#[cfg(unix)]
+#[test]
+fn a_prefix_the_home_owner_installed_into_above_home_is_proven() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = root("prefix");
+    let home = root.join("home");
+    let cwd = home.join("project");
+    std::fs::create_dir_all(cwd.join(".git")).unwrap();
+    let mode = |path: &str, bits: u32| {
+        std::fs::set_permissions(root.join(path), std::fs::Permissions::from_mode(bits)).unwrap();
+    };
+    let proven = |path: &str| {
+        let command = format!("{} --version", root.join(path).display());
+        spelled_from(&home, &cwd, &command, true)
+    };
+    installed(&root, "opt/brew/bin", "gh", "opt/brew/Cellar/gh/2.0/bin/gh");
+    assert!(proven("opt/brew/bin/gh"));
+
+    installed(
+        &root,
+        "opt/brew/bin",
+        "python3",
+        "opt/brew/Cellar/python/3.14/bin/python3.14",
+    );
+    assert!(
+        proven("opt/brew/bin/python3"),
+        "a link to the versioned file"
+    );
+    installed(
+        &root,
+        "opt/brew/bin",
+        "python",
+        "opt/brew/Cellar/python/3.14/bin/python3.14",
+    );
+    assert!(
+        !proven("opt/brew/bin/python"),
+        "a suffix that is not a version"
+    );
+    installed(
+        &root,
+        "opt/brew/bin",
+        "gdu",
+        "opt/brew/Cellar/gdu/1.0/bin/gh",
+    );
+    assert!(
+        !proven("opt/brew/bin/gdu"),
+        "a link that renames another program"
+    );
+
+    mode("opt/brew/bin", 0o777);
+    assert!(!proven("opt/brew/bin/gh"), "a world-writable prefix");
+    mode("opt/brew/bin", 0o1777);
+    assert!(!proven("opt/brew/bin/gh"), "a sticky world-writable prefix");
+    mode("opt/brew/bin", 0o755);
+    mode("opt", 0o777);
+    assert!(
+        !proven("opt/brew/bin/gh"),
+        "a world-writable folder above it"
+    );
+    mode("opt", 0o755);
+    assert!(proven("opt/brew/bin/gh"));
 }

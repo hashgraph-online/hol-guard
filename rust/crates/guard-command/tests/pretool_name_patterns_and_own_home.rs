@@ -6,7 +6,10 @@
 //! so neither is a secret read. The same names handed to a program that
 //! opens them still are. `hol-guard approvals wait <id> --home <HOME>/.hol-guard`
 //! reads the store the plain `approvals wait` reads, while another home or a
-//! decision subcommand stays under review.
+//! decision subcommand stays under review. The same holds for the Guard home
+//! the hook reports when it is not the account's default: the wait command
+//! Guard prints for a held request names that home, and running it as printed
+//! must not be held again.
 
 use crate::git_helper_fixture as fixture;
 use fixture::FixtureCleanup;
@@ -126,4 +129,79 @@ fn another_guard_home_or_a_decision_is_still_reviewed() {
         let (action, _) = outcome(&root, command);
         assert_ne!(action, "allow", "{command}");
     }
+}
+
+fn outcome_for_guard_home(root: &Path, guard_home: Option<&Path>, command: &str) -> String {
+    let command = command.replace("{home}", root.to_str().unwrap());
+    fixture::evaluate_for_guard_home(
+        ("claude-code", "PreToolUse"),
+        &json!({"tool_name":"Bash","tool_input":{"command":command}}),
+        (Some(&fixture::local_admin_controls(Vec::new())), None),
+        (root.to_str(), root.join("project").to_str(), true),
+        std::env::var("PATH").unwrap(),
+        guard_home.and_then(Path::to_str),
+    )
+    .minimum_action
+}
+
+/// A Guard home outside `~/.hol-guard`, as a test lane or a user who moved
+/// the store runs with. The wait hint Guard prints for a held request is
+/// `hol-guard approvals wait <id> --json --home <that home>`; running it must
+/// not loop the agent back into review.
+#[test]
+fn a_wait_on_the_reported_guard_home_runs() {
+    let (root, _cleanup) = checkout("reported-home");
+    let store = root.join("lane state").join("guard-home");
+    std::fs::create_dir_all(&store).unwrap();
+    let store = fixture::canonical_spelling(&store);
+    let quoted = format!("'{}'", store.to_str().unwrap());
+    for command in [
+        format!("hol-guard approvals wait c3aae7fd16694cecbe5d5e0a6015063e --json --home {quoted}"),
+        format!("hol-guard approvals wait c3aae7fd16694cecbe5d5e0a6015063e --json --home={quoted}/ --timeout 120"),
+        format!("hol-guard approvals list --home {quoted}"),
+    ] {
+        assert_eq!(
+            outcome_for_guard_home(&root, Some(&store), &command),
+            "allow",
+            "{command}"
+        );
+        assert_ne!(
+            outcome_for_guard_home(&root, None, &command),
+            "allow",
+            "without a reported home: {command}"
+        );
+    }
+    let other = root.join("other-store");
+    std::fs::create_dir_all(&other).unwrap();
+    let other = fixture::canonical_spelling(&other);
+    for (reported, command) in [
+        (
+            &other,
+            format!("hol-guard approvals wait c3aae7fd16694cecbe5d5e0a6015063e --home {quoted}"),
+        ),
+        (
+            &store,
+            format!("hol-guard approvals approve c3aae7fd16694cecbe5d5e0a6015063e --home {quoted}"),
+        ),
+        (
+            &store,
+            format!("hol-guard approvals wait c3aae7fd16694cecbe5d5e0a6015063e --home {quoted} --home {quoted}"),
+        ),
+    ] {
+        assert_ne!(
+            outcome_for_guard_home(&root, Some(reported), &command),
+            "allow",
+            "{command}"
+        );
+    }
+    let missing = root.join("not-created");
+    let command = format!(
+        "hol-guard approvals wait c3aae7fd16694cecbe5d5e0a6015063e --home {}",
+        missing.to_str().unwrap()
+    );
+    assert_ne!(
+        outcome_for_guard_home(&root, missing.to_str().map(Path::new), &command),
+        "allow",
+        "{command}"
+    );
 }

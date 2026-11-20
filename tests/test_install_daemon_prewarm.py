@@ -15,8 +15,9 @@ from codex_plugin_scanner.guard.cli import install_daemon_prewarm
 def _record_prewarm(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, Path | None]]:
     calls: list[tuple[Path, Path | None]] = []
 
-    def record(guard_home: Path, *, home_dir: Path | None = None) -> None:
+    def record(guard_home: Path, *, home_dir: Path | None = None) -> bool:
         calls.append((guard_home, home_dir))
+        return False
 
     monkeypatch.setattr(install_daemon_prewarm, "prewarm_after_install", record)
     return calls
@@ -47,43 +48,74 @@ def test_a_dry_run_install_starts_nothing(tmp_path, monkeypatch, capsys):
     assert calls == []
 
 
-def test_a_test_guard_home_is_never_prewarmed(tmp_path, monkeypatch):
-    scheduled: list[Path] = []
-    monkeypatch.setattr(
-        native_daemon_manage,
-        "schedule_guard_daemon_ensure",
-        lambda guard_home, *, home_dir=None: scheduled.append(guard_home) or "",
-    )
+def _daemon_manager(monkeypatch: pytest.MonkeyPatch, *, ensure=None) -> dict[str, list]:
+    calls: dict[str, list] = {"ensure": [], "schedule": []}
 
+    def record_ensure(guard_home: Path, *, home_dir: Path | None = None, start_timeout: float | None = None) -> str:
+        calls["ensure"].append((guard_home, home_dir, start_timeout))
+        if ensure is not None:
+            ensure()
+        return "http://127.0.0.1:1"
+
+    def record_schedule(guard_home: Path, *, home_dir: Path | None = None) -> str:
+        calls["schedule"].append((guard_home, home_dir))
+        return ""
+
+    monkeypatch.setattr(native_daemon_manage, "ensure_guard_daemon", record_ensure)
+    monkeypatch.setattr(native_daemon_manage, "schedule_guard_daemon_ensure", record_schedule)
+    return calls
+
+
+def test_a_test_guard_home_is_never_prewarmed(tmp_path, monkeypatch):
+    calls = _daemon_manager(monkeypatch)
     test_root = tmp_path / "pytest-of-synthetic" / "pytest-12"
     test_root.mkdir(parents=True)
 
-    install_daemon_prewarm.prewarm_after_install(test_root / "guard-home", home_dir=test_root)
+    assert install_daemon_prewarm.prewarm_after_install(test_root / "guard-home", home_dir=test_root) is False
 
-    assert scheduled == []
+    assert calls == {"ensure": [], "schedule": []}
 
 
-def test_a_real_guard_home_reserves_one_daemon_ensure(monkeypatch):
-    scheduled: list[tuple[Path, Path | None]] = []
+def test_an_install_waits_for_the_daemon_to_report_ready(monkeypatch):
+    calls = _daemon_manager(monkeypatch)
     monkeypatch.setattr(native_daemon_manage, "_guard_home_is_ephemeral", lambda _guard_home: False)
-    monkeypatch.setattr(
-        native_daemon_manage,
-        "schedule_guard_daemon_ensure",
-        lambda guard_home, *, home_dir=None: scheduled.append((guard_home, home_dir)) or "",
-    )
     guard_home = Path("/synthetic/home/.hol-guard")
 
-    install_daemon_prewarm.prewarm_after_install(guard_home, home_dir=Path("/synthetic/home"))
+    ready = install_daemon_prewarm.prewarm_after_install(guard_home, home_dir=Path("/synthetic/home"))
 
-    assert scheduled == [(guard_home, Path("/synthetic/home"))]
+    assert ready is True
+    assert calls["ensure"] == [(guard_home, Path("/synthetic/home"), install_daemon_prewarm.INSTALL_READY_WAIT_SECONDS)]
+    assert calls["schedule"] == []
 
 
-def test_a_failed_reservation_never_fails_the_install(monkeypatch):
-    def refuse(_guard_home: Path, *, home_dir: Path | None = None) -> str:
-        del home_dir
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError("Guard daemon operation deadline exceeded."),
+        native_daemon_manage.GuardDaemonStillStartingError("still starting"),
+        RuntimeError("Guard daemon start requires the native runtime."),
+    ],
+)
+def test_a_start_that_misses_the_wait_keeps_starting_in_the_background(monkeypatch, error):
+    def refuse() -> None:
+        raise error
+
+    calls = _daemon_manager(monkeypatch, ensure=refuse)
+    monkeypatch.setattr(native_daemon_manage, "_guard_home_is_ephemeral", lambda _guard_home: False)
+    guard_home = Path("/synthetic/home/.hol-guard")
+
+    ready = install_daemon_prewarm.prewarm_after_install(guard_home, home_dir=Path("/synthetic/home"))
+
+    assert ready is False
+    assert calls["schedule"] == [(guard_home, Path("/synthetic/home"))]
+
+
+def test_a_failed_start_and_reservation_never_fail_the_install(monkeypatch):
+    def refuse(*_args: object, **_kwargs: object) -> str:
         raise RuntimeError("daemon manager unavailable")
 
     monkeypatch.setattr(native_daemon_manage, "_guard_home_is_ephemeral", lambda _guard_home: False)
+    monkeypatch.setattr(native_daemon_manage, "ensure_guard_daemon", refuse)
     monkeypatch.setattr(native_daemon_manage, "schedule_guard_daemon_ensure", refuse)
 
-    install_daemon_prewarm.prewarm_after_install(Path("/synthetic/home/.hol-guard"))
+    assert install_daemon_prewarm.prewarm_after_install(Path("/synthetic/home/.hol-guard")) is False

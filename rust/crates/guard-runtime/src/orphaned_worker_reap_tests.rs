@@ -187,6 +187,8 @@ struct FakeHost {
     dead: RefCell<Vec<u32>>,
     sent: RefCell<Vec<Sent>>,
     listing_timeouts: RefCell<Vec<Duration>>,
+    absent_paths: Vec<String>,
+    foreign: Vec<u32>,
     started: Instant,
     elapsed: Cell<Duration>,
 }
@@ -201,6 +203,8 @@ impl FakeHost {
             dead: RefCell::default(),
             sent: RefCell::default(),
             listing_timeouts: RefCell::default(),
+            absent_paths: Vec::new(),
+            foreign: Vec::new(),
             started: Instant::now(),
             elapsed: Cell::new(Duration::ZERO),
         }
@@ -263,6 +267,14 @@ impl Host for FakeHost {
         }
     }
 
+    fn owned_by_caller(&self, pid: u32, _timeout: Duration) -> bool {
+        !self.foreign.contains(&pid)
+    }
+
+    fn path_absent(&self, path: &str) -> bool {
+        self.absent_paths.iter().any(|absent| absent == path)
+    }
+
     fn now(&self) -> Instant {
         self.started + self.elapsed.get()
     }
@@ -277,7 +289,8 @@ fn terminate_signals_the_worker_then_forces_a_survivor() {
     let command = worker();
     let host = FakeHost::new().with_process(50, &[Some(&command)], &[Some("posix:start")]);
 
-    let (signalled, forced) = terminate(&host, &[snapshot(50, &command)], &[], Duration::ZERO);
+    let (signalled, forced) =
+        terminate(&host, &[snapshot(50, &command)], &[], Duration::ZERO, None);
 
     assert_eq!(host.sent(), [Sent::Terminate(50), Sent::Kill(50)]);
     assert_eq!((signalled, forced), (vec![50], vec![50]));
@@ -289,7 +302,7 @@ fn terminate_does_not_force_a_worker_that_exits() {
     let mut host = FakeHost::new().with_process(50, &[Some(&command)], &[Some("posix:start")]);
     host.dies_on_terminate.push(50);
 
-    let (_, forced) = terminate(&host, &[snapshot(50, &command)], &[], GRACE);
+    let (_, forced) = terminate(&host, &[snapshot(50, &command)], &[], GRACE, None);
 
     assert_eq!(host.sent(), [Sent::Terminate(50)]);
     assert!(forced.is_empty());
@@ -309,7 +322,7 @@ fn terminate_does_not_signal_the_current_process_or_init() {
         snapshot(77, &command),
     ];
 
-    terminate(&host, &workers, &[77], Duration::ZERO);
+    terminate(&host, &workers, &[77], Duration::ZERO, None);
 
     assert!(host.sent().is_empty());
 }
@@ -322,7 +335,7 @@ fn terminate_skips_a_reused_pid() {
         &[Some("posix:other")],
     );
 
-    terminate(&host, &[snapshot(50, &worker())], &[], Duration::ZERO);
+    terminate(&host, &[snapshot(50, &worker())], &[], Duration::ZERO, None);
 
     assert!(host.sent().is_empty());
 }
@@ -333,7 +346,7 @@ fn terminate_skips_a_worker_without_a_start_token() {
     for token in [None, Some("")] {
         let host = FakeHost::new().with_process(50, &[Some(&command)], &[token]);
 
-        terminate(&host, &[snapshot(50, &command)], &[], Duration::ZERO);
+        terminate(&host, &[snapshot(50, &command)], &[], Duration::ZERO, None);
 
         assert!(host.sent().is_empty());
     }
@@ -348,7 +361,7 @@ fn terminate_does_not_force_kill_after_the_start_token_changes() {
         &[Some("posix:original"), Some("posix:replacement")],
     );
 
-    terminate(&host, &[snapshot(50, &command)], &[], Duration::ZERO);
+    terminate(&host, &[snapshot(50, &command)], &[], Duration::ZERO, None);
 
     assert_eq!(host.sent(), [Sent::Terminate(50)]);
 }
@@ -359,7 +372,7 @@ fn signal_waits_out_the_grace_period_and_skips_a_changed_worker() {
     let host =
         FakeHost::new().with_process(4242, &[Some(&command)], &[Some("born"), Some("replaced")]);
 
-    terminate(&host, &[snapshot(4242, &command)], &[], GRACE);
+    terminate(&host, &[snapshot(4242, &command)], &[], GRACE, None);
 
     assert_eq!(host.sent(), [Sent::Terminate(4242)]);
     assert!(host.elapsed.get() > Duration::ZERO);
@@ -371,7 +384,13 @@ fn signal_stops_when_the_command_changes_after_the_token_is_captured() {
     let host =
         FakeHost::new().with_process(4242, &[Some(&command), Some("/bin/other")], &[Some("born")]);
 
-    terminate(&host, &[snapshot(4242, &command)], &[], Duration::ZERO);
+    terminate(
+        &host,
+        &[snapshot(4242, &command)],
+        &[],
+        Duration::ZERO,
+        None,
+    );
 
     assert!(host.sent().is_empty());
 }

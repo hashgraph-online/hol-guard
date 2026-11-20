@@ -1,9 +1,9 @@
 //! Cline's MCP settings: the candidates, the proxy plan, the rewrite with its
 //! restorable backup, the proxy state and the restore.
 //!
-//! Python builds each proxy launcher entry from the planned servers, so the
-//! install is two asks: `mcp_scan` plans every settings file under the home
-//! and `mcp_apply` rewrites the ones that still hold the bytes it planned.
+//! `mcp_install` plans every settings file under the home, builds Guard's
+//! proxy launcher entry for each planned server and rewrites the files that
+//! still hold the bytes it planned.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::cline::{data_dir, managed_root, runtime, state_text, write_file};
 use super::kimi::expand_user;
-use super::{path_text, Ctx, Failure, Step};
+use super::{path_text, proxy_launch, Ctx, Failure, Step};
 use crate::hook_env_stamp::{dumps, set_member, write_string};
 use crate::pyjson::{self, PyVal};
 
@@ -25,6 +25,8 @@ const EXTENSION: [&str; 5] = [
     "saoudrizwan.claude-dev",
     "settings",
 ];
+/// Cline's MCP proxy command.
+const PROXY: &str = "cline-mcp-proxy";
 const PLAN_FAILED: &str = "Could not plan the Cline MCP proxy install.";
 const FILE_MODE: u32 = 0o644;
 /// Backups hold the original settings text, server secrets included.
@@ -246,27 +248,48 @@ fn sorted_unique(mut names: Vec<String>) -> Vec<String> {
     names
 }
 
-/// Rewrite each planned file with Python's proxy entries for its servers.
-pub(super) fn apply(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let entries: Value = fields
-        .get("entries")
-        .and_then(Value::as_str)
-        .and_then(|text| serde_json::from_str(text).ok())
-        .ok_or(Failure::Invalid)?;
+/// `proxy_entry`: Guard's proxy launcher for one planned server, in Cline's
+/// settings shape, with the stdio transport last.
+fn proxy_entry(ctx: &Ctx, path: &str, row: &Value) -> Step<(String, PyVal)> {
+    let name = row["name"].as_str().ok_or(Failure::Invalid)?.to_owned();
+    let env: Vec<Value> = row["env"]
+        .as_object()
+        .map(|env| {
+            env.iter()
+                .filter_map(|(key, value)| Some(json!([key, value.as_str()?])))
+                .collect()
+        })
+        .unwrap_or_default();
+    let server = json!({
+        "harness": "cline",
+        "name": name,
+        "source_scope": "global",
+        "config_path": path,
+        "command": row["command"],
+        "args": row["args"],
+        "transport": row["transport"],
+        "env": env,
+    });
+    let Value::Object(server) = server else {
+        return Err(Failure::Invalid);
+    };
+    let mut entry = proxy_launch::entry(ctx, PROXY, &server)?;
+    set_member(&mut entry, "type", PyVal::Str("stdio".into()));
+    Ok((name, PyVal::Dict(entry)))
+}
+
+/// Rewrite each planned file with the given proxy entries for its servers.
+fn applied(ctx: &Ctx, planned: Vec<(Value, Vec<(String, PyVal)>)>) -> Step<Value> {
     let mut changed = Vec::new();
     let mut managed = Vec::new();
     let mut remote = Vec::new();
-    for entry in entries.as_array().ok_or(Failure::Invalid)? {
+    for (entry, replacements) in planned {
         remote.extend(names(&entry["remote"])?);
-        let text = entry["replacements"].as_str().ok_or(Failure::Invalid)?;
-        let Ok(PyVal::Dict(replacements)) = pyjson::parse(text) else {
-            return Err(Failure::Invalid);
-        };
         if replacements.is_empty() {
             continue;
         }
         managed.extend(replacements.iter().map(|(name, _)| name.clone()));
-        changed.push(rewrite(ctx, entry, replacements)?);
+        changed.push(rewrite(ctx, &entry, replacements)?);
     }
     Ok(json!({
         "changed_config_paths": changed,
@@ -274,6 +297,24 @@ pub(super) fn apply(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         "skipped_remote_servers": sorted_unique(remote),
         "backup_root": path_text(&backup_root(ctx)),
     }))
+}
+
+/// `install_mcp_proxies`: route every local Cline MCP server through Guard's
+/// proxy.
+pub(super) fn install(ctx: &Ctx) -> Step<Value> {
+    let scanned = scan(ctx)?;
+    let mut planned = Vec::new();
+    for found in scanned["candidates"].as_array().ok_or(Failure::Invalid)? {
+        let path = found["path"].as_str().ok_or(Failure::Invalid)?;
+        let replacements = found["managed"]
+            .as_array()
+            .ok_or(Failure::Invalid)?
+            .iter()
+            .map(|row| proxy_entry(ctx, path, row))
+            .collect::<Step<Vec<_>>>()?;
+        planned.push((found.clone(), replacements));
+    }
+    applied(ctx, planned)
 }
 
 fn backups(ctx: &Ctx) -> Vec<PathBuf> {
@@ -359,3 +400,7 @@ pub(super) fn restore(ctx: &Ctx) -> Step<Value> {
         "complete": retained.is_empty(),
     }))
 }
+
+#[cfg(test)]
+#[path = "cline_mcp_tests.rs"]
+mod tests;

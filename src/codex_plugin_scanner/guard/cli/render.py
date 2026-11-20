@@ -15,6 +15,7 @@ from ..harness_posture import harness_posture_line
 from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is_in_effect
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
+from .claude_settings_target import render_settings_target
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_inline_approval import human_protect_guidance
 from .protect_output import (
@@ -1485,7 +1486,11 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
     if isinstance(approval_url, str) and approval_url:
         body = Table.grid(padding=(0, 1))
         body.add_row("Request", str(payload.get("request_id", "")))
-        body.add_row("URL", f"[bold]{approval_url}[/bold]")
+        signed_url = payload.get("signed_approval_url")
+        if isinstance(signed_url, str) and signed_url:
+            body.add_row("Signed link", f"[bold]{signed_url}[/bold]")
+            body.add_row("", "Opens this request signed in on this device. Share this one, not the URL below.")
+        body.add_row("URL", f"[bold]{approval_url}[/bold]" if not signed_url else approval_url)
         opened_in = payload.get("opened_in")
         if opened_in == "desktop":
             body.add_row("Opened", "In HOL Guard Desktop")
@@ -1559,6 +1564,8 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     sandbox_analysis = _coerce_dict_list(payload.get("sandbox_analysis"))
     if bool(payload.get("self_uninstall")):
         render_self_uninstall(console, payload)
+    for plan in _coerce_dict_list(payload.get("setup_plans")) or [payload]:
+        render_settings_target(console, plan.get("settings_target"))
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
@@ -1605,6 +1612,7 @@ def _render_apps(console: Console, payload: dict[str, object]) -> None:
         _render_managed_install(console, payload)
     else:
         _render_fallback(console, payload)
+    render_settings_target(console, payload.get("settings_target"))
     dry_run_effect = payload.get("dry_run_effect")
     if isinstance(dry_run_effect, str) and dry_run_effect:
         console.print(Panel(dry_run_effect, title="Dry run", border_style="yellow"))
@@ -1922,10 +1930,17 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
 
 def _render_dashboard(console: Console, payload: dict[str, object]) -> None:
     body = Table.grid(padding=(0, 1))
-    body.add_row("Dashboard", str(payload.get("approval_center_url") or "unknown"))
-    if payload.get("opened") is not None:
-        body.add_row("Browser opened", _bool_label(bool(payload.get("opened"))))
-    console.print(Panel(body, title="HOL Guard dashboard", border_style="cyan"))
+    opened = bool(payload.get("opened"))
+    body.add_row("Dashboard", str(payload.get("approval_center_url") or "not running"))
+    if payload.get("port") is not None:
+        body.add_row("Port", str(payload.get("port")))
+    body.add_row("Browser", str(payload.get("browser") or ("opened" if opened else "not_attempted")))
+    body.add_row("Result", str(payload.get("reason") or ("opened" if opened else "daemon_unavailable")))
+    if payload.get("error"):
+        body.add_row("Error", str(payload.get("error")))
+    if payload.get("fallback"):
+        body.add_row("Next step", str(payload.get("fallback")))
+    console.print(Panel(body, title="HOL Guard dashboard", border_style="cyan" if opened else "yellow"))
 
 
 def _render_sync(console: Console, payload: dict[str, object]) -> None:

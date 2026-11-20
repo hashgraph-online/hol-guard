@@ -15,17 +15,18 @@ matches the hook's, and a private snapshot the sink will read. The sink
 re-authorizes the saved call before it runs anything, so admitting the
 command never widens what runs.
 
-The resident reads both: this module reviews a probe through the daemon's
-edge with the sink command it binds, and the edge answers a probe it routes
-to the sink as the direct lane does. A probe the edge does not answer is the
-plain allow. A sink call goes to the resident's ``cursor_shell_route``
-render with the call and the sink command.
+The resident decides all of it through its ``cursor_shell_route`` render:
+which route a call takes (``route``), whether a probe is reviewed at all
+(``probe_gate``), what a reviewed probe is answered (``probe_response``) and
+whether a sink command is admitted. This module
+gathers the facts (the workspace, the policy snapshot, the daemon's edge
+review), asks, and returns the answer. A probe that fails anywhere here is
+the plain allow, and a sink call that fails is reviewed as usual.
 """
 
 from __future__ import annotations
 
 import logging
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,17 +38,9 @@ _LOGGER = logging.getLogger(__name__)
 
 _CURSOR = "cursor"
 _PRE_TOOL_USE = "PreToolUse"
-_SHELL_TOOL = "Shell"
-_SOURCE_HOOK_FIELD = "cursor_source_hook_event"
-_PROBE_FIELD = "cursor_route_probe"
-_BEFORE_SHELL = "beforeShellExecution"
-_RECEIPT_ONLY_FIELD = "guard_containment_receipt_only"
-_SINK_VERB = "execute-contained-test"
-# The runtime's own workspace sandbox sink, which a probe may name instead.
-_NATIVE_SINK_VERB = "contained-workspace-sink"
-_ALLOW: dict[str, object] = {"policy_action": "allow"}
-_SINK_ROUTE = "sink"
-_ROUTED = "native_contained_execution_routed"
+# What a probe is answered when the review that would route it fails.
+# beforeShellExecution still reviews the call that runs.
+_PLAIN_ALLOW: dict[str, object] = {"policy_action": "allow"}
 
 
 def cursor_shell_route_response(
@@ -61,9 +54,12 @@ def cursor_shell_route_response(
 ) -> dict[str, object] | None:
     """The daemon's answer to a Cursor probe or sink call, or ``None`` to review it as usual."""
 
-    if sys.platform == "win32" or payload.get(_RECEIPT_ONLY_FIELD) is not None:
+    try:
+        route = _ask("route", {"payload": dict(payload)}, guard_home=guard_home, deadline=deadline)
+    except Exception:
+        _LOGGER.warning("Cursor shell route decision failed", exc_info=True)
         return None
-    if is_cursor_shell_probe(payload):
+    if route == "probe":
         try:
             routed = _probe_response(
                 worker,
@@ -76,9 +72,8 @@ def cursor_shell_route_response(
         except Exception:
             _LOGGER.warning("Cursor shell route probe failed", exc_info=True)
             routed = None
-        # beforeShellExecution still reviews the call that runs.
-        return routed if routed is not None else dict(_ALLOW)
-    if workspace is not None and payload.get(_SOURCE_HOOK_FIELD) == _BEFORE_SHELL and _names_sink(payload):
+        return routed if routed is not None else dict(_PLAIN_ALLOW)
+    if route == "sink" and workspace is not None:
         try:
             return _resident_route(
                 payload, home_dir=home_dir, guard_home=guard_home, workspace=workspace, deadline=deadline
@@ -89,25 +84,14 @@ def cursor_shell_route_response(
     return None
 
 
-def is_cursor_shell_probe(payload: Mapping[str, object]) -> bool:
-    """Cursor's own ``preToolUse`` for ``Shell``, which names no source hook.
+def _ask(op: str, params: dict[str, object], *, guard_home: Path, deadline: float | None) -> object | None:
+    from ..native_hook_render import native_render_cli
 
-    Guard's Cursor hook names its probe with ``cursor_route_probe``. Any other
-    caller that sends a ``Shell`` call for Cursor gets the ordinary review.
-    """
-
-    return (
-        payload.get("hook_event_name") == _PRE_TOOL_USE
-        and payload.get("tool_name") == _SHELL_TOOL
-        and _SOURCE_HOOK_FIELD not in payload
-        and payload.get(_PROBE_FIELD) is True
+    rendered = native_render_cli(
+        "cursor_shell_route", _CURSOR, {"op": op, **params}, guard_home=guard_home, deadline=deadline
     )
-
-
-def _names_sink(payload: Mapping[str, object]) -> bool:
-    tool_input = payload.get("tool_input")
-    command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    return isinstance(command, str) and (_SINK_VERB in command or _NATIVE_SINK_VERB in command)
+    document = rendered[1] if rendered is not None else None
+    return document.get("value") if document is not None else None
 
 
 def _probe_response(
@@ -119,12 +103,14 @@ def _probe_response(
     workspace: Path | None,
     deadline: float | None,
 ) -> dict[str, object] | None:
-    from ..native_policy_snapshot_harness_postures import recording_only_for_binding
-
-    if workspace is None:
-        return None
-    snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
-    if snapshot is None or recording_only_for_binding(snapshot, _CURSOR):
+    snapshot = worker._native_policy_snapshot(workspace, deadline=deadline) if workspace is not None else None
+    reviewed = _ask(
+        "probe_gate",
+        {"snapshot": snapshot, "has_workspace": workspace is not None},
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if reviewed is not True or workspace is None:
         return None
     edge = worker._review_raw_hook_native(
         payload=dict(payload),
@@ -141,21 +127,8 @@ def _probe_response(
     )
     if edge is None:
         return None
-    # The edge rewrites only a probe it routes to the sink; any other is the
-    # plain allow.
-    if edge.get("containment_route") != _SINK_ROUTE:
-        return dict(_ALLOW)
-    # An edge whose probe answer failed falls back to the generic rewrite,
-    # which keeps the receipt, so only probe answers count.
-    response = edge.get("harness_response")
-    mark = edge.get("containment_rewrite")
-    if (
-        isinstance(response, dict)
-        and ((mark == "kept" and response == _ALLOW) or (mark == "routed" and response.get("reason_code") == _ROUTED))
-        and response.get("policy_action") == "allow"
-    ):
-        return dict(response)
-    return None
+    answer = _ask("probe_response", {"edge": edge}, guard_home=guard_home, deadline=deadline)
+    return dict(answer) if isinstance(answer, dict) else None
 
 
 def _resident_route(
@@ -183,4 +156,4 @@ def _resident_route(
     return dict(value) if isinstance(value, dict) else None
 
 
-__all__ = ["cursor_shell_route_response", "is_cursor_shell_probe"]
+__all__ = ["cursor_shell_route_response"]

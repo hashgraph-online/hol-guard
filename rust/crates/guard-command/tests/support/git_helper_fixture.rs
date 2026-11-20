@@ -161,6 +161,29 @@ pub fn evaluate_on_path(
     (home, cwd, shell_home_matches): (Option<&str>, Option<&str>, bool),
     path: String,
 ) -> guard_contracts::PreToolResultV1 {
+    evaluate_for_guard_home(
+        (harness, event),
+        payload,
+        (controls, deadline),
+        (home, cwd, shell_home_matches),
+        path,
+        None,
+    )
+}
+
+/// As [`evaluate_on_path`], for a hook that reports `guard_home` as the Guard
+/// home its decision is made against.
+pub fn evaluate_for_guard_home(
+    (harness, event): (&str, &str),
+    payload: &serde_json::Value,
+    (controls, deadline): (
+        Option<&guard_command::native_command_controls::CompiledNativeCommandControls>,
+        Option<std::time::Instant>,
+    ),
+    (home, cwd, shell_home_matches): (Option<&str>, Option<&str>, bool),
+    path: String,
+    guard_home: Option<&str>,
+) -> guard_contracts::PreToolResultV1 {
     use sha2::{Digest, Sha256};
     let mut environment = std::collections::BTreeMap::from([
         ("PATH", path.clone()),
@@ -190,6 +213,7 @@ pub fn evaluate_on_path(
         deadline,
         guard_command::pretool::PathContext {
             literal_words: &[],
+            guard_home,
             home_dir: home,
             cwd,
             cdpath_unset: false,

@@ -1,30 +1,30 @@
 from __future__ import annotations
 
-import io
 import json
-from contextlib import redirect_stdout
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import (
-    bounded_cli_hook_bridge,
-    desktop_hook_proxy,
-)
+from codex_plugin_scanner.guard import bounded_cli_hook_bridge, native_caller
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
+from .bounded_cli_hook_test_support import run_hook as _run_hook
+from .desktop_proxy_test_support import launch_script
+from .native_bounded_runtime import durable_copy, use_bounded_runtime
 
 
 def _native_answers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail the test when Python, not the runtime, writes the answer."""
 
-    def python_answer(**_kwargs: object) -> int:
+    def python_answer(_harness: str) -> int:
         raise AssertionError("the native runtime must answer this hook")
 
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_emit_failure", python_answer)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_refuse", python_answer)
 
 
 def _signed_bundle_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -39,17 +39,37 @@ def _signed_bundle_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     return bundle, proxy, core
 
 
-def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    bundle, proxy, core = _signed_bundle_fixture(tmp_path)
+def _frozen_guard(monkeypatch: pytest.MonkeyPatch, executable: str) -> None:
+    """Make this process a frozen Guard whose CLI is ``executable``."""
+
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", executable)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.stable_guard_cli.prune_safe_cli_executable", lambda executable: executable
+    )
+    # The caller stamp reports a frozen Guard only when its executable exists;
+    # ``executable`` names a launcher this host does not have.
+    from codex_plugin_scanner.guard import native_harness_client as harness_client
+
+    stamped = harness_client.caller_identity
+    monkeypatch.setattr(harness_client, "caller_identity", lambda: {**stamped(), "frozen": True, "attest_facts": None})
+
+
+def _hook_argv(tmp_path: Path, harness: str) -> tuple[str, ...]:
+    """The bounded hook argv the native kind names for ``harness`` in this process."""
+
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    return tuple(str(part) for part in ask("hook_spec", context, harness=harness)["hook_argv"])
+
+
+def test_desktop_hook_environment_forwards_only_the_proxy_selectors(tmp_path: Path) -> None:
+    # The native kind verifies the proxy; the signed launch it renders is covered by its Rust tests.
     forwarded = isolated_hook_environment(
         {
             "PATH": "/usr/bin",
             "HOME": str(tmp_path),
             "HOL_GUARD_DESKTOP": "1",
-            "HOL_GUARD_DESKTOP_HOOK_PROXY": str(proxy),
+            "HOL_GUARD_DESKTOP_HOOK_PROXY": str(tmp_path / "HOL Guard"),
             "HOL_GUARD_DESKTOP_RUNTIME_OWNER": str(tmp_path / "untrusted-runtime-owner"),
         }
     )
@@ -57,86 +77,18 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
         "PATH": "/usr/bin",
         "HOME": str(tmp_path),
         "HOL_GUARD_DESKTOP": "1",
-        "HOL_GUARD_DESKTOP_HOOK_PROXY": str(proxy),
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": str(tmp_path / "HOL Guard"),
     }
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", forwarded["HOL_GUARD_DESKTOP"])
-    monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", forwarded["HOL_GUARD_DESKTOP_HOOK_PROXY"])
-    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
-
-    command = bounded_cli_hook_bridge.bounded_cli_hook_command(
-        python_executable=str(core),
-        package_root=tmp_path,
-        guard_home=tmp_path / "guard-home",
-        cli_args=(
-            "guard",
-            "hook",
-            "--guard-home",
-            str(tmp_path / "guard-home"),
-            "--harness",
-            "grok",
-        ),
-        harness="grok",
-        timeout_seconds=25,
-    )
-
-    assert command[:4] == (
-        "/bin/sh",
-        "-c",
-        bounded_cli_hook_bridge._DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
-    )
-    assert command[4:7] == (str(proxy), "TEAMID", str(bundle))
-    config = json.loads(command[7])
-    assert config == {
-        "python_executable": str(core),
-        "package_root": str(tmp_path.resolve()),
-        "guard_home": str((tmp_path / "guard-home").resolve()),
-        "cli_args": [
-            "guard",
-            "hook",
-            "--guard-home",
-            str(tmp_path / "guard-home"),
-            "--harness",
-            "grok",
-        ],
-        "harness": "grok",
-        "timeout_seconds": 25,
-        "frozen_launcher": True,
-    }
-    assert command[8] == str(core)
-    assert command[9] == "0"
 
 
-def test_untrusted_native_proxy_falls_back_to_internal_frozen_bridge(
+def test_frozen_hook_without_a_proxy_or_runtime_asks_for_repair(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "_trusted_desktop_hook_proxy_command",
-        lambda executable, config: None,
-    )
-    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: None)
-    command = bounded_cli_hook_bridge.bounded_cli_hook_command(
-        python_executable="/app/hol-guard",
-        package_root=tmp_path,
-        guard_home=tmp_path / "guard-home",
-        cli_args=(
-            "guard",
-            "hook",
-            "--guard-home",
-            str(tmp_path / "guard-home"),
-            "--harness",
-            "grok",
-        ),
-        harness="grok",
-        timeout_seconds=25,
-    )
-
-    assert command[:2] == ("/app/hol-guard", "__guard-bounded-hook")
+    _frozen_guard(monkeypatch, "/app/hol-guard")
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        _hook_argv(tmp_path, "grok")
 
 
 @pytest.mark.parametrize("harness", ["hermes", "openclaw"])
@@ -145,118 +97,46 @@ def test_frozen_bounded_hook_runs_the_durable_native_bridge(
     tmp_path: Path,
     harness: str,
 ) -> None:
-    runtime = tmp_path / "guard-home" / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
-    requested: list[tuple[str, Path | None]] = []
+    runtime = tmp_path / "bundle" / "hol-guard-runtime"
+    digest = use_bounded_runtime(monkeypatch, runtime)
+    _frozen_guard(monkeypatch, "/app/hol-guard")
 
-    def durable(name: str, *, guard_home: Path | None = None) -> Path:
-        requested.append((name, guard_home))
-        return runtime
+    command = _hook_argv(tmp_path, harness)
 
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bounded_cli_hook_bridge, "prune_safe_cli_executable", lambda executable: executable)
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_trusted_desktop_hook_proxy_command", lambda executable, config: None)
-    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", durable)
-    guard_home = tmp_path / "guard-home"
-    command = bounded_cli_hook_bridge.bounded_cli_hook_command(
-        python_executable="/app/hol-guard",
-        package_root=tmp_path,
-        guard_home=guard_home,
-        cli_args=("guard", "hook", "--guard-home", str(guard_home), "--harness", harness),
-        harness=harness,
-        timeout_seconds=25,
-    )
-
-    assert requested == [(harness, guard_home)]
-    assert command[:4] == (
-        str(runtime),
-        bounded_cli_hook_bridge.NATIVE_BOUNDED_HOOK_COMMAND,
-        "/app/hol-guard",
-        "__guard-bounded-hook",
-    )
-    config = json.loads(command[4])
+    durable = durable_copy(tmp_path / "guard-home", runtime, digest)
+    assert command[:2] == (str(durable), bounded_cli_hook_bridge.NATIVE_BOUNDED_HOOK_COMMAND)
+    assert len(command) == 3
+    config = json.loads(command[2])
+    assert config["python_executable"] == "/app/hol-guard"
     assert config["frozen_launcher"] is True
-    # The runtime recovers the daemon through the frozen Guard, never a Python interpreter.
-    assert config["start_command"][:2] == ["/app/hol-guard", "--_hol-guard-codex-daemon-recover"]
+    # The runtime derives the frozen Guard's recovery from the launcher itself.
+    assert "start_command" not in config
 
 
-def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
+def test_desktop_proxy_keeps_core_for_an_unsigned_writable_or_cross_bundle_proxy(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "_trusted_desktop_hook_proxy_command",
-        lambda executable, config: None,
-    )
-    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: "/usr/bin/python3")
-    runtime = tmp_path / "hol-guard-runtime"
-    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime)
-    guard_home = tmp_path / "guard-home"
-    command = bounded_cli_hook_bridge.bounded_cli_hook_command(
-        python_executable="/app/hol-guard",
-        package_root=tmp_path,
-        guard_home=guard_home,
-        cli_args=(
-            "guard",
-            "hook",
-            "--guard-home",
-            str(guard_home),
-            "--harness",
-            "grok",
-        ),
-        harness="grok",
-        timeout_seconds=25,
-    )
-
-    script = bounded_cli_hook_bridge.bounded_hook_script_path(guard_home, "grok")
-    assert script is not None
-    assert command[:5] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I", str(script.resolve()))
-    assert json.loads(command[5])["guard_home"] == str(guard_home.resolve())
-    source = script.read_text(encoding="utf-8")
-    assert 'HARNESS = "grok"' in source
-    assert "TIMEOUT_SECONDS = 25" in source
-    assert "daemon --serve" not in source
-    assert "__guard-bounded-hook" not in source
-
-
-def test_desktop_proxy_requires_one_real_team_and_same_bundle(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+    # The kind's team and layout checks are unit tested in Rust; here the real kind
+    # answers for fixtures no Apple team signed.
     _bundle, proxy, core = _signed_bundle_fixture(tmp_path)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
+    _other_bundle, other_proxy, _other_core = _signed_bundle_fixture(tmp_path / "other")
+    use_bounded_runtime(monkeypatch, tmp_path / "bundle" / "hol-guard-runtime")
+    _frozen_guard(monkeypatch, str(core))
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+
+    def keeps_core() -> None:
+        command = _hook_argv(tmp_path, "grok")
+        assert command[0] != "/bin/sh"
+        assert command[1] == bounded_cli_hook_bridge.NATIVE_BOUNDED_HOOK_COMMAND
+
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
-
-    for teams in (
-        {proxy: None, core: None, proxy.parents[2]: None},
-        {proxy: "not set", core: "not set", proxy.parents[2]: "not set"},
-        {proxy: "TEAM-A", core: "TEAM-B", proxy.parents[2]: "TEAM-A"},
-    ):
-        monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", teams.get)
-        assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
-
-
-def test_desktop_proxy_rejects_writable_or_cross_bundle_paths(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _bundle, proxy, core = _signed_bundle_fixture(tmp_path)
-    other_bundle, other_proxy, _other_core = _signed_bundle_fixture(tmp_path / "other")
-    del other_bundle
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
-
+    keeps_core()
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(other_proxy))
-    assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
-
+    keeps_core()
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
     proxy.chmod(0o777)
-    assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
+    keeps_core()
 
 
 def test_linux_never_uses_caller_controlled_appimage_as_proxy_provenance(
@@ -269,17 +149,20 @@ def test_linux_never_uses_caller_controlled_appimage_as_proxy_provenance(
     core = tmp_path / "hol-guard"
     core.write_text("core", encoding="utf-8")
     core.chmod(0o755)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "linux")
+    use_bounded_runtime(monkeypatch, tmp_path / "bundle" / "hol-guard-runtime")
+    _frozen_guard(monkeypatch, str(core))
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
     monkeypatch.setenv("APPIMAGE", str(proxy))
 
-    assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
+    command = _hook_argv(tmp_path, "grok")
+
+    assert command[0] != "/bin/sh"
+    assert str(proxy) not in command
 
 
 def test_macos_launcher_reverifies_normal_paths_and_falls_back_by_status() -> None:
-    launcher = bounded_cli_hook_bridge._DESKTOP_PROXY_LAUNCH_SCRIPT
+    launcher, _name = launch_script()
     assert "/dev/fd" not in launcher
     assert "HOL_GUARD_DESKTOP_E2E_ALLOW_ADHOC_SIGNATURE" not in launcher
     assert 'verify_team "$bundle"' in launcher
@@ -311,6 +194,7 @@ def _frozen_config(tmp_path: Path, variant: str) -> dict[str, object]:
 @pytest.mark.parametrize("variant", ["grok", "noncanonical-home", "hermes", "openclaw", "forged-mode", "forged-args"])
 def test_a_frozen_config_without_a_daemon_answer_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
     tmp_path: Path,
     native_hook_force: Path,
     variant: str,
@@ -322,11 +206,7 @@ def test_a_frozen_config_without_a_daemon_answer_fails_closed(
     # The runtime never runs a config's argv, so a forged one changes nothing.
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", frozen, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "executable", str(tmp_path / "missing" / "hol-guard"))
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config, input_text=json.dumps({"hook_event_name": "PreToolUse"})
-        )
+    returncode = _run_hook(monkeypatch, config, json.dumps({"hook_event_name": "PreToolUse"}))
 
     expected = ("block", 2) if variant == "hermes" else ("deny", 0)
-    assert (_json_object(output.getvalue())["decision"], returncode) == expected
+    assert (_json_object(capfd.readouterr().out)["decision"], returncode) == expected

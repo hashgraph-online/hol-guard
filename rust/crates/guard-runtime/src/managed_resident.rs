@@ -71,8 +71,8 @@ pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
 /// Start this runtime's resident, if no client is already holding one, and
 /// keep it up for a bounded window so a session's first hook does not pay
 /// for the start. `managed_resident_prewarm.rs` has the whole contract.
-pub(crate) fn prewarm(state_base: &Path) -> Result<(), String> {
-    prewarm_lane::run(state_base)
+pub(crate) fn prewarm(state_base: &Path, restarted: Option<&str>) -> Result<(), String> {
+    prewarm_lane::run(state_base, restarted)
 }
 
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);

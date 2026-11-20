@@ -230,7 +230,9 @@ def test_a_review_still_downloading_stops_quietly_for_a_retry(monkeypatch: pytes
         deadlines.append(registry_cache._WAIT_DEADLINE.get())
         raise RegistryDeadlineError
 
-    monkeypatch.setattr(package_review, "package_review_plan", lambda *_args, **_kwargs: (object(), True))
+    monkeypatch.setattr(
+        package_review, "package_review_plan", lambda *_args, **_kwargs: (object(), True, tmp_path, True)
+    )
     monkeypatch.setattr(package_review, "_evaluate", evaluate)
     monkeypatch.setattr(
         package_review,
@@ -246,7 +248,7 @@ def test_a_review_still_downloading_stops_quietly_for_a_retry(monkeypatch: pytes
         workspace=tmp_path,
         guard_home=tmp_path / "guard",
         deadline=123.0,
-    )
+    ).response
 
     assert deadlines == [123.0]
     assert response is not None

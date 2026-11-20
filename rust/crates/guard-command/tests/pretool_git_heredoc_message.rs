@@ -117,6 +117,43 @@ fn an_apostrophe_in_a_substituted_commit_message_is_message_text() {
     }
 }
 
+/// Code in a commit message is message text. Claude Code writes messages
+/// such as these, with function names in backticks, `a[key]`, `"\n"` and em
+/// dashes, and each one used to go to review because the projection refused
+/// any character it could not write into the double-quoted value.
+#[test]
+fn code_and_punctuation_in_a_substituted_commit_message_are_message_text() {
+    let session = session("heredoc-message-code");
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
+    for command in [
+        "git add -A && git commit -m \"$(cat <<'EOF'\nFix has_plugin check\n\nThe check was inverted\u{2014}has_plugin returned True for missing names.\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\nFix any_ and all_ predicates\n\nChange `or` to `and` so a single miss fails.\nEOF\n)\"",
+        "git add src/a.py && git commit -m \"$(cat <<'EOF'\nFix line counting\n\nCount with (char != \"\\n\" for error case) again.\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\nFix cache size\n\n- subtract (size - self.__size[key]) on replace\n- compare with '<' instead of '<='\n- keep {a, b} and *args as they were\nEOF\n)\"",
+    ] {
+        quiet(command).unwrap();
+    }
+    for command in [
+        // A second substitution in the same word is not message text.
+        "git commit -m \"$(cat <<'EOF'\nuse `id`\nEOF\n) $(cat ~/.ssh/id_rsa)\"",
+        // The substitution is a path or a flag's value, not the message.
+        "git commit -m -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        "git commit -- -m \"$(cat <<'EOF'\n*\nEOF\n)\"",
+        // A global option before the subcommand is not a plain commit.
+        "git -c core.hooksPath=x commit -m \"$(cat <<'EOF'\nuse `id`\nEOF\n)\"",
+        // An unquoted delimiter expands the body.
+        "git commit -m \"$(cat <<EOF\nuse `cat ~/.ssh/id_rsa`\nEOF\n)\"",
+    ] {
+        let result = session.evaluate_at(command, &session.worktree);
+        assert!(
+            result.minimum_action != "allow" && result.minimum_action != "sandbox-required",
+            "{command}: {} {}",
+            result.minimum_action,
+            result.reason_code
+        );
+    }
+}
+
 fn cursor_verdict(
     session: &crate::pretool_git_session_ops::Session,
     command: &str,

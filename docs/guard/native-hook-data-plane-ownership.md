@@ -33,7 +33,7 @@ harness launcher or managed hook
         -> Rust output traversal, source I/O, hashing, scanning, effective-policy floors, decision
         -> Python harness response rendering
      -> retired off/shadow values: resolve to the product default, select nothing
-  -> Python bounded asynchronous evidence handoff (non-authoritative)
+  -> Python bounded cursor transport for evidence already written by Rust
 ```
 
 Native approval path (when a hook requires approval):
@@ -59,7 +59,7 @@ Rust raw envelope
 | Python reference oracle | Python semantic | Differential tests only; never production authority |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
 | Policy and approval control | Python control | Snapshot publication and approval presentation only; Rust owns approval challenge, validation, replay, and consume |
-| Evidence persistence | Persistence-only | Non-blocking receipt consumption |
+| Evidence persistence | Rust persistence with Python cursor transport | Rust records receipts, activity, fence windows, captures, notices, and relay evidence. Python only fetches bounded pages, observes counters, and acknowledges cursors. |
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
 
@@ -206,6 +206,16 @@ different catalog. The Python module (`approval_extension_recommendation.py`)
 only validates the stored hint, builds the wire view of the control layers it
 already holds, and shape-checks the answer; with no resident there is no
 recommendation and no Python evaluation.
+
+Always allow on a review held only because an allowed script changed moves the
+script's allow to the new version (`local_clis/local_cli_reallow.py`). This stays
+in Python for now because it runs inside approval resolution
+(`apply_approval_resolution`), which has no Rust equivalent yet. It reads the
+stored hint and the listed custom extension, then writes through the existing
+grant writer with the revision read first, so a newer block makes the write
+fail. The hook side's idea of a changed script (`allowed_earlier_version`,
+`rust/crates/guard-runtime/src/connector_setup.rs`) remains the one that names
+the card. When approval resolution moves to Rust, this check moves with it.
 
 What a local Extension control draft may change is the resident's too. Three
 `extension_control` queries (`mutation_bounds`, `mutation_validate` and
@@ -487,19 +497,18 @@ integers wider than the resident's number type. Each travels as a token drawn
 from a per-request random prefix that is verified to match no string in the
 payload, with its meaning in a separate map, so a config file cannot spell a
 token itself and nothing it contains can pass as a substituted scalar.
-`codex_hook_identity.py` now only names what is being identified;
-`native_codex_hook_identity.py` ships it across and fails closed.
+No Python copy of the identity rules remains.
 
 Whether the authenticated Codex hook manifest still describes the live
-installation is decided in the resident (`codex-hook-manifest-verify-v1`, in
-`codex_hook_manifest_verify_op.rs`). Python checked the manifest header, the
-config target, the interpreter and every packaged file, the launch identities
-and the hook registrations in the Codex config. It still authenticates the
-manifest, since the key never leaves it, and supplies the canonical path
-spellings, its package roots, its own command splitting and whether a file's
-group is private to its owner; the resident reads the files and answers with
-the integrity state. An unavailable resident reports the installation as
-unverified. `codex_hook_manifest.py` keeps only that authentication step.
+installation is decided in the native runtime. The `verify_manifest` Codex
+harness op (and `live_hook_state`, which reads the files itself) authenticates
+the manifest under the hook key the runtime owns, builds the canonical
+spellings, and decides the integrity state through
+`codex_hook_manifest_verify_op.rs`. Python sends only the installation it
+expects (`CodexHookManifestSpec.payload()`), the live hook groups it parsed and
+its package roots; it never holds key bytes. A repair or inverse plan sends the
+captured manifest text, and the runtime authenticates it. The baseline
+(`publication_baseline`) is loaded and its untrusted refusal shaped there too.
 
 A Codex hook source's inventory is walked there as well
 (`codex-hook-identity-v2`, the `inventory` entry). Python sent one handler and
@@ -507,8 +516,7 @@ one argv question per hook and assembled the records itself; it now sends the
 source's events in the order the file wrote them, with its manifest, legacy and
 self-install bindings, and the resident answers with every record, its
 ownership and identity, and every shape issue, from the same walk native hook
-detection runs. `codex_hook_inventory.py` checks each field of the answer and
-keeps no walk of its own. A resident without the feature, or an answer that is
+detection runs. No Python walk remains. A resident without the feature, or an answer that is
 not an inventory, leaves the source with one identity issue and no records, so
 install stops before it activates.
 
@@ -519,9 +527,15 @@ indented line is a command row rather than a wrapped description, which tokens
 are commands and which are option spellings, and how a row's description is
 recovered from the columns after it. That grammar decides which commands an
 operator is offered a grant over, so a second copy of it would be a second
-answer to the same question. Python now only probes - it runs the CLI, collects
-the help text each subcommand prints, and sends the text; the resident returns
-the commands it names and their descriptions.
+answer to the same question. Discovery as a whole is the native
+`local-cli-discover` command (`local-cli-discover-v1`, in
+`local_cli_discover.rs`): it reads a script's source first, runs `--help` only
+as far as that source allows (`local_cli_help_probe.rs`, in a private folder
+with a fixed `PATH` and its own process group), parses what each run prints and
+merges the nested commands. Python matches the command to the CLI the operator
+approved, sends the verified `--help` argv, and stores the commands it gets
+back; setting the discovery job's cancel stops the command and every run it
+started.
 
 The options a CLI takes are read there too (`local-cli-help-variations-v1`, in
 `local_cli_help_options.rs`): the option rows and usage line of a help that
@@ -529,8 +543,8 @@ names no subcommands, and, for a script whose `--help` names nothing, the
 script's own source. A source is read only from its comments and heredoc text,
 plus the `case` arms, parser calls and `getopts` strings that compare its own
 arguments, so an option the script passes to another program never becomes
-one of its own. Python reads the verified script file, bounded, and sends it
-with `script_source`; it never runs anything to get it. The grant answer
+one of its own. The discover command reads the verified script file, bounded, and
+never runs anything to get it. The grant answer
 (`local_cli_grant_op.rs`) then decides a call by the options it passes: a
 blocked option blocks the call, and a call with options and no subcommand is
 allowed only when every option it passes is allowed.

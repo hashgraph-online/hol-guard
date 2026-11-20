@@ -18,6 +18,14 @@
       "file_comments:write"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "figma"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "figma.comments.list",

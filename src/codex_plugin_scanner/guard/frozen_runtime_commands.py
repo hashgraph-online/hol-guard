@@ -8,28 +8,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import BinaryIO, cast
 
-from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .stable_guard_cli import resolve_frozen_guard_cli
 
 FROZEN_CODEX_BRIDGE_ARG = "--_hol-guard-codex-bridge"
 FROZEN_DAEMON_RECOVER_ARG = "--_hol-guard-codex-daemon-recover"
 FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
-
-
-def frozen_codex_bridge_tokens_are_live(tokens: Sequence[str]) -> bool:
-    """Return whether argv matches the frozen Codex private-bridge contract."""
-
-    try:
-        flag_index = tokens.index(FROZEN_CODEX_BRIDGE_ARG)
-    except ValueError:
-        return False
-    if flag_index + 1 >= len(tokens):
-        return False
-    try:
-        payload = json.loads(decode_bridge_config_argument(tokens[flag_index + 1]))
-    except (AttributeError, TypeError, ValueError):
-        return False
-    return isinstance(payload, dict)
 
 
 def is_frozen_guard_runtime() -> bool:
@@ -173,7 +156,6 @@ __all__ = [
     "FROZEN_DAEMON_SERVE_ARG",
     "consume_frozen_daemon_serve_gate",
     "decode_frozen_daemon_serve_payload",
-    "frozen_codex_bridge_tokens_are_live",
     "frozen_daemon_recovery_command",
     "frozen_daemon_serve_command",
     "frozen_windows_extension_control_commands",

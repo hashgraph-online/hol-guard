@@ -143,20 +143,48 @@ pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &
     Ok(())
 }
 
-/// Render the exact request for checked arguments.
+/// Whether a request template names anything that is not an action argument.
+/// A validated pack only allows that for a connection value, so rendering it
+/// without the connection would drop the tenant from a query or body.
+fn uses_connection_values(action: &PackAction, request: &RequestTemplate) -> bool {
+    let hosts = std::collections::BTreeSet::from([request.host.as_str()]);
+    crate::cloud_pack_validate_request::validate_request(action, request, &hosts, None).is_err()
+}
+
+/// Render the exact request for checked arguments, for a pack that declares
+/// no connection values.
 pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, ArgumentError> {
+    render_connected(None, action, args, &Map::new())
+}
+
+/// Render the exact request for checked arguments and the values of the
+/// connection it is sent on. `values` must hold every value `connection`
+/// declares and nothing else; callers can never supply one.
+pub fn render_connected(
+    connection: Option<&crate::cloud_pack_connection::Connection>,
+    action: &PackAction,
+    args: &Value,
+    values: &Map<String, Value>,
+) -> Result<RenderedRequest, ArgumentError> {
     let Executor::DeclarativeHttp { request } = &action.executor else {
         return Err(error("executor_not_renderable", None));
     };
-    let record = check_arguments(action, args)?;
+    let checked = check_arguments(action, args)?;
+    if connection.is_none() && uses_connection_values(action, request) {
+        return Err(error("connection_value_missing", None));
+    }
+    let (bound, host) =
+        crate::cloud_pack_connection::bind(connection, &request.host, checked, values)
+            .map_err(|(code, argument)| ArgumentError { code, argument })?;
+    let record = bound.as_ref();
     let path = render_path(&request.path, record)?;
-    let mut url = format!("https://{}{}", request.host, path);
+    let mut url = format!("https://{host}{path}");
     let query = render_query(&request.query, record)?;
     if !query.is_empty() {
         url.push('?');
         url.push_str(&query);
     }
-    confine(&url, request)?;
+    confine(&url, request, &host)?;
     let mut headers: Vec<[String; 2]> = request
         .headers
         .iter()
@@ -307,12 +335,12 @@ pub(crate) fn encode(text: &str, form: bool) -> String {
     out
 }
 
-/// Refuse a rendered URL that is not HTTPS on the declared host under the literal prefix.
-fn confine(rendered: &str, request: &RequestTemplate) -> Result<(), ArgumentError> {
+/// Refuse a rendered URL that is not HTTPS on the resolved host under the literal prefix.
+fn confine(rendered: &str, request: &RequestTemplate, host: &str) -> Result<(), ArgumentError> {
     let parsed = url::Url::parse(rendered).map_err(|_| refused(None))?;
     let prefix = request.path.split('{').next().unwrap_or("/");
     let ok = parsed.scheme() == "https"
-        && parsed.host_str() == Some(request.host.as_str())
+        && parsed.host_str() == Some(host)
         && parsed.port().is_none()
         && parsed.username().is_empty()
         && parsed.password().is_none()

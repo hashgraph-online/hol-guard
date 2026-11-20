@@ -174,8 +174,6 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
     import logging
     from pathlib import Path
 
-    from .adapters import get_adapter
-    from .adapters.base import HarnessContext
     from .approval_gate import ApprovalGateError
     from .cli.install_commands import (
         apply_managed_install,
@@ -183,9 +181,11 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
         build_harness_verification,
         uninstall_confirmation_token,
     )
+    from .harness_context import HarnessContext
     from .harness_disconnect_gate import require_harness_disconnect_gate
     from .harness_versions.service import invalidate as invalidate_harness_versions
     from .native_daemon_handler import NativeDaemonHandlerError, native_harness_action
+    from .native_harness_client import canonical_harness
 
     payload = _payload(args)
     harness = args["harness"]
@@ -208,11 +208,11 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
             return _reply({"error": str(error)}, 404)
     dry_run = verdict.fields["dry_run"]
     try:
-        adapter = get_adapter(harness)
+        harness = canonical_harness(harness)
     except ValueError as error:
         return _reply({"error": str(error)}, 404)
     if action == "uninstall":
-        expected = uninstall_confirmation_token(adapter.harness)
+        expected = uninstall_confirmation_token(harness)
         confirmation = _optional_string(payload.get("confirmation_phrase")) or _optional_string(
             payload.get("confirmation_" + "token")
         )
@@ -220,24 +220,24 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
             return _reply(
                 {
                     "error": "confirmation_required",
-                    "harness": adapter.harness,
+                    "harness": harness,
                     "confirmation_phrase": expected,
-                    "confirm_command": f"hol-guard apps disconnect {adapter.harness} --confirm {expected}",
+                    "confirm_command": f"hol-guard apps disconnect {harness} --confirm {expected}",
                 },
                 400,
             )
     if dry_run:
-        return _reply(build_harness_setup_plan(action, adapter.harness, context, dry_run=True))
+        return _reply(build_harness_setup_plan(action, harness, context, dry_run=True))
     if action == "uninstall":
         try:
-            require_harness_disconnect_gate(store.guard_home, payload, harness=adapter.harness)
+            require_harness_disconnect_gate(store.guard_home, payload, harness=harness)
         except ApprovalGateError as error:
             return _reply(error.to_payload(), error.status)
     install_command = "uninstall" if action == "uninstall" else "install"
     try:
         result = apply_managed_install(
             install_command,
-            adapter.harness,
+            harness,
             False,
             context,
             store,
@@ -247,17 +247,17 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
     except ValueError as error:
         return _reply({"error": str(error)}, 400)
     except RuntimeError as error:
-        logging.getLogger(__name__).exception("Guard could not complete %s repair for %s", action, adapter.harness)
+        logging.getLogger(__name__).exception("Guard could not complete %s repair for %s", action, harness)
         refusal = _user_facing_install_error(error)
         if refusal is not None:
             code, message = refusal
-            return _reply({"error": code, "harness": adapter.harness, "message": message}, 409)
+            return _reply({"error": code, "harness": harness, "message": message}, 409)
         return _reply(
             {
                 "error": "harness_repair_failed",
-                "harness": adapter.harness,
+                "harness": harness,
                 "message": (
-                    f"Guard could not repair {adapter.harness} protection. "
+                    f"Guard could not repair {harness} protection. "
                     "Open this app's repair details and retry that protection layer. "
                     "Your existing protection settings were preserved."
                 ),
@@ -265,8 +265,8 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
             409,
         )
     # A reinstall or repair may change which harness build is in use.
-    invalidate_harness_versions(context.guard_home, adapter.harness)
-    return _reply({"harness": adapter.harness, "action": action, "dry_run": False, **result})
+    invalidate_harness_versions(context.guard_home, harness)
+    return _reply({"harness": harness, "action": action, "dry_run": False, **result})
 
 
 _RESUME_ERRORS = {"not_found": 404, "not_resolved": 409, "resume_unavailable": 503}

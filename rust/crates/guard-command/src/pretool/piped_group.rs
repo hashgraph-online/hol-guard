@@ -108,6 +108,7 @@ pub(super) fn decision(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
     round: usize,
 ) -> Option<PreToolDecisionV1> {
     if round + 1 >= super::MAX_REWRITE_ROUNDS {
@@ -124,6 +125,7 @@ pub(super) fn decision(
         cwd,
         deadline,
         execution_environment,
+        guard_home,
     )
     .ok()?;
     if filtered.minimum_action != "allow" {
@@ -135,6 +137,7 @@ pub(super) fn decision(
         cwd,
         deadline,
         execution_environment,
+        guard_home,
         round + 1,
     )
     .ok()?;

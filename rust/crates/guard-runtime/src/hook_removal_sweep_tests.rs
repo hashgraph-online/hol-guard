@@ -54,6 +54,7 @@ fn guard_signatures_match() {
         "bash -c '/home/x/.hol-guard/managed/bounded-hooks/run.sh'",
         "HOL_GUARD_MANAGED=1 something",
         "unterminated 'quote hol-guard-codex-hook",
+        "/g/hol-guard-runtime codex-hook-bridge '{\"state_path\":\"/g/daemon-state.json\"}'",
     ] {
         assert!(text_is_guard(command), "{command}");
     }

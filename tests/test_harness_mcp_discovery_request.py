@@ -9,14 +9,15 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import mcp_discovery_client as discovery
 from codex_plugin_scanner.guard import native_runner_authority as authority
-from codex_plugin_scanner.guard.adapters import harness_mcp_discovery as discovery
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_process_env
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, proxy_process_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity
+from codex_plugin_scanner.guard.setup_contracts import display_name_for
 
 _FAKE_SECRET = "fake-secret-value"
 
@@ -53,9 +54,11 @@ def _server(harness: str, name: str, identity: McpServerIdentity | None) -> Mana
 
 def _fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, object]]:
     sent: list[dict[str, object]] = []
+    native = authority.native_runner_authority
 
     def fake_native(kind: str, request: dict[str, object]) -> object:
-        assert kind == "harness_mcp_discovery"
+        if kind != "harness_mcp_discovery" or request["op"] == "proxy_env":
+            return native(kind, request)
         sent.append(request)
         if isinstance(answer, Exception):
             raise answer
@@ -96,7 +99,7 @@ def test_one_group_request_carries_every_server_and_no_env_value(monkeypatch: py
     assert sent[0]["servers"] == [
         {
             "harness": server.harness,
-            "label": discovery.display_name_for(server.harness),
+            "label": display_name_for(server.harness),
             "name": server.name,
             "command": "npx",
             "args": ["-y", server.name],
@@ -282,3 +285,91 @@ def test_a_refused_group_answer_still_records_remote_servers(monkeypatch: pytest
 
     assert discovery.observe_configured_mcp_servers(object(), context=context, seen_at="now") == 1
     assert persisted == [((), remote)]
+
+
+def _adapter_fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, object]]:
+    sent: list[dict[str, object]] = []
+
+    def fake_native(kind: str, request: dict[str, object]) -> object:
+        assert kind == "harness_adapter"
+        sent.append(json.loads(json.dumps(request)))
+        return answer
+
+    monkeypatch.setattr(authority, "native_runner_authority", fake_native)
+    return sent
+
+
+def _detection_with(*artifacts: object) -> HarnessDetection:
+    return cast(
+        HarnessDetection,
+        SimpleNamespace(harness="cursor", artifacts=artifacts),
+    )
+
+
+def test_configured_names_are_one_native_request_and_keep_the_answer_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _adapter_fake(monkeypatch, {"names": [["omp", ["a", "b"]], ["cursor", ["c"]]]})
+    artifact = SimpleNamespace(harness="omp", artifact_type="mcp_server", name=" a ")
+
+    names = discovery.configured_mcp_server_names([_detection_with(artifact)])
+
+    assert names == {"omp": ("a", "b"), "cursor": ("c",)}
+    assert sent == [
+        {
+            "op": "mcp_server_names",
+            "artifacts": [{"harness": "omp", "artifact_type": "mcp_server", "name": " a "}],
+        }
+    ]
+
+
+def test_configured_names_without_artifacts_never_ask(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _adapter_fake(monkeypatch, {"names": []})
+
+    assert discovery.configured_mcp_server_names([_detection_with()]) == {}
+    assert sent == []
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {},
+        {"names": None},
+        {"names": ["omp"]},
+        {"names": [["omp", "a"]]},
+        {"names": [["omp", [1]]]},
+        {"names": [[1, []]]},
+    ],
+)
+def test_malformed_configured_names_are_refused(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    _adapter_fake(monkeypatch, answer)
+    artifact = SimpleNamespace(harness="omp", artifact_type="mcp_server", name="a")
+
+    with pytest.raises(ValueError, match="names answer is malformed"):
+        discovery.configured_mcp_server_names([_detection_with(artifact)])
+
+
+def test_source_labels_overlay_what_the_native_runtime_chose(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _adapter_fake(monkeypatch, {"labels": ["Cursor", None, None]})
+    items: list[dict[str, object]] = [{"cli_id": "a"}, {"cli_id": 3}, {"cli_id": "b", "source_label": "kept"}]
+
+    result = discovery.apply_source_labels(items, {"a": "Cursor", "b": ""})
+
+    assert result == [{"cli_id": "a", "source_label": "Cursor"}, {"cli_id": 3}, {"cli_id": "b", "source_label": "kept"}]
+    assert sent == [
+        {"op": "mcp_source_labels", "cli_ids": ["a", None, "b"], "labels": {"a": "Cursor", "b": ""}},
+    ]
+
+
+def test_source_labels_with_nothing_to_overlay_never_ask(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _adapter_fake(monkeypatch, {"labels": []})
+
+    assert discovery.apply_source_labels([], {"a": "Cursor"}) == []
+    assert discovery.apply_source_labels([{"cli_id": "a"}], {}) == [{"cli_id": "a"}]
+    assert sent == []
+
+
+@pytest.mark.parametrize("answer", [{}, {"labels": None}, {"labels": []}])
+def test_a_malformed_source_label_answer_is_refused(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    _adapter_fake(monkeypatch, answer)
+
+    with pytest.raises(ValueError, match="labels answer is malformed"):
+        discovery.apply_source_labels([{"cli_id": "a"}], {"a": "Cursor"})

@@ -12,7 +12,13 @@ pub(crate) use tokens::{shell_tokens, shell_tokens_preserving_redirects};
 mod shapes;
 
 use shapes::{blank_top_level_groups, sole_command_group};
+#[cfg(unix)]
 pub(crate) use shapes::{blanked_top_level_group_list, command_has_top_level_group_list};
+
+#[path = "parser_segment_cd.rs"]
+mod cd_target;
+
+pub(super) use cd_target::{contained_compile_check_segments, is_plain_cd_target};
 
 pub(super) use shapes::{
     is_stderr_to_null_redirect, is_stderr_to_stdout_redirect, null_sink_redirect_at,
@@ -316,45 +322,6 @@ fn split_execution_segments_inner(
     Ok(segments)
 }
 
-pub(super) fn contained_compile_check_segments(command: &str) -> Option<Vec<RawSegment>> {
-    let chars: Vec<char> = command.chars().collect();
-    let and_index = chars.windows(2).position(|window| window == ['&', '&'])?;
-    if chars[and_index + 2..]
-        .windows(2)
-        .any(|window| window == ['&', '&'])
-    {
-        return None;
-    }
-    let (cd_start, cd_end) = trimmed_bounds(&chars, 0, and_index)?;
-    let (find_start, find_end) = trimmed_bounds(&chars, and_index + 2, chars.len())?;
-    let cd: String = chars[cd_start..cd_end].iter().collect();
-    let find: String = chars[find_start..find_end].iter().collect();
-    let cd_tokens = shell_tokens(&cd, false).ok()?;
-    let find_tokens = shell_tokens(&find, false).ok()?;
-    if cd_tokens.len() != 2
-        || cd_tokens.first().map(String::as_str) != Some("cd")
-        || !is_plain_cd_target(&cd_tokens[1])
-        || find_tokens.first().map(String::as_str) != Some("find")
-        || !is_contained_compile_check_arguments(&find_tokens[1..])
-    {
-        return None;
-    }
-    Some(vec![
-        RawSegment {
-            group_index: 0,
-            pipeline_index: 0,
-            start: cd_start,
-            end: cd_end,
-        },
-        RawSegment {
-            group_index: 1,
-            pipeline_index: 0,
-            start: find_start,
-            end: find_end,
-        },
-    ])
-}
-
 pub(super) fn trimmed_bounds(chars: &[char], start: usize, end: usize) -> Option<(usize, usize)> {
     let mut left = start;
     let mut right = end;
@@ -382,17 +349,6 @@ pub(super) fn starts_at_shell_token_boundary(
                     .count()
                     % 2
                     == 0))
-}
-
-pub(super) fn is_plain_cd_target(value: &str) -> bool {
-    !value.is_empty()
-        && !value.starts_with('-')
-        && !value.chars().any(|value| {
-            matches!(
-                value,
-                '$' | '`' | '<' | '>' | '|' | ';' | '&' | '(' | ')' | '{' | '}' | '\0'
-            )
-        })
 }
 
 pub(super) fn push_segment(

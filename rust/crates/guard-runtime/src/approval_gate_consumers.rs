@@ -228,11 +228,15 @@ pub(crate) fn require_policy_clear(
     )
 }
 
-/// `require_settings_write` (:630-637).
+/// `require_settings_write` (:630-637). When the caller names the operation
+/// (`action`, `subject`), the grant must have been issued for exactly that
+/// operation, so an approval for one settings change cannot apply another.
 pub(crate) fn require_settings_write(
     guard_home: &Path,
     grants: &ApprovalGateGrants,
     approval_gate_grant: Option<&ApprovalGateGrantV1>,
+    action: Option<&str>,
+    subject: Option<&str>,
     now: Option<&str>,
 ) -> Result<(), ApprovalGateErrorV1> {
     if !enabled(&load_state(guard_home)) {
@@ -244,9 +248,9 @@ pub(crate) fn require_settings_write(
         approval_gate_grant,
         Some("settings_write"),
         true,
+        action,
         None,
-        None,
-        None,
+        subject,
         None,
         now,
     )

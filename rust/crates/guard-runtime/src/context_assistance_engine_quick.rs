@@ -150,14 +150,43 @@ fn defined(text: &str, words: &[String]) -> usize {
 /// The mark that closes a docstring or block comment `line` leaves open. A
 /// block comment opens only at the start of a line, so a `/*` inside a
 /// string such as a glob, or at the end of a line comment, opens nothing.
+/// A docstring mark inside a one-line string is text, so `"'''"` opens
+/// nothing; read as a docstring, it hid every definition after it.
 pub(crate) fn opened(line: &str) -> Option<&'static str> {
     let comment = line.trim_start().strip_prefix("/*");
     if comment.is_some_and(|rest| !rest.contains("*/")) {
         return Some("*/");
     }
-    DOCSTRINGS
-        .into_iter()
-        .find(|mark| line.matches(mark).count() % 2 == 1)
+    let mut open: Option<&'static str> = None;
+    let mut rest = line;
+    while let Some(c) = rest.chars().next() {
+        if let Some(mark) = DOCSTRINGS.into_iter().find(|mark| rest.starts_with(mark)) {
+            if open.is_none_or(|was| was == mark) {
+                open = open.xor(Some(mark));
+                rest = &rest[mark.len()..];
+                continue;
+            }
+        }
+        rest = &rest[c.len_utf8()..];
+        if open.is_none() && (c == '"' || c == '\'') {
+            rest = after_string(rest, c);
+        }
+    }
+    open
+}
+
+/// What follows the one-line string `rest` closes with `quote`, past any
+/// escaped quote; nothing when the line does not close it.
+fn after_string(rest: &str, quote: char) -> &str {
+    let mut chars = rest.char_indices();
+    while let Some((at, c)) = chars.next() {
+        if c == '\\' {
+            chars.next();
+        } else if c == quote {
+            return &rest[at + c.len_utf8()..];
+        }
+    }
+    ""
 }
 
 /// A line that opens a function, type or top-level value definition.

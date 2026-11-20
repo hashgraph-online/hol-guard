@@ -15,7 +15,6 @@
   "findings": [
     ["AaBsqGy1kSbnfNaazfr9", "timeout", "guard/native_daemon_client.py", "load_running_guard_surface_daemon_client"],
     ["AaBsqHStkSbnfNaazfv3", "variadic", "ecosystems/kimi.py", "_path_values"],
-    ["AaBsqHJ3kSbnfNaazfvM", "variadic", "guard/adapters/bounded_cli_hook_bridge.py", "bounded_cli_hook_command"],
     ["AaBsqG_kkSbnfNaazftj", "variadic", "guard/runtime/exact_cloud_review.py", "exact_cloud_review_operations"],
     ["AaBsqG7UkSbnfNaazftC", "variadic", "guard/native_cisco_preflight.py", "scan_action_for_cisco_evidence"],
     ["AaBsqG9lkSbnfNaazftS", "variadic", "guard/runtime/js_semver.py", "_expand_primitive_comparator"],
@@ -28,7 +27,7 @@
     ["AaBsqHCkkSbnfNaazft-", "variadic", "guard/cli/commands_support_codex_git_config.py", "_git_gitdir_condition_patterns"],
     ["AaBsqHPSkSbnfNaazfvn", "windows", "guard/windows_paths.py", "windows_terminate_process_if_creation_time"],
     ["AaBsqG_EkSbnfNaazfte", "variadic", "guard/runtime/decisions.py", "_approval_scopes_for_action"],
-    ["AaBsqHF1kSbnfNaazfuO", "variadic", "guard/adapters/codex_remote_control.py", "guarded_codex_launch_command_candidates"],
+    ["AaBsqHF1kSbnfNaazfuO", "variadic", "guard/codex_remote_client.py", "guarded_codex_launch_command_candidates"],
     ["AaBsqHMXkSbnfNaazfvf", "lattice", "guard/action_lattice.py", "<module>"],
     ["AaBsqHMXkSbnfNaazfve", "lattice", "guard/action_lattice.py", "<module>"],
     ["AaBsqG74kSbnfNaazftG", "variadic", "guard/runtime/command_rules.py", "PipelineMatcher.match"],

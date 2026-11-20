@@ -123,6 +123,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # inline code, which Guard stops when enforcing. A contained run
         # prints one line inside the workspace, which is all the case does.
         "gauntlet-watch-fixture-command-is-still-stopped",
+        # A DNS lookup reading names from a batch file: the lookup keeps its
+        # review, and a contained run has no network, so no name leaves.
+        "dns-dig-batch-file",
         # An awk program whose output pipe the read screen must refuse: the pipe
         # runs a network client, and a contained run has no network, so nothing
         # leaves. A read misclassification would be a quiet allow and still fail.
@@ -177,6 +180,12 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # build's programs inside the sandbox, so none of them comes from a
         # directory the case plants outside it.
         "neg-env-unset-path-npm-run-build",
+        # A quoted-pattern grep of a key under the home: a contained run has no
+        # home access, so the pattern matches nothing and no key is printed.
+        "neg-grep-quoted-backslash-alternation-reads-ssh-key",
+        # A hidden `fd` walk that follows links keeps its review; a contained run reads no
+        # link target outside the workspace and prints only names inside it.
+        "neg-home-fd-hidden-follow-links",
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
@@ -243,6 +252,8 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A Python filter after `export PYTHONPATH=.`; contained, it reaches nothing.
+        "neg-python-filter-after-module-path-export",
         # A Python filter that reaches past its input: the program screen must
         # refuse it, and a contained run reaches no file outside the workspace,
         # no module path the prefix names and no network.
@@ -354,6 +365,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A sibling checkout's workflows and test runner: a contained run reads only the
         # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
         "neg-sibling-find-github-exec-cat",
+        # `find -exec wc` over a sibling's sources reads file bytes, so it keeps
+        # its review; a contained run reads only the workspace.
+        "neg-sibling-find-exec-wc-reads-contents",
         "neg-sibling-ls-missing-env-below-github",
         "neg-sibling-node-heap-require-other-checkout",
         # The same rejection for a filter that names an output file. `neg-sort-output-file`

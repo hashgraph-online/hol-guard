@@ -1,35 +1,12 @@
 #!/usr/bin/env python3
-"""Record hook pipeline route vectors from the Python dispatch ladder.
+"""Record vectors for the resident-owned hook route oracle.
 
-After the hook payload was prepared, ``run_native_hook_pipeline`` walked a
-ladder in Python to decide which handler answered the hook and in what order:
-the Claude guard question, the native edge decision, the edge outage, the
-containment route, Copilot's pre-tool and permission request flows, the
-runtime artifact, the Claude permission request, permission prompt and turn
-stop handlers, then the artifact or generic flow. Devin and Zcode permission
-requests were answered with no decision before any of it. The resident decides
-that order now (``hook_route`` in ``hook_decision_hook_route.rs``) and returns
-it as a plan of handler names.
-
-The ladder below (``_recorded_ladder``) is that Python code as it stood at
-3b8ac2e848, kept here so the oracle never calls the code it checks. Every
-effect is a stub that appends a tagged entry to a trace, so a vector records
-exactly which effects the old ladder ran, in order, in each of a set of
-effect worlds (what the stubbed effects report):
-
-    PYTHONPATH=src:. .venv/bin/python scripts/ci/record_hook_route_vectors.py
-
-A vector holds the resident's inputs (``facts``), the route the traces exhibit
-(the plan and the event name outage responses carry) and, per world, the trace
-and return code. The Rust ``hook_decision_hook_route_tests`` replays the route.
-The plan is read off the traces: the base world (no optional handler fires)
-shows every handler reached before a terminal one answered, and the
-``edge_missing`` world shows whether the edge outage check applied.
-
-Two deliberate differences from the old ladder: the passthrough fact is
-decided after the payload is prepared (it was decided before the config load),
-and the Claude predicates and the Copilot pre-tool guard each handler used to
-apply to itself are plan membership now, so the stubs do not model them.
+The stubs model the retired Python dispatch ladder without calling production
+hook code. The resulting facts, handler plan, outage event, traces, and return
+codes are replayed by the Rust ``hook_decision_hook_route_tests`` suite.
+The resident now decides handler order through ``hook_route``. This recorder
+keeps the old ladder as a differential oracle and intentionally models only
+the effects needed to compare those plans.
 """
 
 from __future__ import annotations
@@ -43,55 +20,27 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from hook_route_vector_inputs import (
+    COPILOT_STAGES,
+    EDGE_EVENTS,
+    HARNESSES,
+    PASSTHROUGH_HARNESSES,
+    PAYLOADS,
+    REWRITTEN,
+    SESSION,
+    fixture_event_name,
+)
+
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_event_name, _optional_string
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _canonical_harness_name,
     _is_copilot_permission_request,
 )
-from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/hook_route_vectors.json.gz")
 
-HARNESSES = ("codex", "claude-code", "claude", "copilot", "cursor", "devin", "zcode", "grok", "unknown-harness")
-_EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
-_PASSTHROUGH_HARNESSES = frozenset({"devin", "zcode"})
-SESSION = "session-1"
-_PERMISSION_PROMPT = {"hook_event_name": "Notification", "notification_type": "permission_prompt"}
-
-# Payload shapes as the harnesses send them: every key the event-name helpers read.
-PAYLOADS: tuple[dict[str, object], ...] = (
-    {},
-    {"hook_event_name": "PreToolUse"},
-    {"hook_event_name": "pretooluse"},
-    {"hook_name": "preToolUse"},
-    {"event": "PostToolUse"},
-    {"hookEventName": "PostToolUse"},
-    {"hook_event_name": "UserPromptSubmit"},
-    {"hook_event_name": "UserPromptSubmitted"},
-    {"hook_event_name": "PermissionRequest"},
-    {"hook_event_name": "PermissionRequestV2"},
-    {"hook_name": "permission_request"},
-    {"eventName": "PermissionRequest"},
-    {"hook_event_name": "copilotPermissionRequest"},
-    {"hook_event_name": "Stop"},
-    {"hook_event_name": "Stop", "notification_type": "permission_prompt"},
-    _PERMISSION_PROMPT,
-    {"hook_event_name": "Notification", "notification_type": "idle_prompt"},
-    {"hook_event_name": "Notification"},
-    {"hook_event_name": "SessionStart"},
-    {"hook_event_name": "beforeShellExecution"},
-    {"hookName": "afterShellExecution"},
-)
-# Harnesses whose preparation rewrites the event name: (as invoked, as prepared).
-REWRITTEN: tuple[tuple[dict[str, object], dict[str, object]], ...] = (
-    ({"hookEventName": "preToolUse"}, {"hook_event_name": "PreToolUse"}),
-    ({"eventName": "PermissionRequest"}, {"hook_event_name": "PermissionRequest"}),
-    ({"hook_event_name": "PermissionRequest"}, {"hook_event_name": "PreToolUse"}),
-    ({"hook_event_name": "PreToolUse"}, {"hook_event_name": "PermissionRequest"}),
-)
-COPILOT_STAGES = ("", "pretooluse", "permissionrequest", "posttooluse")
 
 RC = {
     "unavailable": 11,
@@ -169,9 +118,9 @@ class Case:
         return {
             "harness": self.harness,
             "canonical_harness": self.canonical,
-            "invoked_event": runtime_hook_event_name(self.entry),
+            "invoked_event": fixture_event_name(self.entry),
             "hook_event": _hook_event_name(self.prepared) or "",
-            "runtime_event": runtime_hook_event_name(self.prepared),
+            "runtime_event": fixture_event_name(self.prepared),
             "notification_type": _optional_string(self.prepared.get("notification_type")) or "",
             "copilot_stage": self.copilot_stage,
             "copilot_tool_call_present": self.copilot_tool_call,
@@ -302,7 +251,7 @@ def _recorded_ladder(case: Case, r: Recorder, claim: Mapping[str, object]) -> in
     payload = case.prepared
     canonical = case.canonical
     claude = canonical == "claude-code"
-    if runtime_hook_event_name(case.entry) == "PermissionRequest" and canonical in _PASSTHROUGH_HARNESSES:
+    if fixture_event_name(case.entry) == "PermissionRequest" and canonical in PASSTHROUGH_HARNESSES:
         return 0
     if claude and _hook_event_name(payload) == "PostToolUse":
         pending_pair = r.pending_pair()
@@ -313,8 +262,8 @@ def _recorded_ladder(case: Case, r: Recorder, claim: Mapping[str, object]) -> in
     edge = edge if isinstance(edge, Mapping) else {}
     edge_result, edge_receipt, edge_failure = edge.get("result"), edge.get("receipt"), edge.get("failure_reason_code")
     recording_only = bool(edge.get("recording_only"))
-    event_name = _hook_event_name(payload) or runtime_hook_event_name(payload)
-    if event_name in _EDGE_EVENTS and edge_result is None:
+    event_name = _hook_event_name(payload) or fixture_event_name(payload)
+    if event_name in EDGE_EVENTS and edge_result is None:
         return r.unavailable(event_name, str(edge_failure or "native_hook_event_unavailable"), recording_only)
     contained = r.containment(edge_result)
     if contained is not None:
@@ -477,7 +426,7 @@ def observed_route(
 def record(case: Case) -> dict[str, Any]:
     worlds = {world.name: run(case, world) for world in WORLDS}
     base, edge_missing = worlds["base"][0], worlds["edge_missing"][0]
-    event_name = _hook_event_name(case.prepared) or runtime_hook_event_name(case.prepared)
+    event_name = _hook_event_name(case.prepared) or fixture_event_name(case.prepared)
     return {
         "facts": case.facts(),
         "route": observed_route(base, edge_missing, event_name, passthrough=not base),

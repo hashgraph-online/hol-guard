@@ -68,6 +68,31 @@ def _hand_settings_to_cigar(guard_home: Path) -> None:
         native_context_assistance.control("status", guard_home=guard_home)
 
 
+def codex_short_replies_ensure(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Turning CIGAR on also asks Codex for short replies, unless the user turned that off.
+
+    The daemon calls this after it saved a settings change that turns CIGAR on. Measured
+    on top of CIGAR it cut the Codex bill by 5-14% with no task lost. A Codex config Guard
+    cannot change leaves the saved CIGAR setting as it is.
+    """
+
+    del args
+    guard_home = store.guard_home
+    # A Guard home outside the home folder belongs to a test or a sandbox; the Codex
+    # config in the home folder is not its to change.
+    if guard_home.resolve().parent != Path.home().resolve():
+        return _reply({"state": "skipped"})
+    import os
+
+    from ..codex_lean_sessions import LeanSessionsError
+    from ..codex_short_replies import ensure
+
+    with suppress(LeanSessionsError, OSError, RuntimeError, TimeoutError, ValueError):
+        ensure(Path.home(), guard_home, os.environ)
+        return _reply({"state": "asked"})
+    return _reply({"state": "failed"})
+
+
 def _requeue_privacy_projection(store: GuardStore, level: str) -> None:
     from ..runtime.runner import _requeue_cloud_review_privacy_projection
 
@@ -76,9 +101,9 @@ def _requeue_privacy_projection(store: GuardStore, level: str) -> None:
 
 def _apply_settings(store: GuardStore, payload: dict[str, object], *, missing_error: str) -> dict[str, object]:
     from ..approval_gate import ApprovalGateError, require_high_risk
-    from ..approval_gate import input_from_mapping as gate_input_from_mapping
     from ..approval_gate import update_settings as update_gate_settings
     from ..approval_gate import validate_settings_update as validate_gate_settings
+    from ..approval_gate_types import settings_input_from_payload
     from ..config import editable_guard_settings, load_guard_config, update_guard_settings
     from ..package_firewall_entitlement import package_firewall_entitlement_or_denied
 
@@ -88,18 +113,21 @@ def _apply_settings(store: GuardStore, payload: dict[str, object], *, missing_er
     guard_home = store.guard_home
     previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
     gate_payload = settings.get("approval_gate")
-    gate_input = gate_input_from_mapping({"approval_gate": gate_payload}) if isinstance(gate_payload, dict) else None
-    if payload.get("approval_password") or payload.get("approval_totp_code"):
-        proof_input = gate_input_from_mapping(payload)
-        if proof_input is not None:
-            gate_input = proof_input
+    gate_input = settings_input_from_payload(payload)
     presentation_only = gate_payload is None and bool(settings) and set(settings).issubset(_PRESENTATION_ONLY_KEYS)
     config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
     try:
         grant = (
             None
             if presentation_only
-            else require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+            else require_high_risk(
+                guard_home,
+                purpose="settings_write",
+                approval_gate_input=gate_input,
+                # One approval covers exactly these settings, so a Pulse
+                # approval cannot be resubmitted with a different change.
+                settings_change={"kind": "save", "settings": settings},
+            )
         )
         if isinstance(gate_payload, dict):
             validate_gate_settings(guard_home, gate_payload, approval_gate_grant=grant)
@@ -168,6 +196,7 @@ def update_channel(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
             guard_home,
             purpose="settings_write",
             approval_gate_input=gate_input_from_mapping(payload),
+            settings_change={"kind": "update_channel", "update_channel": payload.get("update_channel")},
         )
         update_guard_update_channel(guard_home, payload.get("update_channel"), approval_gate_grant=grant)
     except ApprovalGateError as error:
@@ -180,4 +209,5 @@ def update_channel(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
 SETTINGS_CALLS = {
     "route.approval_gate_setup": approval_gate_setup,
     "route.update_channel": update_channel,
+    "route.codex_short_replies_ensure": codex_short_replies_ensure,
 }

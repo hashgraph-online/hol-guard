@@ -12,9 +12,9 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_fail_closed import render_pre_tool, render_pre_tool_review
 from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker

@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_runtime
-from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_command_probes
 from codex_plugin_scanner.guard.cli import doctor_native_diagnosis as diagnosis_module
 from codex_plugin_scanner.guard.cli.doctor_native_diagnosis import (
     native_runtime_candidates,
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.cli.doctor_native_diagnosis import (
 )
 from codex_plugin_scanner.guard.cli.doctor_native_runtime import native_runtime_section
 from codex_plugin_scanner.guard.cli.runtime_posture_command import render_runtime_status
+from codex_plugin_scanner.guard.command_probes import without_command_probes
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and execute bits")
 

@@ -7,12 +7,12 @@ use std::path::PathBuf;
 use serde_json::{json, Map, Value};
 
 use super::copilot::{
-    config_path, hook_path, inline_hooks, parse_object, plan_hooks, strict_object,
+    config_path, hook_argvs, hook_path, inline_hooks, parse_object, plan_hooks, strict_object,
 };
 use super::copilot_install::{paths_manifest, rendered, rendered_object};
 use super::copilot_state as state;
 use super::files::{self, Doc, Object};
-use super::{path_text, Ctx, Failure, Step};
+use super::{path_text, Ctx, Failure, Spec, Step};
 use crate::pyjson::PyVal;
 
 fn os_error(error: std::io::Error) -> Failure {
@@ -21,7 +21,7 @@ fn os_error(error: std::io::Error) -> Failure {
 
 /// `uninstall`: restore each recorded config, drop Guard's hook entries once
 /// no state remains, and rewrite the hook files, all under the locks.
-pub(super) fn uninstall(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn uninstall(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     let _scope = state::scope(ctx)?;
     let recorded = state::uninstall_targets(ctx, state::state_entries(ctx)?);
     let mut lock_paths = state::lock_paths(ctx);
@@ -53,14 +53,13 @@ pub(super) fn uninstall(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         }
         None => None,
     };
-    let config_argv = fields.get("config_argv").ok_or(Failure::Invalid)?;
-    let workspace_argv = fields.get("workspace_argv").unwrap_or(&Value::Null);
+    let (config_argv, workspace_argv) = hook_argvs(spec, ctx)?;
     let (config_plan, workspace_plan) = plan_hooks(
-        fields,
-        (hooks.as_slice(), config_argv),
+        ctx,
+        (hooks.as_slice(), &config_argv),
         workspace_payload
             .as_ref()
-            .map(|payload| (payload, workspace_argv)),
+            .map(|payload| (payload, &workspace_argv)),
     )?;
     for entry in &recorded {
         if !ctx.absolute(&entry.backup).is_file() {

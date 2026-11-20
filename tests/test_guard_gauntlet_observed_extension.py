@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet import observed_extension
-from codex_plugin_scanner.guard.adapters.extension_runtime import PI_HOOK_BRIDGE_SWITCH
+
+PI_HOOK_BRIDGE_SWITCH = "HOL_GUARD_PI_HOOK_BRIDGE"
 
 
 def test_the_extension_keeps_the_transport_the_installed_runtime_chooses(
@@ -28,10 +29,3 @@ def test_the_extension_keeps_the_transport_the_installed_runtime_chooses(
     )
     assert seen == [None]
     assert PI_HOOK_BRIDGE_SWITCH not in os.environ
-
-
-def test_the_bridge_runtime_is_withheld_under_the_switch(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.adapters import extension_runtime
-
-    monkeypatch.setenv(PI_HOOK_BRIDGE_SWITCH, "fetch")
-    assert extension_runtime.pi_native_hook_runtime(guard_home=Path("/nonexistent")) is None

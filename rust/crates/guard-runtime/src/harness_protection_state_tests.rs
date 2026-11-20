@@ -144,3 +144,31 @@ fn live_evidence_without_a_transport_proves_nothing() {
     let answered = with_event_states(payload, Some(&vec![row]));
     assert_eq!(answered["event_states"][0]["state"], "configured");
 }
+
+#[test]
+fn an_event_split_by_tool_reports_each_row_with_its_tools() {
+    let rows: Vec<CapabilityRow> = serde_json::from_value(json!([
+        { "event": "PreToolUse", "tools": ["Bash"], "transport": "native_hook", "mode": "blocking", "declared_actions": ["block"] },
+        { "event": "PreToolUse", "tools": ["apply_patch"], "transport": "native_hook", "mode": "blocking", "declared_actions": ["block"] },
+        { "event": "Stop", "transport": "native_hook", "mode": "observe", "declared_actions": ["observe"] },
+    ]))
+    .expect("rows");
+    let answered = with_event_states(json!({ "state": "tested", "reason": null }), Some(&rows));
+    assert_eq!(answered["event_states"][0]["tools"], json!(["Bash"]));
+    assert_eq!(answered["event_states"][1]["tools"], json!(["apply_patch"]));
+    assert_eq!(answered["event_states"][2]["tools"], json!([]));
+}
+
+#[test]
+fn an_event_split_by_surface_keeps_each_surface() {
+    let rows: Vec<CapabilityRow> = serde_json::from_value(json!([
+        { "event": "*", "surface": "cli", "transport": "none", "mode": "unsupported", "declared_actions": [] },
+        { "event": "*", "surface": "cloud_agent", "transport": "none", "mode": "unsupported", "declared_actions": [] },
+        { "event": "Stop", "transport": "native_hook", "mode": "observe", "declared_actions": ["observe"] },
+    ]))
+    .expect("rows");
+    let answered = with_event_states(json!({ "state": "tested", "reason": null }), Some(&rows));
+    assert_eq!(answered["event_states"][0]["surface"], "cli");
+    assert_eq!(answered["event_states"][1]["surface"], "cloud_agent");
+    assert_eq!(answered["event_states"][2]["surface"], Value::Null);
+}

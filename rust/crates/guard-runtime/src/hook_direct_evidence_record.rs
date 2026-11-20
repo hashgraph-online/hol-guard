@@ -91,6 +91,16 @@ fn capture_pending(paged: &Paged, capturing: bool) -> bool {
         && paged.record.get("receipt").is_some_and(Value::is_object)
 }
 
+/// Whether the resident still has evidence work for this page. A record with
+/// no requested activity may remain visible until its cursor is acknowledged,
+/// but it does not block that acknowledgement once its receipt is written.
+pub(super) fn needs_work(paged: &Paged, guard_home: &str) -> bool {
+    receipt_pending(paged)
+        || (paged.activity && !flagged(&paged.record, DIRECT_ACTIVITY_RECORDED))
+        || fence_wait_ms(&paged.record).is_some()
+        || capture_pending(paged, capture_marker_present(Path::new(guard_home)))
+}
+
 /// `CodexBindingCaptureWriter.submit_native_capture`, sealed in process. The
 /// capture is diagnostics only, so one it cannot seal is left unrecorded.
 #[cfg(unix)]
@@ -182,11 +192,7 @@ pub(super) fn leftovers(
     super::notice::raise(guard_home, source, notices);
     let capturing = capture_marker_present(home);
     let capture_deadline = Instant::now() + CAPTURE_PAGE_BUDGET;
-    let pending = |paged: &Paged| {
-        receipt_pending(paged)
-            || fence_wait_ms(&paged.record).is_some()
-            || capture_pending(paged, capturing)
-    };
+    let pending = |paged: &Paged| needs_work(paged, guard_home);
     if !paged.iter().any(pending) {
         // The writer saves on its own thread, so a store failure can follow
         // the page that gave it the last record.
@@ -197,6 +203,7 @@ pub(super) fn leftovers(
         let mut marks = Vec::new();
         for paged in paged.iter().filter(|paged| pending(paged)) {
             let mut recorded = Vec::new();
+            let mut activity_recorded = flagged(&paged.record, DIRECT_ACTIVITY_RECORDED);
             if fence_wait_ms(&paged.record)
                 .is_some_and(|waited| submit_fence_window(writer, waited))
             {
@@ -217,11 +224,25 @@ pub(super) fn leftovers(
                 // The activity cites the receipt, so it follows one the writer took.
                 if receipt_taken
                     && paged.activity
-                    && !flagged(&paged.record, DIRECT_ACTIVITY_RECORDED)
+                    && !activity_recorded
                     && crate::edge_receipt::submit_activity(writer, &paged.record)
                 {
+                    activity_recorded = true;
                     recorded.push(DIRECT_ACTIVITY_RECORDED);
                 }
+            }
+            // Emergency-safe and other receipt-less direct answers carry no
+            // receipt, but a bound daemon may still have asked the resident
+            // to record their command activity. Keep that activity native as
+            // well instead of handing the page to a Python recorder.
+            if paged.activity
+                && !activity_recorded
+                && (!flagged(&paged.record, RECEIPT_VALID)
+                    || !paged.record.get("receipt").is_some_and(Value::is_object)
+                    || flagged(&paged.record, DIRECT_RECEIPT_RECORDED))
+                && crate::edge_receipt::submit_activity(writer, &paged.record)
+            {
+                recorded.push(DIRECT_ACTIVITY_RECORDED);
             }
             if capture_pending(paged, capturing)
                 && Instant::now() < capture_deadline
@@ -274,6 +295,15 @@ pub(super) fn settled(paged: &Paged, capturing: bool) -> bool {
     if event == USER_PROMPT_SUBMIT {
         // The daemon records no activity for a prompt it answers.
         return true;
+    }
+    if event == PRE_TOOL_USE
+        && record.get(CONNECTOR_NOTICE_FIELD).is_some()
+        && !flagged(record, super::notice::NOTICE_RAISED)
+    {
+        return false;
+    }
+    if !paged.activity {
+        return !record.get("receipt").is_some_and(Value::is_object);
     }
     flagged(record, DIRECT_ACTIVITY_RECORDED)
         && (event == POST_TOOL_USE

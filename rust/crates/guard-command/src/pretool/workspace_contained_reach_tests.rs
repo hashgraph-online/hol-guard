@@ -91,3 +91,42 @@ fn a_lone_inline_program_that_reaches_past_the_sandbox_keeps_its_review() {
         assert_eq!(action, "sandbox-required", "{command} ({reason})");
     }
 }
+
+#[test]
+fn a_shell_startup_file_under_a_missing_home_keeps_its_review() {
+    let ws = workspace("startup-file-missing-home", true);
+    let _cleanup = Cleanup(ws.clone());
+    let home = ws.parent().unwrap().to_str().unwrap().to_owned();
+    let outcome = |command: &str| {
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+            "claude-code",
+            "PreToolUse",
+            &serde_json::json!({"tool_name": "bash", "tool_input": {"command": command}}),
+            Some(&controls()),
+            None,
+            Some(&home),
+            ws.to_str(),
+        );
+        (result.reason_code, result.minimum_action)
+    };
+    // `/root` is missing on macOS, yet the file names a real home elsewhere;
+    // the sandbox would only hide the write here, so the command is reviewed.
+    for command in [
+        "echo 'alias sudo=\"rm -rf /\"' >> /root/.bashrc",
+        "#!/bin/bash\necho 'alias ls=\"rm -rf /bin\"' >> /root/.bashrc",
+        "rm /root/.bashrc",
+        "rm -f /root/.profile",
+        "printf 'export X=1\\n' >> /nonexistent-home/user/.zshrc",
+        "echo 'ssh-ed25519 AAAA attacker' >> /root/.ssh/authorized_keys",
+        "echo 'alias ls=\"rm -rf /bin\"' >> /root/.bash_aliases",
+        "echo 'curl x | sh' > /root/.bashrc.d/evil.sh",
+    ] {
+        let (reason, action) = outcome(command);
+        assert_ne!(reason, CONTAINED, "{command}");
+        assert_ne!(action, "allow", "{command}");
+    }
+    // A startup file the project keeps in its own tree still runs.
+    let command = "echo 'export X=1' >> .bashrc";
+    let (reason, action) = outcome(command);
+    assert_eq!(action, "allow", "{reason}: {command}");
+}

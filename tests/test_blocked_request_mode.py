@@ -59,21 +59,27 @@ def test_package_hint_names_the_frozen_install_without_promising_it() -> None:
     # pnpmfile runs inside the pnpm process, so `--ignore-scripts` alone does not
     # make a pnpm install script-free and the runtime will not prove that form.
     assert "`pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile`" in text
-    assert "If this was already that form" in text
+    assert "if this was already that form" in text
     assert "Use `--ignore-scripts`" not in text
+    # The lockfile-only forms exist only for npm, pnpm and bun; a pip, uv or cargo install
+    # must not read as if one of them would pass.
+    assert "For npm, pnpm and bun, an install" in text
+    assert "Other package managers, such as pip, uv or cargo, have no form Guard passes" in text
 
 
 def test_package_hint_leaves_the_approval_step_to_the_queue_state() -> None:
     # Without an inbox row, the hint must not send the agent to ask for an approval that cannot be given.
     text = safe_alternative_reason("Blocked.", reason_code="native_package_review", approval_queued=False)
-    assert "If this was already that form" in text
+    assert "if this was already that form" in text
     assert "approve this install" not in text
     assert "No approval is waiting in HOL Guard" in text
 
 
 def test_specific_deny_text_without_queued_approval_points_to_no_approval() -> None:
     text = safe_alternative_reason("Blocked.", reason_code="native_policy_reapproval_required", approval_queued=False)
-    assert text.startswith("Blocked. No approval is waiting in HOL Guard")
+    assert text.startswith(
+        "Blocked. Guard rule: `native_policy_reapproval_required`. No approval is waiting in HOL Guard"
+    )
     assert "Ask the user to approve" not in text
     assert "hol-guard approvals" not in text
 
@@ -183,3 +189,12 @@ def test_direct_read_review_leaves_out_the_search_advice() -> None:
         approval_queued=True,
     )
     assert "A search is checked" in search
+
+
+def test_deny_text_names_only_a_plain_rule_identifier() -> None:
+    # The agent can tell holds apart by rule; an unknown or odd code names nothing.
+    named = safe_alternative_reason("Held.", reason_code="native_network_review", approval_queued=True)
+    assert "Guard rule: `native_network_review`." in named
+    for code in ("unknown", "", "Native-Rule", "a`b", "x" * 65):
+        text = safe_alternative_reason("Held.", reason_code=code, approval_queued=True)
+        assert "Guard rule:" not in text

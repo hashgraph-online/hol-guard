@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def worker_config(context: HarnessContext, *, event_name: str, guard_cli: list[str]) -> str:
