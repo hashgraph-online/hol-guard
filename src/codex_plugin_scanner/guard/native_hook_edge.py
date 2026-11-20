@@ -31,6 +31,7 @@ _SELF_CHECK_FEATURE = "edge-self-check-v1"
 # The edge answers the Oh My Pi / Pi structured-output mediation itself from
 # the resident-authenticated direct-lane binding.
 STRUCTURED_OUTPUT_FEATURE = "edge-structured-output-v1"
+STRUCTURED_OUTPUT_BINDING_FEATURE = "edge-structured-output-binding-v1"
 _UNSUPPORTED_EVENT_CODE = "native_hook_event_unsupported"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _LOCAL_CLI_RULE_FEATURE = "edge-local-cli-rule-v1"
@@ -272,10 +273,14 @@ def review_raw_hook_native(
             "aftermcpexecution",
         }
         and normalized_harness in {"pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"}
-    ) or structured_output_config is not None:
+    ):
         # The resident resolves the managed structured-output view from its
-        # authenticated direct-lane binding. Older residents without the
-        # mediation feature cannot be trusted with this hook path.
+        # authenticated direct-lane binding. Older residents without that
+        # binding capability cannot be trusted with this hook path.
+        required_features.add(STRUCTURED_OUTPUT_BINDING_FEATURE)
+    elif structured_output_config is not None:
+        # Compatibility callers that still carry the view use the original
+        # envelope capability until their caller is migrated.
         required_features.add(STRUCTURED_OUTPUT_FEATURE)
     if event_key in {
         "pretool",

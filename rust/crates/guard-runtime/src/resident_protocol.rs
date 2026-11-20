@@ -94,6 +94,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // The edge mediates a Pi or Oh My Pi `PostToolUse` against the managed
         // structured-output policy the envelope carries.
         "edge-structured-output-v1".into(),
+        crate::edge_structured::DIRECT_LANE_FEATURE.into(),
         "git-execution-context-v1".into(),
         "native-resident-client-v1".into(),
         "shell-helpers-v1".into(),

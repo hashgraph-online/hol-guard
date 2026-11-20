@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 /// The key the mediation rides under in the harness response.
 const MEDIATION_FIELD: &str = "structured_content_mediation";
+pub(crate) const DIRECT_LANE_FEATURE: &str = "edge-structured-output-binding-v1";
 
 /// What the daemon resolves when it cannot establish the managed policy: the
 /// destination is required, and nothing names a binding it may be forwarded
@@ -64,6 +65,14 @@ fn attach(
     {
         return;
     }
+    if edge
+        .harness_response
+        .as_ref()
+        .and_then(Value::as_object)
+        .is_some_and(|response| response.contains_key(MEDIATION_FIELD))
+    {
+        return;
+    }
     let resident_view = origin_store.map(|store| {
         let digest = envelope
             .policy_snapshot
@@ -104,7 +113,24 @@ fn attach(
         recording_only: envelope.recording_only,
         deadline: started + Duration::from_millis(budget),
     };
-    let mediation = pi::mediate(&context, || pi::resolved_binding(&resolution));
+    let mediation = pi::mediate(&context, || {
+        let Some(store) = origin_store else {
+            return pi::resolved_binding(&resolution);
+        };
+        let Some(digest) = envelope
+            .policy_snapshot
+            .get("policy_digest")
+            .and_then(Value::as_str)
+        else {
+            return Value::Null;
+        };
+        match store.structured_output_binding(envelope.policy_generation, digest) {
+            Some(Some(current_view)) => pi::resolution(&edge.harness, Some(&current_view))
+                .map(|current| pi::resolved_binding(&current))
+                .unwrap_or(Value::Null),
+            Some(None) | None => Value::Null,
+        }
+    });
     if let (Some(mediation), Some(Value::Object(response))) =
         (mediation, edge.harness_response.as_mut())
     {
