@@ -468,10 +468,10 @@ pub(crate) fn drain(
                         || unwritten.iter().any(|record| record == &item.record)
                 });
             }
-            if paged
-                .iter()
-                .any(|item| record::needs_work(item, &request.guard_home))
-            {
+            if paged.iter().any(|item| {
+                crate::mcp_relay_receipt::is_plain(&item.record)
+                    || record::needs_work(item, &request.guard_home)
+            }) {
                 return Err("direct_hook_evidence_unhandled".to_owned());
             }
             fatal
