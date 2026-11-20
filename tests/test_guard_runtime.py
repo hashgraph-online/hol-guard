@@ -19359,7 +19359,7 @@ def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavai
     def _unavailable(*_args, **_kwargs):
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-    monkeypatch.setattr(guard_runner_module._authority, step, _unavailable)
+    monkeypatch.setattr(guard_runner_module._shadow, step, _unavailable)
 
     guard_runner_module.sync_receipts(store)
 

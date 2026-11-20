@@ -774,7 +774,7 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         ),
     ]
 
-    verdict = guard_runner._authority.policy_shadow_verdict
+    verdict = guard_runner._shadow.policy_shadow_verdict
     assert verdict([], equivalent, evaluating=False, canonical_enforcement=True) == (("legacy_unavailable",), None)
     assert verdict(legacy, equivalent, evaluating=False, canonical_enforcement=True) == ((), None)
     assert verdict(legacy, changed, evaluating=False, canonical_enforcement=True) == (

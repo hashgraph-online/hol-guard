@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from ..config import GuardConfig
-from ..models import GuardAction, HarnessDetection, PolicyDecision
+from ..models import GuardAction, HarnessDetection
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .json_safe_copy import json_safe_copy
 
@@ -62,7 +62,6 @@ _AUTHORITY_ARTIFACT_KEYS = frozenset(
 # Per-request budget for the slimmed artifacts of one chunk (the transport cap
 # is 4 MiB; the reply is a patch, so it stays far below its own 2 MiB cap).
 _CHUNK_BYTES = 512 * 1024
-_SHADOW_KEYS = ("harness", "scope", "artifact_id", "artifact_hash", "workspace", "publisher", "action", "expires_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,76 +403,6 @@ def authority_error(evaluation: Mapping[str, object], *, require_launch_permitte
         {"evaluation": projected, "require_launch_permitted": require_launch_permitted},
     )
     return _typed(payload, "authority_error", str, nullable=True)
-
-
-def policy_shadow_source(
-    candidate: Mapping[str, object],
-    *,
-    stored_legacy: object,
-    existing: object,
-) -> tuple[str | None, bool]:
-    """Which stored bundle shadows a v2 candidate, and whether it only evaluates.
-
-    Answers ``"stored"``, ``"existing"`` or ``None`` for the shadow. Only the
-    fields the choice reads travel: each bundle's version and issue time, and
-    the candidate's default mode. Whole bundles, escaped for transport, could
-    outgrow one request even when each passed bundle validation.
-    """
-
-    def header(bundle: object) -> dict[str, object] | None:
-        if not isinstance(bundle, dict):
-            return None
-        return {key: bundle[key] for key in ("contractVersion", "issuedAt") if key in bundle}
-
-    candidate_fields: dict[str, object] = header(dict(candidate)) or {}
-    payload_field = candidate.get("payload")
-    spec = payload_field.get("spec") if isinstance(payload_field, dict) else None
-    defaults = spec.get("defaults") if isinstance(spec, dict) else None
-    if isinstance(defaults, dict) and "mode" in defaults:
-        candidate_fields["payload"] = {"spec": {"defaults": {"mode": defaults["mode"]}}}
-    payload = native_runner_authority(
-        "policy_shadow_source",
-        {"candidate": candidate_fields, "stored_legacy": header(stored_legacy), "existing": header(existing)},
-    )
-    source = _typed(payload, "legacy", str, nullable=True)
-    if source not in (None, "stored", "existing"):
-        raise _malformed()
-    return source, _typed(payload, "evaluating", bool)
-
-
-def policy_shadow_verdict(
-    legacy: Sequence[PolicyDecision],
-    canonical: Sequence[PolicyDecision],
-    *,
-    evaluating: bool,
-    canonical_enforcement: bool,
-) -> tuple[tuple[str, ...], str | None]:
-    """Where the legacy and canonical rows disagree, and the refusal that follows.
-
-    Rust answers both: the reason codes to record, and
-    ``"canonical_shadow_mismatch"`` when a rollout device must keep the policy
-    it already has, else ``None``.
-    """
-
-    def rows(decisions: Sequence[PolicyDecision]) -> list[dict[str, object]]:
-        return [{key: getattr(decision, key) for key in _SHADOW_KEYS} for decision in decisions]
-
-    payload = native_runner_authority(
-        "policy_shadow_verdict",
-        {
-            "legacy": rows(legacy),
-            "canonical": rows(canonical),
-            "evaluating": evaluating,
-            "canonical_enforcement": canonical_enforcement,
-        },
-    )
-    reasons = _typed(payload, "reason_codes", list)
-    if not all(isinstance(reason, str) for reason in reasons):
-        raise _malformed()
-    rejection = _typed(payload, "rejection", str, nullable=True)
-    if rejection not in (None, "canonical_shadow_mismatch"):
-        raise _malformed()
-    return tuple(reasons), rejection
 
 
 def receipt_evidence_updates(

@@ -82,8 +82,8 @@ from ..review_signature_verification import sync_review_verification_keys
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
-from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
+from . import runner_policy_shadow as _shadow
 from .extension_catalog_handshake import (
     catalog_runtime_unavailable_summary,
     prepare_extension_catalog_handshake,
@@ -400,7 +400,7 @@ def policy_bundle_candidate_decisions(
 
     stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
     try:
-        shadow_source, evaluating = _authority.policy_shadow_source(
+        shadow_source, evaluating = _shadow.policy_shadow_source(
             policy_bundle,
             stored_legacy=stored_legacy,
             existing=existing_policy_bundle,
@@ -434,7 +434,7 @@ def policy_bundle_candidate_decisions(
     rejection: str | None = "native_shadow_unavailable"
     if not native_shadow_unavailable:
         try:
-            mismatch_reasons, rejection = _authority.policy_shadow_verdict(
+            mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
                 legacy_decisions,
                 canonical_decisions,
                 evaluating=evaluating,
