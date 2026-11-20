@@ -126,6 +126,11 @@ impl Rule {
 /// expansion. A context-free classification has no tree to read, as with
 /// path operands.
 pub(super) fn roots_proven(roots: &[&str], globs: &[&str], context: ReadContext<'_>) -> bool {
+    // An all-files override reopens ignored, hidden, and Git-internal paths.
+    // It cannot prove a quiet recursive search even without an ignore negation.
+    if globs.iter().any(|glob| matches!(*glob, "**" | "**/*")) {
+        return false;
+    }
     if context.home_dir.is_none() && context.cwd.is_none() {
         return true;
     }
