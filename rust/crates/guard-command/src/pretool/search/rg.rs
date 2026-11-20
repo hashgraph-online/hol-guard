@@ -773,9 +773,9 @@ mod tests {
     #[test]
     fn case_blind_globs_after_consumed_option_values_cannot_narrow() {
         use super::{inclusion_globs, narrowing_globs};
-        let arguments = arguments("KEY --context-separator -- --iglob *.TS -g src/**");
-        assert_eq!(inclusion_globs(&arguments), vec!["*.TS", "src/**"]);
-        assert!(narrowing_globs(&arguments).is_empty());
+        let args = arguments("KEY --context-separator -- --iglob *.TS -g src/**");
+        assert_eq!(inclusion_globs(&args), vec!["*.TS", "src/**"]);
+        assert!(narrowing_globs(&args).is_empty());
 
         for line in ["KEY --iglob=*.TS -g src/**", "KEY --iglob *.TS -g src/**"] {
             assert!(narrowing_globs(&arguments(line)).is_empty(), "{line}");
