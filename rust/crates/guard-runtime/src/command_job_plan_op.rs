@@ -237,6 +237,9 @@ fn package_shim_remove_confirmation(managers: Option<&[String]>) -> Map<String, 
 }
 
 fn app_remove_confirmation(harness: &str, surface: Option<&str>) -> Map<String, Value> {
+    // The local disconnect gate compares `--confirm` with the canonical
+    // harness, so an alias such as `claude` confirms as `claude-code`.
+    let harness = guard_command::harness_identity::canonical_harness_id(harness).unwrap_or(harness);
     let phrase = format!("disconnect-{harness}");
     let mut command = format!("hol-guard apps disconnect {harness}");
     if let Some(surface) = surface {

@@ -90,6 +90,7 @@ def _valid_plan(plan: object) -> bool:
     managers = plan["managers"]
     return (
         isinstance(plan["operation"], str)
+        and isinstance(plan["family"], str)
         and plan["family"] in _FAMILIES
         and (managers is None or (isinstance(managers, list) and all(isinstance(item, str) for item in managers)))
         and all(plan[key] is None or isinstance(plan[key], str) for key in ("harness", "surface"))

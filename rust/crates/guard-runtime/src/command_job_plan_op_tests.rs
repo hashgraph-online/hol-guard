@@ -217,6 +217,12 @@ fn app_remove_waits_for_the_local_disconnect_command() {
         json!("hol-guard apps disconnect cursor --confirm disconnect-cursor")
     );
     assert_eq!(confirmation(&bare)["surface"], Value::Null);
+    let alias = run_plan("guard.app.remove", json!({"harness": "claude"}));
+    assert_eq!(
+        confirmation(&alias)["confirm_command"],
+        json!("hol-guard apps disconnect claude-code --confirm disconnect-claude-code")
+    );
+    assert_eq!(confirmation(&alias)["harness"], json!("claude-code"));
 }
 
 fn request(schema: &str, query: Value) -> CommandJobPlanRequestV1 {
