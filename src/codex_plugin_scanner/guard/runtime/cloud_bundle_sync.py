@@ -19,13 +19,14 @@ import urllib.error
 from collections.abc import Mapping
 from email.message import Message
 from pathlib import Path
+from typing import NoReturn
 
 CLOUD_BUNDLE_SYNC_COMMAND = "cloud-bundle-sync"
 CLOUD_BUNDLE_SYNC_FEATURE = "cloud-bundle-sync-v1"
 CLOUD_EVENT_SYNC_COMMAND = "cloud-event-sync"
 CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
 CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
-CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v3"
+CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v4"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
@@ -112,12 +113,63 @@ def cloud_json_request(
 
     from ..config import resolve_guard_home
 
+    answer = _native_cloud_request(
+        auth_context,
+        resolve_guard_home(),
+        url=url,
+        body=body,
+        timeout_seconds=timeout_seconds,
+        retry_timeout_seconds=retry_timeout_seconds,
+        raw=False,
+    )
+    return cloud_json_answer(url, answer)
+
+
+def cloud_raw_request(
+    auth_context: Mapping[str, object],
+    guard_home: Path,
+    *,
+    url: str,
+    body: bytes | None,
+    timeout_seconds: float,
+    retry_timeout_seconds: float,
+) -> tuple[int, bytes]:
+    """:func:`cloud_json_request` that returns the 2xx status and body unread.
+
+    For an endpoint that may answer ``204 No Content`` or whose body the caller
+    parses under its own limits. Failures are raised the same way.
+    """
+
+    answer = _native_cloud_request(
+        auth_context,
+        guard_home,
+        url=url,
+        body=body,
+        timeout_seconds=timeout_seconds,
+        retry_timeout_seconds=retry_timeout_seconds,
+        raw=True,
+    )
+    return cloud_raw_answer(url, answer)
+
+
+def _native_cloud_request(
+    auth_context: Mapping[str, object],
+    guard_home: Path,
+    *,
+    url: str,
+    body: bytes | None,
+    timeout_seconds: float,
+    retry_timeout_seconds: float,
+    raw: bool,
+) -> object:
     request: dict[str, object] = {
         "url": url,
         "method": "GET" if body is None else "POST",
         "timeoutSeconds": float(timeout_seconds),
         "retryTimeoutSeconds": float(retry_timeout_seconds),
     }
+    if raw:
+        request["answer"] = "raw"
     body_file: str | None = None
     try:
         if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
@@ -127,10 +179,10 @@ def cloud_json_request(
             request["bodyFile"] = body_file
         elif body is not None:
             request["body"] = body.decode("utf-8")
-        answer = run_native_cloud_sync(
+        return run_native_cloud_sync(
             CLOUD_EVENT_SYNC_COMMAND,
             CLOUD_JSON_REQUEST_FEATURE,
-            resolve_guard_home(),
+            guard_home,
             "request",
             auth_context=auth_context,
             subject="Cloud request",
@@ -139,7 +191,6 @@ def cloud_json_request(
     finally:
         if body_file is not None:
             Path(body_file).unlink(missing_ok=True)
-    return cloud_json_answer(url, answer)
 
 
 def cloud_json_answer(url: str, answer: object) -> dict[str, object]:
@@ -150,6 +201,25 @@ def cloud_json_answer(url: str, answer: object) -> dict[str, object]:
     response = answer.get("response")
     if isinstance(response, dict):
         return response
+    _raise_cloud_failure(url, answer)
+
+
+def cloud_raw_answer(url: str, answer: object) -> tuple[int, bytes]:
+    """The status and body from a native ``raw`` request result, or its failure raised."""
+
+    if not isinstance(answer, dict):
+        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+    raw = answer.get("raw")
+    if isinstance(raw, dict):
+        status = raw.get("status")
+        body = raw.get("body")
+        if isinstance(status, int) and not isinstance(status, bool) and isinstance(body, str):
+            return status, body.encode("utf-8")
+        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+    _raise_cloud_failure(url, answer)
+
+
+def _raise_cloud_failure(url: str, answer: Mapping[str, object]) -> NoReturn:
     refusal = answer.get("refusal")
     if isinstance(refusal, dict) and isinstance(refusal.get("status"), int):
         headers = Message()
