@@ -2795,7 +2795,7 @@ def test_headless_policy_sync_explains_rejected_downgrade(tmp_path: Path, monkey
         "2026-05-19T00:00:00Z",
     )
     bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
-    monkeypatch.setattr(runner_module, "_policy_bundle_is_version_downgrade", lambda *_args: True)
+    monkeypatch.setattr(runner_module, "_policy_bundle_admission_rejection", lambda *_args: "bundle_version_downgrade")
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

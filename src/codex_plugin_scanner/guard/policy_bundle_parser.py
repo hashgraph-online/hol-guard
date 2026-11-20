@@ -51,9 +51,93 @@ def _flag(kind: str, request: dict[str, object], *, otherwise: bool) -> bool:
     return result.get("value") is True
 
 
-def policy_bundle_daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
-    slim = {key: policy_bundle[key] for key in ("minDaemonVersion",) if key in policy_bundle}
-    return _flag("daemon_version_supported", {"bundle": slim, "daemon_version": __version__}, otherwise=False)
+# What the admission and downgrade gates read from a candidate and from the
+# accepted reference. Only these fields cross the transport.
+_CANDIDATE_KEYS = (
+    "contractVersion",
+    "rolloutState",
+    "minDaemonVersion",
+    "bundleVersion",
+    "bundleHash",
+    "payloadHash",
+    "issuedAt",
+    "workspaceId",
+    "rollback",
+    "cloudExceptions",
+    "cloudExceptionsIssuedAt",
+)
+_REFERENCE_KEYS = (
+    "bundleVersion",
+    "bundleHash",
+    "payloadHash",
+    "issuedAt",
+    "workspaceId",
+    "cloudExceptions",
+    "cloudExceptionsIssuedAt",
+    "cloudExceptionsHash",
+)
+_EXPECTED_KEYS = ("bundleVersion", "bundleHash")
+
+
+def _view_chunks(bundle: object, keys: tuple[str, ...]) -> list[str] | None:
+    if not isinstance(bundle, dict):
+        return None
+    return policy_bundle_chunks({key: bundle[key] for key in keys if key in bundle})
+
+
+def policy_bundle_admission_rejection(
+    candidate: dict[str, object],
+    reference: dict[str, object] | None,
+) -> str | None:
+    """The first reason a validated candidate may not become live authority.
+
+    Rust runs the daemon-version, rollout-state and downgrade gates in that
+    order and answers ``None`` when the candidate passes all three. A native
+    failure raises ``PolicyBundleNativeError`` (``PolicyBundleNativeUnavailableError``
+    for an outage); it is never read as a pass.
+    """
+
+    result = native_policy_bundle(
+        "candidate_admission",
+        {
+            "bundle_chunks": _view_chunks(candidate, _CANDIDATE_KEYS),
+            "reference_chunks": _view_chunks(reference, _REFERENCE_KEYS),
+            "daemon_version": __version__,
+        },
+    )
+    error = result.get("error")
+    if isinstance(error, str):
+        raise PolicyBundleNativeError(error, result)
+    rejection = result.get("rejection")
+    if rejection is None or isinstance(rejection, str):
+        return rejection
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
+
+
+def policy_bundle_downgrade_verdict(
+    reference: dict[str, object] | None,
+    candidate: dict[str, object],
+    *,
+    expected_last_good: dict[str, object] | None = None,
+) -> bool:
+    """Whether ``candidate`` replays or rolls back the accepted ``reference``.
+
+    Rust applies the v2 transition rules to a v2 candidate and the v1 ordering
+    rules otherwise. A malformed request fails closed as a downgrade; an outage
+    raises ``PolicyBundleNativeUnavailableError``.
+    """
+
+    try:
+        request: dict[str, object] = {
+            "bundle_chunks": _view_chunks(candidate, _CANDIDATE_KEYS),
+            "reference_chunks": _view_chunks(reference, _REFERENCE_KEYS),
+            "expected_chunks": _view_chunks(expected_last_good, _EXPECTED_KEYS),
+        }
+    except PolicyBundleNativeUnavailableError:
+        raise
+    except ValueError:
+        return True
+    return _flag("downgrade_verdict", request, otherwise=True)
 
 
 def policy_bundle_is_enforceable(policy_bundle: dict[str, object]) -> bool:

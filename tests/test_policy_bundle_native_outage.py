@@ -289,13 +289,24 @@ def test_runner_downgrade_check_raises_on_an_unavailable_transition(monkeypatch:
         "bundleVersion": 3,
         "bundleHash": "sha256:" + "a" * 64,
     }
-    monkeypatch.setattr(
-        guard_runner_module,
-        "validate_policy_bundle_v2_transition",
-        lambda *_args, **_kwargs: NATIVE_UNAVAILABLE_REJECTION,
-    )
-    with pytest.raises(PolicyBundleNativeUnavailableError):
+    with _resident_outage(monkeypatch), pytest.raises(PolicyBundleNativeUnavailableError):
         guard_runner_module._policy_bundle_is_version_downgrade(None, v2)
+
+
+def test_candidate_admission_raises_on_an_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    candidate: dict[str, object] = {"contractVersion": "guard-policy-bundle.v2", "bundleVersion": 3}
+    with _resident_outage(monkeypatch), pytest.raises(PolicyBundleNativeUnavailableError):
+        parser.policy_bundle_admission_rejection(candidate, None)
+
+
+def test_candidate_admission_never_reads_a_malformed_answer_as_a_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(parser, "native_policy_bundle", lambda *_args, **_kwargs: {"rejection": 7})
+    with pytest.raises(PolicyBundleNativeUnavailableError):
+        parser.policy_bundle_admission_rejection({"bundleVersion": 3}, None)
+    monkeypatch.setattr(parser, "native_policy_bundle", lambda *_args, **_kwargs: {"error": "limit_bytes"})
+    with pytest.raises(PolicyBundleNativeError) as raised:
+        parser.policy_bundle_admission_rejection({"bundleVersion": 3}, None)
+    assert raised.value.code == "limit_bytes"
 
 
 def _signed_policy_bundle(store: GuardStore) -> dict[str, object]:
