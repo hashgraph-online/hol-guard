@@ -277,7 +277,7 @@ def test_lienzo_ui_stays_inert_until_local_admin_enable() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
         command="npx",
-        args=("-y", "lienzo-ui-mcp@1.7.3"),
+        args=("-y", "lienzo-ui-mcp@1.7.4"),
         transport="stdio",
     )
     artifact = build_tool_call_artifact(
