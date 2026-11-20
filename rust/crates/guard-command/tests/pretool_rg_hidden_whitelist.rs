@@ -487,6 +487,11 @@ fn a_path_glob_with_explicit_rg_root_cannot_hide_reincluded_secrets() {
 #[test]
 fn broad_rg_globs_must_not_reopen_gitignored_secrets() {
     let fixture = fixture(&[("ignored", &[(".gitignore", ".env*\n")])]);
-    assert_actions(&fixture, "ignored", &["rg -n route -g '**'", "rg -n route --glob '**'"], "review");
+    assert_actions(
+        &fixture,
+        "ignored",
+        &["rg -n route -g '**'", "rg -n route --glob '**'"],
+        "review",
+    );
     assert_actions(&fixture, "ignored", &["rg -n route -g 'src/**'"], "allow");
 }
