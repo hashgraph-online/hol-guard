@@ -1060,6 +1060,12 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
         assert isinstance(raised.value, runner.GuardSyncNotConfiguredError)
     summary = store.get_sync_payload("aibom_sync_summary")
     assert isinstance(summary, dict)
+    expected_error = {
+        "http": "Guard Cloud AIBOM sync failed due to an HTTP error.",
+        "network": "Guard Cloud AIBOM sync failed due to a network error.",
+        "native": "Guard Cloud is not connected.",
+    }[failure_kind]
+    assert summary.get("error") == expected_error
     assert summary.get("synced") is False
     assert summary.get("partial") is True
     assert summary.get("accepted") == 0
