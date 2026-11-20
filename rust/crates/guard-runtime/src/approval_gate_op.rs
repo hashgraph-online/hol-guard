@@ -18,6 +18,8 @@ use serde_json::{json, Value};
 use crate::approval_gate_consumers as consumers;
 use crate::approval_gate_enrollment as enrollment;
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrantV1, ApprovalGateGrants};
+use crate::approval_gate_pulse as pulse;
+use crate::approval_gate_pulse_enrollment as pulse_enrollment;
 use crate::approval_gate_settings as settings;
 use crate::approval_gate_state::{epoch, optional_int, optional_string};
 use crate::approval_gate_verify::{verify_or_raise_locked, ApprovalGateInputV1};
@@ -54,6 +56,9 @@ fn input_from_wire(w: &ApprovalGateInputWireV1) -> ApprovalGateInputV1 {
         use_cooldown: w.use_cooldown,
         revoke_cooldown: w.revoke_cooldown,
         require_fresh_totp: w.require_fresh_totp,
+        pulse_request_id: w.pulse_request_id.clone(),
+        pulse_agent_key: w.pulse_agent_key.clone(),
+        pulse_recovery_code: w.pulse_recovery_code.clone(),
     }
 }
 
@@ -153,7 +158,7 @@ pub(crate) fn evaluate_approval_gate_request(
     crate::encode_response(&result)
 }
 
-fn request_digest(request: &ApprovalGateRequestV1) -> Result<String, &'static str> {
+pub(crate) fn request_digest(request: &ApprovalGateRequestV1) -> Result<String, &'static str> {
     let material = serde_json::to_value(request).map_err(|_| "native_approval_gate_invalid")?;
     let mut bytes = Vec::new();
     super::context_digest_json::write_canonical_json_with_limit(&material, &mut bytes, usize::MAX)
@@ -174,7 +179,21 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
     }
     let guard_home = PathBuf::from(&request.guard_home);
     let now = request.now.as_deref();
-    let params = request.params.as_ref();
+    // A settings change is named by its caller and bound by the resident.
+    let settings_scoped =
+        crate::approval_gate_settings_binding::is_settings_write(request.purpose.as_deref())
+            || matches!(
+                request.method,
+                ApprovalGateMethodV1::RequireSettingsWrite
+                    | ApprovalGateMethodV1::UpdateSettings
+                    | ApprovalGateMethodV1::ValidateSettingsUpdate
+            );
+    let bound = crate::approval_gate_settings_binding::bind(
+        &guard_home,
+        settings_scoped,
+        request.params.as_ref(),
+    )?;
+    let params = bound.as_ref().or(request.params.as_ref());
     // An absent settings payload is an empty one, not "nothing to check".
     let empty_payload = Value::Object(serde_json::Map::new());
     let input = request.approval_gate_input.as_ref().map(input_from_wire);
@@ -356,7 +375,14 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
             Ok(json!({"ok": true}))
         }
         ApprovalGateMethodV1::RequireSettingsWrite => {
-            consumers::require_settings_write(&guard_home, grants, grant_ref, now)?;
+            consumers::require_settings_write(
+                &guard_home,
+                grants,
+                grant_ref,
+                pstr(params, "action"),
+                pstr(params, "subject"),
+                now,
+            )?;
             Ok(json!({"ok": true}))
         }
         ApprovalGateMethodV1::RequirePolicyWrite => {
@@ -384,6 +410,58 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
                 .or_else(|| pstr(params, "password"))
                 .ok_or_else(|| missing("password"))?;
             Ok(settings::create_verifier(password)?)
+        }
+        ApprovalGateMethodV1::PulseRequest => pulse::pulse_request(
+            &guard_home,
+            // The same default as `Verify`, so a request and its verify agree.
+            request.purpose.as_deref().unwrap_or("generic"),
+            request.strict,
+            pstr(params, "action"),
+            pstr(params, "scope"),
+            pstr(params, "subject"),
+            pstr(params, "session_nonce"),
+            pstr(params, "verdict"),
+            &params
+                .and_then(|p| p.get("batch_request_ids"))
+                .and_then(Value::as_array)
+                .map(|ids| {
+                    ids.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            now,
+        ),
+        ApprovalGateMethodV1::PulsePoll => {
+            let request_id = pstr(params, "request_id").ok_or_else(|| missing("request_id"))?;
+            pulse::pulse_poll(&guard_home, request_id, now)
+        }
+        ApprovalGateMethodV1::BeginPulseEnrollment => pulse_enrollment::begin_pulse_enrollment(
+            &guard_home,
+            input_ref,
+            params
+                .and_then(|p| p.get("authorize_only"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            pulse_enrollment::requested_min_tier(params.and_then(|p| p.get("min_tier")))?,
+            now,
+        ),
+        ApprovalGateMethodV1::ConfirmPulseEnrollment => pulse_enrollment::confirm_pulse_enrollment(
+            &guard_home,
+            grants,
+            pstr(params, "request_id").ok_or_else(|| missing("request_id"))?,
+            params
+                .and_then(|p| p.get("cooldown_seconds"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+            now,
+        ),
+        ApprovalGateMethodV1::DisablePulse => {
+            crate::approval_gate_pulse_disable::disable_pulse(&guard_home, grants, grant_ref, now)
+        }
+        ApprovalGateMethodV1::RecoverPulse => {
+            crate::approval_gate_pulse_disable::recover_pulse(&guard_home, grants, input_ref, now)
         }
         ApprovalGateMethodV1::AuditPayload => Ok(json!({"approval_gate": {
             "purpose": request.purpose,

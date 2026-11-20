@@ -8,7 +8,9 @@
 //! config, carries credentials, routes through a proxy or socket, or writes a
 //! file other than a scratch file keeps the normal review path.
 //!
-//! A read of a dev server on `127.0.0.1` or `localhost` is proven too, on a
+//! A read of a dev server on `127.0.0.1` or `localhost` is proven too, written
+//! with a scheme or without one, since curl reads `localhost:3000/health` as
+//! the HTTP request a developer means by it, on a
 //! conventional dev-server port ([`super::loopback_ports`]) that neither
 //! Guard's daemon nor a local service answering a plain GET with
 //! credentials, cluster state or a debugger ([`LOCAL_ADMIN_PORTS`]) may
@@ -55,23 +57,39 @@ const LOCAL_ADMIN_PORTS: [u16; 23] = [
 ];
 
 /// Flags that change only presentation, failure handling or transport version.
-const PLAIN_FLAGS: [&str; 17] = [
+///
+/// None of them names a destination, carries a body or a credential, or
+/// writes a file, so each leaves the request this module already proved
+/// exactly where it was.
+const PLAIN_FLAGS: [&str; 29] = [
     "--compressed",
     "--fail",
     "--fail-with-body",
     "--get",
     "--globoff",
     "--head",
+    "--http1.0",
     "--http1.1",
     "--http2",
+    "--http2-prior-knowledge",
+    "--http3",
     "--include",
     "--ipv4",
     "--ipv6",
+    "--no-alpn",
     "--no-buffer",
+    "--no-keepalive",
     "--no-progress-meter",
+    "--no-styled-output",
+    "--progress-bar",
+    "--raw",
+    "--retry-all-errors",
+    "--retry-connrefused",
     "--show-error",
     "--silent",
     "--ssl-reqd",
+    "--styled-output",
+    "--tcp-nodelay",
     "--verbose",
 ];
 
@@ -173,10 +191,13 @@ pub(crate) fn proven_read_segment(
 /// a projected file redirect of its body stays reviewed.
 pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static str {
     let fetches = model.segments.iter().any(|segment| {
-        segment
-            .executable
-            .as_deref()
-            .is_some_and(|executable| super::executable_basename(executable) == "curl")
+        segment.executable.as_deref().is_some_and(|executable| {
+            // `http` and `xh` fetch over the same rules; see `super::http_reads`.
+            matches!(
+                super::executable_basename(executable),
+                "curl" | "wget" | "http" | "xh"
+            )
+        })
     });
     if fetches {
         NETWORK_READ_REASON
@@ -185,7 +206,7 @@ pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static 
     }
 }
 
-fn expands(argument: &str) -> bool {
+pub(in crate::pretool) fn expands(argument: &str) -> bool {
     argument.contains(['$', '`', '\n', '\r']) || argument.starts_with('@')
 }
 
@@ -282,7 +303,7 @@ fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>) -
     }
 }
 
-fn safe_header(value: &str) -> bool {
+pub(in crate::pretool) fn safe_header(value: &str) -> bool {
     let Some((name, _)) = value.split_once(':') else {
         return false;
     };
@@ -294,14 +315,99 @@ fn safe_header(value: &str) -> bool {
         && !CREDENTIAL_TERMS.iter().any(|term| name.contains(term))
 }
 
-fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
-    public_url(raw) || loopback_url(raw, context.home_dir)
+pub(in crate::pretool) fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
+    web_target(raw, context).is_some()
 }
 
-/// An `http(s)` URL naming `127.0.0.1` or `localhost` itself, on a dev-server
-/// port that no local admin service or Guard daemon listens on.
+/// What a readable URL names: a service on this machine, or public content.
+///
+/// The distinction is the one a fetcher that follows redirects needs. A public
+/// host is chosen by text the agent read, and the redirect it answers with is
+/// the way to reach a destination this screen refuses; a loopback host already
+/// sits on this machine, so whatever its redirect would reach it could as
+/// easily have written into its own response body.
+pub(in crate::pretool) enum WebTarget {
+    Loopback,
+    Public,
+}
+
+/// The target a URL names, read under the scheme the fetcher gives it.
+///
+/// `wget` guesses the same way `curl` does -- HTTP for a bare `host/path`,
+/// another protocol for a name whose prefix says so -- so both read a URL
+/// written without a scheme as the same request, and both reach this screen.
+pub(in crate::pretool) fn web_target(
+    raw: &str,
+    context: super::PathContext<'_>,
+) -> Option<WebTarget> {
+    let raw = as_curl_reads_it(raw)?;
+    if loopback_url(&raw, context.home_dir) {
+        return Some(WebTarget::Loopback);
+    }
+    public_url(&raw).then_some(WebTarget::Public)
+}
+
+/// The same reading, held to a destination on this host.
+///
+/// A program that can pick up a request body the command never names carries
+/// away whatever that body holds, so its reading of a public host asks for
+/// more than the URL screen above. A loopback request cannot leave the
+/// machine, which is what [`super::http_reads`] leans on.
+pub(in crate::pretool) fn loopback_read_url(raw: &str, context: super::PathContext<'_>) -> bool {
+    as_curl_reads_it(raw).is_some_and(|raw| loopback_url(&raw, context.home_dir))
+}
+
+/// Names whose prefix picks curl a protocol other than HTTP when the URL is
+/// written without one. curl matches them case-insensitively.
+const OTHER_PROTOCOL_PREFIXES: [&str; 6] = ["ftp.", "dict.", "ldap.", "imap.", "smtp.", "pop3."];
+
+/// The URL with the scheme curl reads it under. A URL written without `://` is
+/// the ordinary way to name a local server, `localhost:3000/health`, and curl
+/// fetches it over HTTP; only that guess is taken here, so a name whose prefix
+/// picks another protocol stays unread rather than passing as a web request.
+///
+/// The same spelling names a public host too, and `curl example.com` issues
+/// the request `curl http://example.com` issues, so both forms reach the same
+/// checks. Proving one and reviewing the other would turn the scheme into
+/// authority it does not carry.
+fn as_curl_reads_it(raw: &str) -> Option<std::borrow::Cow<'_, str>> {
+    if written_with_a_scheme(raw) {
+        return Some(std::borrow::Cow::Borrowed(raw));
+    }
+    let host = raw.split(['/', '?', '#']).next().unwrap_or(raw);
+    // curl guesses the protocol from the hostname it is left with after the
+    // login part is removed, so `:@ftp.example.com` reaches FTP while the
+    // text before the first `/` begins with neither prefix. An authority
+    // carrying a login is left unread rather than guessed at.
+    if host.contains('@')
+        || OTHER_PROTOCOL_PREFIXES.iter().any(|prefix| {
+            host.get(..prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+        })
+    {
+        return None;
+    }
+    Some(std::borrow::Cow::Owned(format!("http://{raw}")))
+}
+
+/// Whether the URL itself names a scheme, rather than carrying a `://` in a
+/// query the request only passes on. `localhost:3000/redirect?next=https://app`
+/// is a request to the dev server, which curl fetches over HTTP, so only a
+/// `://` that follows a leading scheme is read as one.
+fn written_with_a_scheme(raw: &str) -> bool {
+    raw.find("://").is_some_and(|delimiter| {
+        let scheme = &raw[..delimiter];
+        scheme.starts_with(|first: char| first.is_ascii_alphabetic())
+            && scheme
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+    })
+}
+
+/// An `http(s)` URL naming `127.0.0.1`, `localhost` or `[::1]` itself, on a
+/// dev-server port that no local admin service or Guard daemon listens on.
 pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> bool {
-    if raw.contains(['{', '}', '[', ']', '\\', ' ']) {
+    if raw.contains(['{', '}', '\\', ' ']) {
         return false;
     }
     let Ok(url) = url::Url::parse(raw) else {
@@ -309,10 +415,12 @@ pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> boo
     };
     let loopback = match url.host() {
         Some(url::Host::Ipv4(address)) => address == std::net::Ipv4Addr::LOCALHOST,
+        Some(url::Host::Ipv6(address)) => address == std::net::Ipv6Addr::LOCALHOST,
         Some(url::Host::Domain(name)) => name == "localhost",
-        _ => false,
+        None => false,
     };
     loopback
+        && one_url(raw, url.host())
         && matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
@@ -320,6 +428,16 @@ pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> boo
             .port_or_known_default()
             .is_some_and(|port| reachable_loopback_port(port, home_dir))
         && !url_secrets::carries_secret(&url)
+}
+
+/// Whether the brackets in the URL, if any, are the pair that wraps the host,
+/// so curl reads one address rather than a range of them. curl's glob parser
+/// skips a bracketed span holding at least two colons and no hyphen, which an
+/// IPv6 literal always is and a range never is; every other bracket is that
+/// range syntax, which names several URLs from one word.
+fn one_url(raw: &str, host: Option<url::Host<&str>>) -> bool {
+    let bracket_pairs = usize::from(matches!(host, Some(url::Host::Ipv6(_))));
+    raw.matches('[').count() == bracket_pairs && raw.matches(']').count() == bracket_pairs
 }
 
 /// A loopback port this request may reach: a conventional dev-server port, or

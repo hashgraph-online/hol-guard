@@ -24,7 +24,7 @@ def test_offline_generators_are_test_sources_without_hiding_runtime_enforcement(
         "src/codex_plugin_scanner/guard/resident_state_prune.py",
         "rust/crates/guard-command/src/native_command_program_admission.rs",
         "rust/crates/guard-command/src/native_command_controls.rs",
-        "src/codex_plugin_scanner/guard/daemon/hook_native_review_binding.py",
+        "src/codex_plugin_scanner/guard/hook_review/hook_native_review_binding.py",
     ):
         assert not any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
     assert properties["sonar.sources"] == "src,rust"

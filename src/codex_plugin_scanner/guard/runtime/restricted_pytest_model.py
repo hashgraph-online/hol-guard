@@ -27,6 +27,16 @@ READ_ONLY_TEST_PROFILES = frozenset(
         NODE_EVAL_READ_ONLY_PROFILE_VERSION,
     }
 )
+# Profiles whose plan may grant extra read-only roots: the linked worktree
+# metadata a contained Git reads, whether Git runs directly or from an inline
+# program.
+READ_ONLY_ROOT_PROFILES = frozenset(
+    {
+        GIT_READ_ONLY_PROFILE_VERSION,
+        PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
+        NODE_EVAL_READ_ONLY_PROFILE_VERSION,
+    }
+)
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE = "pytest_restricted_sandbox_unavailable"
 PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"
@@ -41,48 +51,6 @@ _DEFAULT_MEMORY_BYTES = 4 * 1024 * 1024 * 1024
 _DEFAULT_FILE_BYTES = 256 * 1024 * 1024
 _DEFAULT_OPEN_FILES = 256
 _DEFAULT_PROCESSES = 64
-
-_SEALED_SYSTEM_EXECUTABLE_ROOTS = (
-    Path("/bin"),
-    Path("/System"),
-    Path("/usr/bin"),
-)
-_MACOS_READ_ROOTS = (
-    Path("/System"),
-    Path("/Library/Apple"),
-    Path("/Library/Frameworks"),
-    Path("/opt/homebrew/Cellar"),
-    Path("/opt/homebrew/opt"),
-    Path("/usr/lib"),
-    Path("/usr/local/Cellar"),
-    Path("/usr/local/opt"),
-    Path("/usr/share"),
-)
-_MACOS_READ_FILES = (
-    Path("/dev/null"),
-    Path("/dev/random"),
-    Path("/dev/urandom"),
-    Path("/private/etc/hosts"),
-    Path("/private/etc/protocols"),
-    Path("/private/etc/resolv.conf"),
-    Path("/private/etc/services"),
-)
-_LINUX_READ_ROOTS = (
-    Path("/lib"),
-    Path("/lib64"),
-    Path("/usr/lib"),
-    Path("/usr/lib64"),
-    Path("/usr/share"),
-    Path("/usr/local/lib"),
-)
-_LINUX_READ_FILES = (
-    Path("/etc/hosts"),
-    Path("/etc/ld.so.cache"),
-    Path("/etc/nsswitch.conf"),
-    Path("/etc/protocols"),
-    Path("/etc/resolv.conf"),
-    Path("/etc/services"),
-)
 
 
 class RestrictedPytestError(RuntimeError):

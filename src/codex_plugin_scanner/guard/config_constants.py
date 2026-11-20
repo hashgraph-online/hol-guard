@@ -27,4 +27,10 @@ VALID_RISK_ACTION_KEYS = {
     "package_custom_registry",
     "package_install",
     "low_trust_artifact",
+    "runtime_known_vulnerable",
+    "git_hook_bypass",
+    "git_stage_all",
 }
+# The user's own git rules. Every preset leaves them at allow; a user who
+# wants Guard to hold them sets them one by one.
+USER_RULE_RISK_ACTION_KEYS = frozenset({"git_hook_bypass", "git_stage_all"})

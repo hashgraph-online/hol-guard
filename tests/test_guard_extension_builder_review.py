@@ -13,9 +13,6 @@ from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit
 from codex_plugin_scanner.guard.extension_builder.models import Discovery
 from codex_plugin_scanner.guard.extension_builder.review import default_review, load_review
-from codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher import (
-    validate_reviewed_literal_argv,
-)
 from tests.extension_builder_support import make_discovery, make_kit, use_built_native_source_compiler
 
 
@@ -185,10 +182,17 @@ def test_safe_vectors_reject_shell_syntax_and_expansions(tmp_path: Path, argv: l
 
 @pytest.mark.parametrize("argv", [["items", "delete"], ["status"], ["--help"]])
 def test_safe_vectors_are_bound_to_their_exact_operation(tmp_path: Path, argv: list[str]) -> None:
+    """The matchers place the vector, so a vector they place elsewhere is refused.
+
+    `items delete` is another operation's, and neither `status` nor a bare
+    `--help` is an invocation of `items list` at all, so no matcher an installed
+    extension would carry claims any of them for the operation under review.
+    """
+
     discovery = make_discovery(tmp_path)
     payload, entry = reviewed_entry(discovery, ("items", "list"))
     entry["safeArgv"] = [argv]
-    with pytest.raises(BuilderError, match="operation path"):
+    with pytest.raises(BuilderError, match="another or ambiguous operation"):
         load_review(payload, discovery)
 
 
@@ -212,10 +216,17 @@ def test_blocked_operation_cannot_gain_a_safe_variant(tmp_path: Path) -> None:
 
 
 def test_root_safe_variants_cannot_preapprove_unknown_commands(tmp_path: Path) -> None:
+    """A root row owns the executable's flags, not an operation nobody discovered.
+
+    A root matcher claims every invocation of the executable, so a bare word
+    under it would preapprove a subcommand review was never shown. The grammar
+    refuses an operand there rather than reading one.
+    """
+
     discovery = make_discovery(tmp_path)
     payload, entry = reviewed_entry(discovery, ())
     entry["safeArgv"] = [["undiscovered"]]
-    with pytest.raises(BuilderError, match="Root safe variants"):
+    with pytest.raises(BuilderError, match="another or ambiguous operation"):
         load_review(payload, discovery)
     entry["safeArgv"] = [["--undiscovered"]]
     with pytest.raises(BuilderError, match="option"):
@@ -241,9 +252,38 @@ def test_rule_revision_changes_with_review_not_only_source(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize(
-    "executable,argv",
-    [("../demo", ("status",)), ("demo", ()), ("demo", ("x" * 65,)), ("demo", ("long-value" * 5,) * 3)],
+    "argv",
+    [
+        ["items", "list", "long-value" * 5, "long-value" * 5, "long-value" * 5],
+        ["items", "list; rm", "-rf", "/tmp/x"],
+    ],
 )
-def test_reviewed_literal_grammar_enforces_its_own_bounds(executable: str, argv: tuple[str, ...]) -> None:
-    with pytest.raises(ValueError):
-        validate_reviewed_literal_argv(executable, argv)
+def test_reviewed_literal_grammar_enforces_its_own_bounds(tmp_path: Path, argv: list[str]) -> None:
+    """The grammar the compiler applies is the one review reports against.
+
+    The second vector would also fail its scope check, since `rm` names no
+    operation this discovery carries. An author who wrote a second command is
+    told that, rather than told to file it under a different operation.
+    """
+
+    discovery = make_discovery(tmp_path)
+    payload, entry = reviewed_entry(discovery, ("items", "list"))
+    entry["safeArgv"] = [argv]
+    with pytest.raises(BuilderError, match="bounded exact literal invocation"):
+        load_review(payload, discovery)
+
+
+@pytest.mark.parametrize("argv", [[], ["items", "list", "x" * 65]])
+def test_a_vector_the_authoring_contract_rejects_never_reaches_the_grammar(tmp_path: Path, argv: list[str]) -> None:
+    """An empty vector and an over-long token are refused by the document schema.
+
+    Both bounds are also the grammar's, which `reviewed_invocation_bindings`
+    pins in Rust. Review reads the document first, so the author hears about the
+    shape of the file they wrote rather than about the matcher it would compile.
+    """
+
+    discovery = make_discovery(tmp_path)
+    payload, entry = reviewed_entry(discovery, ("items", "list"))
+    entry["safeArgv"] = [argv]
+    with pytest.raises(BuilderError, match="versioned extension authoring contract"):
+        load_review(payload, discovery)

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.native_daemon_route import native_origin_decision
 from codex_plugin_scanner.guard.store import GuardStore
@@ -68,21 +68,20 @@ def test_dashboard_session_authorizes_new_extension_control_routes(tmp_path: Pat
         ) as response:
             test_payload = json.loads(response.read().decode("utf-8"))
 
-        # A brand-new authority store has no validated history anchor yet, so this
-        # route may legitimately return 409. The important auth regression is that
-        # a valid signed dashboard session reaches the API instead of being rejected
-        # with 401 by the daemon's dashboard-session path allowlist.
-        with pytest.raises(urllib.error.HTTPError) as history_error:
-            urllib.request.urlopen(
-                _request(
-                    daemon,
-                    "/v1/extension-controls/history",
-                    session_token=session_token,
-                    origin=local_origin,
-                ),
-                timeout=5,
-            )
-        assert history_error.value.code == 409
+        # The daemon enrolls a fresh home at startup, so history is readable. The
+        # auth regression is that a valid signed dashboard session reaches the API
+        # instead of being rejected with 401 by the dashboard-session path allowlist.
+        with urllib.request.urlopen(
+            _request(
+                daemon,
+                "/v1/extension-controls/history",
+                session_token=session_token,
+                origin=local_origin,
+            ),
+            timeout=5,
+        ) as history_response:
+            assert history_response.status == 200
+            json.loads(history_response.read().decode("utf-8"))
 
         # A healthy fresh authority is not in degraded mode. Reaching this 409 also
         # proves the signed session was accepted for the new acknowledge route.
@@ -168,8 +167,7 @@ def test_dashboard_session_rejects_forged_expired_and_foreign_origin_test_lab_re
             )
         assert forged_error.value.code == 401
 
-        original_time = daemon_server_module.time.time()
-        monkeypatch.setattr(daemon_server_module.time, "time", lambda: original_time + 5)
+        time.sleep(2.5)
         with pytest.raises(urllib.error.HTTPError) as expired_error:
             urllib.request.urlopen(
                 _request(

@@ -12,7 +12,7 @@ from codex_plugin_scanner.guard.extension_builder import native_source_compiler 
 
 
 def route_distribution(monkeypatch: Any) -> None:
-    """Send only `distribution` requests to the pinned binary in a source checkout.
+    """Send only `distribution` and `release-transport` requests to the pinned binary in a source checkout.
 
     A checkout carries no packaged runtime for the production session to verify.
     A test that installs one, or replaces `lifecycle.invoke`, keeps its own path.
@@ -23,7 +23,10 @@ def route_distribution(monkeypatch: Any) -> None:
     original = lifecycle.invoke
 
     def invoke(kind: str, **fields: Any) -> dict[str, Any]:
-        if kind != "distribution" or (transport._NATIVE_PACKAGE / transport._MANIFEST_NAME).is_file():
+        if (
+            kind not in {"distribution", "release-transport"}
+            or (transport._NATIVE_PACKAGE / transport._MANIFEST_NAME).is_file()
+        ):
             return original(kind, **fields)
         result = subprocess.run(
             [binary, "pack-lifecycle", "--stdin"],

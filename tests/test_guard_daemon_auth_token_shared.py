@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.manager import (
+from codex_plugin_scanner.guard.native_daemon_manage import (
     ensure_guard_daemon_auth_token,
     load_guard_daemon_auth_token,
     write_guard_daemon_state,
@@ -103,7 +103,7 @@ def test_concurrent_daemon_processes_share_one_token(tmp_path: Path) -> None:
     script = (
         "import sys\n"
         "from pathlib import Path\n"
-        "from codex_plugin_scanner.guard.daemon.manager import ensure_guard_daemon_auth_token\n"
+        "from codex_plugin_scanner.guard.native_daemon_manage import ensure_guard_daemon_auth_token\n"
         "print(ensure_guard_daemon_auth_token(Path(sys.argv[1])))\n"
     )
     processes = [

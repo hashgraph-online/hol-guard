@@ -13,8 +13,14 @@ CPython behaviours decide its output and none of them is the Rust default:
 3. `isinstance(candidate, int)` accepts `bool`, and `str(True)` is `"True"`,
    so a `totalFindings` of `true` reaches the exported detail as text.
 
-Run this after changing the redaction module and commit the regenerated
-fixture; `inventory_redaction_tests.rs` reads it.
+The serializer walk now lives in the resident, and the shipped module
+delegates to it, so this generator reads the CPython bodies kept beside it in
+`scripts/ci/inventory_redaction_reference.py`. Asking the runtime for the
+corpus would pin the port against itself.
+
+Run this after changing that reference and commit the regenerated fixture;
+`inventory_redaction_tests.rs` and `inventory_export_redaction_tests.rs` read
+it.
 """
 
 from __future__ import annotations
@@ -23,12 +29,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.inventory_contract_redaction import (
+from inventory_redaction_reference import (
     _assert_serialized_inventory_payload_safe,
     _safe_json,
-    _safe_source_detail,
     _sanitize_serializer_string,
 )
+
+from codex_plugin_scanner.guard.inventory_contract_redaction import _safe_source_detail
 
 FIXTURE = Path("rust/crates/guard-command/testdata/inventory_redaction_parity.json")
 
@@ -123,6 +130,13 @@ SAFE_JSON_VALUES: list[Any] = [
     {"list": [["bearer abc"]]},
     {"present": "present", "redacted": "redacted"},
     {"a": {"b": {"c": "/etc/passwd"}}},
+    {"evidenceAuthority": "device_claim"},
+    {"EVIDENCEAUTHORITY": "device_claim"},
+    {"evidenceAuthorityToken": "abc"},
+    {"xevidenceAuthority": "abc"},
+    {"evidenceAuthor\u0131ty": "abc"},
+    {"description\napiKey": "abc"},
+    {"trust": {"evidenceAuthority": "device_claim", "authToken": "abc"}},
 ]
 
 ASSERT_PAYLOADS: list[Any] = [

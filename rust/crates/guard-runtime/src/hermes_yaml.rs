@@ -15,7 +15,7 @@
 use saphyr_parser::{Event, Parser, ScalarStyle};
 
 use super::hermes_yaml_construct::{construct, into_pyval, validate, validate_json};
-use super::pyjson::{parse_unique, JsonFailure, PyVal};
+use super::pyjson::{parse_mapping_lone_surrogates, parse_unique, JsonFailure, PyVal};
 
 pub(crate) const MAX_DEPTH: usize = 32;
 pub(crate) const MAX_NODES: usize = 20_000;
@@ -156,6 +156,14 @@ pub(crate) fn load(content: &str) -> Built<PyVal> {
 
 /// Load one bounded JSON document with the Hermes limits.
 pub(crate) fn load_json(content: &str) -> Built<PyVal> {
+    // CPython keeps a lone `\uD800` escape as an unpaired surrogate, which a
+    // Rust string cannot hold; decoding it to U+FFFD would hand callers a
+    // different value, so such a document is refused instead.
+    if content.contains("\\u")
+        && parse_mapping_lone_surrogates(content).is_ok_and(|parsed| parsed.mapped)
+    {
+        return Err(ERR_UNREPRESENTABLE);
+    }
     match parse_unique(content) {
         Ok(value) => validate_json(value),
         Err(JsonFailure::Syntax | JsonFailure::IntegerLimit) => fail(Failure::Parse),

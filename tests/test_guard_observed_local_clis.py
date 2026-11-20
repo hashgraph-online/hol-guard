@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -7,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime.observed_local_clis import (
     commands_from_requests,
     discover_observed_local_clis,
+    paused_launch_paths,
 )
 
 
@@ -106,3 +109,42 @@ def test_backfill_leaves_listed_clis_untouched(tmp_path: Path) -> None:
 
     assert discover_observed_local_clis(listed, seen_at="2026-10-08T00:00:00Z", home_dir=tmp_path / "home") == 0
     assert listed.recorded == []
+
+
+def _script(home: Path) -> Path:
+    program = home / "tools" / "approve-merge.sh"
+    program.parent.mkdir(parents=True)
+    program.write_text("#!/usr/bin/env bash\necho 'Usage: approve-merge.sh <command>'\n", encoding="utf-8")
+    program.chmod(program.stat().st_mode | stat.S_IXUSR)
+    return program.resolve()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the fixture tool is a POSIX shell script")
+def test_backfill_keeps_the_file_a_paused_script_launched(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    program = _script(home)
+    store = _Store([{"raw_command_text": f"{program} status", "workspace": str(home)}])
+
+    assert discover_observed_local_clis(store, seen_at="2026-10-08T00:00:00Z", home_dir=home) == 1
+    [(_, source_path, _)] = store.recorded
+    assert source_path == str(program)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the fixture tool is a POSIX shell script")
+def test_paused_launch_paths_names_only_files_launched_as_that_tool(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    program = _script(home)
+    other = program.with_name("other.sh")
+    other.write_text("#!/usr/bin/env bash\necho other\n", encoding="utf-8")
+    other.chmod(other.stat().st_mode | stat.S_IXUSR)
+    requests = [
+        {"raw_command_text": f"{other} status", "workspace": str(home)},
+        {"raw_command_text": f"{program} status", "workspace": str(home)},
+    ]
+    first = _Store(requests)
+    discover_observed_local_clis(first, seen_at="2026-10-08T00:00:00Z", home_dir=home)
+    cli_id = next(cli for cli, path, _ in first.recorded if path == str(program))
+    item = {"cli_id": cli_id, "name": "approve-merge.sh"}
+
+    assert list(paused_launch_paths(_Store(requests), item, home_dir=home)) == [str(program)]
+    assert list(paused_launch_paths(_Store(requests[:1]), item, home_dir=home)) == []

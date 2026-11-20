@@ -4,20 +4,22 @@ import json
 import multiprocessing
 import os
 import time
+from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import codex_publication_inverse as publication
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec, codex_native_hook_state
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_recovery import commit_hook_publication, recover_hook_publication
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
 from codex_plugin_scanner.guard.codex_publication_inverse_authorization import authorize_codex_publication_inverse
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import (
     PUBLICATION_INVERSE_ACTION,
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- isolated fixture dependency
@@ -37,14 +39,19 @@ def authorize(context, plan, owner):
 def test_publication_restores_authority_before_config_and_retains_journal(inverse, monkeypatch):  # noqa: F811
     context, config, manifest, _unbound, plan = inverse
     writes = []
-    original = publication.atomic_write_bytes
+    original = publication.native_transition_files.publication
 
-    def record_write(path, value, **kwargs):
-        if path in {change.path for change in plan.changes}:
+    def record_write(op, home, **fields):
+        if op != "inverse_restore":
+            return original(op, home, **fields)
+        path = Path(fields["path"])
+        before = rollback_file_identity(path)
+        answer = original(op, home, **fields)
+        if rollback_file_identity(path) != before:
             writes.append(path)
-        return original(path, value, **kwargs)
+        return answer
 
-    monkeypatch.setattr(publication, "atomic_write_bytes", record_write)
+    monkeypatch.setattr(publication.native_transition_files, "publication", record_write)
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:
         pending = publication.publish_codex_publication_inverse(authorize(context, plan, owner))
         pending.compare()
@@ -162,15 +169,17 @@ def test_process_exit_preserves_explicit_inverse_for_fresh_recovery(inverse, bou
             )
 
     def child():
-        original = publication.atomic_write_bytes
+        original = publication.native_transition_files.publication
 
-        def exit_after_owned_write(path, value, **kwargs):
-            original(path, value, **kwargs)
+        def exit_after_owned_write(op, home, **fields):
+            answer = original(op, home, **fields)
             target = {"intent": journal, "manifest": manifest, "config": config}[boundary]
+            path = {"inverse_record": journal, "inverse_restore": Path(fields.get("path", ""))}.get(op)
             if path == target:
                 os._exit(17)
+            return answer
 
-        publication.atomic_write_bytes = exit_after_owned_write
+        publication.native_transition_files.publication = exit_after_owned_write
         with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:
             publication.publish_codex_publication_inverse(authorize(context, plan, owner))
         os._exit(18)
@@ -208,19 +217,20 @@ def test_process_exit_preserves_explicit_inverse_for_fresh_recovery(inverse, bou
 
 def test_same_byte_substitution_inside_publication_cannot_be_claimed(inverse, monkeypatch):  # noqa: F811
     context, config, manifest, _unbound, plan = inverse
-    original = publication.atomic_write_bytes
+    original = publication.native_transition_files.publication
     observed = {}
 
-    def substitute_after_owned_write(path, value, **kwargs):
-        original(path, value, **kwargs)
-        if path == manifest:
+    def substitute_after_owned_write(op, home, **fields):
+        answer = original(op, home, **fields)
+        if op == "inverse_restore" and Path(fields["path"]) == manifest:
             replacement = manifest.with_name("foreign-manifest")
             replacement.write_bytes(manifest.read_bytes())
             replacement.chmod(0o600)
             replacement.replace(manifest)
             observed.update(participant_digests(context, config, manifest))
+        return answer
 
-    monkeypatch.setattr(publication, "atomic_write_bytes", substitute_after_owned_write)
+    monkeypatch.setattr(publication.native_transition_files, "publication", substitute_after_owned_write)
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:
         with pytest.raises(TransitionError) as failure:
             publication.publish_codex_publication_inverse(authorize(context, plan, owner))
@@ -231,22 +241,17 @@ def test_same_byte_substitution_inside_publication_cannot_be_claimed(inverse, mo
 
 def test_competing_config_during_file_preparation_prevents_publication(inverse, monkeypatch):  # noqa: F811
     context, config, manifest, _unbound, plan = inverse
-    original = publication.atomic_write_bytes
+    original = publication.native_transition_files.publication
     observed = {}
 
-    def prepare_then_intervene(path, value, **kwargs):
-        if path == manifest:
-            compare = kwargs["before_publish"]
+    def prepare_then_intervene(op, home, **fields):
+        # The caller has compared; a writer lands before the op publishes.
+        if op == "inverse_restore" and Path(fields["path"]) == manifest:
+            config.write_bytes(config.read_bytes() + b"\n# competing writer during preparation\n")
+            observed.update(participant_digests(context, config, manifest))
+        return original(op, home, **fields)
 
-            def intervene():
-                config.write_bytes(config.read_bytes() + b"\n# competing writer during preparation\n")
-                observed.update(participant_digests(context, config, manifest))
-                compare()
-
-            kwargs["before_publish"] = intervene
-        return original(path, value, **kwargs)
-
-    monkeypatch.setattr(publication, "atomic_write_bytes", prepare_then_intervene)
+    monkeypatch.setattr(publication.native_transition_files, "publication", prepare_then_intervene)
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:
         with pytest.raises(TransitionError) as failure:
             publication.publish_codex_publication_inverse(authorize(context, plan, owner))
@@ -317,9 +322,10 @@ def test_resumption_requires_fresh_plan_and_owner_grant(inverse):  # noqa: F811
 def test_signed_but_invalid_prior_inverse_never_authorizes_resumption(inverse, mutation):  # noqa: F811
     import hashlib
 
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
     from codex_plugin_scanner.guard.codex_hook_recovery import _PURPOSE
     from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+    from tests.codex_hook_paths_support import canonical_manifest_bytes
 
     context, config, manifest, _unbound, plan = inverse
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:
@@ -348,7 +354,7 @@ def test_signed_but_invalid_prior_inverse_never_authorizes_resumption(inverse, m
     secret = load_hook_secret(context.guard_home)
     record["authentication"] = sign_local_authority_payload(
         record,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         purpose=_PURPOSE,
         signed_at=marker["owner_operation_id"],

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -112,10 +112,6 @@ class _NativeMcpChildIo:
                 self.exit_code = code
             self._injected.append(_ChildOutputFrame())
         return written
-
-    def writelines(self, lines: Iterable[str]) -> None:
-        for line in lines:
-            self.write(line)
 
     def close(self) -> None:
         mcp_stdio_session_close_native(self._session_id, guard_home=self._guard_home)

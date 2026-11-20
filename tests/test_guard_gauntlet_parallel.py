@@ -212,7 +212,7 @@ def _fake_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     identity = type("I", (), {"sha256": "i" * 64, "path": Path(__file__)})()
     monkeypatch.setattr(runner.probe, "_probe_native_identity", lambda: (None, identity, capabilities))
     monkeypatch.setattr(runner.shutil, "which", lambda name: sys.executable)
-    monkeypatch.setattr(runner.subprocess, "check_output", lambda *a, **k: version)
+    monkeypatch.setattr(runner, "omp_version", lambda _executable: version)
     binding = {
         "candidate_sha": sha,
         "tested_source_sha": sha,

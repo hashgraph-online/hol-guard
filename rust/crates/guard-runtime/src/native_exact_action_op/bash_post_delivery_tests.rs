@@ -71,6 +71,7 @@ fn joined(
         GuardHookPayloadKindV2::Inline,
         response,
         proof,
+        false,
     )
     .unwrap()
 }
@@ -244,6 +245,7 @@ fn bash_post_delivery_reuses_execution_review_but_keeps_current_hard_and_output_
         GuardHookPayloadKindV2::Inline,
         native.clone(),
         Some(&proof),
+        false,
     )
     .unwrap();
     assert_eq!(result.reason_code, "native_bash_owner_result_allow");
@@ -259,6 +261,7 @@ fn bash_post_delivery_reuses_execution_review_but_keeps_current_hard_and_output_
         GuardHookPayloadKindV2::Inline,
         guard_hook_core::review_post_tool(&sensitive),
         Some(&proof),
+        false,
     )
     .unwrap();
     assert_eq!(result.decision, "deny");

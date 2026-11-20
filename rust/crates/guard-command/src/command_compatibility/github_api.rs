@@ -53,6 +53,82 @@ pub(super) fn jq_is_static(value: &str) -> bool {
         })
 }
 
+/// A `--jq` filter may render with a format string such as `@tsv`; in jq `@`
+/// only names a formatter, never a file the way a typed `-F` value does. A
+/// `$` may only name a variable the filter binds itself.
+///
+/// A filter may span lines, since jq reads a newline as a space. A `#` opens a
+/// comment that a newline closes, so a quote inside one would mislead the
+/// string-aware format check below; a multi-line filter must carry none.
+fn jq_filter_is_static(value: &str) -> bool {
+    let commented_lines = value.contains('\n') && value.contains('#');
+    if commented_lines || value.contains(['`', '\0', '\r']) {
+        return false;
+    }
+    (!value.contains('$') || crate::pretool::safe_reads::jq_variables_bound(value))
+        && jq_is_static(value)
+        && jq_formats_are_bare(value)
+}
+
+/// Every `@` names a format the jq read grammar accepts and stands bare, so
+/// `@sh` and a `@text "..."` template stay in review. An `@` in a string
+/// literal's text is text; the code inside a `\(...)` interpolation is
+/// screened like the rest of the filter.
+pub(super) fn jq_formats_are_bare(value: &str) -> bool {
+    outside_strings(value).split('@').skip(1).all(|tail| {
+        let end = tail
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(tail.len());
+        crate::pretool::safe_reads::jq_rendering_format(&tail[..end])
+            && !tail[end..].trim_start().starts_with('"')
+    })
+}
+
+/// The filter with each string literal's text removed. Quotes stay, and so
+/// does the code inside each `\(...)` interpolation, nested strings and all.
+/// A `#` in code opens a comment, where a quote or parenthesis is text that
+/// this scan would misread, so a filter with one is screened whole.
+fn outside_strings(value: &str) -> String {
+    let mut code = String::with_capacity(value.len());
+    // One entry per open interpolation: the parenthesis depth in its code.
+    let mut interpolations: Vec<usize> = Vec::new();
+    let mut in_string = false;
+    let mut characters = value.chars();
+    while let Some(character) = characters.next() {
+        if in_string {
+            match character {
+                // An escape takes the next character; `\(` opens code.
+                '\\' => {
+                    if characters.next() == Some('(') {
+                        interpolations.push(0);
+                        in_string = false;
+                        code.push('(');
+                    }
+                }
+                '"' => {
+                    in_string = false;
+                    code.push('"');
+                }
+                _ => {}
+            }
+            continue;
+        }
+        match (character, interpolations.last_mut()) {
+            ('"', _) => in_string = true,
+            ('#', _) => return value.to_owned(),
+            ('(', Some(depth)) => *depth += 1,
+            (')', Some(0)) => {
+                interpolations.pop();
+                in_string = true;
+            }
+            (')', Some(depth)) => *depth -= 1,
+            _ => {}
+        }
+        code.push(character);
+    }
+    code
+}
+
 fn safe_header(value: &str) -> bool {
     let lowered = value.to_ascii_lowercase();
     let Some((name, value)) = lowered.split_once(':') else {
@@ -81,9 +157,18 @@ fn safe_header(value: &str) -> bool {
         })
 }
 
+/// Whether `value` names one fixed endpoint.
+///
+/// The path is spelled from a closed byte set, so no expansion, traversal
+/// trick or second endpoint can hide in it. A read's query string also admits
+/// `<` and `>`, the comparison operators GitHub's own search syntax is written
+/// with (`created:>=2026-10-29`, `comments:>10`). They sit after the first
+/// literal `?`, so they can never reach the path the capability is attributed
+/// from, and an encoded `%3F` stays data rather than opening the query.
 fn static_endpoint(value: &str, read_only: bool) -> bool {
     let mut bytes = value.bytes();
     let mut decoded = Vec::with_capacity(value.len());
+    let mut in_query = false;
     while let Some(byte) = bytes.next() {
         if byte == b'%' && read_only {
             let Some(high) = bytes.next().and_then(|byte| (byte as char).to_digit(16)) else {
@@ -98,6 +183,9 @@ fn static_endpoint(value: &str, read_only: bool) -> bool {
             }
             decoded.push(byte);
         } else if byte.is_ascii_alphanumeric() || b"_./{}:+,@=?&-".contains(&byte) {
+            in_query |= byte == b'?';
+            decoded.push(byte);
+        } else if read_only && in_query && matches!(byte, b'<' | b'>') {
             decoded.push(byte);
         } else {
             return false;
@@ -193,6 +281,10 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 if !literal_field_is_static(name, value) {
                     return None;
                 }
+            } else if matches!(name, "--jq" | "-q") {
+                if !jq_filter_is_static(value) {
+                    return None;
+                }
             } else if !field_is_static(value) {
                 return None;
             }
@@ -206,7 +298,6 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                     fields.push((key, value));
                 }
                 "--header" | "-H" if !safe_header(value) => return None,
-                "--jq" | "-q" if !jq_is_static(value) => return None,
                 "--input" => return None,
                 _ => {}
             }
@@ -382,97 +473,5 @@ fn mutation_capabilities(
 }
 
 #[cfg(test)]
-mod encoded_endpoint_tests {
-    use super::classify;
-
-    #[test]
-    fn encoded_read_paths_and_queries_keep_read_capability() {
-        for arguments in [
-            vec!["repos/example/repo/contents/app/%28group%29/file.ts?ref=main"],
-            vec![
-                "-H",
-                "Accept: application/vnd.github.raw",
-                "repos/example/repo/contents/a%20b.ts",
-            ],
-            vec!["-X", "HEAD", "repos/example/repo/contents/%E2%9C%93.ts"],
-            vec!["repos/example/repo/commits?path=app/%28group%29/file.ts&per_page=3"],
-        ] {
-            let arguments: Vec<String> = arguments.into_iter().map(String::from).collect();
-            assert_eq!(classify(&arguments), Some(vec!["read_remote"]));
-        }
-    }
-
-    #[test]
-    fn short_jq_and_template_aliases_match_their_long_forms() {
-        let endpoint = "repos/example-org/service-api/git/ref/tags/v3.45.0";
-        for (option, value) in [
-            ("-q", ".object.sha"),
-            ("--jq", ".object.sha"),
-            ("-t", "{{.object.sha}}"),
-            ("--template", "{{.object.sha}}"),
-        ] {
-            for arguments in [
-                vec![endpoint.to_owned(), option.to_owned(), value.to_owned()],
-                vec![endpoint.to_owned(), format!("{option}={value}")],
-            ] {
-                assert_eq!(
-                    classify(&arguments),
-                    Some(vec!["read_remote"]),
-                    "{arguments:?}"
-                );
-            }
-        }
-        for attached in [
-            "-q.object.sha",
-            "-q=.object.sha",
-            "-q.a | select(.b == \"c\")",
-        ] {
-            let arguments = vec![endpoint.to_owned(), attached.to_owned()];
-            assert_eq!(
-                classify(&arguments),
-                Some(vec!["read_remote"]),
-                "{attached}"
-            );
-        }
-        for unsafe_filter in [vec!["-q", "env"], vec!["-qenv.HOME"], vec!["-q", "$x"]] {
-            let mut arguments = vec![endpoint.to_owned()];
-            arguments.extend(unsafe_filter.iter().map(|value| (*value).to_owned()));
-            assert_eq!(classify(&arguments), None, "{arguments:?}");
-        }
-        let write: Vec<String> = ["-X", "DELETE", endpoint, "-q", ".ref"]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        assert_eq!(classify(&write), Some(vec!["delete_remote"]));
-        let field: Vec<String> = ["-fname=value", endpoint]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        assert_eq!(classify(&field), Some(vec!["mutate_remote"]));
-    }
-
-    #[test]
-    fn malformed_encodings_and_encoded_mutations_stay_unproven() {
-        for arguments in [
-            vec!["repos/example/repo/contents/%2"],
-            vec!["repos/example/repo/contents/%GG"],
-            vec!["repos/example/repo/contents/%00"],
-            vec!["graph%71l"],
-            vec!["graph%71l?query=synthetic"],
-            vec!["%2fgraphql"],
-            vec![
-                "-X",
-                "DELETE",
-                "repos/example/repo/contents/%28group%29/file.ts",
-            ],
-            vec![
-                "repos/example/repo/contents/%28group%29/file.ts",
-                "-f",
-                "content=synthetic",
-            ],
-        ] {
-            let arguments: Vec<String> = arguments.into_iter().map(String::from).collect();
-            assert_eq!(classify(&arguments), None);
-        }
-    }
-}
+#[path = "github_api_tests.rs"]
+mod encoded_endpoint_tests;

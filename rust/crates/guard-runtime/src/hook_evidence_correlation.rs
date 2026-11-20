@@ -78,17 +78,22 @@ pub(crate) fn load_or_create_correlation_key(
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
+    create_key(&key_path)
+}
 
+/// Write a new key at `key_path`, or read the one another writer linked there
+/// first.
+fn create_key(key_path: &Path) -> io::Result<InstallationCorrelationKey> {
     let (key_id, material) = new_key();
-    let temporary = write_private_temporary(&key_path, &serialize_key(&key_id, &material))?;
-    let created = match fs::hard_link(&temporary, &key_path) {
+    let temporary = write_private_temporary(key_path, &serialize_key(&key_id, &material))?;
+    let created = match fs::hard_link(&temporary, key_path) {
         Ok(()) => {
-            set_private_mode(&key_path);
+            set_private_mode(key_path);
             fsync_directory(key_path.parent());
             InstallationCorrelationKey::new(&key_id, &material)
         }
         // Another process created the key between the read and the link.
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => read_key(&key_path),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => read_key(key_path),
         Err(error) => Err(error),
     };
     let _ = fs::remove_file(&temporary);
@@ -378,7 +383,7 @@ fn read_key(path: &Path) -> io::Result<InstallationCorrelationKey> {
 }
 
 /// `_parse_key` (:184-208).
-fn parse_key(raw: &str) -> io::Result<InstallationCorrelationKey> {
+pub(crate) fn parse_key(raw: &str) -> io::Result<InstallationCorrelationKey> {
     let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(raw) else {
         return Err(invalid(
             "invalid command activity correlation key file shape",
@@ -497,7 +502,7 @@ fn base64_decode(encoded: &str) -> Option<Vec<u8>> {
     Base64::decode_vec(encoded).ok()
 }
 
-fn hmac_hex(material: &[u8], framed: &[u8]) -> String {
+pub(crate) fn hmac_hex(material: &[u8], framed: &[u8]) -> String {
     let mut mac = <HmacSha256 as Mac>::new_from_slice(material).expect("hmac accepts any key");
     mac.update(framed);
     hex::encode(mac.finalize().into_bytes())

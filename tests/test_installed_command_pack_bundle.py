@@ -15,6 +15,7 @@ import pytest
 from codex_plugin_scanner.guard.catalog_delivery import installed_bundle as installed
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import MANIFEST, descriptor, validate
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler
+from tests.installed_bundle_layout import installed_layout
 
 SOURCE = "a" * 40
 ENGINE = "b" * 64
@@ -188,6 +189,31 @@ def test_complete_root_shape_is_strict(fault):
         validate(data, source_sha=SOURCE, engine=ENGINE)
 
 
+def test_installed_asset_paths_fit_a_stock_windows_install(monkeypatch):
+    # A default pipx or uv install puts site-packages about 90 characters deep;
+    # Windows refuses longer paths than 259 unless long paths are enabled.
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "scripts"))
+    from installed_bundle_assets import tag_directory
+
+    longest = (
+        installed.PREFIX
+        + "assets/"
+        + tag_directory(f"extension-data-{SOURCE}-0.0-000000", source_sha=SOURCE)
+        + f"/pack-{'a' * 64}.zip"
+    )
+    installed.asset_path(longest.removeprefix(installed.PREFIX))
+    assert len(longest) <= 160
+    with pytest.raises(ValueError):
+        installed.asset_path(f"assets/extension-data-{SOURCE}-0.0-000000/pack-{'a' * 64}.zip")
+    for tag in (
+        f"extension-data-{'d' * 40}-0.0-000000",
+        f"extension-data-{SOURCE}-1.0-000000",
+        f"extension-data-{SOURCE}-0.0-../000",
+    ):
+        with pytest.raises(ValueError):
+            tag_directory(tag, source_sha=SOURCE)
+
+
 @pytest.mark.parametrize("fault", ["files", "bytes", "path", "orphan"])
 def test_native_bundle_inventory_bounds_and_paths(monkeypatch, fault):
     from scripts import native_wheel_metadata as metadata
@@ -195,7 +221,7 @@ def test_native_bundle_inventory_bounds_and_paths(monkeypatch, fault):
     entries = {metadata.ROOT: encoded(root())}
     if fault == "files":
         monkeypatch.setattr(metadata, "MAX_FILES", 0)
-        entries[metadata.PREFIX + f"assets/extension-data-{SOURCE}-0.0-000000/objects-000000.zip"] = b"asset"
+        entries[metadata.PREFIX + "assets/000000/objects-000000.zip"] = b"asset"
     elif fault == "bytes":
         monkeypatch.setattr(metadata, "MAX_BYTES", len(entries[metadata.ROOT]) - 1)
     elif fault == "path":
@@ -215,6 +241,7 @@ def test_fetch_checks_containers_digest_paths_and_symlinks(package, monkeypatch)
     content = b'{"policy":true}'
     target = plan.asset(content, "object")
     plan.finish()
+    installed_layout(directory / "assets")
     bundle = installed.load_installed_bundle()
     assert bundle.fetch(target, len(content)) == content
     for bad in ({**target, "asset": "../escape"}, {**target, "tag": f"extension-data-{'d' * 40}-0.0-000000"}):
@@ -224,7 +251,7 @@ def test_fetch_checks_containers_digest_paths_and_symlinks(package, monkeypatch)
         bundle.fetch(target, 65537)
     with pytest.raises(ValueError):
         bundle.fetch(target, len(content) - 1)
-    path = directory / "assets" / target["tag"] / target["asset"]
+    path = directory / "assets" / target["tag"].rsplit("-", 1)[1] / target["asset"]
     original = path.read_bytes()
     path.write_bytes(original.replace(content, b'{"policy":fals}'))
     with pytest.raises(ValueError):
@@ -245,6 +272,7 @@ def test_preparation_io_reuses_one_container_and_still_checks_each_member(packag
     first, second = b'{"first":true}', b'{"second":true}'
     targets = [plan.asset(value, "object") for value in (first, second)]
     plan.finish()
+    installed_layout(directory / "assets")
     assert targets[0]["asset"] == targets[1]["asset"]
     bundle = installed.load_installed_bundle()
     reads = []

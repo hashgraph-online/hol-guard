@@ -80,7 +80,6 @@ updates:
   - package-ecosystem: "npm"
     directories:
       - "/dashboard"
-      - "/.github/tools/mcpb-cli"
       - "/.github/tools/containment-ci"
     schedule:
       interval: "weekly"

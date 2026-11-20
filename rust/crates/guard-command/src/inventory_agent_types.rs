@@ -21,6 +21,7 @@ pub static AGENT_INVENTORY_TYPES: &[&str] = &[
     "devin",
     "copilot",
     "cline",
+    "muse",
 ];
 
 /// `agent_type(value)`.

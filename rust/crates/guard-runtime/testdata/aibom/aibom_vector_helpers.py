@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from codex_plugin_scanner.guard import aibom_detection as old
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 SKILL = "---\nname: {name}\n---\n{name} instructions.\n"
 MARKETPLACE = ".agents/plugins/marketplace.json"
@@ -26,36 +26,24 @@ def skill(base: str, name: str, *extra: dict) -> list[dict]:
 
 
 def mcp_case(name: str, metadata: dict, *, command=None, args=(), url=None, transport=None, env=None, headers=None):
-    enriched = old.enrich_mcp_server_metadata(
-        dict(metadata),
-        command=command,
-        args=tuple(args),
-        url=url,
-        transport=transport,
-        configured_environment=env,
-        configured_headers=headers,
-    )
-    owned = ("env_keys", "headers_keys", "env_values_hash", "header_values_hash", "content_hash", "versionInfo")
     raw_env = env if env is not None else metadata.get("env")
     raw_headers = headers if headers is not None else metadata.get("headers")
-    return {
-        "name": name,
-        "kind": "mcp_metadata",
-        "args": {
-            "command": command,
-            "args": list(args),
-            "url": url,
-            "transport": transport,
-            "env_keys": string_list(metadata.get("env_keys")),
-            "headers_keys": string_list(metadata.get("headers_keys")),
-            "env": pairs(raw_env),
-            "headers": pairs(raw_headers),
-            "env_values_hash": string_or_none(metadata.get("env_values_hash")),
-            "header_values_hash": string_or_none(metadata.get("header_values_hash")),
-            "label": str(metadata.get("name", "mcp")),
-        },
-        "expected": {key: enriched[key] for key in owned},
+    request = {
+        "command": command,
+        "args": list(args),
+        "url": url,
+        "transport": transport,
+        "env_keys": string_list(metadata.get("env_keys")),
+        "headers_keys": string_list(metadata.get("headers_keys")),
+        "env": pairs(raw_env),
+        "headers": pairs(raw_headers),
+        "env_values_hash": string_or_none(metadata.get("env_values_hash")),
+        "header_values_hash": string_or_none(metadata.get("header_values_hash")),
+        "label": str(metadata.get("name", "mcp")),
     }
+    answer = native_runner_authority("aibom_mcp_metadata", request)
+    owned = ("env_keys", "headers_keys", "env_values_hash", "header_values_hash", "content_hash", "versionInfo")
+    return {"name": name, "kind": "mcp_metadata", "args": request, "expected": {key: answer[key] for key in owned}}
 
 
 def string_list(value: object) -> list[str]:

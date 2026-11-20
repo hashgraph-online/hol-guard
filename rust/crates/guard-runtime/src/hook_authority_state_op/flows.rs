@@ -3,6 +3,24 @@
 
 use super::*;
 
+/// A `tool_call` notice keeps its command only to tie the notice to its
+/// pending row and to show it, never to bind an approval: that rides on
+/// `artifact_hash`. Both rows are stored with credentials masked, including
+/// the ones passed as arguments (`--api-key=…`). Other artifact types are
+/// returned as `None` and stored as sent.
+fn mask_tool_call_command(payload: &Value) -> Option<Value> {
+    if payload.get("artifact_type").and_then(Value::as_str) != Some("tool_call") {
+        return None;
+    }
+    let mut masked = payload.clone();
+    for field in ["command", "raw_command_text"] {
+        if let Some(Value::String(text)) = masked.get_mut(field) {
+            *text = guard_command::redacted_command_tokens::redact_command_text(text);
+        }
+    }
+    Some(masked)
+}
+
 impl Env<'_> {
     pub(super) fn claude_record_notice(
         &self,
@@ -15,15 +33,23 @@ impl Env<'_> {
         };
         let notice_key = notice_key(session_id, tool_name);
         let pending_key = claude_pending_key(session_id, artifact_id);
-        if !self.store_signed(&pending_key, payload, &CLAUDE_PENDING) {
+        let masked = mask_tool_call_command(payload);
+        let recorded = masked
+            .as_ref()
+            .and_then(Value::as_object)
+            .cloned()
+            .or_else(|| payload.as_object().cloned())
+            .unwrap_or_default();
+        let payload = Value::Object(recorded);
+        if !self.store_signed(&pending_key, &payload, &CLAUDE_PENDING) {
             return;
         }
         if !self.append_key(&CLAUDE_FAMILY, session_id, &pending_key) {
             self.delete(&pending_key);
             return;
         }
-        if !self.store_signed(&notice_key, payload, &CLAUDE_NOTICE) {
-            self.claude_remove_pending(session_id, &pending_key);
+        if !self.store_signed(&notice_key, &payload, &CLAUDE_NOTICE) {
+            let _ = self.claude_remove_pending(session_id, &pending_key);
         }
     }
 
@@ -161,14 +187,16 @@ impl Env<'_> {
         items.pop()
     }
 
-    pub(super) fn claude_remove_pending(&self, session_id: &str, pending_key: &str) {
-        self.delete(pending_key);
+    pub(super) fn claude_remove_pending(&self, session_id: &str, pending_key: &str) -> bool {
+        if !self.delete(pending_key) {
+            return false;
+        }
         let remaining: Vec<String> = self
             .load_index(&CLAUDE_FAMILY, session_id)
             .into_iter()
             .filter(|key| key != pending_key)
             .collect();
-        self.store_index(&CLAUDE_FAMILY, session_id, &remaining);
+        self.store_index(&CLAUDE_FAMILY, session_id, &remaining)
     }
 
     /// `_discard_claude_pending_permissions`: drops every indexed pending

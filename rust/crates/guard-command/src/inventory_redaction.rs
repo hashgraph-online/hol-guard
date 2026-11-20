@@ -77,6 +77,13 @@ const SAFE_SERIALIZED_MARKERS: &[&str] = &[
     "malformed_url_redacted",
 ];
 
+/// Whether `value` is one of `_SAFE_SERIALIZED_MARKERS`: text the serializer
+/// itself produced in place of what it masked.
+#[must_use]
+pub fn is_safe_serialized_marker(value: &str) -> bool {
+    SAFE_SERIALIZED_MARKERS.contains(&value)
+}
+
 /// `_SENSITIVE_KEY_RE`. `(?i)` folds the negated class the same way CPython
 /// does, so `api[^a-z0-9]?key` keeps rejecting `apiXkey`.
 static SENSITIVE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -118,8 +125,13 @@ fn matches_secret_assignment(value: &str) -> bool {
         .unwrap_or(true)
 }
 
-/// `_SENSITIVE_KEY_RE.search(key)` with CPython's case folding.
-fn matches_sensitive_key(key: &str) -> bool {
+/// `_is_sensitive_key(key)` with CPython's case folding.
+pub fn matches_sensitive_key(key: &str) -> bool {
+    // `evidenceAuthority` names who vouches for trust evidence, not a
+    // credential; only that exact key is exempt, as in `_is_sensitive_key`.
+    if key.eq_ignore_ascii_case("evidenceAuthority") {
+        return false;
+    }
     SENSITIVE_KEY_RE.is_match(&fold_python_case_extras(key))
 }
 
@@ -185,18 +197,64 @@ pub fn safe_json(value: &Value, parent_key: &str, parent_sensitive: bool) -> Val
 
 /// `_assert_serialized_inventory_payload_safe(payload)`.
 pub fn assert_serialized_inventory_payload_safe(payload: &Value) -> Result<(), String> {
-    let encoded = python_json(payload, DEFAULT_SEPARATORS);
-    if SERIALIZER_UNSAFE_PATH_RE.is_match(&encoded)
-        || matches_sensitive_value(&encoded)
-        || matches_secret_assignment(&encoded)
-    {
+    if !encoded_payload_is_safe(&python_json(payload, DEFAULT_SEPARATORS)) {
         return Err("Inventory snapshot serialization produced unsafe payload.".to_string());
     }
     Ok(())
 }
 
+/// Whether `json.dumps(payload, sort_keys=True)` text passes the export
+/// safety net: no private path, credential value or secret assignment left.
+pub fn encoded_payload_is_safe(encoded: &str) -> bool {
+    !(SERIALIZER_UNSAFE_PATH_RE.is_match(encoded)
+        || matches_sensitive_value(encoded)
+        || matches_secret_assignment(encoded))
+}
+
 /// `_safe_source_detail(run)`.
 ///
+/// `_SENSITIVE_VALUE_RE.sub("redacted", value)`.
+///
+/// The match runs over the case-folded haystack, the way
+/// `matches_sensitive_value` does, so a Turkish dotted or dotless `i` inside a
+/// token is recognised. Folding is one char for one char but not one byte for
+/// one byte, so each match is spliced back into the original text through a
+/// char-boundary map rather than at the folded offsets.
+pub fn substitute_sensitive_values(value: &str) -> String {
+    let folded = fold_python_case_extras(value);
+    let Cow::Owned(folded) = folded else {
+        return SENSITIVE_VALUE_RE
+            .replace_all(value, "redacted")
+            .into_owned();
+    };
+    let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(value.chars().count() + 1);
+    for (original, folded_char) in value.char_indices().zip(folded.char_indices()) {
+        offsets.push((folded_char.0, original.0));
+    }
+    offsets.push((folded.len(), value.len()));
+    // The map is built by walking the folded text once, so its folded offsets
+    // are already strictly increasing and a search can halve its way in. Walking
+    // it for every match end instead costs a pass over the whole text per match,
+    // which is the shape that turns a long finding full of dotted or dotless
+    // `i`s into quadratic work on the redaction path.
+    let original_offset = |folded_offset: usize| -> usize {
+        offsets
+            .binary_search_by_key(&folded_offset, |(candidate, _)| *candidate)
+            .map_or(value.len(), |index| offsets[index].1)
+    };
+    let mut out = String::with_capacity(value.len());
+    let mut cursor = 0usize;
+    for found in SENSITIVE_VALUE_RE.find_iter(&folded) {
+        let start = original_offset(found.start());
+        let end = original_offset(found.end());
+        out.push_str(&value[cursor..start]);
+        out.push_str("redacted");
+        cursor = end;
+    }
+    out.push_str(&value[cursor..]);
+    out
+}
+
 /// `run` is the duck-typed scanner run the Python caller reads `status` and
 /// `metadata` from. Every producer sets `status` to a string; the scalar
 /// fallbacks below reproduce `str()` for the rest. A container `status` is
@@ -220,6 +278,34 @@ pub fn safe_source_detail(run: &Map<String, Value>) -> String {
     }
 }
 
+/// CPython truthiness, for the `getattr(...) or default` guards the scan
+/// grammar uses: an empty string, an empty container, zero, `False` and `None`
+/// all fall through to the default.
+pub(crate) fn python_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(flag) => *flag,
+        Value::Number(number) => number.as_f64().is_some_and(|value| value != 0.0),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(entries) => !entries.is_empty(),
+    }
+}
+
+/// `value if isinstance(value, int) else None`, keeping the value itself.
+///
+/// CPython counts `True`/`False` as `int`, so a bool survives the guard and is
+/// published as it stands rather than as a number.
+pub(crate) fn python_int_value(value: Option<&Value>) -> Value {
+    match value {
+        Some(flag @ Value::Bool(_)) => flag.clone(),
+        Some(Value::Number(number)) if number.is_i64() || number.is_u64() => {
+            Value::Number(number.clone())
+        }
+        _ => Value::Null,
+    }
+}
+
 /// `isinstance(candidate, int)` — `True`/`False` are `int` in CPython, floats
 /// are not.
 fn python_int_text(value: &Value) -> Option<String> {
@@ -232,7 +318,7 @@ fn python_int_text(value: &Value) -> Option<String> {
 }
 
 /// `str(value)` for the scalars a mirrored attribute can hold.
-fn python_str(value: &Value) -> String {
+pub(crate) fn python_str(value: &Value) -> String {
     match value {
         Value::Null => "None".to_string(),
         Value::Bool(true) => "True".to_string(),

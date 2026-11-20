@@ -19,6 +19,9 @@ pub(super) struct ConfigFacts {
     pub(super) repository_hooks_path: Option<String>,
     /// Every `remote.<name>.fetch` refspec, by remote name as Git spells it.
     pub(super) remote_fetch: Vec<(String, String)>,
+    /// `worktree.guessRemote` starts the branch `git worktree add <path>`
+    /// creates from a remote-tracking branch of that name, not from `HEAD`.
+    pub(super) guess_remote: bool,
 }
 
 /// `Some(None)` when a setting could run a program or redirect the checkout,
@@ -38,6 +41,9 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         ..ConfigFacts::default()
     };
     let mut past_system = false;
+    // The last `core.hooksPath` value read, and whether the repository's own
+    // configuration wrote it.
+    let mut hooks_path: Option<(bool, String)> = None;
     let mut records = output.split('\0');
     while let Some(scope) = records.next() {
         if scope.is_empty() {
@@ -59,6 +65,13 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         if key == "core.bare" && super::super::git_config::enabled_boolean(value) {
             return Some(None);
         }
+        if key == "worktree.guessremote" {
+            // The last value Git reads wins, exactly as it resolves the key.
+            // Git reads the key as a boolean, where any non-zero integer and
+            // an empty value are true, so only an explicit false clears it.
+            facts.guess_remote = !super::super::git_config::disabled_boolean(value);
+            continue;
+        }
         let global_scope = matches!(scope, "global" | "system" | "unknown");
         // The bundled `unknown` scope keeps the stricter reading for settings
         // that run programs or pull in more files; a user's own global config
@@ -66,23 +79,22 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         let user_scope = matches!(scope, "global" | "system");
         if key == "core.hookspath" {
             // Hook managers set this globally; the directory must exist and
-            // hold no hook Git would run for this operation.
-            if !global_scope {
-                if scope == "local"
-                    && super::super::git_hook_files::repository_relative_hooks_path(value)
-                {
-                    facts.repository_hooks_path = Some(value.to_owned());
-                    continue;
-                }
+            // hold no hook Git would run for this operation. A repository's
+            // own file carries the same trust as the user's global one:
+            // `git clone` never copies `.git/config`, so a `local` value was
+            // written by this developer or a tool they ran. The directory it
+            // names is read either way. A `worktree` or `command` value can
+            // come from this very invocation, so it stays doubt - and Git
+            // reads those last, so nothing later in the listing retires one.
+            if !global_scope && scope != "local" {
                 return Some(None);
             }
-            let Some(directory) = expand_config_path(value, home)
-                .and_then(|path| fs::canonicalize(path).ok())
-                .filter(|path| path.is_dir())
-            else {
-                return Some(None);
-            };
-            facts.hook_dirs.push(directory);
+            // Git consults one hooks path: the last value it is given. An
+            // earlier value names a directory this checkout never reads, so
+            // it is judged only once the listing ends and the effective value
+            // is known. Judging it in place sent `worktree add` to review
+            // over a directory Git had already been told to ignore.
+            hooks_path = Some((scope == "local", value.to_owned()));
             continue;
         }
         if key.starts_with("filter.") {
@@ -105,10 +117,15 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             continue;
         }
         // `worktree add` and each probe below use built-in commands, local
-        // refs, and no diff/editor operation. A global or system credential
-        // helper, such as the `osxkeychain` helper Git for macOS installs, is
-        // not consulted for this local-ref operation; retain the deny floor
-        // for repository-scoped helpers and execution-capable settings.
+        // refs, and no diff/editor operation. None of them asks Git for a
+        // credential, so no credential helper runs, whatever its scope: the
+        // branch the checkout starts from is resolved against the refs this
+        // repository already holds. A `local` value carries the same trust as
+        // the user's global one for that reason and for the reason
+        // `core.hooksPath` does: `git clone` never copies `.git/config`, so a
+        // repository value was written by this developer or a tool they ran.
+        // A `worktree` or `command` value can come from this very invocation,
+        // so it stays doubt.
         // The repository may not name further LFS programs for a filter
         // the user's own `git lfs install` set up.
         if !global_scope
@@ -126,8 +143,8 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
                 "core.sshcommand" | "core.gitproxy" | "core.askpass"
             ) && !user_scope)
             || key.starts_with("hook.")
-            || (display_pager_setting(&key) && !(user_scope && display_pager_key(&key)))
-            || (key.starts_with("credential.") && !global_scope)
+            || (display_pager_setting(&key) && !display_pager_key(&key))
+            || (key.starts_with("credential.") && !global_scope && scope != "local")
             || (key.starts_with("include") && (!user_scope || key.contains("onbranch:")))
             || (key.starts_with("extensions.") && !inert_extension(&key))
             || (key.starts_with("submodule.")
@@ -138,6 +155,19 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             || key.ends_with(".receivepack")
         {
             return Some(None);
+        }
+    }
+    if let Some((local, value)) = hooks_path {
+        if local && super::super::git_hook_files::repository_relative_hooks_path(&value) {
+            facts.repository_hooks_path = Some(value);
+        } else {
+            let Some(directory) = expand_config_path(&value, home)
+                .and_then(|path| fs::canonicalize(path).ok())
+                .filter(|path| path.is_dir())
+            else {
+                return Some(None);
+            };
+            facts.hook_dirs.push(directory);
         }
     }
     Some(Some(facts))
@@ -160,13 +190,14 @@ fn display_pager_setting(key: &str) -> bool {
 
 /// A pager starts only for a command that pages its output, and only on a
 /// terminal. `worktree add` runs `worktree`, `reset` and `update-ref`, none
-/// of which a display setting names; the user's global `core.pager` and
-/// `pager.<display command>` keys therefore do nothing here. Any other
-/// `pager.<command>` key, and any repository-scoped pager, stays reviewed.
+/// of which a display setting names, so `core.pager` and
+/// `pager.<display command>` do nothing here whichever file sets them: a
+/// repository that spells one is choosing how `git log` prints, not what this
+/// checkout runs. Any other `pager.<command>` key stays reviewed.
 fn display_pager_key(key: &str) -> bool {
     const DISPLAY: &[&str] = &[
-        "diff", "log", "show", "blame", "status", "grep", "stash", "tag", "branch", "shortlog",
-        "reflog",
+        "diff", "log", "show", "blame", "annotate", "status", "grep", "stash", "tag", "branch",
+        "shortlog", "reflog",
     ];
     key == "core.pager"
         || key
@@ -255,185 +286,5 @@ fn install_prefix(exec_path: &str) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn listing(entries: &[(&str, &str, &str)]) -> Vec<u8> {
-        let mut output = Vec::new();
-        for (scope, key, value) in entries {
-            output.extend_from_slice(format!("{scope}\0{key}\n{value}\0").as_bytes());
-        }
-        output
-    }
-
-    fn judged(entries: &[(&str, &str, &str)]) -> Option<Option<ConfigFacts>> {
-        safe_worktree_config(&listing(entries), Path::new("/nonexistent-home"))
-    }
-
-    #[test]
-    fn bundled_macos_config_is_judged_as_system_config() {
-        let facts = judged(&[
-            ("unknown", "credential.helper", "osxkeychain"),
-            ("unknown", "init.defaultbranch", "main"),
-            ("global", "user.name", "Example"),
-            ("local", "core.bare", "false"),
-        ]);
-        assert!(matches!(facts, Some(Some(_))));
-    }
-
-    #[test]
-    fn bundled_scope_keeps_execution_settings_reviewed() {
-        for (key, value) in [
-            ("core.fsmonitor", "/opt/example/run"),
-            ("core.pager", "/opt/example/run"),
-            ("core.sshcommand", "/opt/example/run"),
-            ("hook.post-checkout.command", "/opt/example/run"),
-            ("pager.log", "/opt/example/run"),
-            ("pager.worktree", "/opt/example/run"),
-            ("include.path", "/opt/example/run"),
-            ("includeif.onbranch:main.path", "/opt/example/run"),
-            ("extensions.partialclone", "origin"),
-        ] {
-            let facts = judged(&[("unknown", key, value)]);
-            assert!(matches!(facts, Some(None)), "{key}");
-        }
-    }
-
-    #[test]
-    fn global_display_and_transport_settings_are_ordinary_developer_config() {
-        for (key, value) in [
-            ("core.pager", "delta"),
-            ("pager.log", "less -FRX"),
-            ("core.fsmonitor", "true"),
-            ("core.sshcommand", "ssh -i ~/.ssh/id_work"),
-            ("include.path", "~/.gitconfig.d/work"),
-            ("includeif.gitdir:~/work/.path", "~/.gitconfig.d/work"),
-            ("submodule.recurse", "true"),
-            ("extensions.worktreeconfig", "true"),
-        ] {
-            assert!(
-                matches!(judged(&[("global", key, value)]), Some(Some(_))),
-                "{key}"
-            );
-        }
-        assert!(matches!(
-            judged(&[("local", "extensions.objectformat", "sha256")]),
-            Some(Some(_))
-        ));
-    }
-
-    #[test]
-    fn repository_scoped_execution_settings_stay_reviewed() {
-        for (key, value) in [
-            ("core.pager", "/tmp/run"),
-            ("pager.log", "/tmp/run"),
-            ("core.fsmonitor", "/tmp/run"),
-            ("core.sshcommand", "/tmp/run"),
-            ("include.path", "../.gitconfig"),
-            ("includeif.gitdir:/.path", "../.gitconfig"),
-        ] {
-            assert!(
-                matches!(judged(&[("local", key, value)]), Some(None)),
-                "{key}"
-            );
-        }
-        for key in [
-            "includeif.onbranch:main.path",
-            "pager.worktree",
-            "core.fsmonitor",
-        ] {
-            let value = if key == "core.fsmonitor" {
-                "/tmp/run"
-            } else {
-                "/tmp/x"
-            };
-            assert!(
-                matches!(judged(&[("global", key, value)]), Some(None)),
-                "{key}"
-            );
-        }
-    }
-
-    #[test]
-    fn repository_hooks_path_is_recorded_only_when_relative_and_local() {
-        let Some(Some(facts)) = judged(&[("local", "core.hookspath", ".husky/_")]) else {
-            panic!("relative repository hooks path rejected");
-        };
-        assert_eq!(facts.repository_hooks_path.as_deref(), Some(".husky/_"));
-        for (scope, value) in [
-            ("local", "../hooks"),
-            ("local", "/opt/hooks"),
-            ("local", "~/hooks"),
-            ("worktree", ".husky/_"),
-            ("command", ".husky/_"),
-        ] {
-            assert!(
-                matches!(judged(&[(scope, "core.hookspath", value)]), Some(None)),
-                "{scope} {value}"
-            );
-        }
-    }
-
-    #[test]
-    fn bundled_scope_after_repository_settings_is_doubt() {
-        let facts = judged(&[
-            ("local", "core.bare", "false"),
-            ("unknown", "credential.helper", "osxkeychain"),
-        ]);
-        assert!(facts.is_none());
-    }
-
-    #[test]
-    fn repository_credential_helper_and_filter_stay_reviewed() {
-        assert!(matches!(
-            judged(&[("local", "credential.helper", "osxkeychain")]),
-            Some(None)
-        ));
-        assert!(matches!(
-            judged(&[("local", "filter.lfs.smudge", "git-lfs smudge -- %f")]),
-            Some(None)
-        ));
-        assert!(matches!(
-            judged(&[("worktree", "core.hookspath", "/opt/hooks")]),
-            Some(None)
-        ));
-    }
-
-    #[test]
-    fn standard_lfs_filter_is_recognised() {
-        let Some(Some(facts)) = judged(&[
-            ("global", "filter.lfs.clean", "git-lfs clean -- %f"),
-            ("global", "filter.lfs.smudge", "git-lfs smudge -- %f"),
-            ("global", "filter.lfs.process", "git-lfs filter-process"),
-            ("global", "filter.lfs.required", "true"),
-        ]) else {
-            panic!("standard LFS filter rejected");
-        };
-        assert!(facts.filters && facts.only_standard_lfs);
-        let Some(Some(facts)) =
-            judged(&[("global", "filter.lfs.smudge", "/opt/example/smudge %f")])
-        else {
-            panic!("global filter rejected");
-        };
-        assert!(facts.filters && !facts.only_standard_lfs);
-    }
-
-    #[test]
-    fn install_prefix_needs_a_libexec_git_core_exec_path() {
-        let root = std::env::temp_dir().join(format!(
-            "guard-worktree-prefix-{}-{}",
-            std::process::id(),
-            crate::unique_nanos::unique_nanos()
-        ));
-        let exec_path = root.join("usr/libexec/git-core");
-        fs::create_dir_all(&exec_path).expect("exec path");
-        let canonical_root = fs::canonicalize(&root).expect("root");
-        assert_eq!(
-            install_prefix(exec_path.to_str().expect("utf-8")),
-            Some(canonical_root.join("usr"))
-        );
-        assert_eq!(install_prefix(root.to_str().expect("utf-8")), None);
-        assert_eq!(install_prefix("usr/libexec/git-core"), None);
-        fs::remove_dir_all(root).ok();
-    }
-}
+#[path = "git_worktree_config_tests.rs"]
+mod tests;

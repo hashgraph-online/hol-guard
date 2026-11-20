@@ -1,6 +1,6 @@
 # Exact-continuation qualification
 
-This fixture deliberately pins Node 22.19.0, Bun 1.3.14, and the SDK versions
+This fixture deliberately pins Node 22.22.2, Bun 1.4.4, and the SDK versions
 in `package-lock.json`. Floating runtime aliases would change the SDK execution
 environment without a reviewed qualification change.
 

@@ -140,7 +140,7 @@ jq -n \
 "$COMPILER" compile < source-build.json > source-compiled.json
 ```
 
-Building from source with `cargo +1.88.0 build --locked -p guard-command` is only needed
+Building from source with `cargo +1.89.0 build --locked -p guard-command` is only needed
 when reviewing or changing the native contract itself, not to compose existing operations.
 
 `base: "packaged"` compiles an addition against the admitted baseline and
@@ -166,7 +166,7 @@ writes deterministic projections, including the package resource copies for
 an editable checkout. It does not generate or execute a detector. There is no
 separate staging step for the native program and catalog.
 
-Without `--compiler`, both commands invoke `cargo +1.88.0 run --locked`; the
+Without `--compiler`, both commands invoke `cargo +1.89.0 run --locked`; the
 second invocation rebuilds the compiler after the generated program changes.
 This matters because `--check` verifies both the files and the program embedded
 in the compiler. If you supply `--compiler PATH`, rebuild that binary after

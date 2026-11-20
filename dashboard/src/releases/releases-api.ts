@@ -39,9 +39,22 @@ async function errorCode(response: Response): Promise<string | null> {
   }
 }
 
+const UNREADABLE_CODES: ReadonlySet<string> = new Set([
+  "release_feed_payload_invalid",
+  "release_feed_response_too_large",
+]);
+
 async function failureForResponse(response: Response): Promise<ReleaseFeedFailure> {
   if (response.status === 404) return "not-found";
   if (response.status === 501) return "unsupported";
+  // Guard already re-minted the session once before answering 401, so the
+  // window itself has lost its signed session; hol.org is not involved.
+  if (response.status === 401) return "session";
+  // hol.org answered, but the release did not pass Guard's checks before it
+  // reaches the screen. Retrying reads the same document again.
+  if (response.status === 502 && UNREADABLE_CODES.has((await errorCode(response)) ?? "")) {
+    return "unreadable";
+  }
   // A 503 carries two different answers: the archive switched off on this
   // device, and an upstream read that failed. Only one of them is hol.org's
   // doing, and only one of them is worth retrying.

@@ -53,38 +53,6 @@ class CustomExtensionContinuityError(ValueError):
     """The signed continuity observation cannot be applied safely."""
 
 
-def apply_verified_custom_extension_continuity(
-    store: GuardStore,
-    validated_policy_bundle: Mapping[str, object],
-    *,
-    device_id: str | None = None,
-    now: str,
-) -> dict[str, object]:
-    """Consume continuity only after the production caller verified the bundle signature."""
-
-    mutation, state = prepare_verified_custom_extension_continuity(
-        store,
-        validated_policy_bundle,
-        device_id=device_id,
-        now=now,
-    )
-    if mutation is None:
-        return state
-    try:
-        _ = store.apply_custom_extension_continuity_transaction(
-            expected_revision=mutation.expected_revision,
-            authority_updates=mutation.authority_updates,
-            sync_payloads=mutation.sync_payloads,
-            events=mutation.events,
-            updated_at=mutation.updated_at,
-            sync_preconditions=mutation.sync_preconditions,
-            observation_preconditions=mutation.observation_preconditions,
-        )
-    except ValueError as error:
-        raise CustomExtensionContinuityError("local continuity authority changed during apply") from error
-    return state
-
-
 def prepare_verified_custom_extension_continuity(
     store: GuardStore,
     validated_policy_bundle: Mapping[str, object],
@@ -173,6 +141,7 @@ def record_local_custom_extension_mutation(
     provider_updates: Sequence[tuple[str, str, int]] = (),
     catalog_seed: Sequence[LocalCliCommand] = (),
     capabilities: Mapping[str, str] | None = None,
+    reviewed_catalog_revision: int | None = None,
 ) -> int:
     """Commit a local grant and its continuity tombstone/state/receipt atomically.
 
@@ -217,6 +186,9 @@ def record_local_custom_extension_mutation(
             provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
             catalog_seeds={identity.cli_id: catalog_seed} if catalog_seed else None,
             capability_updates={identity.cli_id: capabilities} if capabilities else None,
+            catalog_reviews=(
+                {identity.cli_id: reviewed_catalog_revision} if reviewed_catalog_revision is not None else None
+            ),
         )
     except ValueError as error:
         if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:

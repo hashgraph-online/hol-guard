@@ -1,6 +1,6 @@
 //! Codex sandbox-required answers, settled natively: a port of
-//! `route_codex_containment` (`codex_contained_tests.py`) and the
-//! `contained_zcode_response` rewrite it runs for Codex.
+//! `route_codex_containment` (`tests/codex_containment_route.py`) and the
+//! contained-sink rewrite it runs for Codex.
 //!
 //! A contained-run denial becomes an allow whose `updatedInput` runs Guard's
 //! execution sink on a private snapshot of the call, but only once the Codex
@@ -8,6 +8,8 @@
 //! `updatedInput` (0.131.0 or later). An older or unknown Codex keeps the
 //! denial with an update hint; anything this module cannot reproduce keeps
 //! the denial unchanged. Native authority is rechecked by the sink.
+//! A call that Codex's own macOS sandbox already confines runs as it is,
+//! since the sink cannot start inside that sandbox (`sandbox`).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -16,11 +18,12 @@ use sha2::{Digest, Sha256};
 
 #[cfg(unix)]
 use self::codex::user_home;
-use self::codex::{codex_applies_updated_input, launching_codex_executable};
+use self::codex::{codex_applies_updated_input, launching_codex_executable, with_update_hint};
 use super::approval::pending_pretool_approval;
 use super::{BridgeConfig, Prepared, Route, STATE_FILE};
 use crate::codex_hook_bridge_direct::unquote_plus;
 use crate::codex_hook_response::{codex_hook_response, fail_closed, PRE_TOOL_USE};
+use crate::hook_direct::contained::{unprojected_sink_command, NativeSink};
 use crate::hook_env_stamp::dumps;
 use crate::pyjson::{self, PyVal};
 
@@ -66,7 +69,10 @@ pub(super) fn settle(
     let (settled, unmap) = match contain(config, prepared, &response, deadline) {
         Contained::Unchanged => (response, mapped),
         Contained::Hint => (with_update_hint(response), mapped),
-        Contained::Routed(routed, unmap) => (routed, unmap),
+        Contained::Routed(routed, unmap) => {
+            admit_contained(config, prepared);
+            (routed, unmap)
+        }
     };
     let PyVal::Dict(entries) = &settled else {
         return Route::Respond(fail_closed(&prepared.event_name));
@@ -82,6 +88,30 @@ pub(super) fn settle(
         Some(pending) => Route::AwaitApproval(pending, rendered),
         None => Route::Respond(rendered),
     }
+}
+
+/// Running the call contained is how this answer settles the floor that held
+/// it, so the call's `PostToolUse` must not hold its output for that same
+/// floor again (`native_admitted_call`). Oh My Pi proves the same through its
+/// verified sink delivery; Codex has no such delivery, so the call id stands
+/// in. Secret, network and risk floors on the output still apply.
+fn admit_contained(config: &BridgeConfig, prepared: &Prepared) {
+    let Some(guard_home) = guard_home(&config.state_path) else {
+        return;
+    };
+    // The same parser routing used: a lone surrogate in an unrelated field
+    // must not leave a routed call without its witness. The witness keys on
+    // the call id and tool name only.
+    let Ok(payload) = pyjson::parse_mapping_lone_surrogates(&prepared.data) else {
+        return;
+    };
+    let mut identity = serde_json::Map::new();
+    for field in ["tool_use_id", "tool_name"] {
+        if let Some(value) = text(&payload.value, field) {
+            identity.insert(field.to_owned(), serde_json::Value::from(value));
+        }
+    }
+    crate::native_admitted_call::record_for_hook(&guard_home, "codex", &identity);
 }
 
 fn text<'a>(value: &'a PyVal, name: &str) -> Option<&'a str> {
@@ -137,10 +167,23 @@ fn contain(
     if payload.mapped && payload.collision {
         return Contained::Unchanged;
     }
+    if let Some(original) = routable(response, &payload.value) {
+        let profile = text(response, "required_execution_profile");
+        match sandbox::launching_turn(&payload.value) {
+            sandbox::Turn::Unknown => {}
+            turn => {
+                return match turn.check_profile(profile) {
+                    Some(check) => sandbox::checked(original, &payload, Some(check)),
+                    None => Contained::Unchanged,
+                }
+            }
+        }
+    }
     let target = Target {
         prefix: &config.fallback_command,
         guard_home: &guard_home,
         home: &home,
+        native: crate::hook_direct::contained::native_sink,
     };
     match routed(response, &payload.value, payload.mapped, &target) {
         Some(routed) => Contained::Routed(routed, payload.mapped),
@@ -226,6 +269,8 @@ struct Target<'a> {
     prefix: &'a [String],
     guard_home: &'a str,
     home: &'a str,
+    /// The runtime's own sink for the calls it reproduces.
+    native: NativeSink,
 }
 
 /// `isolated_guard_cli_command(python, package_root, ())`, read from the
@@ -264,8 +309,9 @@ fn string(text: &str) -> PyVal {
     PyVal::Str(text.to_owned())
 }
 
-/// `contained_zcode_response` for the Codex harness.
-fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
+/// The shell call's input, when the answer names the contained profile it
+/// requires and the call is a `PreToolUse` shell command.
+fn routable<'a>(response: &PyVal, payload: &'a PyVal) -> Option<&'a PyVal> {
     let profile = text(response, "reason_code")
         .and_then(guard_command::hook_responses::contained_execution_profile)?;
     if response.get("observe_mode") == Some(&PyVal::Bool(true))
@@ -273,7 +319,6 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     {
         return None;
     }
-    let prefix = sink_prefix(target.prefix)?;
     let event = first(payload, &["hook_event_name", "hookEventName"])?.as_str()?;
     let tool = first(payload, &["tool_name", "toolName"])?.as_str()?;
     if !PRE_TOOL_EVENTS.contains(&event) || !SHELL_TOOLS.contains(&tool) {
@@ -282,6 +327,13 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     let original = first(payload, &["tool_input", "toolInput"])?;
     original.as_dict()?;
     original.get("command")?.as_str()?;
+    Some(original)
+}
+
+/// The contained-sink rewrite for the Codex harness.
+fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
+    let original = routable(response, payload)?;
+    let prefix = sink_prefix(target.prefix)?;
     let workspace = resolved_workspace(first(payload, &["cwd", "workspace"])?.as_str()?)?;
     let snapshot = PyVal::Dict(vec![
         ("schema".to_owned(), string(REQUEST_SCHEMA)),
@@ -310,20 +362,37 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     ]);
     let mut serialized = String::new();
     dumps(&snapshot, true, mapped, &mut serialized);
+    // The sink reads the snapshot as strict JSON: a lone surrogate or a
+    // non-finite number would be refused there, so such a call keeps its
+    // denial instead of being handed to a sink that cannot run it.
     if serialized.len() > MAX_REQUEST_BYTES {
         return None;
     }
+    let strict = serde_json::from_str::<serde_json::Value>(&serialized).ok()?;
+    let native = strict
+        .pointer("/payload/tool_input")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|original| {
+            let answer = serde_json::json!({
+                "reason_code": text(response, "reason_code"),
+                "required_execution_profile": text(response, "required_execution_profile"),
+                "reason": text(response, "reason"),
+            });
+            unprojected_sink_command(&answer, original, &workspace, target.home, target.native)
+        });
     let request = write_snapshot(serialized.as_bytes())?;
     let Some(request_text) = request.to_str().map(str::to_owned) else {
         discard(&request);
         return None;
     };
     let digest = hex::encode(Sha256::digest(serialized.as_bytes()));
-    let mut command = command_prefix(prefix);
+    let mut command = native.unwrap_or_else(|| {
+        let mut command = command_prefix(prefix);
+        command.extend(["guard", "execute-contained-test"].map(str::to_owned));
+        command
+    });
     command.extend(
         [
-            "guard",
-            "execute-contained-test",
             "--harness",
             "codex",
             "--guard-home",
@@ -343,7 +412,7 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
         discard(&request);
         return None;
     };
-    Some(routed_response(original, &joined))
+    Some(routed_response(original, &joined, ROUTED_REASON))
 }
 
 /// The sink's argv prefix as the shell will start it.
@@ -357,21 +426,22 @@ fn command_prefix(prefix: &[String]) -> Vec<String> {
     windows::sink_prefix(prefix)
 }
 
-/// The sink command line: POSIX-quoted, and on Windows quoted for the
-/// PowerShell Codex runs shell commands in.
+/// The sink command line: POSIX-quoted, and on Windows written so that
+/// PowerShell and Git Bash, either of which Codex may run it in, read it
+/// the same way.
 #[cfg(not(windows))]
-fn shell_join(command: &[String]) -> Option<String> {
+pub(crate) fn shell_join(command: &[String]) -> Option<String> {
     Some(crate::mcp_proxy_shlex::join(command))
 }
 
 #[cfg(windows)]
-fn shell_join(command: &[String]) -> Option<String> {
-    windows::powershell_join(command)
+pub(crate) fn shell_join(command: &[String]) -> Option<String> {
+    windows::sink_command_line(command)
 }
 
 /// The allow that runs the `joined` command line in place of the original
 /// call.
-fn routed_response(original: &PyVal, joined: &str) -> PyVal {
+fn routed_response(original: &PyVal, joined: &str, reason: &str) -> PyVal {
     let mut updated = match original {
         PyVal::Dict(entries) => entries.clone(),
         _ => Vec::new(),
@@ -383,7 +453,7 @@ fn routed_response(original: &PyVal, joined: &str) -> PyVal {
     }
     PyVal::Dict(vec![
         ("policy_action".to_owned(), string("allow")),
-        ("reason_code".to_owned(), string(ROUTED_REASON)),
+        ("reason_code".to_owned(), string(reason)),
         (
             "hookSpecificOutput".to_owned(),
             PyVal::Dict(vec![
@@ -395,40 +465,10 @@ fn routed_response(original: &PyVal, joined: &str) -> PyVal {
     ])
 }
 
-/// `_with_update_hint(response)`.
-fn with_update_hint(response: PyVal) -> PyVal {
-    let PyVal::Dict(mut entries) = response else {
-        return response;
-    };
-    let output = entries
-        .iter_mut()
-        .find(|(name, _)| name == "hookSpecificOutput")
-        .map(|(_, value)| value);
-    if let Some(PyVal::Dict(output)) = output {
-        let reason = output
-            .iter()
-            .find(|(name, _)| name == "permissionDecisionReason")
-            .and_then(|(_, value)| value.as_str())
-            .filter(|reason| !reason.is_empty());
-        let hinted = string(&match reason {
-            Some(reason) => format!("{reason} {UPDATE_HINT}"),
-            None => UPDATE_HINT.to_owned(),
-        });
-        match output
-            .iter_mut()
-            .find(|(name, _)| name == "permissionDecisionReason")
-        {
-            Some(slot) => slot.1 = hinted,
-            None => output.push(("permissionDecisionReason".to_owned(), hinted)),
-        }
-    }
-    PyVal::Dict(entries)
-}
-
 /// `Path(value).expanduser().resolve(strict=True)`, when it is a directory
 /// named in UTF-8.
 #[cfg(unix)]
-fn resolved_workspace(value: &str) -> Option<String> {
+pub(crate) fn resolved_workspace(value: &str) -> Option<String> {
     let expanded = match value.strip_prefix('~') {
         Some(rest) => {
             let (user, tail) = rest.split_once('/').unwrap_or((rest, ""));
@@ -444,31 +484,31 @@ fn resolved_workspace(value: &str) -> Option<String> {
 }
 
 #[cfg(windows)]
-fn resolved_workspace(value: &str) -> Option<String> {
+pub(crate) fn resolved_workspace(value: &str) -> Option<String> {
     windows::resolved_workspace(value)
 }
 
 #[cfg(not(any(unix, windows)))]
-fn resolved_workspace(_value: &str) -> Option<String> {
+pub(crate) fn resolved_workspace(_value: &str) -> Option<String> {
     None
 }
 
 #[cfg(unix)]
-fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
+pub(crate) fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
     crate::hook_direct::contained::request::write_snapshot(&std::env::temp_dir(), serialized)
 }
 
 #[cfg(windows)]
-fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
+pub(crate) fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
     windows::write_snapshot(serialized)
 }
 
 #[cfg(not(any(unix, windows)))]
-fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf> {
+pub(crate) fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf> {
     None
 }
 
-fn discard(request: &Path) {
+pub(crate) fn discard(request: &Path) {
     let _ = std::fs::remove_file(request);
     if let Some(directory) = request.parent() {
         let _ = std::fs::remove_dir(directory);
@@ -477,9 +517,11 @@ fn discard(request: &Path) {
 
 #[path = "codex_hook_bridge_contain_codex.rs"]
 mod codex;
+#[path = "codex_hook_bridge_contain_sandbox.rs"]
+mod sandbox;
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_contain_tests.rs"]
 mod tests;
 #[cfg(windows)]
 #[path = "codex_hook_bridge_contain_windows.rs"]
-mod windows;
+pub(crate) mod windows;

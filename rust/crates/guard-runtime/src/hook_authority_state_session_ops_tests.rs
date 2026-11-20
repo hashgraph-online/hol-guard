@@ -26,12 +26,12 @@ const CURSOR_ALLOW: &str = "cursor_native_shell_allow:";
 const CLAUDE_PENDING: &str = "claude_pending_permission:";
 const CLAUDE_INDEX: &str = "claude_pending_permissions:";
 
-struct Base<'a> {
-    request: &'a HookAuthorityStateRequestV1,
+pub(super) struct Base<'a> {
+    pub(super) request: &'a HookAuthorityStateRequestV1,
 }
 
 impl Base<'_> {
-    fn call(&self, path: &Path, op: &str, fields: Value) -> Value {
+    pub(super) fn call(&self, path: &Path, op: &str, fields: Value) -> Value {
         let request = HookAuthorityStateRequestV1 {
             schema: self.request.schema.clone(),
             store_path: path.to_string_lossy().into_owned(),
@@ -108,7 +108,7 @@ impl Base<'_> {
         );
     }
 
-    fn old_discard(&self, path: &Path, session: &str) -> usize {
+    pub(super) fn old_discard(&self, path: &Path, session: &str) -> usize {
         let mut keys = self.keys(path, "claude_load_index", json!({ "session_id": session }));
         if keys.is_empty() {
             return 0;
@@ -128,16 +128,16 @@ impl Base<'_> {
 }
 
 /// Owners, pending keys and commands present in the store, plus unknown ones.
-struct Inputs {
+pub(super) struct Inputs {
     conversations: BTreeSet<String>,
     cursor_keys: BTreeSet<String>,
     commands: BTreeSet<String>,
-    sessions: BTreeSet<String>,
+    pub(super) sessions: BTreeSet<String>,
     /// Session and artifact of every Claude pending row, plus an absent pair.
     claude_artifacts: BTreeSet<(String, String)>,
 }
 
-fn inputs(connection: &Connection) -> Inputs {
+pub(super) fn inputs(connection: &Connection) -> Inputs {
     let mut found = Inputs {
         conversations: BTreeSet::from(["absent-conversation".to_owned()]),
         cursor_keys: BTreeSet::from([format!("{CURSOR_PENDING}absent-conversation:0")]),
@@ -215,7 +215,7 @@ fn state(path: &Path) -> (Value, Value) {
 }
 
 /// Runs `old` on one copy and `new` on another; both must agree.
-fn agree(
+pub(super) fn agree(
     path: &Path,
     label: &str,
     old: impl FnOnce(&Path) -> Value,

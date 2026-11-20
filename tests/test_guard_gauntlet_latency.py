@@ -120,6 +120,7 @@ def test_verifier_labels_legacy_reports_without_claiming_latency(tmp_path, monke
     from ci.gauntlet.evidence import assess_case
     from ci.gauntlet.fixtures import digest_file
     from ci.gauntlet.interruptions import summarize_interruptions
+    from ci.gauntlet.release_budgets import release_budgets
     from tests.test_guard_gauntlet import observed_case, ordinary
 
     scenario = ordinary()
@@ -149,6 +150,11 @@ def test_verifier_labels_legacy_reports_without_claiming_latency(tmp_path, monke
         "cases": [{"id": scenario.id, **case["assessment"], "evidence_sha256": digest_file(path)}],
         "interruptions": summarize_interruptions([case["assessment"]]),
     }
+    report["release_budgets"] = release_budgets(
+        [{"id": scenario.id, **case["assessment"]}],
+        report["interruptions"],
+        summarize_hook_latency(case["guard_observations"]),
+    )
     if reported:
         report["hook_latency"] = case["hook_latency"]
     (tmp_path / "summary.json").write_text(json.dumps(report))
@@ -161,3 +167,16 @@ def test_verifier_labels_legacy_reports_without_claiming_latency(tmp_path, monke
         (tmp_path / "summary.json").write_text(json.dumps(report))
         with pytest.raises(ValueError, match="aggregate hook latency"):
             verify.verify_report(tmp_path, expected_sha="a" * 40, require_qualified=False)
+
+
+def test_verifier_rejects_a_report_without_release_budgets(tmp_path, monkeypatch):
+    import json
+
+    from ci.gauntlet import verify
+
+    test_verifier_labels_legacy_reports_without_claiming_latency(tmp_path, monkeypatch, False)
+    report = json.loads((tmp_path / "summary.json").read_text())
+    del report["release_budgets"]
+    (tmp_path / "summary.json").write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="release budgets"):
+        verify.verify_report(tmp_path, expected_sha="a" * 40, require_qualified=False)

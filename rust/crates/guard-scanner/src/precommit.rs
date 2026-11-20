@@ -212,7 +212,7 @@ fn git_common_dir(root: &Path) -> Result<PathBuf, PrecommitError> {
     .map_err(|_| PrecommitError::value("hook target is not a usable Git worktree"))?;
     // `raw = result.stdout.decode("utf-8", errors="strict").strip()`; a strict
     // decode failure is a `UnicodeDecodeError`, a `ValueError` subclass.
-    let raw = String::from_utf8(result.stdout)
+    let raw = std::str::from_utf8(&result.stdout)
         .map_err(|error| PrecommitError::Value(error.to_string()))?;
     let trimmed = raw.trim();
     if trimmed.is_empty() {

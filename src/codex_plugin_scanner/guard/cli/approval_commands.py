@@ -8,8 +8,16 @@ import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
+from ..approval_gate import (
+    ApprovalGateError,
+    require_high_risk,
+    revoke_cooldown,
+    unlock_cooldown,
+)
 from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_gate_fresh import require_fresh_approval_decision
+from ..approval_handoff_link import HANDOFF_LINK_PATTERN
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..approval_resolution import TERMINAL_POLICY_ACTION_NOT_RESOLVABLE
 from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError
 from ..approvals import (
@@ -18,14 +26,16 @@ from ..approvals import (
     apply_approval_resolution,
     build_runtime_snapshot,
 )
-from ..browser_opener import open_browser_url
+from ..browser_opener import open_app_url, open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
-from ..daemon import load_guard_daemon_url
+from ..desktop_review_link import desktop_review_url
+from ..native_daemon_manage import load_guard_daemon_url
 from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .commands_parser_approvals import add_approval_parser as add_approval_parser
 
@@ -158,24 +168,46 @@ def run_approval_command(
             "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
             "exit_code": 4,
         }
+    requested_scope = str(getattr(args, "scope", None) or "artifact")
     try:
         trust_local_tool = bool(getattr(args, "trust_local_tool", False))
-        if trust_local_tool and (args.scope != "artifact" or bool(getattr(args, "remember", False))):
+        if trust_local_tool and (requested_scope != "artifact" or bool(getattr(args, "remember", False))):
             return {
                 "resolved": False,
                 "error": "invalid_local_tool_trust_scope",
                 "message": "Local tool trust requires artifact scope and cannot be combined with --remember.",
                 "exit_code": 2,
             }
-        gate_input = (
-            prompt_for_approval_gate(store.guard_home, strict=str(args.scope) == "global")
-            if _approval_resolution_needs_gate(
-                store,
-                action=str(args.approval_action),
-                scope=str(args.scope),
+        approval_gate_grant = None
+        if bool(getattr(args, "fresh_approval_gate", False)) and approval_gate_public_config(store.guard_home).enabled:
+            # A "y" typed at an install prompt proves only that something could type
+            # into that terminal. Ask for the gate's own factor every time: an open
+            # password cooldown or a recent authenticator code does not count here.
+            fresh_input = prompt_for_approval_gate(
+                store.guard_home,
+                use_cooldown=False,
+                require_fresh_totp=True,
+                strict=True,
             )
-            else None
-        )
+            approval_gate_grant = require_fresh_approval_decision(
+                store.guard_home,
+                action=str(args.approval_action),
+                scope=requested_scope,
+                approval_gate_input=fresh_input,
+                subject=f"approval-request:{args.request_id}",
+                now=_now(),
+            )
+            gate_input = None
+        else:
+            gate_input = (
+                prompt_for_approval_gate(store.guard_home, strict=requested_scope == "global")
+                if _approval_resolution_needs_gate(
+                    store,
+                    action=str(args.approval_action),
+                    scope=requested_scope,
+                )
+                else None
+            )
         remember = bool(getattr(args, "remember", False))
         request = store.get_approval_request(args.request_id) if remember else None
         exact_action_remember = request is not None and request.get("exact_action_persistence_eligible") is True
@@ -196,11 +228,12 @@ def run_approval_command(
             store=store,
             request_id=args.request_id,
             action=args.approval_action,
-            scope=args.scope,
+            scope=requested_scope,
             workspace=str(workspace) if workspace is not None else None,
             reason=args.reason,
             now=_now(),
             approval_gate_input=gate_input,
+            approval_gate_grant=approval_gate_grant,
             persist_policy=True if remember else None,
             scope_contract_version=scope_contract_version,
             scope_contract_digest=scope_contract_digest,
@@ -235,6 +268,12 @@ def run_approval_command(
         return {
             "resolved": False,
             "error": "already_resolved",
+            "exit_code": 4,
+        }
+    except LocalToolGrantUnavailableError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
             "exit_code": 4,
         }
     except ValueError as error:
@@ -307,11 +346,40 @@ def run_approval_open_command(
         return {"error": "not_found", "request_id": request_id}, 1
     approval_url = str(item.get("approval_url", ""))
     repaired_url = _repaired_approval_url(approval_url, store.guard_home)
-    return {
+    payload: dict[str, object] = {
         "request_id": request_id,
         "approval_url": repaired_url,
         "repaired": repaired_url != approval_url,
-    }, 0
+        "opened": False,
+        "opened_in": None,
+    }
+    if getattr(args, "no_open", False):
+        # An agent asked for the link to hand the user. The bare link opens a
+        # tab that cannot decide anything, so give the short signed one the
+        # paused tool shows: it opens only this request, signed in, and expires.
+        signed_link = _shareable_signed_link(repaired_url, store.guard_home)
+        if signed_link is not None:
+            payload["signed_approval_url"] = signed_link
+        return payload, 0
+    # The launch carries a session, in Desktop's own window or as a signed
+    # browser link, so the request opens signed in on this machine.
+    desktop_url = desktop_review_url(store.guard_home, request_id)
+    if desktop_url is not None and open_app_url(desktop_url):
+        payload.update(opened=True, opened_in="desktop")
+        return payload, 0
+    signed_url = authenticated_approval_review_url(repaired_url, guard_home=store.guard_home)
+    if signed_url and open_browser_url(signed_url):
+        payload.update(opened=True, opened_in="browser")
+    return payload, 0
+
+
+def _shareable_signed_link(approval_url: str, guard_home: Path) -> str | None:
+    """The short link bound to this one request, never a full dashboard session."""
+
+    signed = authenticated_approval_review_url(approval_url, guard_home=guard_home)
+    if not signed or signed == approval_url or HANDOFF_LINK_PATTERN.search(signed) is None:
+        return None
+    return signed
 
 
 def run_approval_retry_hint_command(

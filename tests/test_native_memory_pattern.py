@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import memory_decision_event, native_memory_pattern, store_policy
+from codex_plugin_scanner.guard import (
+    memory_decision_event,
+    native_memory_pattern,
+    native_runner_authority,
+    store_policy,
+)
 from codex_plugin_scanner.guard.memory_decision_event import build_memory_decision_event
 from codex_plugin_scanner.guard.native_memory_pattern import NativeMemoryPatternError, memory_pattern_verdict
 from codex_plugin_scanner.guard.store_policy import memory_lookup_candidates
@@ -108,8 +113,15 @@ def test_policy_lookup_fails_closed_without_the_resident(monkeypatch: pytest.Mon
         )
 
 
-def test_decision_event_omits_the_fingerprint_without_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(native_memory_pattern, "native_context_digest", lambda *_args, **_kwargs: None)
+def _refuse_runner_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", _refuse)
+
+
+def test_decision_event_is_skipped_without_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    _refuse_runner_authority(monkeypatch)
 
     event = build_memory_decision_event(
         request={
@@ -122,15 +134,11 @@ def test_decision_event_omits_the_fingerprint_without_the_resident(monkeypatch: 
         resolved_at="2026-10-12T00:00:00Z",
     )
 
-    assert event is not None
-    assert event.memory_pattern_fingerprint is None
-    assert event.memory_pattern_kind is None
-    assert event.memory_pattern_components == {}
+    assert event is None
 
 
 def test_callers_share_the_native_client() -> None:
     assert store_policy.memory_pattern_verdict is memory_pattern_verdict
-    assert memory_decision_event.memory_pattern_verdict is memory_pattern_verdict
 
 
 def test_unavailable_error_names_the_resident_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,10 +174,10 @@ def test_lookup_asks_the_resident_for_the_store_home(monkeypatch: pytest.MonkeyP
     assert homes == [tmp_path]
 
 
-def test_decision_event_logs_the_missing_fingerprint(
+def test_decision_event_logs_the_missing_event(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(native_memory_pattern, "native_context_digest", lambda *_args, **_kwargs: None)
+    _refuse_runner_authority(monkeypatch)
 
     with caplog.at_level("WARNING", logger=memory_decision_event.__name__):
         build_memory_decision_event(

@@ -64,6 +64,7 @@ runs:
         }
         uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
           --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
+          --hidden-import sigstore._store --collect-data sigstore `
           --version-file $versionFile `
           --distpath $dist --workpath $work --specpath $spec `
           scripts/mdm/hol-guard-entry.py

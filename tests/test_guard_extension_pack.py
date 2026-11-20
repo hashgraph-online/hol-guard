@@ -9,10 +9,10 @@ from dataclasses import dataclass
 import pytest
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.pack import load_pack, plan_pack_selection, validate_pack
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
 from scripts.export_extension_directory import native_extensions
 from tests.extension_builder_support import REPOSITORY
+from tests.extension_pack import load_pack, plan_pack_selection, validate_pack
 
 PACK = REPOSITORY / "contributions/extension-packs/business.google-workspace.json"
 
@@ -98,12 +98,6 @@ def docs(tmp_path):
     (tmp_path / "docs/guard").mkdir(parents=True)
     (tmp_path / "docs/guard/demo.md").write_text("# Demo\n")
     return tmp_path
-
-
-def test_pack_contract_is_packaged_byte_for_byte() -> None:
-    source = REPOSITORY / "contracts/extensions/pack.v1.schema.json"
-    packaged = REPOSITORY / "src/codex_plugin_scanner/guard/extension_builder/pack.v1.schema.json"
-    assert source.read_bytes() == packaged.read_bytes()
 
 
 def test_google_workspace_pack_matches_the_generated_catalog(authoring_catalog) -> None:

@@ -14,8 +14,8 @@
 //! observed intrinsic action.
 
 use guard_contracts::{
-    GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, PreToolActionTypeV1,
-    PreToolResultV1,
+    GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, NativePromptRiskClassV1,
+    PreToolActionTypeV1, PreToolResultV1,
 };
 use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
@@ -33,6 +33,7 @@ mod policy_enforcement_policy;
 #[path = "policy_enforcement_reason.rs"]
 mod policy_enforcement_reason;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
+pub(crate) use prompt::deferred_prompt_review;
 
 /// Recheck business rules above the authenticated native receipt's intrinsic
 /// floor. This validates review eligibility; it grants no execution authority.
@@ -65,14 +66,18 @@ use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
 };
 use policy_enforcement_helpers::{
-    action_rank, join_action, normalized_harness, policy_floor_with_cause, FloorCause, FloorInput,
+    action_rank, join_action, normalized_harness, policy_floor_with_cause_and_delivery, FloorCause,
+    FloorInput,
 };
 use policy_enforcement_policy::CompiledEffectivePolicy;
-use policy_enforcement_reason::{policy_override_reason, NO_SCRIPT_INSTALL_ALTERNATIVE};
+use policy_enforcement_reason::{
+    policy_override_reason, PromptStop, NO_SCRIPT_INSTALL_ALTERNATIVE,
+};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
 pub(crate) use policy_enforcement_admission::AdmittedPolicySnapshot;
+pub(crate) use policy_enforcement_helpers::risk_action;
 
 #[path = "policy_enforcement_business.rs"]
 mod policy_enforcement_business;
@@ -104,15 +109,102 @@ fn package_scripts_disabled(payload: &Value, result: &PreToolResultV1) -> bool {
 /// and integrity hash and whose lifecycle scripts are off.
 const LOCKFILE_INSTALL_REASON: &str = "native_exact_safe_lockfile_install";
 
+/// Whether `payload` runs Guard's own approval inspection on the Guard home
+/// the hook reports, the wait Guard tells the agent to run after a review
+/// (`guard_command::pretool::guard_approval_inspection_command`).
+fn guard_approval_inspection(payload: &Value, guard_home: &str, cwd: Option<&str>) -> bool {
+    guard_command::pretool::generic::extract_untrusted_command_context(payload)
+        .ok()
+        .and_then(|context| context.command)
+        .is_some_and(|command| {
+            guard_command::pretool::guard_approval_inspection_command(&command, guard_home, cwd)
+        })
+}
+
+/// `PreToolUse` policy for one hook envelope. Guard's own approval wait is
+/// proven against the Guard home and working directory this hook reports.
+pub(crate) fn apply_pre_tool_policy_for_hook(
+    snapshot: &AdmittedPolicySnapshot,
+    envelope: &guard_contracts::GuardHookEnvelopeV2,
+    result: PreToolResultV1,
+) -> Result<PreToolResultV1, String> {
+    let inspection = guard_approval_inspection(
+        &envelope.raw_payload,
+        &envelope.source.guard_home,
+        envelope.source.cwd.as_deref(),
+    );
+    // Guard's own safety guide passes the execution floors only where the
+    // native verdict already allows the read; it never turns a review into
+    // an allow.
+    let guide = result.minimum_action == "allow"
+        && guard_safety_guide_read(&envelope.raw_payload, &envelope.source.home_dir);
+    apply_pre_tool_policy_with_inspection(
+        snapshot,
+        &envelope.raw_payload,
+        result,
+        inspection || guide,
+    )
+}
+
+/// Whether `payload` is one plain read of Guard's own safety guide below the
+/// hook's user home, the read Guard's managed agent instructions ask for
+/// (`guard_command::pretool::guard_safety_guide_read_command`).
+fn guard_safety_guide_read(payload: &Value, home_dir: &str) -> bool {
+    guard_command::pretool::generic::extract_untrusted_command_context(payload)
+        .ok()
+        .and_then(|context| context.command)
+        .is_some_and(|command| {
+            guard_command::pretool::guard_safety_guide_read_command(&command, home_dir)
+        })
+}
+
+/// The native review of a `--home` Guard's launcher cannot place, lifted when
+/// that home is the one this hook reports and nothing else held the command.
+const OWN_INSPECTION_REVIEW_REASON: &str = "native_command_review_required";
+const OWN_INSPECTION_ALLOW_REASON: &str = "native_exact_safe_command";
+
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
+    result: PreToolResultV1,
+) -> Result<PreToolResultV1, String> {
+    apply_pre_tool_policy_with_inspection(snapshot, payload, result, false)
+}
+
+/// `apply_pre_tool_policy`, told whether the call is Guard's own approval
+/// inspection on this hook's Guard home ([`guard_approval_inspection`]). That
+/// wait is part of answering a review, so the execution floors an approval
+/// would lift (`subprocess_action`, the default and harness actions) do not
+/// send it to a second review. Every other floor still applies.
+pub(crate) fn apply_pre_tool_policy_with_inspection(
+    snapshot: &AdmittedPolicySnapshot,
+    payload: &Value,
     mut result: PreToolResultV1,
+    guard_inspection: bool,
 ) -> Result<PreToolResultV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
     }
     validate_pre_tool_result_matrix(&result)?;
+    let guard_inspection = guard_inspection
+        && result.action.action_type == PreToolActionTypeV1::Command
+        && !result.action.sensitive_target
+        && result.command_extensions.as_ref().is_none_or(|evidence| {
+            evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
+        });
+    if guard_inspection
+        && result.reason_code == OWN_INSPECTION_REVIEW_REASON
+        && result.minimum_action == "review"
+    {
+        result.minimum_action = "allow".into();
+        result.policy_action = "allow".into();
+        result.decision = "allow".into();
+        result.explicitly_benign = true;
+        result.reason_code = OWN_INSPECTION_ALLOW_REASON.into();
+        result.reason = "Guard's own approval inspection on this hook's Guard home.".into();
+    }
+    let guard_inspection = guard_inspection && result.minimum_action == "allow";
     policy_enforcement_business::guard_untrusted_business_context(snapshot, payload, &mut result)?;
     let harness = normalized_harness(&result.action.harness);
     let mut facts = payload_facts(
@@ -127,25 +219,9 @@ pub(crate) fn apply_pre_tool_policy(
         && result.explicitly_benign
         && result.reason_code == "native_prompt_benign"
         && !facts.sensitive_target;
+    let mut operator_allowed_mcp_tool = false;
     if result.action.action_type == PreToolActionTypeV1::McpTool {
-        // Tool arguments can themselves contain `tool_name` (dispatchers are
-        // common). They are data, never the outer tool's authority selector.
-        let tool = match payload.as_object() {
-            Some(record) => {
-                let mut envelopes = vec![record];
-                for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
-                    if let Some(envelope) = record.get(key).and_then(Value::as_object) {
-                        envelopes.push(envelope);
-                    }
-                }
-                preferred_tool_name(&envelopes)?.or_else(|| {
-                    ["action", "operation"]
-                        .into_iter()
-                        .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
-                })
-            }
-            None => None,
-        };
+        let tool = policy_enforcement_mcp_provider::mcp_tool_name(payload, &harness)?;
         if let Some(tool) = tool {
             let composio_name = tool
                 .rsplit("__")
@@ -206,16 +282,22 @@ pub(crate) fn apply_pre_tool_policy(
                 result.reason_code = "native_custom_mcp_tool_review".into();
                 result.reason =
                     "This MCP tool requires approval under its custom extension settings.".into();
-            } else if choice == Some("allow")
-                && !composio_execution
-                && result.minimum_action == "review"
-                && result.reason_code == "native_mcp_tool_review"
+            }
+            operator_allowed_mcp_tool = !composio_execution
+                && policy_enforcement_mcp_provider::operator_allows_tool(
+                    &snapshot.effective_policy.mcp_tool_actions,
+                    &harness,
+                    &tool,
+                )
                 && result.action.bounded
                 && !facts.sensitive_target
                 && !facts.changed_hash
                 && result.command_extensions.as_ref().is_none_or(|evidence| {
                     evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
-                })
+                });
+            if operator_allowed_mcp_tool
+                && result.minimum_action == "review"
+                && result.reason_code == "native_mcp_tool_review"
             {
                 // Only explicit operator authority in the admitted, authenticated
                 // snapshot can replace the unknown-tool review. Independent
@@ -251,7 +333,7 @@ pub(crate) fn apply_pre_tool_policy(
     {
         facts.publisher_relevant = false;
     }
-    let (policy_floor, floor_cause) = policy_floor_with_cause(
+    let (policy_floor, floor_cause) = policy_floor_with_cause_and_delivery(
         &snapshot.effective_policy,
         &snapshot.compiled,
         &harness,
@@ -262,7 +344,10 @@ pub(crate) fn apply_pre_tool_policy(
             prompt_classes: &result.prompt_risk_classes,
             benign_prompt,
             package_scripts_disabled: package_scripts_disabled(payload, &result),
+            operator_allowed_mcp_tool,
         },
+        false,
+        guard_inspection && !facts.sensitive_target,
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;
     let policy_raised = action_rank(&effective) > action_rank(&result.minimum_action);
@@ -305,6 +390,7 @@ pub(crate) fn apply_pre_tool_policy(
                 };
             output.explicitly_benign = effective == "allow";
         }
+        prompt::defer_prompt_review(&mut output);
         validate_pre_tool_result_matrix(&output)?;
         return Ok(output);
     }
@@ -313,7 +399,15 @@ pub(crate) fn apply_pre_tool_policy(
         let (reason_code, reason) = policy_override_reason(
             &effective,
             Some(floor_cause),
-            output.action.action_type == guard_contracts::PreToolActionTypeV1::Prompt,
+            if output.action.action_type == guard_contracts::PreToolActionTypeV1::Prompt {
+                PromptStop::Prompt {
+                    injection_detected: output
+                        .prompt_risk_classes
+                        .contains(&NativePromptRiskClassV1::PromptInjectionIntent),
+                }
+            } else {
+                PromptStop::NotPrompt
+            },
         );
         output.reason_code = reason_code.to_owned();
         output.reason = reason;
@@ -334,6 +428,7 @@ pub(crate) fn apply_pre_tool_policy(
         "deny".to_owned()
     };
     output.explicitly_benign = effective == "allow";
+    prompt::defer_prompt_review(&mut output);
     validate_pre_tool_result_matrix(&output)?;
     Ok(output)
 }
@@ -342,6 +437,12 @@ pub(crate) fn apply_pre_tool_policy(
 mod eval_output;
 #[path = "policy_enforcement_post.rs"]
 mod post;
+#[path = "policy_enforcement_prompt.rs"]
+mod prompt;
 #[cfg(test)]
 pub(crate) use post::apply_post_tool_policy;
+pub(crate) use post::apply_post_tool_policy_for_hook;
+#[cfg(test)]
 pub(crate) use post::apply_post_tool_policy_with_delivery;
+#[cfg(test)]
+pub(crate) use post::apply_post_tool_policy_with_witness;

@@ -61,6 +61,61 @@ entries!(
     hook_runtime_artifact,
 );
 
+/// Families the secret corpus gained after the vectors were recorded.
+///
+/// The vectors froze the Python implementation's answers, and Python did not
+/// know these families, so every vector that names one of them recorded
+/// `null`. A recorded `null` may therefore become a match in one of these
+/// families and in nothing else: a vector Python matched still has to match
+/// the same way, and a new match in a family Python already knew is still a
+/// failure. [`CORPUS_EXPANSIONS`] pins how far the expansion reaches, so
+/// widening one of these families later has to be recorded here.
+const EXPANDED_FAMILIES: &[&str] = &["SSH key material", "GitHub CLI credentials"];
+
+/// Vectors per entry whose recorded `null` is now a match in an expanded
+/// family. Entries absent from this table allow none.
+const CORPUS_EXPANSIONS: &[(&str, usize)] = &[
+    ("classify_sensitive_path", 6),
+    ("extract_sensitive_file_read_request", 50),
+    ("extract_sensitive_file_write_request", 36),
+];
+
+/// Every family the result names, under whichever key carries it.
+fn families(value: &Value) -> Vec<&str> {
+    fn walk<'a>(value: &'a Value, found: &mut Vec<&'a str>) {
+        match value {
+            Value::Object(map) => {
+                for (key, item) in map {
+                    if matches!(key.as_str(), "family" | "path_class") {
+                        if let Some(text) = item.as_str() {
+                            found.push(text);
+                        }
+                    }
+                    walk(item, found);
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|item| walk(item, found)),
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    walk(value, &mut found);
+    found
+}
+
+/// True when `actual` is a match the expanded corpus explains and the vector
+/// recorded no match at all.
+fn is_corpus_expansion(expected: &Value, actual: &Value) -> bool {
+    if !expected.is_null() {
+        return false;
+    }
+    let found = families(actual);
+    !found.is_empty()
+        && found
+            .iter()
+            .all(|family| EXPANDED_FAMILIES.contains(family))
+}
+
 fn check_entry(entry: &str) {
     let (vectors, _root) = replay_vectors(entry);
     assert!(!vectors.is_empty(), "{entry}: no vectors");
@@ -85,6 +140,7 @@ fn check_entry(entry: &str) {
     let mut failures = Vec::new();
     let mut compared = 0usize;
     let mut resident_deferred = 0usize;
+    let mut expanded = 0usize;
     for vector in &vectors {
         if vector.host_dependent {
             continue;
@@ -117,6 +173,10 @@ fn check_entry(entry: &str) {
         let actual = normalize_identities(&actual);
         compared += 1;
         if actual != expected {
+            if is_corpus_expansion(&expected, &actual) {
+                expanded += 1;
+                continue;
+            }
             failures.push(format!(
                 "{}\n  args: {}\n  expected: {expected}\n  actual:   {actual}",
                 vector.id, vector.args
@@ -144,6 +204,14 @@ fn check_entry(entry: &str) {
             .cloned()
             .collect::<Vec<_>>()
             .join("\n")
+    );
+    let recorded = CORPUS_EXPANSIONS
+        .iter()
+        .find(|(name, _)| *name == entry)
+        .map_or(0, |(_, count)| *count);
+    assert_eq!(
+        expanded, recorded,
+        "{entry}: {expanded} recorded-null vectors now match an expanded family, against {recorded} recorded"
     );
 }
 

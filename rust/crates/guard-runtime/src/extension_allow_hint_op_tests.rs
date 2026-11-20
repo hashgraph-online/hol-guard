@@ -1,11 +1,12 @@
 use super::*;
 use guard_command::{parse_command, CommandModelRequestV1};
-use guard_contracts::EXTENSION_ALLOW_HINT_FEATURE;
+use guard_contracts::{NativeCommandControlAuthorityV1, EXTENSION_ALLOW_HINT_FEATURE};
 use serde_json::json;
 
 const DOCKER_PERMISSION: &str = "command.container-runtime.permission.docker-sensitive";
 const HARD_RESET_PERMISSION: &str = "command.git.permission.hard-reset";
 const DOCKER: &str = "docker version --format '{{.Server.Version}}'";
+const DOCKER_CONTEXT: &str = "docker context use staging";
 const HARD_RESET: &str = "git reset --hard HEAD~1";
 
 fn admitted_controls(name: &str) -> CompiledNativeCommandControls {
@@ -77,6 +78,23 @@ fn hint_for(
     payload.hint
 }
 
+/// [`hint_for`] with the review binding a caller outside the runtime sends:
+/// it names no authority, so the admitted snapshot's has to decide.
+fn hint_for_unnamed_authority(
+    controls: &CompiledNativeCommandControls,
+    command: &str,
+) -> Option<ExtensionAllowHintV1> {
+    let mut query = query(controls, command);
+    query
+        .control_snapshot
+        .as_object_mut()
+        .unwrap()
+        .remove("authority");
+    let result = answer(&request(query), controls);
+    assert_eq!(result.status, "ok", "{command}: {}", result.code);
+    result.payload.expect("an ok answer carries a payload").hint
+}
+
 #[test]
 fn docker_sensitive_review_names_the_container_runtime_permission() {
     let controls = admitted_controls("docker");
@@ -93,6 +111,184 @@ fn docker_sensitive_review_names_the_container_runtime_permission() {
         hint.catalog_digest,
         controls.command_catalog().unwrap().catalog_digest
     );
+}
+
+/// Controls admitted under `health`. An unenrolled device carries the
+/// first-install binding: no layers, revision zero and the all-zero authority key.
+fn controls_with_health(name: &str, health: &str) -> CompiledNativeCommandControls {
+    let home = std::env::temp_dir().join(format!(
+        "guard-extension-allow-hint-{name}-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    let home = home.canonicalize().unwrap();
+    crate::contributed_mcp_catalog_test_support::controls_for_binding(
+        &home,
+        false,
+        &[],
+        &[],
+        |binding| {
+            health.clone_into(&mut binding.health);
+            if health == "unenrolled" {
+                binding.revision = 0;
+                binding.layers.clear();
+                binding.authority = Some(NativeCommandControlAuthorityV1 {
+                    epoch: 1,
+                    mutation_revision: 1,
+                    authority_key_id: "0".repeat(64),
+                    recovery: None,
+                });
+            }
+        },
+    )
+}
+
+#[test]
+fn an_unenrolled_device_is_hinted_as_it_will_be_once_enrolled() {
+    let unenrolled = controls_with_health("unenrolled", "unenrolled");
+    let enrolled = admitted_controls("enrolled");
+    for command in [DOCKER_CONTEXT, DOCKER, HARD_RESET] {
+        let hint = hint_for(&unenrolled, command)
+            .unwrap_or_else(|| panic!("{command}: an unenrolled review has a hint"));
+        let once_enrolled = hint_for(&enrolled, command).expect("an enrolled review has a hint");
+        assert_eq!(
+            hint.permission_ids, once_enrolled.permission_ids,
+            "{command}"
+        );
+        assert_eq!(hint.rule_ids, once_enrolled.rule_ids, "{command}");
+        assert_eq!(hint.extension_ids, once_enrolled.extension_ids, "{command}");
+        assert!(hint.relied_permission_ids.is_empty(), "{command}");
+    }
+    let hint = hint_for(&unenrolled, DOCKER_CONTEXT).unwrap();
+    assert_eq!(hint.permission_ids, [DOCKER_PERMISSION]);
+    let hint = hint_for_unnamed_authority(&unenrolled, DOCKER_CONTEXT)
+        .expect("the admitted initial authority stands in for an unnamed one");
+    assert_eq!(hint.permission_ids, [DOCKER_PERMISSION]);
+}
+
+#[test]
+fn a_lost_authority_with_saved_history_has_no_hint() {
+    // Unenrolled with a saved revision or layers is a lost authority, not a
+    // fresh install, so judging it once enrolled must not make it protected.
+    let home = std::env::temp_dir().join(format!(
+        "guard-extension-allow-hint-lost-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&home).unwrap();
+    let home = home.canonicalize().unwrap();
+    let lost = crate::contributed_mcp_catalog_test_support::controls_for_binding(
+        &home,
+        false,
+        &[],
+        &[],
+        |binding| "unenrolled".clone_into(&mut binding.health),
+    );
+    for command in [DOCKER_CONTEXT, DOCKER, HARD_RESET] {
+        assert!(hint_for(&lost, command).is_none(), "{command}");
+    }
+}
+
+#[test]
+fn an_unenrolled_authority_that_is_not_the_initial_one_has_no_hint() {
+    // Enforcement keeps packaged protection only for the initial authority.
+    // A later epoch, a real key or a pending recovery with an otherwise empty
+    // binding is a lost authority there, so the hint must not call it a fresh
+    // install either.
+    let initial = || NativeCommandControlAuthorityV1 {
+        epoch: 1,
+        mutation_revision: 1,
+        authority_key_id: "0".repeat(64),
+        recovery: None,
+    };
+    let later_epoch = NativeCommandControlAuthorityV1 {
+        epoch: 2,
+        ..initial()
+    };
+    let real_key = NativeCommandControlAuthorityV1 {
+        authority_key_id: "a".repeat(64),
+        ..initial()
+    };
+    let recovering = NativeCommandControlAuthorityV1 {
+        epoch: 2,
+        mutation_revision: 2,
+        recovery: Some(guard_contracts::NativeCommandControlRecoveryV1 {
+            schema: "guard.native-command-control-recovery.v1".into(),
+            previous_epoch: 1,
+            previous_mutation_revision: 1,
+            previous_authority_key_id: "b".repeat(64),
+            previous_floor_digest: "c".repeat(64),
+            nonce: "d".repeat(64),
+        }),
+        ..initial()
+    };
+    for (name, authority) in [
+        ("later-epoch", later_epoch),
+        ("real-key", real_key),
+        ("recovering", recovering),
+    ] {
+        let home = std::env::temp_dir().join(format!(
+            "guard-extension-allow-hint-{name}-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        let home = home.canonicalize().unwrap();
+        let lost = crate::contributed_mcp_catalog_test_support::controls_for_binding(
+            &home,
+            false,
+            &[],
+            &[],
+            |binding| {
+                "unenrolled".clone_into(&mut binding.health);
+                binding.revision = 0;
+                binding.layers.clear();
+                binding.authority = Some(authority);
+            },
+        );
+        assert!(!lost.control_binding().is_initial_defaults(), "{name}");
+        assert!(hint_for(&lost, DOCKER_CONTEXT).is_none(), "{name}");
+        assert!(
+            hint_for_unnamed_authority(&lost, DOCKER_CONTEXT).is_none(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn judging_once_enrolled_never_changes_the_reported_decision() {
+    let unenrolled = controls_with_health("reported", "unenrolled");
+    let query = query(&unenrolled, DOCKER_CONTEXT);
+    let request = CommandEffectRequestV1 {
+        schema: COMMAND_EFFECT_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        command_text: query.command_text.clone(),
+        canonical_command: query.canonical_command.clone(),
+        compatibility_action_class: None,
+        compatibility_reason: None,
+        native_extension_evidence: query.native_extension_evidence.clone(),
+        control_snapshot: query.control_snapshot.clone(),
+        workflow_authorization: None,
+        cwd: None,
+        home_dir: None,
+        counterfactual_enabled_permission_ids: Vec::new(),
+    };
+    let reported = crate::command_effect::evaluate_composite(&request, Some(&unenrolled)).unwrap();
+    assert!(reported.authority_failure);
+    let once_enrolled =
+        evaluate_composite_under(&request, Some(&unenrolled), AuthorityView::OnceEnrolled).unwrap();
+    assert!(!once_enrolled.authority_failure);
+}
+
+#[test]
+fn a_tampered_authority_has_no_hint_even_for_an_extension_review() {
+    for health in ["tampered", "recovery-required", "degraded-unacknowledged"] {
+        let controls = controls_with_health(health, health);
+        let mut review = query(&controls, DOCKER_CONTEXT);
+        review.native_extension_evidence["minimum_action"] = json!("review");
+        review.native_extension_evidence["reason_code"] = json!(EXTENSION_REVIEW_REASON);
+        let result = answer(&request(review), &controls);
+        assert_eq!(result.status, "ok", "{health}: {}", result.code);
+        assert!(result.payload.unwrap().hint.is_none(), "{health}");
+    }
 }
 
 #[test]

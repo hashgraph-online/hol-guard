@@ -118,6 +118,22 @@ fn redact_url_matches_python() {
     }
 }
 
+/// An authority made only of userinfo once fell back to the credentials
+/// themselves, so an exported endpoint carried the password it was meant to
+/// drop. The corpus rows this reads are the ones that regressed.
+#[test]
+fn userinfo_never_survives_the_authority() {
+    for case in url_section("redact_url") {
+        let url = text(&case, "url");
+        if !url.contains("private-value") {
+            continue;
+        }
+        let redacted = redact_url(&url);
+        assert!(!redacted.contains("private-value"), "url {url:?}");
+        assert!(!redacted.contains("user"), "url {url:?}");
+    }
+}
+
 #[test]
 fn classify_endpoint_host_matches_python() {
     for case in url_section("classify_endpoint_host") {

@@ -1,0 +1,117 @@
+{
+  "schema": "guard-evidence-hash-parity.v1",
+  "cases": [
+    {
+      "name": "an empty payload",
+      "payload": {},
+      "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "keys hash in sorted order, not insertion order",
+      "payload": {
+        "b": 1,
+        "a": 2,
+        "A": 3,
+        "": 4
+      },
+      "digest": "593c8a14ce78528ff90a74320a070f546c4fc35c6c0900705f0e491755de9db5"
+    },
+    {
+      "name": "a nested object and array",
+      "payload": {
+        "scope": {
+          "layer": [
+            "a",
+            "b"
+          ],
+          "depth": 2
+        }
+      },
+      "digest": "3a60c04881ffe0bad16cafc7062ddb6cebb6e7fc5c87b337413990aea62b1427"
+    },
+    {
+      "name": "a null, a true and a false",
+      "payload": {
+        "nonce": null,
+        "signed": true,
+        "revoked": false
+      },
+      "digest": "0aeb7f4e0ba4b5958f7daab94d25224dc63f656ef786c1e72257edc3d2651d90"
+    },
+    {
+      "name": "an integer and a float keep their own spelling",
+      "payload": {
+        "count": 10,
+        "ratio": 1.0,
+        "share": 0.5
+      },
+      "digest": "1a89a8028c20bac6f03e7211dfd76454a3271539745d3c62dc122dc81c8d8f0d"
+    },
+    {
+      "name": "a float CPython writes in exponent form",
+      "payload": {
+        "span": 1e+30,
+        "tiny": 1e-07
+      },
+      "digest": "d7a085e2bce11568fdf0298ac51ffcca1d95cdcb2561bf6eb791059a593b8860"
+    },
+    {
+      "name": "a negative zero",
+      "payload": {
+        "offset": -0.0
+      },
+      "digest": "467b718ed885d32b18a8e0e42379f109122cec02a5bfa11afd90474d0c5b405f"
+    },
+    {
+      "name": "non-ascii text is escaped before hashing",
+      "payload": {
+        "item": "café",
+        "emoji": "✅"
+      },
+      "digest": "f6c988f2b1163b51f9dc600574ba9c928dcbe917996dffd839530c5d6f48603b"
+    },
+    {
+      "name": "an astral character becomes a surrogate pair",
+      "payload": {
+        "item": "𝄞"
+      },
+      "digest": "a410df901179e43498e37aab6ecc6149b6d28196ec1d45fa04aab8cd0081732d"
+    },
+    {
+      "name": "text with quotes, backslashes and control characters",
+      "payload": {
+        "raw": "a\"b\\c\nd\te\u0001"
+      },
+      "digest": "df7f879d6d3525d9e4e4ce402ade1feeed81fa468cfa1971d8aa34f9eace6007"
+    },
+    {
+      "name": "an empty string, an empty array and an empty object",
+      "payload": {
+        "a": "",
+        "b": [],
+        "c": {}
+      },
+      "digest": "214e5f21874caf37264609000b3e2219fad0cd046e3618f39b59a942769fc8a9"
+    },
+    {
+      "name": "a solidus stays unescaped",
+      "payload": {
+        "path": "a/b"
+      },
+      "digest": "736391240a706e2507a83bd748d748c17c2ea915f833859d167d95b0cff33a85"
+    },
+    {
+      "name": "the replay key shape attestations are deduplicated by",
+      "payload": {
+        "domainSeparator": "hol-guard/trust-attestation/v1",
+        "nonce": "0123456789abcdef",
+        "itemId": "item-1",
+        "scope": "workspace",
+        "layerId": null,
+        "workspaceId": "workspace-1",
+        "repositoryId": null
+      },
+      "digest": "6072eba1ba80534f62f06afa82d8d77a5cef72ef4fe924c81dc2baea1218ebdf"
+    }
+  ]
+}

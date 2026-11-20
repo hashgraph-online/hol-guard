@@ -16,7 +16,7 @@ def stop_guard_daemon(guard_home: Path) -> dict[str, object]:
     names this Guard home. The daemon state file is cleared either way.
     """
 
-    from .daemon.manager import (
+    from .native_daemon_manage import (
         _guard_daemon_pid_is_running,
         _guard_daemon_pid_matches_command,
         clear_guard_daemon_state,

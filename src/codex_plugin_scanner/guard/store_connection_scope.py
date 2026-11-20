@@ -9,6 +9,7 @@ from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING
 
 from . import store_review_event_outbox_schema
+from .sqlite_connection_cache import open_store_connection, release_store_connection
 from .sqlite_deadline_connection import DeadlineConnection
 from .sqlite_profile import sqlite_error_is_busy_locked
 from .sqlite_recovery import sqlite_error_is_io
@@ -89,7 +90,7 @@ def _open_connection(store: GuardStore) -> Iterator[sqlite3.Connection]:
     started = time.monotonic()
     try:
         factory = DeadlineConnection if sqlite_operation_deadline_monotonic() is not None else sqlite3.Connection
-        connection = sqlite3.connect(store.path, timeout=timeout, factory=factory)
+        connection, cache_key = open_store_connection(store.path, timeout=timeout, factory=factory)
     except sqlite3.OperationalError as error:
         profiler.record_connect((time.monotonic() - started) * 1000)
         if sqlite_error_is_busy_locked(error):
@@ -97,6 +98,7 @@ def _open_connection(store: GuardStore) -> Iterator[sqlite3.Connection]:
         raise
     profiler.record_connect((time.monotonic() - started) * 1000)
     connection.row_factory = sqlite3.Row
+    completed = False
     try:
         try:
             connection.execute(f"pragma busy_timeout={int(timeout * 1000)}")
@@ -110,8 +112,9 @@ def _open_connection(store: GuardStore) -> Iterator[sqlite3.Connection]:
                 profiler.record_busy_locked()
             raise
         yield connection
+        completed = True
     finally:
-        connection.close()
+        release_store_connection(connection, cache_key, reusable=completed)
         store._repair_store_permissions()
 
 

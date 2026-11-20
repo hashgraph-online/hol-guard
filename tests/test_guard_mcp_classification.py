@@ -20,11 +20,32 @@ from codex_plugin_scanner.guard.native_mcp_classification import (
     _MAX_REQUEST_BYTES,
     McpClassificationUnavailableError,
 )
-from codex_plugin_scanner.guard.runtime.mcp_classification import (
-    classify_mcp_action,
-    classify_mcp_actions,
-)
+from codex_plugin_scanner.guard.runtime.mcp_classification import classify_mcp_actions
 from codex_plugin_scanner.guard.store_mcp_provider_catalog import describe_provider_actions
+
+
+def classify_mcp_action(
+    name: str,
+    schema: object,
+    *,
+    guard_home: Path,
+    provider: str | None = None,
+    annotations: object = None,
+    full_schema: bool = True,
+) -> dict[str, object] | None:
+    described = classify_mcp_actions(
+        [
+            {
+                "name": name,
+                "schema": schema,
+                "provider": provider,
+                "annotations": annotations,
+                "full_schema": full_schema,
+            }
+        ],
+        guard_home=guard_home,
+    )
+    return described[0]
 
 
 def _install_transport(

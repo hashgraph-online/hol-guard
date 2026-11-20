@@ -1,0 +1,1 @@
+{"command":"Get-ChildItem -Path .","dialect":"powershell","transport":"argv"}

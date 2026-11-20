@@ -59,7 +59,6 @@ fn other_reads_keep_glob_pathspecs_reviewed() {
         "diff -- src/*",
         "show HEAD -- src/*",
         "status -- src/*",
-        "ls-files -- src/*",
         "log src/*",
     ] {
         assert!(!proven(text), "{text}");
@@ -73,11 +72,63 @@ fn credential_and_escaping_pathspecs_stay_reviewed() {
         "log --oneline -- *.key",
         "log --name-only -- secrets/*",
         "log --oneline -- .ssh/*",
+        "log --name-only -- .env*",
+        "log --name-only -- **/id_rsa*",
         "log --oneline -- :(glob)src/*",
         "log --oneline -- ../other/*",
         "log --oneline -- /etc/*",
         "log --oneline -- ~/.aws/*",
         "log --oneline -- src/* .env",
+    ] {
+        assert!(!proven(text), "{text}");
+    }
+}
+
+#[test]
+fn ls_files_accepts_glob_pathspecs() {
+    for text in [
+        "ls-files **/deploy.sh",
+        "ls-files scripts/deploy.sh **/deploy.sh",
+        "ls-files -- src/*",
+        "ls-files src/*/index.ts",
+        "ls-files -z --others --exclude-standard -- src/**/*.sql",
+        "ls-files --error-unmatch **/deploy.sh",
+    ] {
+        assert!(proven(text), "{text}");
+    }
+}
+
+#[test]
+fn ls_files_pathspec_start_skips_the_options() {
+    let listed = arguments("ls-files -z **/deploy.sh");
+    assert_eq!(pathspec_start(&listed, PathContext::default()), Some(2));
+    let separated = arguments("ls-files -z -- **/deploy.sh");
+    assert_eq!(pathspec_start(&separated, PathContext::default()), Some(3));
+    let bare = arguments("ls-files -z");
+    assert_eq!(pathspec_start(&bare, PathContext::default()), None);
+}
+
+#[test]
+fn ls_files_keeps_credential_escaping_and_option_pathspecs_reviewed() {
+    for text in [
+        "ls-files -- .env*",
+        "ls-files config/.env.*",
+        "ls-files **/id_rsa?",
+        "ls-files **/*.key",
+        "ls-files secrets/*",
+        "ls-files .ssh/*",
+        "ls-files :(glob)**/deploy.sh",
+        "ls-files ../other/*",
+        "ls-files /etc/*",
+        "ls-files src/* .env",
+        "ls-files src/* --exclude-from=list.txt",
+        "ls-files src/* -- **/deploy.sh",
+        // Options that open a file: the value is not a pathspec.
+        "ls-files -X list.txt **/deploy.sh",
+        "ls-files --exclude-from=list.txt **/deploy.sh",
+        "ls-files --exclude-from list.txt **/deploy.sh",
+        "ls-files --exclude-per-directory=.ignore src/*/index.ts",
+        "ls-files -X list.txt -- **/deploy.sh",
     ] {
         assert!(!proven(text), "{text}");
     }

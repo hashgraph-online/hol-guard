@@ -148,7 +148,7 @@ def test_regression_action_installs_only_the_same_run_wheel() -> None:
 def test_required_status_aggregators_run_after_cancellation() -> None:
     """Verify required status aggregators run after cancellation."""
     for filename, names in {
-        "ci.yml": ["ci-python-312"],
+        "ci.yml": ["required"],
         "nightly-native.yml": ["native-regression-complete"],
     }.items():
         workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / filename).read_text()))

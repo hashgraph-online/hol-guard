@@ -1,19 +1,23 @@
-//! Native Claude Code hook bridge: a port of `main` in
-//! `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
+//! Native Claude Code hook bridge, started by the installed hook command or
+//! by the legacy launcher `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
 //! hook. It forwards the hook to the authenticated loopback Guard daemon and
 //! recovers a dead daemon once, waiting for it to come back up, all inside the harness's hook deadline. Every
-//! failure ends in a hook response that denies or degrades the action; nothing
-//! here decides a verdict itself, and no Python hook command runs in its place.
+//! failure ends in a hook response that denies or degrades the action, unless
+//! the signed posture proves the harness is in Watch, where a live daemon would
+//! only have recorded the call; nothing here decides a verdict itself, and no
+//! Python hook command runs in its place.
 
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use crate::claude_hook_bridge_harness::{attributed_query, current_cursor_run};
 use crate::claude_hook_bridge_http::{remaining, MINIMUM_OPERATION};
+use crate::claude_hook_bridge_recovery::launcher_recovery;
 use crate::claude_hook_bridge_render::{
-    control_plane_failure, degraded, event_name, limit_denied, py_strip, should_suppress_output,
-    valid_hook_json_or_degraded,
+    control_plane_failure, degraded, event_name, hook_decision, limit_denied, py_strip,
+    should_suppress_output, DEFAULT_EVENT,
 };
 use crate::claude_hook_bridge_transport::{
     authenticated_claude_hook_response, daemon_proves_identity, json_failure, BridgeError,
@@ -21,10 +25,12 @@ use crate::claude_hook_bridge_transport::{
 use crate::claude_hook_bridge_url::{
     assert_loopback_http_url, endpoint_query, state_names_loopback_port, state_path_for_query,
 };
-use crate::codex_hook_bridge_direct::{direct_answer, CLAUDE_CODE};
+use crate::codex_hook_bridge_direct::{direct_answer_reporting, CLAUDE_CODE};
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_bridge_daemon_start::{await_daemon, Attempt, MINIMUM_REQUEST};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::hook_process_spawn::{isolated_hook_environment, run_isolated_hook_process};
+use crate::hook_watch_posture::harness_in_watch;
 
 /// argv marker that selects the bridge, mirroring the Python module path.
 pub(crate) const BRIDGE_MARKER: &str = "HOL_GUARD_CLAUDE_DAEMON_HOOK";
@@ -66,14 +72,21 @@ pub(crate) fn parse_config(text: &str) -> Option<BridgeConfig> {
     if string_list(payload.get("fallback_command"))?.is_empty() {
         return None;
     }
-    let recovery_command = match payload.get("recovery_command") {
-        None => Vec::new(),
-        value => string_list(value)?,
+    let state_path = text_field("state_path")?;
+    let query = text_field("query")?;
+    let recovery_command = match (
+        payload.get("recovery_command"),
+        payload.get("recovery_launcher"),
+    ) {
+        (None, None) => Vec::new(),
+        (None, Some(launcher)) => launcher_recovery(&state_path, &query, launcher.as_object()?)?,
+        (value, None) => string_list(value)?,
+        (Some(_), Some(_)) => return None,
     };
     Some(BridgeConfig {
-        state_path: text_field("state_path")?,
+        state_path,
         fallback_daemon_url: text_field("fallback_daemon_url")?,
-        query: text_field("query")?,
+        query,
         recovery_command,
     })
 }
@@ -140,19 +153,25 @@ fn hook_environment() -> BTreeMap<String, String> {
 
 struct Bridge<'a> {
     config: &'a BridgeConfig,
+    /// The configured query, attributed to the harness running this hook.
+    query: String,
+    /// The runtime harness key of that harness.
+    harness: &'static str,
     data: String,
     deadline: Instant,
 }
 
 impl Bridge<'_> {
     /// One authenticated daemon exchange and its hook-JSON validation,
-    /// classified exactly as the Python `try` block classifies it.
+    /// classified exactly as the Python `try` block classifies it. `miss`
+    /// names why the resident did not answer. `Ok(None)` is a reply that is
+    /// not a decision.
     fn exchange(
         &self,
         state_path: &Path,
         deadline: Instant,
-        malformed: &str,
-    ) -> Result<String, BridgeError> {
+        miss: DirectMiss,
+    ) -> Result<Option<String>, BridgeError> {
         if !state_names_loopback_port(state_path) {
             let fallback = format!("{}/", self.config.fallback_daemon_url.trim_end_matches('/'));
             assert_loopback_http_url(&fallback).map_err(BridgeError::Value)?;
@@ -163,59 +182,95 @@ impl Bridge<'_> {
                 "Guard daemon hook request exhausted its absolute deadline".to_owned(),
             ));
         }
-        let query = endpoint_query(&self.config.query);
-        let response = authenticated_claude_hook_response(state_path, &query, &self.data, timeout)?;
-        valid_hook_json_or_degraded(&response, malformed, &self.data).map_err(json_failure)
+        let response =
+            authenticated_claude_hook_response(state_path, &self.query, &self.data, timeout, miss)?;
+        hook_decision(&response, &self.data).map_err(json_failure)
     }
 
     /// The response a live resident answered for a passed-through `PreToolUse`,
     /// a reviewed `PostToolUse`, a `UserPromptSubmit` hook without Guard's
-    /// notice or a `PermissionRequest`, checked as a daemon response is; `None`
-    /// takes the daemon path.
-    fn direct_response(&self, state_path: &Path) -> Option<String> {
-        let guard_home = state_path.parent()?;
-        let query = endpoint_query(&self.config.query);
+    /// notice or a `PermissionRequest`, checked as a daemon response is; the
+    /// miss takes the daemon path. `Ok(None)` is a reply that is not a
+    /// decision.
+    fn direct_response(&self, state_path: &Path) -> Result<Option<String>, DirectMiss> {
+        let guard_home = state_path.parent().ok_or(DirectMiss::NoState)?;
         let event = event_name(&self.data);
-        let text = direct_answer(
+        let text = direct_answer_reporting(
             CLAUDE_CODE,
             guard_home,
-            &query,
+            &self.query,
             &event.name,
             &self.data,
             self.deadline,
         )?;
-        valid_hook_json_or_degraded(&text, "resident returned malformed hook JSON", &self.data).ok()
+        hook_decision(&text, &self.data).map_err(|_| DirectMiss::Unanswered)
     }
 
     fn respond(&self, state_path: &Path) -> Option<String> {
-        let answered = match self.direct_response(state_path) {
-            Some(body) => Ok(body),
-            None => self.exchange(
-                state_path,
-                self.deadline,
+        let (answered, miss, malformed) = match self.direct_response(state_path) {
+            Ok(reply) => (
+                Ok(reply),
+                DirectMiss::Unanswered,
+                "resident returned malformed hook JSON",
+            ),
+            Err(miss) => (
+                self.exchange(state_path, self.deadline, miss),
+                miss,
                 "daemon returned malformed hook JSON",
             ),
         };
         let error = match answered {
-            Ok(body) if should_suppress_output(&self.data, &body) => return None,
-            Ok(body) if py_strip(&body).is_empty() => return Some("{}".to_owned()),
-            Ok(body) => return Some(body),
+            Ok(reply) => {
+                // A reply that is not a decision answers nothing, so it takes
+                // the same Watch check as a daemon that never replied.
+                let body = reply.unwrap_or_else(|| {
+                    self.unanswered(degraded(malformed, &self.data), state_path)
+                });
+                if should_suppress_output(&self.data, &body) {
+                    return None;
+                }
+                if py_strip(&body).is_empty() {
+                    return Some("{}".to_owned());
+                }
+                return Some(body);
+            }
             Err(error) => error,
         };
         let reason = error.reason();
         let kind = error.failure_kind();
         Some(if kind == CONTROL_PLANE_FAILURE {
-            control_plane_failure(&reason, &self.data)
+            self.unanswered(control_plane_failure(&reason, &self.data), state_path)
         } else if error.is_recoverable() {
-            self.recover_or_degrade(reason, state_path, kind)
+            self.recover_or_degrade(reason, state_path, kind, miss)
         } else {
-            degraded(&reason, &self.data)
+            self.unanswered(degraded(&reason, &self.data), state_path)
         })
+    }
+
+    /// The answer for a hook no daemon answered: `failure`, which denies a
+    /// tool call, unless the signed posture proves this harness is in Watch.
+    /// A live daemon only records a Watch harness's calls, so a dead one
+    /// leaves the call to the harness's own permission flow.
+    fn unanswered(&self, failure: String, state_path: &Path) -> String {
+        let event = event_name(&self.data);
+        let denies = event.name == DEFAULT_EVENT || event.is_permission();
+        match state_path.parent() {
+            Some(guard_home) if denies && harness_in_watch(guard_home, self.harness) => {
+                "{}".to_owned()
+            }
+            _ => failure,
+        }
     }
 
     /// Restarts a dead daemon once and retries the hook; the action is
     /// degraded when that does not produce an answer in time.
-    fn recover_or_degrade(&self, mut reason: String, state_path: &Path, kind: &str) -> String {
+    fn recover_or_degrade(
+        &self,
+        mut reason: String,
+        state_path: &Path,
+        kind: &str,
+        miss: DirectMiss,
+    ) -> String {
         let window = capped(self.deadline, RECOVERY_TIMEOUT);
         if !self.config.recovery_command.is_empty()
             && window >= MINIMUM_RECOVERY
@@ -236,18 +291,22 @@ impl Bridge<'_> {
                 }
             });
             if started.is_none() {
-                return degraded(
-                    &format!("{reason}; daemon recovery retry failed: the restarted daemon did not answer in time"),
-                    &self.data,
+                return self.unanswered(
+                    degraded(
+                        &format!("{reason}; daemon recovery retry failed: the restarted daemon did not answer in time"),
+                        &self.data,
+                    ),
+                    state_path,
                 );
             }
             let malformed = format!("{reason}; recovered daemon returned malformed hook JSON");
-            match self.exchange(state_path, self.deadline, &malformed) {
-                Ok(body) => return body,
+            match self.exchange(state_path, self.deadline, miss) {
+                Ok(Some(body)) => return body,
+                Ok(None) => return self.unanswered(degraded(&malformed, &self.data), state_path),
                 Err(error) => reason = format!("{reason}; daemon recovery retry failed: {error}"),
             }
         }
-        degraded(&reason, &self.data)
+        self.unanswered(degraded(&reason, &self.data), state_path)
     }
 
     fn run_recovery(&self, recovery_deadline: Instant, kind: &str) -> bool {
@@ -308,8 +367,15 @@ pub(crate) fn hook_response(config_text: &str, input: &mut impl Read) -> Option<
     let Some(config) = parse_config(config_text) else {
         return Some(degraded(INVALID_CONFIG, &data));
     };
+    let cursor = current_cursor_run();
     let bridge = Bridge {
         config: &config,
+        query: attributed_query(&endpoint_query(&config.query), cursor.as_ref()),
+        harness: if cursor.is_some() {
+            "cursor"
+        } else {
+            "claude-code"
+        },
         data,
         deadline,
     };
@@ -337,3 +403,11 @@ pub(crate) fn run(config_text: &str) -> Result<(), String> {
 #[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "claude_hook_bridge_unmanaged_tests.rs"]
+mod unmanaged_tests;
+
+#[cfg(all(test, unix))]
+#[path = "claude_hook_bridge_watch_tests.rs"]
+mod watch_tests;

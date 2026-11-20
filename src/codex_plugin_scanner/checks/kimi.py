@@ -20,6 +20,7 @@ from .security import (
     check_no_approval_bypass_defaults,
     check_security_md,
 )
+from .security_binaries import UninspectedBinary, uninspected_binary_check
 
 KIMI_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 KIMI_SEMVER_RE = re.compile(
@@ -199,15 +200,18 @@ def check_kimi_manifest_shapes(package: NormalizedPackage) -> CheckResult:
     findings: list[Finding] = []
     interface = manifest.get("interface")
     interface_mapping = string_keyed_mapping(interface)
+    # Kimi Work adds structured metadata; only the documented display fields are strings.
+    display_fields = ("displayName", "shortDescription", "longDescription", "developerName", "websiteURL")
     if interface is not None and (
-        interface_mapping is None or not all(isinstance(value, str) for value in interface_mapping.values())
+        interface_mapping is None
+        or any(key in interface_mapping and not isinstance(interface_mapping[key], str) for key in display_fields)
     ):
         findings.append(
             _finding(
                 "KIMI_INTERFACE_INVALID",
                 "Kimi interface metadata is invalid",
-                "interface must be an object containing string display metadata.",
-                "Use string values for Kimi interface metadata.",
+                "interface must be an object with string values for documented display fields.",
+                "Use strings for displayName, shortDescription, longDescription, developerName and websiteURL.",
                 package,
                 Severity.LOW,
             )
@@ -476,6 +480,8 @@ def run_kimi_checks(package: NormalizedPackage) -> tuple[CheckResult, ...]:
     """Run Kimi schema, path, MCP, and declared-content checks."""
 
     files = _bundle_files(package)
+    uninspected: list[UninspectedBinary] = []
+    credential_checks = check_credential_access(package.root_path, files, uninspected=uninspected)
     return (
         check_kimi_manifest(package),
         check_kimi_declared_paths(package),
@@ -483,8 +489,9 @@ def run_kimi_checks(package: NormalizedPackage) -> tuple[CheckResult, ...]:
         check_kimi_mcp_servers(package),
         check_security_md(package.root_path),
         check_license(package.root_path),
-        *check_credential_access(package.root_path, files),
+        *credential_checks,
         check_no_approval_bypass_defaults(package.root_path, files),
         check_no_eval(package.root_path, files),
         check_no_shell_injection(package.root_path, files),
+        *((uninspected_binary_check(package.root_path.resolve(), uninspected),) if uninspected else ()),
     )

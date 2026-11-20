@@ -8,12 +8,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
-from codex_plugin_scanner.guard.cli import commands_hook_native_pipeline as pipeline
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .native_exit_code_support import native_exit_code_is
 
 
 @pytest.mark.parametrize("failure", ("worker_none", "worker_response", "worker_raise"))
@@ -45,9 +45,9 @@ def test_native_failure_preserves_codex_wire_response(
         return None
 
     monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
+    native_exit_code_is(monkeypatch, 0)
     result = cli.route_native_hook(
         Mock(harness="codex", json=json_requested),
-        config=None,
         context=context,
         payload=payload,
         runtime_workspace=None,
@@ -68,29 +68,34 @@ def test_native_failure_preserves_codex_wire_response(
         assert result == 0
 
 
-@pytest.mark.parametrize("event", ("PreToolUse", "PermissionRequest"))
-@pytest.mark.parametrize("json_requested", (False, True))
-def test_pipeline_unavailable_preserves_codex_wire_response(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], event: str, json_requested: bool
+@pytest.mark.parametrize("failure", ("worker_none", "worker_raise"))
+def test_native_failure_keeps_copilot_permission_wire_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
 ) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    result = pipeline._emit_native_unavailable(
-        Mock(harness="codex", json=json_requested),
-        workspace=None,
+    guard_home = tmp_path / "guard-home"
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=guard_home)
+    payload = {"hookName": "permissionRequest", "toolName": "bash", "toolArgs": {"command": "rm -rf build"}}
+
+    def unavailable(**_kwargs):
+        if failure == "worker_raise":
+            raise RuntimeError("injected native failure")
+        return None
+
+    monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
+    result = cli.route_native_hook(
+        Mock(harness="copilot", json=False),
         context=context,
-        event_name=event,
-        reason_code="native_hook_event_unavailable",
-        worker=HookWorker(
-            store=GuardStore(context.guard_home), wait_for_native_policy=False, publish_native_policy=False
-        ),
+        payload=payload,
+        runtime_workspace=None,
+        store=GuardStore(guard_home),
     )
     response = json.loads(capsys.readouterr().out)
-    # codex deny rides the permissionDecision envelope; rc stays 0.
-    assert response["hookSpecificOutput"]["hookEventName"] == event
-    if event == "PreToolUse":
-        assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert result == 0
-    else:
-        assert response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-        assert "permissionDecision" not in response["hookSpecificOutput"]
-        assert result == 0
+    # Copilot reads a permission answer from these top-level fields; the
+    # generic hookSpecificOutput envelope would leave the request undecided.
+    assert response["behavior"] == "deny"
+    assert response["message"]
+    assert "hookSpecificOutput" not in response
+    assert result == 0

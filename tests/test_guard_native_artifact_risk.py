@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_content_sensitivity import NativeContentSensitivityError
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.types import GuardSignal
+from tests import artifact_risk_support
 
 _VECTORS = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/testdata/artifact_risk/vectors.json"
 _VECTOR = next(
@@ -107,7 +108,7 @@ def test_presents_every_signal_from_one_reply(monkeypatch: pytest.MonkeyPatch) -
     assert profile.signals == tuple(GuardSignal(**signal) for signal in expected["signals"])
     assert profile.signals_v2 == tuple(RiskSignalV2(**signal) for signal in expected["signals_v2"])
     assert profile.summary == expected["summary"]
-    assert client.artifact_risk_signals(_artifact()) == tuple(expected["strings"])
+    assert artifact_risk_support.artifact_risk_signals(_artifact()) == tuple(expected["strings"])
     assert client.artifact_risk_summary(_artifact()) == expected["summary"]
 
 
@@ -123,7 +124,7 @@ def test_wire_projects_only_the_metadata_the_derivation_reads(monkeypatch: pytes
         "unrelated": {"ignored": True},
     }
 
-    client.artifact_risk_signals_typed(_artifact(metadata=metadata))
+    artifact_risk_support.artifact_risk_signals_typed(_artifact(metadata=metadata))
 
     request = calls[0]["request"]
     assert isinstance(request, dict)
@@ -204,7 +205,7 @@ def test_unencodable_artifacts_raise_before_any_request(monkeypatch: pytest.Monk
     calls = _reply(monkeypatch)
 
     with pytest.raises(client.NativeArtifactRiskError):
-        client.artifact_risk_signals(_artifact(args=("-lc", "\ud800")))
+        artifact_risk_support.artifact_risk_signals(_artifact(args=("-lc", "\ud800")))
 
     assert calls == []
 

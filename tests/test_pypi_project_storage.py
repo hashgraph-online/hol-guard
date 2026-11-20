@@ -278,6 +278,26 @@ def test_outlook_thresholds_use_unrounded_values() -> None:
     assert just_under_ratio["near_limit"] is False
 
 
+def test_project_flag_names_the_measured_project_and_rejects_a_bad_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload = tmp_path / "pypi.json"
+    payload.write_text(
+        json.dumps({"releases": {"1.0.0": [{"filename": "a.whl", "size": 10}]}}),
+        encoding="utf-8",
+    )
+
+    assert (
+        pypi_project_storage.main(["--payload", str(payload), "--project", "plugin-scanner", "--limit-bytes", "1000"])
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["project"] == "plugin-scanner"
+    assert report["over_limit"] is False
+
+    assert pypi_project_storage.main(["--payload", str(payload), "--project", "not a project"]) == 1
+
+
 def test_pending_upload_crossing_warning_threshold_warns(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     payload = tmp_path / "pypi.json"
     payload.write_text(

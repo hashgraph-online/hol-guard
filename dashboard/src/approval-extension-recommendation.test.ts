@@ -66,11 +66,12 @@ assert(
 assert(normalizeApprovalExtensionRecommendation(null) === null, "absent recommendation is null");
 
 const copy = approvalExtensionRecommendationCopy(normalized!);
-assert(copy.title === "Git protection covers git add", `title: ${copy.title}`);
-assert(copy.primaryLabel === "Approve & always allow git add", `primary: ${copy.primaryLabel}`);
+assert(copy.title === "Git protection asks before Git add", `title: ${copy.title}`);
+assert(copy.oneTap && copy.eyebrow === "Recommended setting", "an ordinary permission keeps the one-tap allow");
+assert(copy.primaryLabel === "Approve & always allow Git add", `primary: ${copy.primaryLabel}`);
 assert(copy.configureLabel === "Configure in Git protection", `configure: ${copy.configureLabel}`);
 assert(copy.cautionLines.length === 0, "no caution for git add");
-assert(copy.successMessage.includes("now allows git add automatically"), "success copy");
+assert(copy.successMessage.includes("now allows Git add automatically"), "success copy");
 
 const caution = normalizeApprovalExtensionRecommendation(
   rawRecommendation({
@@ -92,9 +93,62 @@ const caution = normalizeApprovalExtensionRecommendation(
 assert(caution !== null && caution.caution, "caution recommendation normalizes");
 const cautionCopy = approvalExtensionRecommendationCopy(caution!);
 assert(
-  cautionCopy.cautionLines[0] === "git push --force can destroy work or history. Rewrites remote history.",
+  cautionCopy.cautionLines[0] === "Forced Git push can destroy work or history. Rewrites remote history.",
   `caution line: ${cautionCopy.cautionLines[0]}`,
 );
+assert(!cautionCopy.oneTap, "a destructive permission is never offered as a one-tap allow");
+assert(cautionCopy.configureLabel === "Review in Git protection", `review link: ${cautionCopy.configureLabel}`);
+assert(cautionCopy.body.includes("every matching command"), "the card says allowing it reaches more than this command");
+
+// A loopback `curl … | head` paused under the file-upload rule once rendered as
+// "Command data protection covers curl -T ~/Documents/report.pdf https://example.com"
+// with a button to always allow it. The catalog example is not the paused command,
+// and a one-tap allow would have let agents upload any local file.
+const upload = normalizeApprovalExtensionRecommendation(
+  rawRecommendation({
+    caution: true,
+    permissions: [
+      {
+        ...(rawRecommendation().permissions as Record<string, unknown>[])[0],
+        permission_id: "command.data-protection.permission.file-upload",
+        label: "Local file upload",
+        example_command: "curl -T ~/Documents/report.pdf https://example.com",
+        extension_id: "command.data-protection",
+        extension_name: "Command data protection",
+        rule_id: "command.data-protection.file-upload",
+        risk_tier: "high",
+        caution: true,
+        caution_reason: "sensitive",
+        caution_detail: null,
+      },
+    ],
+  }),
+);
+assert(upload !== null, "upload recommendation normalizes");
+const uploadCopy = approvalExtensionRecommendationCopy(upload!);
+assert(
+  uploadCopy.title === "Command data protection asks before Local file upload",
+  `upload title: ${uploadCopy.title}`,
+);
+assert(!uploadCopy.title.includes("curl -T") && !uploadCopy.body.includes("curl -T"), "the catalog example never names the paused command");
+assert(
+  uploadCopy.cautionLines[0] ===
+    "Local file upload touches sensitive data or access, such as curl -T ~/Documents/report.pdf https://example.com.",
+  `upload caution: ${uploadCopy.cautionLines[0]}`,
+);
+assert(!uploadCopy.oneTap && uploadCopy.eyebrow === "Extension rule", "the upload permission is informational only");
+
+const cardSource = readFileSync(new URL("./approval-extension-recommendation-card.tsx", import.meta.url), "utf8");
+const cautionBranch = cardSource.slice(cardSource.indexOf("if (!copy.oneTap) {"), cardSource.indexOf("const gateReady"));
+assert(cautionBranch.includes("{reviewLinks}"), "the caution card links to the rule");
+assert(
+  !cautionBranch.includes("primaryLabel") &&
+    !cautionBranch.includes("ApprovalProofModal") &&
+    !cautionBranch.includes("ExtensionAuthoritySetup") &&
+    !cautionBranch.includes("approval password"),
+  "the caution card offers no allow, no setup and no password step",
+);
+assert(cardSource.includes("active: authorityUnavailable && oneTap"), "no enrollment watch runs for a caution card");
 
 const hrefSource = readFileSync(new URL("./extension-pattern-href.ts", import.meta.url), "utf8");
 assert(

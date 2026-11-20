@@ -202,3 +202,66 @@ fn wire_exact_action_with_real_engines_answers_a_domain_outcome() {
     assert!(reply["payload"]["once_only_reason"].is_null());
     assert!(reply["payload"]["token"].as_str().is_some());
 }
+
+fn exact_query() -> Value {
+    let root = std::env::temp_dir().to_string_lossy().into_owned();
+    json!({
+        "kind": "exact_action", "harness": "codex", "tool_name": "Bash", "command": "cat notes",
+        "tool_input": [["command", "cat notes"]], "payload_cwd": root, "workspace": root, "home_dir": root,
+        "environment": {"PATH": "/usr/bin:/bin"},
+        "facts": {"decision": "ask", "minimum_action": "review", "policy_action": "review", "reason_code": "r", "action_type": "shell"},
+        "policy_binding": {"state": "unbound"},
+        "extension_control_digest": "e".repeat(64), "budget_ms": 20000
+    })
+}
+
+fn evidence_request(binding: Value, action: Value) -> Value {
+    json!({
+        "schema": "guard-native-exact-action-request.v1",
+        "request_id": "req-evidence",
+        "query": {"kind": "review_evidence", "binding": binding, "action": action}
+    })
+}
+
+#[test]
+fn one_review_evidence_ask_answers_what_the_two_asks_answer() {
+    let binding_query = binding_request("guard-native-exact-action-request.v1")["query"].clone();
+    let alone_binding = resident(&binding_request("guard-native-exact-action-request.v1"));
+    let alone_exact = resident(&json!({
+        "schema": "guard-native-exact-action-request.v1",
+        "request_id": "req-exact",
+        "query": exact_query(),
+    }));
+    let reply = resident(&evidence_request(binding_query, exact_query()));
+    assert_eq!(reply["status"], "ok");
+    assert_eq!(reply["payload"]["kind"], "review_evidence");
+    assert!(reply["payload"]["binding"].as_str().is_some());
+    assert_eq!(
+        reply["payload"]["binding"],
+        alone_binding["payload"]["binding"]
+    );
+    assert!(reply["payload"]["token"].as_str().is_some());
+    assert_eq!(reply["payload"]["token"], alone_exact["payload"]["token"]);
+    assert_eq!(
+        reply["payload"]["once_only_reason"],
+        alone_exact["payload"]["once_only_reason"]
+    );
+}
+
+#[test]
+fn review_evidence_refuses_halves_of_the_wrong_kind() {
+    let binding_query = binding_request("guard-native-exact-action-request.v1")["query"].clone();
+    for (binding, action) in [
+        (exact_query(), exact_query()),
+        (binding_query.clone(), binding_query.clone()),
+        (
+            evidence_request(binding_query.clone(), exact_query())["query"].clone(),
+            exact_query(),
+        ),
+    ] {
+        let reply = resident(&evidence_request(binding, action));
+        assert_eq!(reply["status"], "error");
+        assert_eq!(reply["code"], "native_exact_action_query_invalid");
+        assert!(reply["payload"].is_null());
+    }
+}

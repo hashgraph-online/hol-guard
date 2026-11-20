@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
-from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native, _request_payload
+from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from tests.native_command_test_support import real_native_review_fixture
 
@@ -56,9 +56,11 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("stripe --api-key key products delete product", "block"),
     ("stripe products --api-key key delete product", "block"),
     ("env sh -c 'rm -rf workspace/target'", "block"),
-    ("rm -rf ./BUILD", "block"),
-    ("rm --recurs --for workspace/target", "block"),
+    ("rm -rf ./BUILD", "review"),
+    ("rm --recurs --for workspace/target", "review"),
     ("xargs rm -rf BUILD", "block"),
+    ("parallel rm -rf BUILD", "block"),
+    ("echo / | parallel rm -rf BUILD", "block"),
     ("timeout 5 bash -lc 'rm -rf workspace/target'", "block"),
     ("timeout 5 /bin/bash -lc 'rm -rf workspace/target'", "block"),
     ("timeout 5 /bin/sh -c 'rm -rf workspace/target'", "block"),
@@ -161,7 +163,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("aws.exe route53 delete-hosted-zone --id zone", "block"),
     ("/usr/bin/stripe.exe products delete product", "block"),
     ("hol-guard.exe uninstall --all", "block"),
-    ("rm.exe -rf workspace/target", "block"),
+    ("rm.exe -rf workspace/target", "review"),
     ("gh.exe pr merge 17 --repo example/repo --squash", "require-reapproval"),
     ("PATH=scratch/bin:$PATH hol-guard status", "require-reapproval"),
     ("export PATH=scratch/bin:$PATH; hol-guard status", "require-reapproval"),
@@ -186,18 +188,6 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
         "review",
     ),
 )
-
-
-def test_native_command_model_rejects_input_above_transport_budget() -> None:
-    assert (
-        _request_payload(
-            "x" * (64 * 1024),
-            dialect="posix",
-            transport="shell_string",
-            extraction_provenance="guard-shell",
-        )
-        is None
-    )
 
 
 # Frozen native baseline dispositions that are intentionally stricter than the

@@ -146,6 +146,14 @@ const GUARDED_DOT_PREFIXES: &[&str] = &[
     ".zcode",
 ];
 
+/// Whether a lowercased path component is a guarded hidden name.
+pub(super) fn guarded_dot_part(lowered: &str) -> bool {
+    GUARDED_DOT_NAMES.contains(&lowered)
+        || GUARDED_DOT_PREFIXES
+            .iter()
+            .any(|prefix| lowered.starts_with(prefix))
+}
+
 /// Hidden directories a write may pass through. Any other dot directory can
 /// be configuration some tool loads on its own, such as a new agent's rules
 /// folder, so it stays reviewed.
@@ -177,6 +185,27 @@ fn regenerated_dot_directory(lowered: &str, in_node_modules: bool) -> bool {
         || (in_node_modules && NODE_MODULES_DOT_DIRECTORIES.contains(&lowered))
 }
 
+/// Whether every hidden name in `names`, a relative path below a directory
+/// called `parent`, is scratch or regenerated build output. Any other part
+/// than a plain name, such as `..`, fails.
+pub(in crate::pretool) fn regenerated_hidden_names(
+    parent: Option<&std::ffi::OsStr>,
+    names: &Path,
+) -> bool {
+    let mut parent = parent.map(std::ffi::OsStr::to_os_string);
+    names.components().all(|part| {
+        let Component::Normal(name) = part else {
+            return false;
+        };
+        let lowered = name.to_string_lossy().to_ascii_lowercase();
+        let in_node_modules = parent
+            .as_deref()
+            .is_some_and(|parent| parent == "node_modules");
+        parent = Some(name.to_os_string());
+        !lowered.starts_with('.') || regenerated_dot_directory(&lowered, in_node_modules)
+    })
+}
+
 /// A write whose hidden components are plain scratch names, such as
 /// `.tmp/check.mjs` or `.write-test` in a sibling checkout. No hidden
 /// component may sit directly in the home directory, where dot names are
@@ -204,10 +233,7 @@ pub(super) fn plain_dot_scratch_target(path: &Path, home_dir: Option<&str>) -> b
                     .is_some_and(|last| last == "node_modules");
                 if home.starts_with(&parent)
                     || (directory && !regenerated_dot_directory(&lowered, in_node_modules))
-                    || GUARDED_DOT_NAMES.contains(&lowered.as_str())
-                    || GUARDED_DOT_PREFIXES
-                        .iter()
-                        .any(|prefix| lowered.starts_with(prefix))
+                    || guarded_dot_part(&lowered)
                 {
                     return false;
                 }

@@ -5,29 +5,27 @@ from __future__ import annotations
 import logging
 import urllib.error
 from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...version import __version__
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
+from ..native_command_state import CommandStateUnavailableError, native_command_state
 from ..store import GuardStore
 from .command_capability import (
-    CommandCapabilityError,
     command_capability_operations,
     command_capability_status,
     command_environment_allows_queue,
 )
-from .command_executors import COMMAND_OPERATION_SCHEMA_VERSIONS, SUPPORTED_COMMAND_OPERATIONS
+from .command_executors import SUPPORTED_COMMAND_OPERATIONS
 from .command_queue_activation import (
     COMMAND_QUEUE_LEASE_WAIT_MS_ENV,
     command_queue_is_enabled,
-    command_queue_lease_wait_ms,
 )
-from .command_queue_authority import command_queue_oauth_target
 from .command_queue_protocol import redacted_error
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
-    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     exact_cloud_review_operations,
     exact_cloud_review_status,
 )
@@ -37,6 +35,53 @@ COMMAND_QUEUE_STATE_KEY = "guard_command_queue_state"
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CommandQueueLane:
+    """Which queue state a worker owns and which jobs it may lease.
+
+    The daemon's main worker uses the defaults: the shared state key, every
+    ready operation and the configured long-poll wait. A Review drain worker
+    keeps its own state key, so a result it could not upload is retried by
+    that worker instead of being overwritten by another, and leases exact
+    Review jobs without waiting.
+    """
+
+    state_key: str = COMMAND_QUEUE_STATE_KEY
+    operations: tuple[str, ...] | None = None
+    wait_ms: int | None = None
+
+    @property
+    def is_drain(self) -> bool:
+        """Whether this lane is a Review drain worker rather than the main worker."""
+
+        return self.state_key != COMMAND_QUEUE_STATE_KEY
+
+    def lease_scope(self, operations: tuple[str, ...], wait_ms: int) -> tuple[tuple[str, ...], int] | None:
+        """Narrow a lease of ``operations`` to this lane, or None when it may lease none."""
+
+        if self.operations is not None:
+            operations = tuple(operation for operation in self.operations if operation in operations)
+            if not operations:
+                return None
+        return operations, wait_ms if self.wait_ms is None else self.wait_ms
+
+
+_MAIN_LANE = CommandQueueLane()
+_CURRENT_LANE: ContextVar[CommandQueueLane] = ContextVar("guard_command_queue_lane", default=_MAIN_LANE)
+
+
+def current_command_queue_lane() -> CommandQueueLane:
+    """The lane bound to the calling thread's context; the main lane by default."""
+
+    return _CURRENT_LANE.get()
+
+
+def enter_command_queue_lane(lane: CommandQueueLane) -> None:
+    """Bind ``lane`` to the calling thread's context for the rest of its run."""
+
+    _CURRENT_LANE.set(lane)
 
 
 def command_queue_now() -> str:
@@ -69,12 +114,12 @@ def command_queue_enabled(
 
 
 def load_command_queue_state(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    payload = store.get_sync_payload(current_command_queue_lane().state_key)
     return dict(payload) if isinstance(payload, dict) else {}
 
 
 def save_command_queue_state(store: GuardStore, payload: dict[str, object]) -> None:
-    store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, payload, command_queue_now())
+    store.set_sync_payload(current_command_queue_lane().state_key, payload, command_queue_now())
 
 
 def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTTPError) -> None:
@@ -90,6 +135,44 @@ def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTT
 def clear_exact_route_failure(state: dict[str, object]) -> None:
     state.pop("exact_review_route_error", None)
     state.pop("exact_review_route_error_at", None)
+
+
+EXACT_LEASE_BATCH_LIMIT_KEY = "exact_lease_batch_limit"
+
+
+def exact_lease_batch_limit(state: dict[str, object]) -> int:
+    """How many exact Review jobs Guard Cloud last said one lease may return."""
+
+    value = state.get(EXACT_LEASE_BATCH_LIMIT_KEY)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return 1
+    return value
+
+
+def lane_exact_lease_batch_limit(store: GuardStore, state: dict[str, object]) -> int:
+    """The lease batch limit for this lane's state.
+
+    A drain lane that has not leased a batch of its own yet uses the limit the
+    main worker recorded, so its first batch is not cut to one job.
+    """
+
+    if EXACT_LEASE_BATCH_LIMIT_KEY in state or not current_command_queue_lane().is_drain:
+        return exact_lease_batch_limit(state)
+    main = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    return exact_lease_batch_limit(main if isinstance(main, dict) else {})
+
+
+def record_exact_lease_batch_limit(store: GuardStore, state: dict[str, object], limit: int) -> None:
+    """Remember Guard Cloud's lease batch limit, saving at once when it changes.
+
+    A limit that drops back to one is saved even when the poll then fails, so a
+    Guard Cloud that stopped accepting batches is never asked for one again.
+    """
+
+    if exact_lease_batch_limit(state) == limit and EXACT_LEASE_BATCH_LIMIT_KEY in state:
+        return
+    state[EXACT_LEASE_BATCH_LIMIT_KEY] = limit
+    save_command_queue_state(store, state)
 
 
 def command_queue_status(
@@ -121,59 +204,45 @@ def command_queue_status(
     }
 
 
-def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
+def command_queue_brief_status(store: GuardStore) -> dict[str, object]:
+    """The lane's queue state alone, for the daemon's own loops between jobs.
+
+    The full status also reports capability, Cloud Review and grant details.
+    Building it costs a native round trip per job, and the loops read none of it.
+    """
+
     state = load_command_queue_state(store)
-    repaired: list[str] = []
-    if state.get("active_job") is not None and not isinstance(state.get("active_job"), dict):
-        state.pop("active_job", None)
-        repaired.append("active_job")
-    pending_result = state.get("pending_result")
-    if pending_result is not None:
-        pending_valid = (
-            isinstance(pending_result, dict)
-            and isinstance(pending_result.get("job"), dict)
-            and isinstance(pending_result.get("payload"), dict)
-        )
-        if not pending_valid:
-            state.pop("pending_result", None)
-            repaired.append("pending_result")
-    if repaired:
-        state.update({"state": "idle", "last_error": None})
-        save_command_queue_state(store, state)
+    return {
+        "state": state.get("state", "idle"),
+        "last_error": state.get("last_error"),
+        "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
+        "pending_result": state.get("pending_result"),
+    }
+
+
+def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
+    """Drop the lane's damaged queue fields and report which ones went.
+
+    The runtime reads the lane's state row, drops an ``active_job`` that is not
+    an object and a ``pending_result`` without an object job and payload, and
+    writes the row back idle, all in one transaction, so a queue worker saving
+    the same row cannot lose its write. Raises ``CommandStateUnavailableError``
+    when no capable runtime answers and ``CommandStateRefusedError`` when the
+    row cannot be read.
+    """
+
+    guard_home = getattr(store, "guard_home", None)
+    if not isinstance(guard_home, Path):
+        raise CommandStateUnavailableError
+    answer = native_command_state(
+        guard_home,
+        "queue_repair",
+        now=command_queue_now(),
+        state_key=current_command_queue_lane().state_key,
+    )
+    listed = answer.get("repaired") if isinstance(answer, dict) else None
+    repaired = [field for field in listed if isinstance(field, str)] if isinstance(listed, list) else []
     return {"repaired": repaired, "repaired_count": len(repaired), "status": command_queue_status(store)}
-
-
-def command_queue_lease_payload(
-    store: GuardStore,
-    *,
-    operations: tuple[str, ...] | None = None,
-    wait_ms: int | None = None,
-    operation_resolver: Callable[[GuardStore], tuple[str, ...]] = command_queue_operations,
-) -> dict[str, object]:
-    machine_id, workspace_id = command_queue_oauth_target(store)
-    operations = operation_resolver(store) if operations is None else operations
-    if not operations:
-        raise CommandCapabilityError("command_capability_required")
-    capabilities: dict[str, object] = {"operations": list(operations)}
-    schema_versions = {
-        operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation]
-        for operation in operations
-        if operation != EXACT_CLOUD_REVIEW_OPERATION and operation in COMMAND_OPERATION_SCHEMA_VERSIONS
-    }
-    if schema_versions:
-        capabilities["schemaVersions"] = schema_versions
-    exact_only = operations == (EXACT_CLOUD_REVIEW_OPERATION,)
-    payload: dict[str, object] = {
-        "workspaceId": workspace_id,
-        "deviceId": machine_id,
-        "daemonVersion": __version__,
-        "capabilities": capabilities,
-        "maxJobs": 1,
-        "waitMs": command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
-    }
-    if exact_only:
-        payload["protocolVersion"] = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    return payload
 
 
 def default_command_context(store: GuardStore) -> HarnessContext:
@@ -184,13 +253,16 @@ __all__ = [
     "COMMAND_QUEUE_ENABLED_ENV",
     "COMMAND_QUEUE_LEASE_WAIT_MS_ENV",
     "COMMAND_QUEUE_STATE_KEY",
+    "CommandQueueLane",
     "clear_exact_route_failure",
+    "command_queue_brief_status",
     "command_queue_enabled",
-    "command_queue_lease_payload",
     "command_queue_now",
     "command_queue_operations",
     "command_queue_status",
+    "current_command_queue_lane",
     "default_command_context",
+    "enter_command_queue_lane",
     "load_command_queue_state",
     "record_exact_route_failure",
     "repair_command_queue_state",

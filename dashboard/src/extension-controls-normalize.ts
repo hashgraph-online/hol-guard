@@ -298,7 +298,7 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
       ? "default-on"
       : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"] as const),
     publisher: item.publisher === undefined
-      ? { id: "hol", displayName: "Hashgraph Online" }
+      ? { id: "hol", displayName: "HOL" }
       : publisher(item.publisher, `${label}.publisher`),
     icon: icon(item.icon, `${label}.icon`),
     source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"] as const),

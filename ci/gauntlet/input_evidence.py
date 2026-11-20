@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,35 @@ def fixture_path_aliases(replacements: dict[str, str]) -> dict[str, str]:
 
 
 Redaction = str | re.Pattern[str]
+
+
+OPERATOR_HOME_PLACEHOLDER = "{{operator_home}}"
+
+
+def operator_home_replacements() -> dict[Redaction, str]:
+    """Hide the operator's own home directory from exported evidence.
+
+    Fixture replacements name only the directories a run created under its
+    temporary root. A failure raised outside that tree names the real home
+    instead - a login file the credential seed cannot read, a tool reporting
+    where its configuration lives - and that path carries the operator's
+    account name into a bundle published alongside a release.
+    """
+    try:
+        home = Path.home()
+    except (OSError, RuntimeError):
+        return {}
+    spellings = {str(home)}
+    with contextlib.suppress(OSError):
+        spellings.add(str(home.resolve(strict=False)))
+    result: dict[Redaction, str] = {}
+    for spelling in spellings:
+        # A home of ``/`` or a bare drive root would redact every absolute path.
+        if len(Path(spelling).parts) < 2:
+            continue
+        for form in (spelling, spelling.replace("\\", "/"), shlex.quote(spelling)):
+            result[form] = OPERATOR_HOME_PLACEHOLDER
+    return result
 
 
 def _redaction_order(item: tuple[Redaction, str]) -> tuple[int, int]:
@@ -120,6 +151,16 @@ def public_observations(rows: list[dict], replacements: dict[Redaction, str]) ->
     return result
 
 
+# Oh My Pi trims the whole header body, so padding may sit on either side of
+# the anchor hash: `[ notes.md#FB48 ]` opens notes.md just as `[notes.md#FB48]` does.
+EDIT_HEADER = re.compile(r"^\[([^\n]+)#[0-9A-Fa-f]{4}[ \t]*\]$", re.MULTILINE)
+
+
+def edit_headers(patch: str) -> list[str]:
+    """The trimmed path of every hashline header in one edit patch."""
+    return [header.strip(" \t") for header in EDIT_HEADER.findall(patch)]
+
+
 def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     """Accept identity or the pinned OMP adapter's derived edit-path metadata."""
     expected = {key: value for key, value in executed.items() if key not in {"i", "intent"}}
@@ -131,7 +172,7 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     target = expected.get("path", expected.get("file_path"))
     patch = expected.get("input")
     if isinstance(patch, str):
-        headers = [header.strip(" \t") for header in re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", patch, re.MULTILINE)]
+        headers = edit_headers(patch)
         if len(headers) != 1 or (target is not None and target != headers[0]):
             return False
         target = headers[0]
@@ -158,9 +199,16 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
         return False
     # A bare `:raw` returns the whole file without line formatting, so its
     # result must still prove the same resolved source from the first line.
-    selector = re.fullmatch(r"(.+):(?:([1-9][0-9]*)(?:-([1-9][0-9]*))?|raw)", original)
+    # OMP also takes a line range combined with raw, in either order
+    # (`:1-5:raw`, `:raw:1-5`); the prelude's own located read uses the latter.
+    selector = re.fullmatch(
+        r"(.+?):(?:([1-9][0-9]*)(?:-([1-9][0-9]*))?(?::raw)?|raw(?::([1-9][0-9]*)(?:-([1-9][0-9]*))?)?)",
+        original,
+    )
     if selector:
-        base, first, last = selector.groups()
+        base, first, last, raw_first, raw_last = selector.groups()
+        if raw_first is not None:
+            first, last = raw_first, raw_last
         first = first or "1"
         if last is not None and int(last) < int(first):
             return False

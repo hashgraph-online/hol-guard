@@ -18,7 +18,7 @@ use guard_command::command_evaluation_controls::{
 use guard_command::Ctx;
 use guard_contracts::{CodexToolOutputFactsV1, HookCompositionInputsV1};
 
-use crate::codex_tool_output_op::ResidentInspectionHost;
+use crate::resident_inspection_host::ResidentInspectionHost;
 
 const MAX_TEXT_BYTES: usize = 64 * 1024;
 const MAX_ENVIRONMENT: usize = 128;

@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.contracts.guard_cloud_review import validate_exact_command_result
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     validated_remote_approval_envelope,
@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.runtime.command_capability import issue_command_
 from codex_plugin_scanner.guard.runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
-    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     _oauth_metadata,
     apply_exact_cloud_review,
     disable_exact_cloud_review,
@@ -32,7 +31,6 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
     EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
-    exact_result,
     lease_next_job,
 )
 from tests.guard_exact_cloud_review_support import (
@@ -40,6 +38,7 @@ from tests.guard_exact_cloud_review_support import (
 )
 from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
+    exact_result,
 )
 from tests.guard_exact_cloud_review_support import (
     exact_review_job as _job,
@@ -50,6 +49,7 @@ from tests.guard_exact_cloud_review_support import (
 from tests.guard_exact_cloud_review_support import (
     review_request as _request,
 )
+from tests.support.command_lease_transport import lease_over
 
 _TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review" / "exact-transport-fixture.json"
 _TRANSPORT_FIXTURE_SHA256 = "3b14a6c1ea73b53492d32bcd3031666fdd429220c1021525cb7df7510f12a0f3"
@@ -111,11 +111,14 @@ def test_exact_lease_rejects_missing_or_downgraded_protocol(
         lease_next_job(
             operations=(EXACT_CLOUD_REVIEW_OPERATION,),
             wait_ms=0,
-            exact_request=lambda _options: response,
-            queue_request=lambda _options: pytest.fail("exact-only lease cannot use the generic queue"),
+            lease=lease_over(
+                lambda _body: response,
+                lambda _body: pytest.fail("exact-only lease cannot use the generic queue"),
+            ),
         )
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_signature(tmp_path: Path) -> None:
     fixture = _transport_fixture()
     lease_request = fixture["leaseRequest"]
@@ -203,10 +206,6 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
     assert advertisement["nativeBindingVersion"] == claim["nativeBindingVersion"]
     assert advertisement["nativeBindingDigest"] == claim["nativeBindingDigest"]
 
-    lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
-    assert "localRequestsSnapshot" not in lease
-    assert lease["protocolVersion"] == EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    assert lease["capabilities"] == {"operations": [EXACT_CLOUD_REVIEW_OPERATION]}
     disable_exact_cloud_review(store)
     refreshed_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
     assert "exactReviewCapability" not in refreshed_claim
@@ -367,8 +366,8 @@ def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     assert "schemaVersions" not in capabilities
     ack_payload = {"leaseId": job["leaseId"], "protocolVersion": 2}
     assert calls[1] == ("POST", f"/{job['id']}/ack", ack_payload)
-    assert calls[2] == ("POST", f"/{job['id']}/ack", ack_payload)
-    result_call = calls[3]
+    assert len(calls) == 3
+    result_call = calls[2]
     assert result_call[0:2] == ("POST", f"/{job['id']}/result")
     assert result_call[2]["protocolVersion"] == 2
     result = result_call[2]["result"]
@@ -385,6 +384,7 @@ def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     assert row is not None and row["status"] == "resolved"
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_mixed_capability_polls_exact_nonblocking_then_generic_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -422,6 +422,7 @@ def test_mixed_capability_polls_exact_nonblocking_then_generic_queue(
     assert generic_capabilities["operations"] == ["guard.packageShims.status"]
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_missing_exact_route_preserves_generic_queue_progress_and_exact_health(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -482,7 +483,6 @@ def test_missing_exact_route_preserves_generic_queue_progress_and_exact_health(
     assert "404" in str(status["exact_review_route_error"])
     assert generic_paths == [
         "/lease",
-        "/generic-status-job/heartbeat",
         "/generic-status-job/heartbeat",
         "/generic-status-job/result",
     ]

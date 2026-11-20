@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type { ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import { shouldSubmitApprovalProof } from "./approval-keyboard";
@@ -24,7 +24,21 @@ export function approvalProofRecentlySatisfied(gate: GuardApprovalGatePublicConf
 }
 
 export function approvalProofRequiresPassword(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
-  return gate?.totp_enabled !== true;
+  return gate?.totp_enabled !== true && !approvalProofUsesPulse(gate);
+}
+
+/** Pulse replaces the password and the authenticator code: the user approves in the YID app. */
+export function approvalProofUsesPulse(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate?.enabled === true && gate.pulse_enabled === true;
+}
+
+export function PulseApprovalProofNotice() {
+  return (
+    <p className="text-sm leading-6 text-brand-dark/75" role="note">
+      You will approve this in the YID app with a face scan. Check that the app shows the same match code as
+      this page.
+    </p>
+  );
 }
 
 
@@ -93,6 +107,9 @@ export function isApprovalProofSubmitDisabled(
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return false;
   }
+  if (approvalProofUsesPulse(gate)) {
+    return false;
+  }
   if (approvalProofRequiresPassword(gate)) {
     return credentials.approvalPassword.trim() === "";
   }
@@ -111,6 +128,10 @@ export function buildApprovalProofCredentials(
     return {};
   }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
+    return {};
+  }
+  if (approvalProofUsesPulse(gate)) {
+    // No local secret: the request layer runs the Pulse approval for this exact action.
     return {};
   }
   if (approvalProofRequiresPassword(gate)) {
@@ -145,6 +166,9 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
         Recently confirmed with your authenticator. A new code is not needed yet.
       </p>
     );
+  }
+  if (approvalProofUsesPulse(props.approvalGate)) {
+    return <PulseApprovalProofNotice />;
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
   return (
@@ -192,7 +216,7 @@ type ApprovalProofInlineProps = {
   approvalGate: GuardApprovalGatePublicConfig | null;
   approvalPassword: string;
   approvalTotpCode: string;
-  error: string | null;
+  error: ReactNode;
   submitLabel: string;
   submitBusy: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -264,11 +288,7 @@ export function ApprovalProofInline(props: ApprovalProofInlineProps) {
         onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
       />
 
-      {props.error !== null ? (
-        <p className="text-sm text-brand-attention" role="alert">
-          {props.error}
-        </p>
-      ) : null}
+      {props.error ?? null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <ActionButton variant="primary" onClick={props.onSubmit} disabled={submitDisabled}>

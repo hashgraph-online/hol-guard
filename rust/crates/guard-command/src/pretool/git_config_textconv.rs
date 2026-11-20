@@ -24,6 +24,15 @@ pub(super) fn may_run(operation: &str, options: &[&str]) -> bool {
         // describe prints a ref name; reflog prints the ref log's own entries.
         // blame is absent on purpose: it converts the blob it annotates.
         "describe" | "reflog" => false,
+        // A bisect log replays the session's own lines, and a note listing prints
+        // names and object ids. `git notes show` runs `git show`, so the proof
+        // asks about `show` for it and never reaches here with `notes`.
+        // A replacement listing prints the names under `refs/replace/`, and
+        // its three formats add the object ids and the object types those
+        // names stand for. None of the three prints an object's content, so
+        // no blob is converted.
+        // A submodule status line is an object id, a path and a ref name.
+        "bisect" | "notes" | "replace" | "submodule" => false,
         _ => true,
     }
 }
@@ -139,6 +148,8 @@ mod tests {
             ("log", &["-1", "--oneline"][..]),
             ("log", &["-n5", "--stat", "--no-merges"][..]),
             ("branch", &["-vv"][..]),
+            ("bisect", &["log"][..]),
+            ("notes", &["list"][..]),
         ] {
             assert!(!may_run(operation, options), "{operation} {options:?}");
         }

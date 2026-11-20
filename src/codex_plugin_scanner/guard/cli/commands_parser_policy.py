@@ -9,6 +9,7 @@ import argparse
 
 from ...argparse_utils import FriendlyArgumentParser
 from ..config_constants import VALID_GUARD_ACTIONS, VALID_SECURITY_LEVELS
+from .approval_pulse_parser import add_approval_pulse_parser
 from .commands_parser_constants import _guard_risk_action_key
 from .commands_parser_helpers import *
 
@@ -16,6 +17,18 @@ def _add_policy_format_args(parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(parser)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--format", dest="output_format", choices=("text", "json"), default="text")
+
+
+def _reliability_days(value: str) -> int:
+    """``--days`` for ``doctor reliability``: a whole number of days from 1 to 90."""
+
+    try:
+        days = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid day count: {value!r}") from None
+    if not 1 <= days <= 90:
+        raise argparse.ArgumentTypeError("--days must be between 1 and 90")
+    return days
 
 
 def _configure_guard_policy_parsers(
@@ -391,6 +404,7 @@ def _configure_guard_policy_parsers(
     approval_totp_disable_parser.add_argument("--code", required=True)
     _add_guard_common_args(approval_totp_disable_parser, suppress_defaults=True)
     approval_totp_disable_parser.add_argument("--json", action="store_true")
+    add_approval_pulse_parser(settings_subparsers, _add_guard_common_args, FriendlyArgumentParser)
 
     exceptions_parser = guard_subparsers.add_parser("exceptions", help="List active Guard exceptions with expiry")
     exceptions_parser.add_argument("--harness")
@@ -423,7 +437,11 @@ def _configure_guard_policy_parsers(
     events_parser.add_argument("--json", action="store_true")
 
     doctor_parser = guard_subparsers.add_parser("doctor", help="Emit Guard diagnostics for a harness")
-    doctor_parser.add_argument("harness", nargs="?")
+    doctor_parser.add_argument(
+        "harness",
+        nargs="?",
+        help="A harness to diagnose, or 'reliability' for the daemon reliability report",
+    )
     _add_guard_common_args(doctor_parser)
     doctor_parser.add_argument("--json", action="store_true")
     doctor_parser.add_argument(
@@ -438,6 +456,21 @@ def _configure_guard_policy_parsers(
     )
     doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
     doctor_parser.add_argument(
+        "--days",
+        type=_reliability_days,
+        default=30,
+        help="With 'doctor reliability', how many days of records to report, 1 to 90 (default 30)",
+    )
+    # --native is read only and --repair changes local state, so the pair is
+    # refused here. Accepting it would run the lifecycle gate's repairs, which
+    # can revive a resident, before the read-only report the user asked for.
+    doctor_scope = doctor_parser.add_mutually_exclusive_group()
+    doctor_scope.add_argument(
+        "--native",
+        action="store_true",
+        help="Report only the native runtime: availability, a resident already running, and this process's counters",
+    )
+    doctor_scope.add_argument(
         "--repair",
         "--fix",
         action="store_true",

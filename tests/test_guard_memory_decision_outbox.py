@@ -4,7 +4,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.memory_decision_event import MEMORY_DECISION_EVENT_CONTRACT_VERSION
 from codex_plugin_scanner.guard.memory_decision_outbox import (
-    APPROVAL_RETRY_BLOCKED_OVERRIDE,
     _ensure_source_receipt_id,
     enqueue_memory_decision_event,
 )
@@ -302,7 +301,7 @@ def test_one_time_approval_the_retry_cannot_reuse_is_recorded_as_still_blocked()
     [receipt] = store.receipts
     # The user's decision stays an allow; the override says the action did not run.
     assert receipt.policy_decision == "allow"
-    assert receipt.user_override == APPROVAL_RETRY_BLOCKED_OVERRIDE
+    assert receipt.user_override == "approval-approved-retry-blocked"
 
 
 def test_retry_blocked_does_not_relabel_a_block_decision() -> None:

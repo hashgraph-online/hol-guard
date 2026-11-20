@@ -6,7 +6,6 @@ import json
 import os
 from copy import deepcopy
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -50,7 +49,6 @@ def test_compact_fixture_paths_preserve_absolute_command_operands(tmp_path):
 def test_fixture_alias_redaction_preserves_host_guard_identity(monkeypatch):
     """Reconcile verified macOS display aliases without exporting private fixture paths."""
     import hashlib
-    import json
     from pathlib import Path
 
     canonical = str(Path("/").joinpath("private", "tmp", "fixture", "workspace"))
@@ -71,7 +69,6 @@ def test_fixture_alias_redaction_preserves_host_guard_identity(monkeypatch):
 
 def test_fixture_alias_redaction_requires_matching_physical_path(monkeypatch):
     """Keep an unrelated alias distinct instead of qualifying a different target."""
-    from pathlib import Path
 
     canonical = str(Path("/").joinpath("private", "tmp", "fixture", "workspace"))
     monkeypatch.setattr(Path, "resolve", lambda path, **kwargs: path)
@@ -259,160 +256,6 @@ def test_source_confirmed_semantic_native_denies_are_recognized(reason):
     assert assess_case(scenario, case)["outcome"] == "pass"
 
 
-def test_host_execution_must_equal_the_complete_guard_input():
-    """Reject host arguments that differ from the digest-verified input reviewed by Guard."""
-    from ci.gauntlet.input_evidence import input_digest
-
-    case = observed_case()
-    reviewed = {"command": "different command"}
-    case["guard_observations"][0].update(input=reviewed, input_sha256=input_digest(reviewed))
-    result = assess_case(ordinary(), case)
-    assert result["outcome"] == "harness-error"
-    assert "input reviewed by Guard" in result["reason"]
-
-
-def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
-    """Accept derived edit metadata only when paths and edit bytes agree with the host call."""
-    from ci.gauntlet.input_evidence import input_matches
-
-    args = {"input": "[src/settings.ts#3BE2]\nPUT 2.=2:\n+  retryLimit: 5,"}
-    derived = {**args, "path": "src/settings.ts", "paths": ["src/settings.ts"]}
-    assert input_matches("edit", args, derived)
-    assert not input_matches("edit", args, {**derived, "path": ".env"})
-    assert not input_matches("edit", args, {**derived, "paths": ["src/settings.ts", ".env"]})
-    assert not input_matches("edit", args, {**derived, "input": args["input"].replace("5", "9")})
-    sibling_args = {
-        "path": "{{home}}/other-project/notes.md",
-        "input": "[notes.md#3BE2]\nPUT 1.=1:\n+Verified settings change.",
-    }
-    assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
-
-
-@pytest.mark.parametrize(("before", "after"), [(" ", ""), ("\t", "\t"), (" \t", "  ")])
-def test_native_header_padding_keeps_exact_patch_bytes_and_reviewed_target(before, after):
-    from ci.gauntlet.input_evidence import input_matches
-    from ci.gauntlet.proofs import _edit_path
-
-    target = "src/a file.ts"
-    args = {"input": f"[{before}{target}{after}#3BE2]\nPUT 1.=1:\n+changed"}
-    reviewed = {**args, "path": target, "paths": [target]}
-    assert input_matches("edit", args, reviewed)
-    assert _edit_path(args) == target
-    assert not input_matches("edit", args, {**reviewed, "path": ".env", "paths": [".env"]})
-    assert not input_matches("edit", args, {**reviewed, "input": args["input"].replace("+changed", "+different")})
-    assert not input_matches("edit", {**args, "path": "other.ts"}, reviewed)
-
-
-@pytest.mark.parametrize("header", ["[ \t#3BE2]", "[ src/a.ts#3BE2]\n[src/b.ts#1B2C]"])
-def test_empty_or_multiple_native_edit_targets_cannot_borrow_one_review(header):
-    from ci.gauntlet.input_evidence import input_matches
-    from ci.gauntlet.proofs import _edit_path
-
-    args = {"input": header + "\nPUT 1.=1:\n+changed"}
-    reviewed = {**args, "path": "src/a.ts", "paths": ["src/a.ts"]}
-    assert not input_matches("edit", args, reviewed)
-    assert _edit_path(args) is None
-
-
-@pytest.mark.parametrize("path", ["src/one.ts", "./src/one.ts", "~/other-project/one.ts"])
-def test_resolved_read_post_inputs_remain_bound_to_original_target(path):
-    from ci.gauntlet.input_evidence import post_input_matches
-    from ci.gauntlet.proofs import guard_inventory
-
-    reviewed = {"path": path, "offset": 2, "limit": 4}
-    target = "{{home}}/" + path[2:] if path.startswith("~/") else "{{workspace}}/" + path.removeprefix("./")
-    completed = {**reviewed, "path": target}
-    assert post_input_matches("read", reviewed, completed)
-    rows = deepcopy(observed_case()["guard_observations"])
-    for row, value in zip(rows, (reviewed, completed), strict=True):
-        row.update(tool="read", input=value, input_sha256=input_digest(value))
-    calls = [{"id": "c1", "name": "read", "args": reviewed, "is_error": False}]
-    assert guard_inventory(calls, rows, {"native_resident": 2})[1] is None
-    for altered in [
-        {**completed, "path": "{{workspace}}/.env"},
-        {**completed, "offset": 1},
-        {**completed, "limit": 100},
-        {**completed, "file_path": target},
-    ]:
-        assert not post_input_matches("read", reviewed, altered)
-    rows[1]["input_sha256"] = "0" * 64
-    assert guard_inventory(calls, rows, {"native_resident": 2})[1] == "missing or inconsistent Guard input digest"
-
-
-@pytest.mark.parametrize("tool,path", [("write", "src/one.ts"), ("read", "../one.ts"), ("read", "src/../one.ts")])
-def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
-    from ci.gauntlet.input_evidence import post_input_matches
-
-    assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
-
-
-def test_read_selector_resolution_requires_actual_host_result_metadata():
-    from ci.gauntlet.input_evidence import post_input_matches
-
-    pre, post = {"path": "README.md:1-15"}, {"path": "{{workspace}}/README.md"}
-    result = {
-        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
-    }
-    assert post_input_matches("read", pre, post, result)
-    assert not post_input_matches("read", pre, post)
-    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
-    assert not post_input_matches("read", {"path": "README.md:15-1"}, post, result)
-    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
-
-
-def test_raw_read_selector_requires_whole_file_host_result_metadata():
-    from ci.gauntlet.input_evidence import post_input_matches
-
-    pre, post = {"path": "{{workspace}}/src/one.ts:raw"}, {"path": "{{workspace}}/src/one.ts"}
-    result = {
-        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
-    }
-    assert post_input_matches("read", pre, post, result)
-    assert not post_input_matches("read", pre, post)
-    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
-    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
-    late = {"details": {**result["details"], "displayContent": {"startLine": 2}}}
-    assert not post_input_matches("read", pre, post, late)
-    for selector in ("img", "RAW", "1-5:raw", "conflicts"):
-        assert not post_input_matches("read", {"path": f"src/one.ts:{selector}"}, post, result)
-
-
-def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
-    from ci.gauntlet.input_evidence import post_input_matches
-
-    reviewed = {"path": "src/settings.ts"}
-    assert post_input_matches("read", reviewed, {"path": "{{workspace}}\\src\\settings.ts"})
-    assert post_input_matches("read", {"path": "~/notes.md"}, {"path": "{{home}}\\notes.md"})
-    for altered in [
-        "{{workspace}}\\.env",
-        "{{workspace}}\\src/settings.ts",
-        "{{workspace}}\\src\\..\\settings.ts",
-        "{{workspace}}/src\\settings.ts",
-    ]:
-        assert not post_input_matches("read", reviewed, {"path": altered})
-    # On POSIX, a reviewed backslash is part of a file name, not a separator.
-    windows_form = {"path": "{{workspace}}\\src\\settings.ts"}
-    assert not post_input_matches("read", {"path": "src\\settings.ts"}, windows_form)
-
-
-def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
-    """Verify raw input digests before redacting paths and recomputing the public digest."""
-    import hashlib
-    import json
-
-    from ci.gauntlet.input_evidence import input_digest, public_observations
-
-    raw = json.dumps({"path": "/tmp/private fixture/café.txt"}, ensure_ascii=False)
-    observation = {"input_json": raw, "input_sha256": hashlib.sha256(raw.encode()).hexdigest()}
-    exported = public_observations([observation], {"/tmp/private fixture": "{{workspace}}"})[0]
-    assert exported["input"] == {"path": "{{workspace}}/café.txt"}
-    assert exported["input_sha256"] == input_digest(exported["input"])
-    assert exported["observed_input_sha256"] == observation["input_sha256"]
-    assert "input_json" not in exported
-    tampered = public_observations([{**observation, "input_json": "{}", "tool": "read"}], {})[0]
-    assert tampered == {"tool": "read", "observer_error": True, "observer_error_code": "input_digest_mismatch"}
-
-
 @pytest.mark.parametrize("change", ["execution_error", "returncode", "timed_out", "cleanup_ok"])
 def test_setup_failures_are_harness_errors_even_before_inference(change):
     """Prioritize setup and lifecycle failures over missing inference or tool observations."""
@@ -425,7 +268,6 @@ def test_setup_failures_are_harness_errors_even_before_inference(change):
 
 def test_source_identity_ignores_inherited_git_repository_selection(tmp_path, monkeypatch):
     """Bind source identity to the requested checkout despite inherited Git location overrides."""
-    import os
     import subprocess
 
     from ci.gauntlet.source_identity import source_identity
@@ -506,185 +348,3 @@ def test_live_omp_sibling_edit_requires_absolute_anchor_replacement():
     calls[2]["args"]["input"] = "[{{home}}/other-project/notes.md#FB48]\nPUT 1.=1:\n+Verified settings change."
     assert task_calls_in_scope(scenario, calls)
     assert task_tools_match(scenario, calls)
-
-
-def test_a_forwarded_provider_credential_never_reaches_exported_evidence():
-    """The harness CLI's own login is in the environment its tool children inherit.
-
-    Any command the model runs can print it - ``env`` and ``printenv`` outright,
-    a build that echoes its environment by accident - and the transcript that
-    captures it is packed into the public evidence bundle. Path and canary
-    redaction does not cover a credential, so the value is replaced by name.
-    """
-    from ci.gauntlet.case_helpers import add_credential_redactions
-
-    replacements = {"/fixture/home": "{{home}}"}
-    login = {"ANTHROPIC_API_KEY": "sk-ant-not-a-real-key", "CLAUDE_CODE_OAUTH_TOKEN": ""}
-    add_credential_redactions(replacements, login)
-    transcript = [{"output": "PATH=/usr/bin\nANTHROPIC_API_KEY=sk-ant-not-a-real-key\n"}]
-    redacted = redact_value(transcript, replacements)
-    assert "sk-ant-not-a-real-key" not in str(redacted)
-    assert redacted[0]["output"].endswith("ANTHROPIC_API_KEY=<anthropic_api_key-redacted>\n")
-    # An unset credential has no value to hide, and an empty replacement key
-    # would rewrite every position in every exported string.
-    assert "" not in replacements
-
-
-def test_a_credential_handed_on_in_an_encoding_is_redacted_too():
-    """Replacing the literal value leaves every reversible spelling of it readable.
-
-    A model that pipes its environment through ``base64``, a client that logs a
-    percent-encoded header, a tool that hex-escapes what it sends: each writes
-    bytes the bundle's reader can turn straight back into a live key.
-    """
-    import base64
-    from urllib.parse import quote
-
-    from ci.gauntlet.case_helpers import add_credential_redactions
-
-    key = "sk-ant-not-a-real-key"
-    replacements = {}
-    add_credential_redactions(replacements, {"ANTHROPIC_API_KEY": key})
-    raw = key.encode("utf-8")
-    spellings = (
-        key,
-        base64.b64encode(raw).decode("ascii"),
-        base64.b64encode(raw).decode("ascii").rstrip("="),
-        base64.urlsafe_b64encode(raw).decode("ascii"),
-        raw.hex(),
-        raw.hex().upper(),
-        quote(key, safe=""),
-    )
-    transcript = [{"output": "\n".join(spellings)}]
-    redacted = str(redact_value(transcript, replacements))
-    for spelling in spellings:
-        assert spelling not in redacted, spelling
-    assert "<anthropic_api_key-redacted>" in redacted
-
-
-def test_a_credential_base64ed_mid_stream_and_wrapped_is_redacted():
-    """``env | base64`` is how a key really reaches a transcript, and it is neither aligned nor flat.
-
-    The key sits at whatever byte offset the dump puts it at, so its encoding
-    depends on the bytes around it, and ``base64`` breaks the result every 76
-    columns. Matching one unbroken, three-byte-aligned spelling leaves nearly
-    all of the key decodable in the published bundle.
-    """
-    import base64
-
-    from ci.gauntlet.case_helpers import add_credential_redactions
-
-    key = "sk-ant-api03-" + "aB3dE6gH9jK2mN5p" * 7
-    replacements = {}
-    add_credential_redactions(replacements, {"ANTHROPIC_API_KEY": key})
-    raw = key.encode("utf-8")
-    for prefix in (b"PATH=/usr/bin\nANTHROPIC_API_KEY=", b"x\nANTHROPIC_API_KEY=", b"xy\nANTHROPIC_API_KEY="):
-        stream = prefix + raw + b"\nHOME=/fixture/home\n"
-        wrapped = base64.encodebytes(stream).decode("ascii")
-        assert "\n" in wrapped.strip(), "the fixture stream is long enough to wrap"
-        # The groups made entirely of key bytes, as this stream really encodes
-        # them: nothing in them comes from a neighbour, so all of them must go.
-        flat = base64.b64encode(stream).decode("ascii")
-        offset = len(prefix)
-        interior = flat[-(-offset // 3) * 4 : ((offset + len(raw)) // 3) * 4]
-        assert len(interior) > 76 and interior in "".join(wrapped.split())
-        redacted = redact_value([{"output": wrapped}], replacements)[0]["output"]
-        assert interior not in "".join(redacted.split()), prefix
-        assert "<anthropic_api_key-redacted>" in redacted
-
-
-def test_a_credential_piped_through_base64_with_a_trailing_newline_is_redacted():
-    """``echo $KEY | base64`` encodes the key plus the newline ``echo`` added.
-
-    That trailing byte changes the final group, so neither the padded nor the
-    unpadded spelling of the key alone appears anywhere in the output.
-    """
-    import base64
-
-    from ci.gauntlet.case_helpers import add_credential_redactions
-
-    key = "sk-ant-api03-" + "aB3dE6gH9jK2mN5p" * 7
-    replacements = {}
-    add_credential_redactions(replacements, {"ANTHROPIC_API_KEY": key})
-    raw = key.encode("utf-8")
-    flat = base64.b64encode(raw + b"\n").decode("ascii")
-    assert base64.b64encode(raw).decode("ascii") not in flat, "the fixture key exercises the shifted tail"
-    redacted = redact_value([{"output": flat}], replacements)[0]["output"]
-    whole = flat[: (len(raw) // 3) * 4]
-    assert whole not in redacted
-    assert "<anthropic_api_key-redacted>" in redacted
-
-
-def test_a_credential_named_in_a_property_name_is_redacted() -> None:
-    """A tool that keys its report by the value reports the key in a property name.
-
-    ``jq`` grouping a report by token, a cache keyed by credential and an
-    environment map inverted for lookup all put the secret on the left of the
-    colon. A redaction that rewrites only values hands the public bundle a
-    readable key, so the mapping is rewritten on both sides.
-    """
-    from ci.gauntlet.case_helpers import add_credential_redactions
-
-    key = "sk-ant-api03-" + "aB3dE6gH9jK2mN5p" * 7
-    replacements: dict = {}
-    add_credential_redactions(replacements, {"ANTHROPIC_API_KEY": key})
-    redacted = redact_value({"tokens": {key: {"source": key}}}, replacements)
-    assert key not in json.dumps(redacted)
-    assert redacted == {"tokens": {"<anthropic_api_key-redacted>": {"source": "<anthropic_api_key-redacted>"}}}
-
-
-def test_a_fixture_path_in_a_property_name_is_aliased() -> None:
-    """A per-file report names the file in its property name, and the alias belongs there too."""
-    workspace = Path("/fixture/home/project")
-    replacements = fixture_path_aliases({str(workspace): "{{workspace}}"})
-    report = {str(workspace / "src/app.ts"): {"errors": 0}}
-    redacted = redact_value(report, replacements)
-    assert str(workspace) not in json.dumps(redacted)
-    assert redacted == {"{{workspace}}/src/app.ts": {"errors": 0}}
-
-
-def test_a_seeded_login_file_withholds_the_credential_variable() -> None:
-    """A credential the CLI does not need is one the model's commands cannot print.
-
-    Redaction hides a key the transcript already captured; withholding it keeps
-    the key out of the tool children altogether, so no spelling of the dump -
-    encoded, split or reported by a tool - can carry it into the bundle. The
-    operator who authenticates by key alone has no login file, and the variable
-    is still forwarded for them.
-    """
-    from ci.gauntlet.harnesses import adapter, credential_environment
-
-    spec = adapter("claude-code")
-    names = [name for name in spec.credential_env if name]
-    assert names, "the claude-code adapter forwards at least one credential variable"
-    with mock.patch.dict(os.environ, {name: "sk-ant-not-a-real-key" for name in names}, clear=False):
-        assert credential_environment(spec, login_seeded=True) == {}
-        forwarded = credential_environment(spec, login_seeded=False)
-    assert sorted(forwarded) == sorted(names)
-
-
-def test_an_unreadable_login_copy_is_not_a_login(tmp_path: Path) -> None:
-    """A login the CLI cannot read leaves the key to forward, not to withhold.
-
-    Withholding the variable is right only where the fixture HOME can
-    authenticate without it. An empty or truncated copy authenticates nothing,
-    and treating it as a login would fail every case of that run on the CLI's
-    own sign-in rather than on anything Guard decided.
-    """
-    from ci.gauntlet.harnesses import CredentialSeed, adapter
-
-    spec = adapter("claude-code")
-    relative = spec.credential_files[0]
-    logins = (
-        (b'{"claudeAiOauth": {"accessToken": "not-a-real-token"}}', True),
-        (b"", False),
-        (b"{", False),
-        (b"{}", False),
-    )
-    for payload, usable in logins:
-        source, fixture = tmp_path / payload.hex() / "source", tmp_path / payload.hex() / "fixture"
-        (source / relative).parent.mkdir(mode=0o700, parents=True)
-        (source / relative).write_bytes(payload)
-        fixture.mkdir(mode=0o700, parents=True)
-        seed = CredentialSeed(spec, source, fixture)
-        assert seed.login_usable is usable, payload

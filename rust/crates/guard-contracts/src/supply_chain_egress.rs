@@ -25,6 +25,11 @@ pub const EGRESS_MAX_NEEDS: usize = 16;
 pub const EGRESS_MAX_INLINE_BODY_BYTES: usize = 32 * 1024;
 /// Largest request body the resident will hand to the caller to send.
 pub const EGRESS_MAX_NEED_BODY_BYTES: usize = 512 * 1024;
+/// Largest request body an in-process broker will send. The caller that
+/// fulfils the needs runs in the same process, so the body never crosses a
+/// resident request; this bounds the extension catalog pages and AI inventory
+/// uploads Guard Cloud accepts.
+pub const EGRESS_MAX_IN_PROCESS_NEED_BODY_BYTES: usize = 8 * 1024 * 1024;
 /// Most response headers kept per outcome.
 pub const EGRESS_MAX_HEADERS: usize = 64;
 

@@ -1,0 +1,523 @@
+{
+  "schema": "guard-action-normalization-parity.v1",
+  "values": [
+    {
+      "name": "allow",
+      "value_json": "\"allow\"",
+      "action": "allow",
+      "reason_code": null,
+      "original_action": "allow",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 0
+    },
+    {
+      "name": "warn",
+      "value_json": "\"warn\"",
+      "action": "warn",
+      "reason_code": null,
+      "original_action": "warn",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 1
+    },
+    {
+      "name": "review",
+      "value_json": "\"review\"",
+      "action": "review",
+      "reason_code": null,
+      "original_action": "review",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 2
+    },
+    {
+      "name": "require-reapproval",
+      "value_json": "\"require-reapproval\"",
+      "action": "require-reapproval",
+      "reason_code": null,
+      "original_action": "require-reapproval",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 3
+    },
+    {
+      "name": "sandbox-required",
+      "value_json": "\"sandbox-required\"",
+      "action": "sandbox-required",
+      "reason_code": null,
+      "original_action": "sandbox-required",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 4
+    },
+    {
+      "name": "block",
+      "value_json": "\"block\"",
+      "action": "block",
+      "reason_code": null,
+      "original_action": "block",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 5
+    },
+    {
+      "name": "legacy-ask",
+      "value_json": "\"ask\"",
+      "action": "review",
+      "reason_code": null,
+      "original_action": "ask",
+      "original_type": "str",
+      "recognized": true,
+      "severity": 2
+    },
+    {
+      "name": "unknown-word",
+      "value_json": "\"escalate\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "escalate",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "empty-string",
+      "value_json": "\"\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "uppercase",
+      "value_json": "\"ALLOW\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "ALLOW",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "capitalized",
+      "value_json": "\"Review\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "Review",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "padded",
+      "value_json": "\" allow\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": " allow",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "trailing-space",
+      "value_json": "\"allow \"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "allow ",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "underscore-reapproval",
+      "value_json": "\"require_reapproval\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "require_reapproval",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "underscore-sandbox",
+      "value_json": "\"sandbox_required\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "sandbox_required",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "null",
+      "value_json": "null",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "NoneType",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "true",
+      "value_json": "true",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "bool",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "false",
+      "value_json": "false",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "bool",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "zero",
+      "value_json": "0",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "int",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "one",
+      "value_json": "1",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "int",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "negative",
+      "value_json": "-1",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "int",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "negative-zero",
+      "value_json": "-0",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "int",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "float",
+      "value_json": "1.5",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "float",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "float-whole",
+      "value_json": "1.0",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "float",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "float-exponent",
+      "value_json": "1e3",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "float",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "big-integer",
+      "value_json": "1000000000000000000000000000000",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "int",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "empty-list",
+      "value_json": "[]",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "list",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "list-of-actions",
+      "value_json": "[\"allow\", \"block\"]",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "list",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "empty-object",
+      "value_json": "{}",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "dict",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "object-with-action",
+      "value_json": "{\"action\": \"block\"}",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": null,
+      "original_type": "dict",
+      "recognized": false,
+      "severity": 2
+    },
+    {
+      "name": "unicode-string",
+      "value_json": "\"échouer\"",
+      "action": "review",
+      "reason_code": "guard_action_unknown",
+      "original_action": "échouer",
+      "original_type": "str",
+      "recognized": false,
+      "severity": 2
+    }
+  ],
+  "compositions": [
+    {
+      "name": "empty",
+      "values_json": [],
+      "action": "review"
+    },
+    {
+      "name": "single-allow",
+      "values_json": [
+        "\"allow\""
+      ],
+      "action": "allow"
+    },
+    {
+      "name": "allow-and-block",
+      "values_json": [
+        "\"allow\"",
+        "\"block\""
+      ],
+      "action": "block"
+    },
+    {
+      "name": "block-then-allow",
+      "values_json": [
+        "\"block\"",
+        "\"allow\""
+      ],
+      "action": "block"
+    },
+    {
+      "name": "warn-and-ask",
+      "values_json": [
+        "\"warn\"",
+        "\"ask\""
+      ],
+      "action": "review"
+    },
+    {
+      "name": "review-and-reapproval",
+      "values_json": [
+        "\"review\"",
+        "\"require-reapproval\""
+      ],
+      "action": "require-reapproval"
+    },
+    {
+      "name": "reapproval-and-sandbox",
+      "values_json": [
+        "\"require-reapproval\"",
+        "\"sandbox-required\""
+      ],
+      "action": "sandbox-required"
+    },
+    {
+      "name": "sandbox-and-review",
+      "values_json": [
+        "\"sandbox-required\"",
+        "\"review\""
+      ],
+      "action": "sandbox-required"
+    },
+    {
+      "name": "allow-and-unknown",
+      "values_json": [
+        "\"allow\"",
+        "\"escalate\""
+      ],
+      "action": "review"
+    },
+    {
+      "name": "allow-and-null",
+      "values_json": [
+        "\"allow\"",
+        "null"
+      ],
+      "action": "review"
+    },
+    {
+      "name": "all-six",
+      "values_json": [
+        "\"allow\"",
+        "\"warn\"",
+        "\"review\"",
+        "\"require-reapproval\"",
+        "\"sandbox-required\"",
+        "\"block\""
+      ],
+      "action": "block"
+    },
+    {
+      "name": "allow-twice",
+      "values_json": [
+        "\"allow\"",
+        "\"allow\""
+      ],
+      "action": "allow"
+    }
+  ],
+  "action_bearing_keys": [
+    {
+      "key": "action",
+      "action_bearing": true
+    },
+    {
+      "key": "actions",
+      "action_bearing": true
+    },
+    {
+      "key": "finalAction",
+      "action_bearing": true
+    },
+    {
+      "key": "final_action",
+      "action_bearing": true
+    },
+    {
+      "key": "observed_policy_action",
+      "action_bearing": true
+    },
+    {
+      "key": "policyAction",
+      "action_bearing": true
+    },
+    {
+      "key": "preExecutionResult",
+      "action_bearing": true
+    },
+    {
+      "key": "preexecutionresult",
+      "action_bearing": true
+    },
+    {
+      "key": "pre_execution_result",
+      "action_bearing": true
+    },
+    {
+      "key": "redaction",
+      "action_bearing": false
+    },
+    {
+      "key": "transaction",
+      "action_bearing": false
+    },
+    {
+      "key": "actionable",
+      "action_bearing": false
+    },
+    {
+      "key": "ACTION",
+      "action_bearing": true
+    },
+    {
+      "key": "Action",
+      "action_bearing": true
+    },
+    {
+      "key": "",
+      "action_bearing": false
+    },
+    {
+      "key": "action-taken",
+      "action_bearing": true
+    },
+    {
+      "key": "actionsTaken",
+      "action_bearing": true
+    },
+    {
+      "key": "reaction",
+      "action_bearing": false
+    },
+    {
+      "key": "no_action_here",
+      "action_bearing": true
+    },
+    {
+      "key": "áction",
+      "action_bearing": false
+    },
+    {
+      "key": "actionÉ",
+      "action_bearing": true
+    },
+    {
+      "key": "a2Action",
+      "action_bearing": true
+    },
+    {
+      "key": "ACTIONS",
+      "action_bearing": true
+    },
+    {
+      "key": "PreExecutionResult",
+      "action_bearing": true
+    },
+    {
+      "key": "pre-execution-result",
+      "action_bearing": true
+    },
+    {
+      "key": "deaction",
+      "action_bearing": false
+    },
+    {
+      "key": "transactional",
+      "action_bearing": false
+    }
+  ]
+}

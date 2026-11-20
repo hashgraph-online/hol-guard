@@ -10,6 +10,8 @@ import {
 import { SectionLabel, Badge, Tag, ActionButton } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import type { GuardRuntimeSnapshot } from "./guard-types";
+import { bundleRefreshKey, resolveIntelFreshness, type IntelFreshness } from "./supply-chain-intel-freshness";
+import { useSupplyChainBundle } from "./use-supply-chain-bundle";
 
 export type FeedSourceMode = "sample" | "full" | "live";
 
@@ -56,6 +58,42 @@ function FeedSourceBadge({ mode }: FeedSourceBadgeProps) {
   return <Tag tone="attention">Sample only (local-only mode)</Tag>;
 }
 
+function LiveFeedNotice({ freshness }: { freshness: IntelFreshness }) {
+  if (freshness.kind === "loading") {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+        <HiMiniClock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold text-brand-dark">Checking the intel feed</p>
+          <p className="text-xs text-slate-600 mt-0.5">{freshness.description}</p>
+        </div>
+      </div>
+    );
+  }
+  if (freshness.kind === "current") {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-brand-green/20 bg-brand-green/[0.04] px-3 py-2.5">
+        <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold text-brand-dark">Live feed active</p>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Guard Cloud is connected and Guard is receiving its signed intel bundle.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5" role="alert">
+      <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+      <div>
+        <p className="text-sm font-semibold text-amber-800">Live feed connected, intel not current</p>
+        <p className="text-xs text-amber-700 mt-0.5">{freshness.description}</p>
+      </div>
+    </div>
+  );
+}
+
 type FeedHealthCardProps = {
   label: string;
   value: string;
@@ -99,6 +137,13 @@ type FeedHealthWorkspaceProps = {
 export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWorkspaceProps) {
   const sourceMode = resolveFeedSourceMode(snapshot.cloud_state);
   const staleState = resolveFeedStaleness(snapshot);
+  const bundleLoad = useSupplyChainBundle(bundleRefreshKey(snapshot));
+  const freshness = resolveIntelFreshness({
+    cloudState: snapshot.cloud_state,
+    load: bundleLoad,
+    nowMs: Date.now(),
+  });
+  const FreshnessIcon = freshness.kind === "current" ? HiMiniCheckCircle : freshness.kind === "loading" || freshness.kind === "sample" ? HiMiniInformationCircle : HiMiniExclamationTriangle;
   const daemonRunning = snapshot.runtime_state !== null;
   const cloudLabel = snapshot.cloud_state_label;
   const cloudDetail = snapshot.cloud_state_detail;
@@ -151,26 +196,16 @@ export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWork
           </div>
         )}
 
-        {sourceMode === "live" && (
-          <div className="flex items-start gap-2 rounded-xl border border-brand-green/20 bg-brand-green/[0.04] px-3 py-2.5">
-            <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-semibold text-brand-dark">Live feed active</p>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Guard is receiving live cloud intel. Threat data is up to date.
-              </p>
-            </div>
-          </div>
-        )}
+        {sourceMode === "live" && <LiveFeedNotice freshness={freshness} />}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FeedHealthCard
           label="Feed freshness"
-          value={staleState.stale ? "Stale" : "Fresh"}
-          tone={staleState.stale ? "attention" : "green"}
-          description={staleState.ageLabel}
-          icon={staleState.stale ? HiMiniExclamationTriangle : HiMiniCheckCircle}
+          value={freshness.label}
+          tone={freshness.tone}
+          description={freshness.description}
+          icon={FreshnessIcon}
         />
         <FeedHealthCard
           label="Daemon status"

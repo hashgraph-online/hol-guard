@@ -124,6 +124,7 @@ def test_runtime_only_crates_stay_outside_the_fingerprint() -> None:
         "guard-hook-core",
         "guard-pack-compiler",
         "guard-policy-snapshot",
+        "guard-policy-bundle",
         "guard-rule-contract",
         "guard-google-identity",
         "guard-seatbelt",
@@ -217,11 +218,7 @@ def _host_compiler_closure() -> tuple[set[str], set[str]]:
                 stack.append(resolved)
 
     def bump(name: str) -> None:
-        live = [
-            decl
-            for decl in decls.get(name, ())
-            if not _is_test_decl(decl["cfg"]) and not decl["inline"]
-        ]
+        live = [decl for decl in decls.get(name, ()) if not _is_test_decl(decl["cfg"]) and not decl["inline"]]
         if not live or name in needed:
             return
         needed.add(name)
@@ -236,9 +233,7 @@ def _host_compiler_closure() -> tuple[set[str], set[str]]:
             continue
         files.add(current)
         text = current.read_text(encoding="utf-8")
-        children = set(
-            re.findall(r"(?:pub(?:\([^)]*\))?\s+)?mod\s+([a-z_][a-z0-9_]*)\s*;", text)
-        )
+        children = set(re.findall(r"(?:pub(?:\([^)]*\))?\s+)?mod\s+([a-z_][a-z0-9_]*)\s*;", text))
         for match in re.finditer(r"crate::([a-z_][a-z0-9_]*)", text):
             bump(match.group(1))
         for match in re.finditer(r"use\s+crate::\{([^}]*)\}", text):
@@ -286,8 +281,7 @@ def test_scoped_host_lib_mounts_stay_inside_the_closure() -> None:
     """Every #[path] mount in the scoped host lib is a declared closure file."""
     scoped = (WORKSPACE / "crates/guard-command-build/src/lib.rs").read_text(encoding="utf-8")
     mounted = {
-        f"src/{relative}"
-        for relative in re.findall(r'#\[path = "\.\./\.\./guard-command/src/([^"]+)"\]', scoped)
+        f"src/{relative}" for relative in re.findall(r'#\[path = "\.\./\.\./guard-command/src/([^"]+)"\]', scoped)
     }
     declared = set(_crate_files()["guard-command"])
     assert mounted
@@ -325,9 +319,7 @@ def _fake_workspace(root: Path, domain: str) -> Path:
     """
     manifest = _manifest()
     manifest["identity_domain"] = domain
-    manifest["files"] = [
-        relative for relative in manifest["files"] if relative != MANIFEST_RELATIVE
-    ]
+    manifest["files"] = [relative for relative in manifest["files"] if relative != MANIFEST_RELATIVE]
     workspace = root / "rust"
     workspace.mkdir(parents=True)
     (workspace / "Cargo.toml").write_text("[workspace]\n", encoding="utf-8")
@@ -335,9 +327,7 @@ def _fake_workspace(root: Path, domain: str) -> Path:
     for relative in manifest["files"]:
         target = workspace / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            (WORKSPACE / relative).read_text(encoding="utf-8"), encoding="utf-8"
-        )
+        target.write_text((WORKSPACE / relative).read_text(encoding="utf-8"), encoding="utf-8")
     manifest_path = workspace / MANIFEST_RELATIVE
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")

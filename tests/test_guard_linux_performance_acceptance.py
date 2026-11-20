@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from codex_plugin_scanner.guard.runtime.linux_performance_acceptance import (
+from tests.linux_performance_acceptance import (
     MAX_LATENCY_NS,
     MAX_PERFORMANCE_PAYLOAD_BYTES,
     MAX_PERFORMANCE_SAMPLES,

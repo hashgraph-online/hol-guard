@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.sovereignlogos-scripture",
+  "version": "1.0.0",
+  "name": "Sovereign Logos Scripture MCP",
+  "description": "Verbatim public-domain scripture for agents: the Septuagint (Brenton and LXX2012), KJV with Apocrypha, Geneva, WEB and 1 Enoch. Keyless and read-only; every passage returns a citation URL, translation, licence and publisher. All tools only read and keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.sovereignlogos",
+    "displayName": "Sovereign Logos",
+    "url": "https://sovereignlogos.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#1C1917"
+  },
+  "homepage": "https://sovereignlogos.com/developers",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://sovereignlogos.com/api/mcp",
+    "serverNames": [
+      "sovereign-logos-scripture",
+      "sovereignlogos",
+      "sovereign-logos"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read"
+  ],
+  "tools": [
+    {
+      "name": "get_passage",
+      "state": "inherit"
+    },
+    {
+      "name": "compare_translations",
+      "state": "inherit"
+    },
+    {
+      "name": "search_scripture",
+      "state": "inherit"
+    },
+    {
+      "name": "list_translations",
+      "state": "inherit"
+    },
+    {
+      "name": "list_books",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://sovereignlogos.com/developers",
+    "https://sovereignlogos.com/llms.txt",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=com.sovereignlogos/scripture"
+  ],
+  "saferAlternatives": [
+    "Every tool is read-only: none writes to an account, sends messages, uploads local files or needs a key. Requests are rate-limited per IP.",
+    "For a fixed reference without an MCP session, the same passages are served by the keyless REST endpoint https://sovereignlogos.com/api/v1/scripture/passage?ref=John+1:1&translation=kjv."
+  ]
+}

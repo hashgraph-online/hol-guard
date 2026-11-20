@@ -12,14 +12,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode_config import (
-    ZCODE_PRETOOL_MATCHERS,
-    is_guard_managed_hook_command,
-)
-from codex_plugin_scanner.guard.runtime.actions import normalize_zcode_hook_payload
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
+from tests import harness_ops_support as harness_support
+from tests.test_zcode_adapter import ZCODE_PRETOOL_MATCHERS, is_guard_managed_hook_command
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -44,12 +41,12 @@ class TestZCodeMcpToolCoverage:
     def test_install_installs_mcp_pretooluse_hook(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.zcode.prepare_guard_shim",
+            "codex_plugin_scanner.guard.shims.prepare_guard_shim",
             lambda *args, **kwargs: PreparedGuardShim(
                 (), {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []}
             ),
         )
-        ZCodeHarnessAdapter().install(ctx)
+        harness_support.install("zcode", ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         pretool_entries = payload["hooks"]["events"]["PreToolUse"]
         matchers = {
@@ -66,7 +63,9 @@ class TestZCodeMcpToolCoverage:
         )
 
     def test_mcp_tool_payload_is_intercepted_as_pretooluse(self, tmp_path: Path) -> None:
-        envelope = normalize_zcode_hook_payload(
+        envelope = normalize_harness_payload(
+            "zcode",
+            "",
             _fixture("pretooluse_mcp.json"),
             workspace=tmp_path / "workspace",
             home_dir=tmp_path,

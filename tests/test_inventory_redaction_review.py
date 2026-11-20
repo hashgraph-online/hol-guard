@@ -1,4 +1,4 @@
-"""Regression coverage for malformed authorities and nested sensitive metadata."""
+"""Regression coverage for nested sensitive metadata in the serializer."""
 
 from __future__ import annotations
 
@@ -7,26 +7,7 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.inventory_contract_redaction import _safe_json, redact_url
-
-
-@pytest.mark.security_critical
-@pytest.mark.parametrize(
-    ("source", "expected"),
-    [
-        ("http://user:private-value@", "http://"),
-        ("https://user:private-value@/api?token=private-value&mode=fast", "https:///api?token=redacted&mode=fast"),
-        ("https://user:private-value@example.test:8443/api", "https://example.test:8443/api"),
-        ("http://user:private-value@[::1]:8080/api", "http://[::1]:8080/api"),
-        ("http://[::1]:8080/api?token=private-value&mode=fast", "http://[::1]:8080/api?token=redacted&mode=fast"),
-    ],
-)
-def test_url_authority_never_falls_back_to_userinfo(source: str, expected: str) -> None:
-    """An absent hostname must not preserve credentials or damage valid IPv6 authorities."""
-    result = redact_url(source)
-    assert result == expected
-    assert "private-value" not in result
-    assert "user" not in result
+from codex_plugin_scanner.guard.inventory_contract_redaction import _safe_json
 
 
 @pytest.mark.security_critical
@@ -58,3 +39,253 @@ def test_sensitive_ancestor_does_not_disable_unsafe_key_redaction() -> None:
     """Preserve structural names, not literal secrets embedded in a key itself."""
     result = _safe_json({"safeField": "private-value", "sk-secret-key": "another-private-value"}, parent_sensitive=True)
     assert result == {"safeField": "[REDACTED]", "[REDACTED]": "[REDACTED]"}
+
+
+def test_an_export_asks_for_every_metadata_value_in_the_prefetched_batch(monkeypatch, tmp_path) -> None:
+    """Pin that the batch covers the walk: one request of each kind, then no further asks."""
+    from dataclasses import dataclass, field
+    from pathlib import Path
+
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+    from codex_plugin_scanner.guard import native_inventory_url_redaction as native_url
+    from codex_plugin_scanner.guard.inventory_contract_redaction import (
+        _is_supported_scanner_run,
+        _prefetch_export_redactions,
+        _redact_known_path,
+        _safe_artifact_metadata,
+        _safe_finding_text,
+        _scanner_finding_title,
+    )
+
+    requests: list[list[dict[str, object]]] = []
+
+    def answers(tasks, *, guard_home=None, timeout_seconds=10.0):
+        requests.append(list(tasks))
+        return ["redacted" for _ in tasks]
+
+    monkeypatch.setattr(native_url, "_answers", answers)
+    metadata_requests: list[list[str]] = []
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        assert args["op"] == "artifact_metadata"
+        entries = args["artifacts"]
+        assert isinstance(entries, list)
+        metadata_requests.append(entries)
+        return {"metadata": ["{}" for _ in entries]}
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
+
+    @dataclass
+    class Artifact:
+        artifact_type: str = "mcp_server"
+        config_path: str | None = None
+        command: str | None = None
+        url: str | None = None
+        transport: str | None = None
+        metadata: dict[str, object] = field(default_factory=dict)
+
+    home = tmp_path / "home"
+    artifacts = (
+        Artifact(
+            config_path=f"{home}/.config/one.json",
+            command="npx server --root /private/root",
+            url="https://one.example.test/path?token=abc",
+            metadata={
+                "entry": f"{home}/.config/entry.py",
+                "nested": {"path": Path(f"{home}/.config/nested.py"), "endpoint": "https://two.example.test"},
+                "items": [f"{home}/.config/list.py", "https://three.example.test"],
+                "apiToken": "private-value",
+            },
+        ),
+        Artifact(artifact_type="skill", config_path=f"{home}/.config/two.json"),
+    )
+
+    @dataclass
+    class Finding:
+        title: str
+        description: str
+        file_path: str | None = None
+
+    @dataclass
+    class Run:
+        source: str
+        message: str
+        findings: tuple[Finding, ...]
+
+    runs = (
+        Run(
+            source="cisco-mcp-scanner",
+            message=f"scanned {home}/.config",
+            findings=(
+                Finding("npx tool --token abc", "found in /private/root", f"{home}/.config/hit.py"),
+                Finding("another finding", ""),
+                # A finding with no title of its own: the export gives it a
+                # stand-in, so the batch has to carry the stand-in too.
+                Finding("", "an untitled finding"),
+            ),
+        ),
+        # A run from a scanner the export drops. Nothing of it is ever redacted,
+        # so nothing of it belongs in the batch either.
+        Run(
+            source="some-other-scanner",
+            message=f"scanned {home}/.config/unsupported",
+            findings=(Finding("unsupported finding", f"seen at {home}/.config/unsupported.py"),),
+        ),
+    )
+    with native_url.redaction_pass():
+        _prefetch_export_redactions(artifacts, runs, home_dir=home, workspace_dir=None)
+        prefetched = len(requests)
+        prefetched_tasks = len(requests[0])
+        for artifact in artifacts:
+            _safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+        for run in runs:
+            if not _is_supported_scanner_run(run):
+                continue
+            _safe_finding_text(run.message, home_dir=home, workspace_dir=None)
+            for finding in run.findings:
+                _safe_finding_text(_scanner_finding_title(finding), home_dir=home, workspace_dir=None)
+                _safe_finding_text(finding.description, home_dir=home, workspace_dir=None)
+                if finding.file_path:
+                    _redact_known_path(finding.file_path, home, None)
+    assert prefetched == 1
+    assert len(requests) == prefetched
+    # The dropped run's three strings would have been asked about had the batch
+    # not applied the same filter the export does.
+    assert not any("unsupported" in str(task.get("value", "")) for task in requests[0]), (
+        "the batch asked about a run the export never redacts"
+    )
+    assert prefetched_tasks == len(requests[0])
+    # Both artifacts' metadata went in one request, and the export asked for
+    # neither again.
+    assert [len(entries) for entries in metadata_requests] == [2]
+
+
+def test_an_oversized_payload_is_checked_in_parts_that_keep_every_match(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+
+    monkeypatch.setattr(redaction, "_NATIVE_VALUE_BUDGET", 256)
+    payload = {
+        "items": [{"name": f"tool-{index}", "notes": ["plain"] * 4} for index in range(40)],
+        "meta": {"keys": {f"k{index}": index for index in range(40)}},
+    }
+    parts = list(redaction._payload_parts(payload))
+    assert len(parts) > 1
+    assert all(len(part) <= 256 for part in parts)
+    redaction._assert_serialized_inventory_payload_safe(payload)
+
+    for unsafe in ({"note": "token=abc"}, {"/Users/someone/x": 1}, "bearer abc"):
+        tainted = copy.deepcopy(payload)
+        tainted["items"][37]["notes"].append(unsafe)
+        with pytest.raises(ValueError, match="unsafe payload"):
+            redaction._assert_serialized_inventory_payload_safe(tainted)
+
+
+def test_an_oversized_key_is_checked_alone(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+
+    monkeypatch.setattr(redaction, "_NATIVE_VALUE_BUDGET", 256)
+    long_key = "k" * 600
+    payload = {"meta": {long_key: 1, 2: None, True: "plain"}}
+    parts = list(redaction._payload_parts(payload))
+    assert json.dumps(long_key) in parts
+    assert '"2"' in "".join(parts)
+    redaction._assert_serialized_inventory_payload_safe(payload)
+
+    tainted = {"meta": {long_key + " /Users/someone/x": 1}}
+    with pytest.raises(ValueError, match="unsafe payload"):
+        redaction._assert_serialized_inventory_payload_safe(tainted)
+
+
+def test_artifact_metadata_is_sent_as_json_text_and_a_bad_answer_fails_closed(monkeypatch) -> None:
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import pytest
+
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+    from codex_plugin_scanner.guard.native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
+    sent: list[dict[str, object]] = []
+    answer: dict[str, object] = {"metadata": ['{"artifactType":"skill"}']}
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        sent.append(args)
+        return answer
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
+    artifact = SimpleNamespace(
+        artifact_type="skill",
+        metadata={1: (Path("/agent/a"), "b"), "1": {"n": 2}},
+        config_path=Path("/agent/config"),
+        command="node",
+        url=None,
+    )
+    home = Path("/agent/home")
+    assert redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None) == {"artifactType": "skill"}
+    (request,) = sent
+    assert request["op"] == "artifact_metadata"
+    assert request["home_dir"] == str(home)
+    assert request["workspace_dir"] is None
+    entries = request["artifacts"]
+    assert isinstance(entries, list)
+    assert json.loads(entries[0]) == {
+        "metadata": {"1": {"n": 2}},
+        "artifact_type": "skill",
+        "config_path": None,
+        "command": "node",
+        "url": None,
+        "transport": None,
+    }
+    assert request["window"] is None
+    bad_answers: tuple[dict[str, object], ...] = (
+        {"metadata": []},
+        {"metadata": ["[]"]},
+        {"metadata": [1]},
+        {"metadata": ["{not json"]},
+        {},
+    )
+    for bad in bad_answers:
+        answer = bad
+        with pytest.raises(NativeInventoryUrlRedactionError):
+            redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+
+
+def test_a_large_artifact_is_answered_in_windows(monkeypatch) -> None:
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import pytest
+
+    from codex_plugin_scanner.guard import inventory_contract_redaction as redaction
+    from codex_plugin_scanner.guard.native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
+    monkeypatch.setattr(redaction, "_METADATA_BUDGET", 16)
+    monkeypatch.setattr(redaction, "_METADATA_WINDOW", 7)
+    whole = json.dumps({"tools": ["\u00e9" * 5, "x" * 20], "artifactType": "mcp_server"}, ensure_ascii=False)
+    windows: list[object] = []
+    answer_total = len(whole)
+
+    def export_redaction(args: dict[str, object]) -> dict[str, object]:
+        window = args["window"]
+        assert isinstance(window, dict)
+        assert len(args["artifacts"]) == 1
+        windows.append(window)
+        start, length = window["start"], window["length"]
+        return {"metadata": [whole[start : start + length]], "total": answer_total}
+
+    monkeypatch.setattr(redaction, "_native_export_redaction", export_redaction)
+    artifact = SimpleNamespace(artifact_type="mcp_server", metadata={"tools": ["a"] * 40})
+    home = Path("/agent/home")
+    assert redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None) == json.loads(whole)
+    assert [window["start"] for window in windows] == list(range(0, len(whole), 7))
+
+    # A total that moves between windows, or a window that makes no progress, fails closed.
+    totals = iter((len(whole), len(whole) + 1))
+    monkeypatch.setattr(redaction, "_native_export_redaction", lambda args: {"metadata": ["x"], "total": next(totals)})
+    with pytest.raises(NativeInventoryUrlRedactionError):
+        redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
+    monkeypatch.setattr(redaction, "_native_export_redaction", lambda args: {"metadata": [""], "total": 5})
+    with pytest.raises(NativeInventoryUrlRedactionError):
+        redaction._safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)

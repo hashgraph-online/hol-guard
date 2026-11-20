@@ -26,10 +26,14 @@ if TYPE_CHECKING:
 
 POLICY_EFFECTIVE_COMMAND = "policy-effective"
 POLICY_EFFECTIVE_FEATURE = "native-policy-effective-v1"
+POLICY_PUBLISH_FEATURE = "native-policy-effective-publish-v1"
 POLICY_EFFECTIVE_SCHEMA = "guard-effective-policy.v1"
 POLICY_EFFECTIVE_TIMEOUT_SECONDS = 10.0
 _UNAVAILABLE = "native_policy_effective_unavailable"
 _INVALID = "native_policy_effective_invalid"
+# A publication adds up to six bound harness views of at most 256 KiB each to
+# a composed policy that alone may fill the default reply cap.
+_PUBLISH_VIEW_BYTES = 2 * 1024 * 1024
 # The composer is a pure function of one binary and its request. An unchanged
 # request against that same digest must not respawn the runtime.
 _MEMO_LIMIT = 32
@@ -48,6 +52,9 @@ _CONFIG_FIELDS = (
     "subprocess_action",
     "sandbox_analysis",
     "receipt_redaction_level",
+    "blocked_request_mode",
+    "managed_policy_hash",
+    "managed_policy_status",
     "risk_actions",
     "harness_risk_actions",
     "harness_actions",
@@ -68,7 +75,7 @@ def _config_fields(config: GuardConfig | Mapping[str, object]) -> dict[str, obje
     return {name: getattr(config, name) for name in _CONFIG_FIELDS if hasattr(config, name)}
 
 
-def _runtime_identity(deadline_monotonic: float) -> NativeRuntimeIdentity:
+def _runtime_identity(deadline_monotonic: float, feature: str) -> NativeRuntimeIdentity:
     from .native_runtime import native_runtime_status
 
     status = native_runtime_status(deadline_monotonic=deadline_monotonic)
@@ -78,6 +85,7 @@ def _runtime_identity(deadline_monotonic: float) -> NativeRuntimeIdentity:
         or status.identity is None
         or status.capabilities is None
         or POLICY_EFFECTIVE_FEATURE not in status.capabilities.features
+        or feature not in status.capabilities.features
     ):
         raise NativePolicySnapshotError(_UNAVAILABLE)
     return status.identity
@@ -88,16 +96,19 @@ def _call(
     configs: Iterable[GuardConfig | Mapping[str, object]],
     *,
     guard_config: bool,
+    observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
-    from .native_runtime import _run_native_process
+    from .native_runtime import _MAX_RESPONSE_BYTES, _run_native_process
 
-    request = {
+    request: dict[str, object] = {
         "schema": POLICY_EFFECTIVE_SCHEMA,
         "op": op,
         "guard_config": guard_config,
         "configs": [_config_fields(config) for config in configs],
     }
+    if observed is not None:
+        request["observed"] = dict(observed)
     try:
         text = json.dumps(request, separators=(",", ":"), default=_json_default)
     except (TypeError, ValueError) as error:
@@ -108,7 +119,7 @@ def _call(
     if deadline - time.monotonic() <= 0:
         # An expired caller budget must neither probe nor spawn.
         raise NativePolicySnapshotError(_UNAVAILABLE)
-    identity = _runtime_identity(deadline)
+    identity = _runtime_identity(deadline, POLICY_PUBLISH_FEATURE if op == "publish" else POLICY_EFFECTIVE_FEATURE)
     path = identity.path
     # The path stays the same when a runtime is replaced in place. The digest
     # is what says the derivation tables changed.
@@ -122,7 +133,11 @@ def _call(
     if remaining <= 0:
         raise NativePolicySnapshotError(_UNAVAILABLE)
     output = _run_native_process(
-        path, (POLICY_EFFECTIVE_COMMAND, "--stdin"), input_text=text, timeout_seconds=remaining
+        path,
+        (POLICY_EFFECTIVE_COMMAND, "--stdin"),
+        input_text=text,
+        timeout_seconds=remaining,
+        output_limit=_MAX_RESPONSE_BYTES + (_PUBLISH_VIEW_BYTES if op == "publish" else 0),
     )
     if output is None:
         raise NativePolicySnapshotError(_UNAVAILABLE)
@@ -135,14 +150,25 @@ def _call(
     if response.get("ok") is not True:
         reason = response.get("error")
         raise NativePolicySnapshotError(reason if isinstance(reason, str) and reason else _INVALID)
-    policy = response.get("policy")
-    if not isinstance(policy, dict):
+    if not isinstance(response.get("policy"), dict):
+        raise NativePolicySnapshotError(_INVALID)
+    if op == "publish" and not _publication_views(response.get("views")):
         raise NativePolicySnapshotError(_INVALID)
     with _MEMO_LOCK:
-        _MEMO[memo_key] = copy.deepcopy(policy)
+        _MEMO[memo_key] = copy.deepcopy(response)
         while len(_MEMO) > _MEMO_LIMIT:
             _MEMO.popitem(last=False)
-    return cast("dict[str, Any]", policy)
+    return cast("dict[str, Any]", response)
+
+
+def _publication_views(views: object) -> bool:
+    if not isinstance(views, dict):
+        return False
+    mode = views.get("blocked_request_mode")
+    harnesses = views.get("mcp_relay_harnesses")
+    return (mode is None or isinstance(mode, str)) and (
+        isinstance(harnesses, dict) and all(isinstance(view, dict) for view in harnesses.values())
+    )
 
 
 def _json_default(value: object) -> object:
@@ -163,19 +189,22 @@ def effective_native_policy_v3(
             (config,),
             guard_config=not isinstance(config, Mapping),
             deadline_monotonic=deadline_monotonic,
-        ),
+        )["policy"],
     )
 
 
 def compose_effective_native_policies(
     configs: tuple[GuardConfig | Mapping[str, object], ...],
     *,
+    observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> dict[str, object]:
     """Compile home, workspace and managed configs into one native policy.
 
     The result carries the derived ``mode`` and the strictest per-harness
     postures beside the snapshot fields; neither reaches the Rust digest.
+    ``observed`` carries the operator's stored MCP choices, which the composer
+    lays over the configured policy without loosening a configured restriction.
     """
 
     if not configs:
@@ -187,5 +216,41 @@ def compose_effective_native_policies(
         raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
     return cast(
         "dict[str, object]",
-        _call("compose", configs, guard_config=mappings == 0, deadline_monotonic=deadline_monotonic),
+        _call(
+            "compose",
+            configs,
+            guard_config=mappings == 0,
+            observed=observed,
+            deadline_monotonic=deadline_monotonic,
+        )["policy"],
+    )
+
+
+def compose_native_publication(
+    configs: tuple[GuardConfig, ...],
+    *,
+    observed: Mapping[str, object] | None = None,
+    deadline_monotonic: float | None = None,
+) -> tuple[dict[str, object], str | None, dict[str, object]]:
+    """Compose loaded configs and derive the direct-lane views beside them.
+
+    Returns the composed policy, the blocked-request mode every config agrees
+    on, and the MCP relay harness views every config agrees on. Rust derives
+    all three from the same request.
+    """
+
+    if not configs or any(isinstance(config, Mapping) for config in configs):
+        raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
+    response = _call(
+        "publish",
+        configs,
+        guard_config=True,
+        observed=observed,
+        deadline_monotonic=deadline_monotonic,
+    )
+    views = response["views"]
+    return (
+        cast("dict[str, object]", response["policy"]),
+        cast("str | None", views.get("blocked_request_mode")),
+        cast("dict[str, object]", views["mcp_relay_harnesses"]),
     )

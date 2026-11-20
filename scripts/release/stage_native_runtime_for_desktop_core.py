@@ -17,6 +17,9 @@ _MANIFEST_SCHEMA = "hol-guard-native-runtime.v1"
 _PROTOCOL_VERSION = 1
 _MAX_WHEEL_BYTES = 256 * 1024 * 1024
 _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
+# Development wheels build the runtime at opt-level 0 and are never published.
+# The runtime's own resident-state reader refuses anything larger.
+_MAX_UNPUBLISHED_RUNTIME_BYTES = 512 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 16 * 1024
 _SHA40 = 40
 _SHA64 = 64
@@ -158,15 +161,22 @@ def _write_file(path: Path, payload: bytes, mode: int) -> None:
         raise NativeRuntimeStageError(f"staged native path is world-writable: {path.name}")
 
 
+def _check_runtime_bound(max_runtime_bytes: int) -> None:
+    if max_runtime_bytes <= 0 or max_runtime_bytes > _MAX_UNPUBLISHED_RUNTIME_BYTES:
+        raise NativeRuntimeStageError(f"runtime bound must be between 1 and {_MAX_UNPUBLISHED_RUNTIME_BYTES} bytes")
+
+
 def stage_from_wheel(
     wheel: Path,
     destination: Path,
     *,
     expected_version: str,
     expected_target: str,
+    max_runtime_bytes: int = _MAX_RUNTIME_BYTES,
 ) -> tuple[Path, Path]:
     """Extract and seal the native runtime from one attested platform wheel."""
 
+    _check_runtime_bound(max_runtime_bytes)
     if not wheel.is_file():
         raise NativeRuntimeStageError("attested native wheel is missing")
     wheel_size = wheel.stat().st_size
@@ -180,7 +190,7 @@ def stage_from_wheel(
         names = {_safe_member_name(info.filename).as_posix() for info in archive.infolist() if not info.is_dir()}
         runtime_name = _runtime_member_name(names)
         manifest_name = f"{_NATIVE_DIR}/{_MANIFEST_NAME}"
-        runtime = _read_member(archive, runtime_name, _MAX_RUNTIME_BYTES)
+        runtime = _read_member(archive, runtime_name, max_runtime_bytes)
         manifest_bytes = _read_member(archive, manifest_name, _MAX_MANIFEST_BYTES)
     manifest = _decode_manifest(manifest_bytes)
     if manifest["package_version"] != expected_version:
@@ -197,9 +207,10 @@ def stage_from_wheel(
     return runtime_path, manifest_path
 
 
-def refresh_identity(destination: Path) -> Path:
+def refresh_identity(destination: Path, max_runtime_bytes: int = _MAX_RUNTIME_BYTES) -> Path:
     """Rewrite manifest size and digest after Apple signing changes the runtime bytes."""
 
+    _check_runtime_bound(max_runtime_bytes)
     runtime_matches = [path for path in (destination / name for name in _RUNTIME_NAMES) if path.is_file()]
     if len(runtime_matches) != 1:
         raise NativeRuntimeStageError("staged native runtime must contain exactly one hol-guard-runtime binary")
@@ -208,7 +219,7 @@ def refresh_identity(destination: Path) -> Path:
     if not manifest_path.is_file():
         raise NativeRuntimeStageError("staged native runtime manifest is missing")
     runtime = runtime_path.read_bytes()
-    if not runtime or len(runtime) > _MAX_RUNTIME_BYTES:
+    if not runtime or len(runtime) > max_runtime_bytes:
         raise NativeRuntimeStageError("staged native runtime is the wrong size")
     manifest = _decode_manifest(manifest_path.read_bytes())
     manifest["runtime_sha256"] = _sha256(runtime)
@@ -229,10 +240,19 @@ def main() -> int:
     parser.add_argument("--expected-version")
     parser.add_argument("--expected-target")
     parser.add_argument("--refresh-identity", action="store_true")
+    parser.add_argument(
+        "--max-runtime-bytes",
+        type=int,
+        default=_MAX_RUNTIME_BYTES,
+        help=(
+            "Largest runtime to stage, in bytes. The default suits the shipped release profile; "
+            "raise it only for bundles that are never published, such as installed acceptance."
+        ),
+    )
     args = parser.parse_args()
     try:
         if args.refresh_identity:
-            path = refresh_identity(args.destination)
+            path = refresh_identity(args.destination, args.max_runtime_bytes)
             print(path)
             return 0
         if args.wheel is None or not args.expected_version or not args.expected_target:
@@ -242,6 +262,7 @@ def main() -> int:
             args.destination,
             expected_version=args.expected_version,
             expected_target=args.expected_target,
+            max_runtime_bytes=args.max_runtime_bytes,
         )
         print(runtime_path)
         print(manifest_path)

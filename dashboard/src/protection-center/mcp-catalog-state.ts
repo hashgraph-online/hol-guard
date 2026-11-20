@@ -44,6 +44,14 @@ export function mcpCatalogCopy(item: LocalCliItem): { title: string; description
   };
 }
 
+/**
+ * A later listing of the same connector moved its catalog on. Choices made
+ * against the earlier catalog were not made against the tools it now lists.
+ */
+export function catalogRevisionChanged(previous: LocalCliItem, next: LocalCliItem): boolean {
+  return previous.cli_id === next.cli_id && previous.mcp_catalog?.revision !== next.mcp_catalog?.revision;
+}
+
 export function rebaseCommandDraft(
   current: LocalCliCommand[],
   previous: LocalCliCommand[],

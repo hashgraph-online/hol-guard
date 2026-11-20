@@ -414,3 +414,58 @@ fn a_replaced_writer_hands_its_pending_signals_to_the_next_one() {
     let stopped = call(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
     assert_eq!(stopped["payload"]["drained"], json!(true));
 }
+
+/// The writer saves on its own thread, so a store failure can arrive after
+/// the drain page that gave it the last record. A later page with nothing to
+/// record still reports it, until the client acknowledges it.
+#[test]
+fn a_drain_with_nothing_to_record_still_reports_the_store_failure() {
+    use crate::hook_direct_evidence::{
+        drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1,
+    };
+
+    let home = store_home("writer-op-drain-fatal", "record_basic");
+    let queue = DirectEvidenceQueue::default();
+    let request = HookDirectEvidenceDrainRequestV1 {
+        guard_home: home.to_string_lossy().into_owned(),
+        max_records: None,
+        ack_through: None,
+        ack_epoch: None,
+    };
+    let page = |source| -> Value {
+        serde_json::from_slice(&drain(&request, &queue, source).unwrap()).unwrap()
+    };
+    // No writer runs, and the drain does not start one to look.
+    assert!(page(Some("guard")).get("store_fatal").is_none());
+    assert_eq!(
+        call(&home, json!({"action": "stats"}))["payload"]["running"],
+        json!(false)
+    );
+
+    let started = call(&home, json!({"action": "start"}));
+    assert_eq!(started["payload"]["running"], json!(true));
+    assert!(page(Some("guard")).get("store_fatal").is_none());
+    {
+        let slot = super::slot(&std::fs::canonicalize(&home).unwrap());
+        let held = slot.writer.lock().unwrap();
+        held.as_ref()
+            .expect("the start built a writer")
+            .fatal
+            .record("native_guard_store_sqlite_corrupt");
+    }
+    let reported = page(Some("guard"))["store_fatal"].clone();
+    assert_eq!(reported["code"], json!("native_guard_store_sqlite_corrupt"));
+    // A recovery that failed is asked for again on the next page.
+    assert_eq!(page(Some("guard"))["store_fatal"], reported);
+    // A lane bound without a source leaves the failure to the client's own calls.
+    assert!(page(None).get("store_fatal").is_none());
+
+    let identifier = reported["id"].as_str().unwrap().to_owned();
+    call(
+        &home,
+        json!({"action": "stats", "store_fatal_ack": identifier}),
+    );
+    assert!(page(Some("guard")).get("store_fatal").is_none());
+    let stopped = call(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+    assert_eq!(stopped["payload"]["drained"], json!(true));
+}

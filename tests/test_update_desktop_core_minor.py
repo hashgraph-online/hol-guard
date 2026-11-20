@@ -66,7 +66,6 @@ def test_desktop_update_fetches_and_installs_stable_minor(
     _ = stable_desktop
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-stable-core"
     manifest = {

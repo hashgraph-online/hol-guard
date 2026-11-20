@@ -3,10 +3,11 @@
 //! The relay asks before it reads the host's input or starts the MCP server,
 //! and again while the session's first call waits for a lane that was not
 //! ready yet. A lane is ready only when the resident can decide the
-//! session's calls at all (`mcp_relay_decide_session.rs`): a config that
-//! prompts (in either mode, observe included) or a store holding remote
-//! policy sends the session to the Python proxy, and so does a server whose
-//! catalog offers a tool the proxy decides (`mcp_relay_servers.rs`). A
+//! session's calls at all (`mcp_relay_decide_session.rs`): a store holding
+//! remote policy sends the session to the Python proxy, and so does a server
+//! whose catalog offers a tool the proxy decides (`mcp_relay_servers.rs`),
+//! while a config whose review mode the queue route does not answer keeps
+//! the session native and refuses each call it would queue. A
 //! server whose catalog the resident has no report of is not ready either,
 //! but its session stays native and reports the catalog it relays.
 //! The answer is only `ready` or `not_ready` with the lane's defer code. It

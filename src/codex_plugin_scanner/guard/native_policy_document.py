@@ -13,7 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 from .native_binary_identity import validate_native_binary
-from .native_context import _canonical_request_sha256, _resolve_digest_home
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, native_runtime_status
 from .policy_document_types import PolicyCompilationError
@@ -78,6 +78,10 @@ def _bound_query(
     ):
         raise NativePolicyDocumentError("native_policy_document_runtime_changed")
     home = _resolve_digest_home(None)
+    # The resident refuses every request until this home's verifier key
+    # exists. A policy command can be the first thing a new home runs.
+    if not ensure_resident_prerequisite(home):
+        raise NativePolicyDocumentError("native_policy_document_unavailable")
     request = {
         "schema": "guard-request-context-request.v1",
         "request_id": f"policy-document-{uuid4().hex}",

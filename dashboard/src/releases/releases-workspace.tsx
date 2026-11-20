@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { HiMiniArrowTopRightOnSquare } from "react-icons/hi2";
+
 import { ActionButton, EmptyState } from "../approval-center-primitives";
 import { ReleaseArchiveList } from "./components/release-archive-list";
 import { ReleaseDetailPanel } from "./components/release-detail-panel";
-import { WhatsNewCard } from "./components/whats-new-card";
+import { ReleaseStatusBand } from "./components/release-status-band";
 import { fetchReleaseDetail, fetchReleaseIndex } from "./releases-api";
 import {
   dismissWhatsNew,
   failureCopy,
-  installedNote,
-  installedRelease,
+  holReleaseUrl,
+  installedStanding,
   isRetryable,
   isWhatsNewDismissed,
   openingSlug,
+  readsOnHol,
 } from "./releases-model";
+import type { InstalledStanding } from "./releases-model";
 import type { ReleaseDetail, ReleaseFeedFailure, ReleaseIndex } from "./releases-types";
 
 type IndexState =
@@ -27,26 +31,41 @@ type DetailState =
   | { kind: "ready"; detail: ReleaseDetail }
   | { kind: "failed"; failure: ReleaseFeedFailure };
 
-function FailureNotice(props: { failure: ReleaseFeedFailure; onRetry?: () => void }) {
-  const copy = failureCopy(props.failure);
+function FailureAction(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
+  if (props.onRetry) {
+    return (
+      <ActionButton variant="outline" onClick={props.onRetry}>
+        Try again
+      </ActionButton>
+    );
+  }
+  if (!readsOnHol(props.failure)) {
+    return null;
+  }
   return (
-    <EmptyState
-      title={copy.title}
-      body={copy.body}
-      action={
-        props.onRetry ? (
-          <ActionButton variant="outline" onClick={props.onRetry}>
-            Try again
-          </ActionButton>
-        ) : undefined
-      }
-    />
+    <a
+      href={props.holUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-dark/15 px-4 text-sm font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/40 hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30 motion-reduce:transition-none"
+    >
+      Read it on hol.org
+      <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
   );
+}
+
+function FailureNotice(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
+  const copy = failureCopy(props.failure);
+  const hasAction = Boolean(props.onRetry) || readsOnHol(props.failure);
+  const action = hasAction ? <FailureAction {...props} /> : undefined;
+  return <EmptyState title={copy.title} body={copy.body} action={action} />;
 }
 
 function LoadingNotice({ label }: { label: string }) {
   return (
-    <p role="status" className="py-8 text-center text-sm text-brand-dark/60">
+    <p role="status" className="py-8 text-center text-sm text-brand-dark/75">
       {label}
     </p>
   );
@@ -148,54 +167,73 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
     return () => controller.abort();
   }, [selectedSlug, detailToken]);
 
-  const installed =
-    indexState.kind === "ready" ? installedRelease(indexState.index.releases, installedVersion) : null;
-  const installedLabel = installed?.versionLabel ?? null;
-
-  // Read during render, not in an effect: an effect would paint the card once
-  // before hiding it, so a reader who dismissed it last week sees it flash on
-  // every visit.
-  const dismissedBefore = useMemo(
-    () => (installedLabel === null ? false : isWhatsNewDismissed(installedLabel)),
-    [installedLabel],
+  const standing: InstalledStanding = useMemo(
+    () =>
+      indexState.kind === "ready"
+        ? installedStanding(indexState.index, installedVersion)
+        : { kind: "unknown" },
+    [indexState, installedVersion],
   );
-  const whatsNewDismissed = dismissedBefore || dismissedLabel === installedLabel;
 
-  const handleSelect = useCallback((slug: string) => {
+  // The standing already found this device's row on the page in hand; the
+  // archive and the detail panel mark the same row.
+  const installed =
+    standing.kind === "current" || standing.kind === "behind" ? standing.release : null;
+
+  const handleSelect = useCallback((slug: string, options?: { scroll?: boolean }) => {
     readerChose.current = true;
     setSelectedSlug(slug);
+    if (options?.scroll === false) return;
     detailHeadingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  // The band calls for the newest release when this device is behind, and for
+  // the installed one when it is not.
+  const standingTarget =
+    standing.kind === "behind"
+      ? (standing.newest ?? standing.release)
+      : standing.kind === "current"
+        ? standing.release
+        : null;
+  // Dismissal belongs to the release the button names, not to the one this
+  // device runs. Saved under the installed version, a reader who dismissed
+  // the call for 3.53.0 would never be offered 3.54.0 while they stayed put.
+  const targetLabel = standingTarget?.versionLabel ?? null;
+
+  // Read during render, not in an effect: an effect would paint the call once
+  // before hiding it, so a reader who dismissed it last week sees it flash on
+  // every visit.
+  const dismissedBefore = useMemo(
+    () => (targetLabel === null ? false : isWhatsNewDismissed(targetLabel)),
+    [targetLabel],
+  );
+  const whatsNewDismissed = dismissedBefore || dismissedLabel === targetLabel;
+
   const handleReadWhatsNew = useCallback(() => {
-    if (installed) handleSelect(installed.slug);
-  }, [installed, handleSelect]);
+    if (standingTarget) handleSelect(standingTarget.slug);
+  }, [standingTarget, handleSelect]);
 
   const handleDismissWhatsNew = useCallback(() => {
-    if (!installedLabel) return;
-    dismissWhatsNew(installedLabel);
-    setDismissedLabel(installedLabel);
-  }, [installedLabel]);
+    if (!targetLabel) return;
+    dismissWhatsNew(targetLabel);
+    setDismissedLabel(targetLabel);
+  }, [targetLabel]);
 
   return (
-    <div className="space-y-6 pb-10">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">Releases</h1>
-        <p className="text-sm text-brand-dark/65">
-          Every published Guard version, what it changed, and who is verified to have changed it.
-          {indexState.kind === "ready" ? installedNote(indexState.index.releases, installedVersion) : ""}
-        </p>
-      </header>
-
-      {installed && !whatsNewDismissed ? (
-        <WhatsNewCard release={installed} onRead={handleReadWhatsNew} onDismiss={handleDismissWhatsNew} />
-      ) : null}
+    <div className="guard-releases space-y-6 pb-10">
+      <ReleaseStatusBand
+        standing={standing}
+        onRead={standingTarget ? handleReadWhatsNew : undefined}
+        onDismiss={targetLabel ? handleDismissWhatsNew : undefined}
+        ctaDismissed={whatsNewDismissed}
+      />
 
       {indexState.kind === "loading" ? <LoadingNotice label="Reading the release archive…" /> : null}
 
       {indexState.kind === "failed" ? (
         <FailureNotice
           failure={indexState.failure}
+          holUrl={holReleaseUrl(null)}
           onRetry={isRetryable(indexState.failure) ? () => setReloadToken((token) => token + 1) : undefined}
         />
       ) : null}
@@ -208,7 +246,7 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
       ) : null}
 
       {indexState.kind === "ready" && indexState.index.releases.length > 0 ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
           {/* The rail scrolls on its own so the reader keeps their place in
               the history while reading a release that runs long. */}
           <div className="flex max-h-[32rem] flex-col overflow-hidden rounded-xl border border-brand-dark/10 bg-white lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]">
@@ -225,6 +263,7 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
             {detailState.kind === "failed" ? (
               <FailureNotice
                 failure={detailState.failure}
+                holUrl={holReleaseUrl(selectedSlug)}
                 onRetry={
                   isRetryable(detailState.failure) ? () => setDetailToken((token) => token + 1) : undefined
                 }

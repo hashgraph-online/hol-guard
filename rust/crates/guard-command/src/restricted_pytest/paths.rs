@@ -97,15 +97,6 @@ pub(super) fn runtime_distribution_root(executable: &Path) -> PathBuf {
     root
 }
 
-pub(super) fn host_home_directory() -> Option<PathBuf> {
-    nix::unistd::User::from_uid(nix::unistd::getuid())
-        .ok()
-        .flatten()?
-        .dir
-        .canonicalize()
-        .ok()
-}
-
 /// `_path_is_within` (:476-483).
 pub(super) fn path_is_within(path: &Path, root: &Path) -> bool {
     match (resolve_nonstrict(path).ok(), resolve_nonstrict(root).ok()) {

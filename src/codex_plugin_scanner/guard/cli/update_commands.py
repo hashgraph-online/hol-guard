@@ -27,22 +27,19 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ... import version as package_version
-from ..adapters.base import HarnessContext
-from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
-from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
-from ..adapters.pi_extension_source import managed_extension_source
-from ..adapters.pi_support import json_payload
+from ..codex_harness_client import codex_native_hook_state, codex_paths
 from ..config import load_guard_config, resolve_guard_home
-from ..daemon.runtime_peer import (
-    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
-)
-from ..daemon.runtime_peer import retained_desktop_owner_note, retained_desktop_owner_payload
-from ..daemon.runtime_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
-from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
+from ..cursor_hook_ops import cursor_native_hook_state
+from ..harness_context import HarnessContext
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
+from ..native_daemon_peer import (
+    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
+)
+from ..native_daemon_peer import retained_desktop_owner_note, retained_desktop_owner_payload
+from ..native_daemon_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
+from ..native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..native_resident_update_lock import (
     NativeResidentUpdateLock,
     NativeResidentUpdateLockError,
@@ -53,6 +50,7 @@ from ..redaction import redact_sensitive_text
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
+from ..updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
 from .native_wheel_sources import NativeWheelError, is_alpha_version
@@ -92,12 +90,20 @@ from .update_native_wheel import (
 from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_live_pypi_version, newest_pypi_version, select_live_release
 from .update_repair_notes import attach_repair_notes
+from .update_resident_barrier import release_before_post_update_repair, subprocess_failure_summary
 from .update_retirement import retire_native_resident_for_home
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
     UpdateSubprocessError,
     build_trusted_update_context,
+)
+from .windows_arm64_python import REASON_CODE as WINDOWS_ARM64_REASON_CODE
+from .windows_arm64_python import (
+    native_windows_arm64_python,
+    wheel_less_dependency_build_failed,
+    x64_python_candidates,
+    x64_python_route_message,
 )
 
 _TRUSTED_UPDATE_FAILURE_MESSAGES = {
@@ -187,7 +193,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import package_shim_status, repair_package_shims
 
 
@@ -223,11 +229,20 @@ def _retire_native_resident_before_update(guard_home: Path) -> bool:
     return retire_native_resident_for_home(guard_home)
 
 
-_DAEMON_REFRESH_TIMEOUT_SECONDS = 75.0
+# The refresh program retires the running daemon, starts the updated one and
+# then holds a three second stability window before it reports success, so this
+# subprocess has to outlast the start it waits on rather than match it. A
+# packaged Windows start is allowed 75 seconds by the native budget
+# (`NT_POST_UPDATE_START_TIMEOUT_SECONDS`), and the retirement loop and the
+# stability window add eight more on top of the installed runtime's own import
+# cost. A subprocess that stops first kills a daemon that was still coming up
+# and reports the update as a refresh failure.
+# `tests/test_guard_daemon_slow_start.py` pins this against the native budget.
+_DAEMON_REFRESH_TIMEOUT_SECONDS = 150.0
 _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = DAEMON_REFRESH_SCRIPT
 _DAEMON_REFRESH_BOOTSTRAP_SCRIPT = """
-from codex_plugin_scanner.guard.daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
+from codex_plugin_scanner.guard.updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 
 exec(DAEMON_REFRESH_SCRIPT, {})
 """.strip()
@@ -238,14 +253,14 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.manager import (
+from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_is_running,
     clear_guard_daemon_state,
     guard_daemon_retirement_is_complete,
     load_authenticated_guard_daemon_pending_launch,
     retire_all_guard_daemons_for_home,
 )
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
+from codex_plugin_scanner.guard.native_daemon_manage import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.windows_paths import windows_process_creation_time
 
 payload = json.loads(sys.stdin.read())
@@ -284,7 +299,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.cli.update_commands import _repair_supported_harnesses_in_process
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -895,12 +910,7 @@ def _run_guard_update_unlocked(
         payload["resulting_version"] = current_version
         payload["message"] = already_current_update_message(version_check)
         newer_runtime = (
-            _verified_newer_guard_daemon(
-                context.guard_home,
-                minimum_version=current_version,
-            )
-            if context is not None
-            else None
+            _verified_newer_guard_daemon(context.guard_home, minimum_version=current_version) if context else None
         )
         if newer_runtime is not None:
             payload["daemon_refresh"] = newer_runtime
@@ -911,6 +921,7 @@ def _run_guard_update_unlocked(
             )
             return payload, 0
         # Skip force-reinstall/upgrade noise when PyPI already reports current.
+        release_before_post_update_repair(resident_update_lock, _bundled_runtime_candidate())
         package_shims, package_shim_note = _refresh_package_shims_after_update(
             context=context,
             dry_run=dry_run,
@@ -1079,6 +1090,15 @@ def _run_guard_update_unlocked(
                 )
                 payload.pop("retry_command", None)
                 return payload, 0
+            if native_windows_arm64_python() and wheel_less_dependency_build_failed(installer_output):
+                payload["status"] = "blocked"
+                payload["changed"] = False
+                payload["reason_code"] = WINDOWS_ARM64_REASON_CODE
+                payload["message"] = x64_python_route_message(installer, x64_python_candidates())
+                payload.pop("retry_command", None)
+                if trusted_wheel is not None:
+                    _retain_local_wheel_staging(payload)
+                return finish_update((payload, 1))
             conflict_message = _dependency_conflict_message(
                 installer_output,
             )
@@ -1220,6 +1240,7 @@ def _run_guard_update_unlocked(
             )
             payload["changed"] = True
             finalization_exit_code = 1
+    release_before_post_update_repair(resident_update_lock, _bundled_runtime_candidate())
     daemon_refresh: dict[str, object] | None = None
     if context is not None:
         daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
@@ -1420,6 +1441,66 @@ def _shell_command(command: list[str]) -> str:
     return shlex.join(command)
 
 
+def _account_free_path(path: str) -> str:
+    """``path`` with the user's home directory written as ``~``.
+
+    The install-surface diagnostics are facts a reader pastes into an issue or
+    a support request, and an install under the home directory spells out the
+    account name of whoever ran it. Unlike the manual install command in the
+    native runtime report, nothing here is meant to be run, so there is no
+    shell that has to expand the result and the same spelling works on every
+    platform: ``~`` names the home directory to a reader without naming the
+    account. A path outside the home directory, and a host that will not name
+    a home at all, are left exactly as they are.
+    """
+
+    if not path:
+        return path
+    try:
+        home = Path.home()
+    except Exception:
+        return path
+    # A caller may hand us a resolved path while the home directory is reached
+    # through a symlink, so the account name only disappears when the resolved
+    # home is a candidate prefix too.
+    candidates: list[str] = []
+    for candidate in (home, _resolved_home(home)):
+        if candidate is None:
+            continue
+        spelling = str(candidate).rstrip("/\\")
+        if spelling and spelling not in candidates:
+            candidates.append(spelling)
+    if not candidates:
+        return path
+    # Windows paths differ from their home prefix in case and separator alone,
+    # so compare normalised and slice the spelling that matched. ``normcase``
+    # leaves redundant separators in place, so ``/home//harriet-example/bin``
+    # would miss the prefix and keep the account name; the lexically collapsed
+    # spelling is tried as well so that path is redacted too.
+    spellings = [path]
+    collapsed = os.path.normpath(path)
+    if collapsed != path:
+        spellings.append(collapsed)
+    for spelling in spellings:
+        normalised = os.path.normcase(spelling)
+        for candidate in candidates:
+            normalised_home = os.path.normcase(candidate)
+            if normalised == normalised_home:
+                return "~"
+            for separator in ("/", "\\"):
+                prefix = normalised_home + os.path.normcase(separator)
+                if normalised.startswith(prefix):
+                    return "~" + separator + spelling[len(prefix) :]
+    return path
+
+
+def _resolved_home(home: Path) -> Path | None:
+    try:
+        return home.resolve()
+    except Exception:
+        return None
+
+
 def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]:
     resolved_binary = shutil.which("hol-guard")
     installer_binary = command[0] if command else ""
@@ -1436,9 +1517,11 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
     else:
         path_status = "path_mismatch"
     return {
-        "resolved_hol_guard": resolved_binary,
-        "installer_binary": installer_binary,
-        "expected_script_dir": str(expected_script_dir) if expected_script_dir is not None else None,
+        "resolved_hol_guard": _account_free_path(resolved_binary) if resolved_binary is not None else None,
+        "installer_binary": _account_free_path(installer_binary),
+        "expected_script_dir": (
+            _account_free_path(str(expected_script_dir)) if expected_script_dir is not None else None
+        ),
         "path_status": path_status,
     }
 
@@ -1460,7 +1543,7 @@ def build_guard_install_surface_payload() -> dict[str, object]:
         return {
             "installer": "desktop",
             "binary_diagnostics": {
-                "resolved_hol_guard": str(Path(sys.executable).resolve()),
+                "resolved_hol_guard": _account_free_path(str(Path(sys.executable).resolve())),
                 "installer_binary": None,
                 "expected_script_dir": None,
                 "path_status": "bundled",
@@ -2621,7 +2704,7 @@ def _refresh_package_shims_after_update(
     if result.output_limited:
         return None, "Could not refresh package firewall shims during update: update_installer_output_limit"
     if result.returncode != 0:
-        details = stderr or stdout or f"exit code {result.returncode}"
+        details = subprocess_failure_summary(stderr or stdout) or f"exit code {result.returncode}"
         return None, f"Could not refresh package firewall shims during update: {details}"
     try:
         refresh_payload = json.loads(stdout) if stdout else {}
@@ -2889,7 +2972,9 @@ def _repair_supported_harnesses_in_process(
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
     append_grok_repair(repaired_installs, repair_notes, context=context, store=store, workspace=workspace, now=now)
-    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(
+        context=context, store=store, workspace=workspace, now=now
+    )
     repaired_installs.extend(refreshed_clients)
     repair_notes.extend(refresh_warnings)
     legacy_omp_migration, legacy_omp_warning = _migrate_legacy_omp_install(
@@ -2939,7 +3024,11 @@ def _migrate_legacy_omp_install(
         return None, None
     if omp_install is not None or pi_install is None:
         return None, None
-    if not legacy_omp_managed_extension_is_verified(context, pi_install):
+    try:
+        verified = legacy_omp_extension_is_verified(context, pi_install)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, f"Could not verify legacy Oh My Pi protection during update: {error}"
+    if not verified:
         return None, None
     try:
         repair_context, repair_workspace = _repair_context_from_managed_install(context, pi_install)
@@ -3001,36 +3090,9 @@ def _repair_pi_family_install(
 def _pi_family_extension_is_current(*, harness: str, context: HarnessContext) -> bool:
     """Return whether the managed Pi/OMP extension already matches this package."""
 
-    adapter: PiHarnessAdapter | OmpHarnessAdapter
-    if harness == "pi":
-        adapter = PiHarnessAdapter()
-    elif harness == "omp":
-        adapter = OmpHarnessAdapter()
-    else:
+    if harness not in {"pi", "omp"}:
         return False
-    extension_path = adapter._managed_extension_path(context)
-    settings_path = adapter._managed_settings_path(context)
-    if not extension_path.is_file():
-        return False
-    expected_source = managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=settings_path,
-        harness=adapter.harness,
-        display_name=adapter.display_name,
-    )
-    try:
-        current_source = extension_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    if current_source != expected_source:
-        return False
-    settings = json_payload(settings_path) if settings_path.is_file() else {}
-    raw_extensions = settings.get("extensions")
-    if not isinstance(raw_extensions, list):
-        return False
-    extension_value = str(extension_path)
-    return any(isinstance(item, str) and item == extension_value for item in raw_extensions)
+    return extension_is_current(harness, context)
 
 
 def _repair_cursor_install(
@@ -3141,7 +3203,7 @@ def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[Ha
 
 def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext, str | None] | None:
     for repair_context in _codex_backup_repair_contexts(context):
-        if not CodexHarnessAdapter._backup_path(repair_context).is_file():
+        if not codex_paths(repair_context).backup.is_file():
             continue
         repair_workspace = str(repair_context.workspace_dir) if repair_context.workspace_dir is not None else None
         return repair_context, repair_workspace
@@ -3154,7 +3216,9 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 
 def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict[str, object]:
     resolved_guard_home = guard_home or resolve_guard_home()
-    update_channel = load_guard_config(resolved_guard_home).update_channel
+    guard_config = load_guard_config(resolved_guard_home)
+    update_channel = guard_config.update_channel
+    update_mode = getattr(guard_config, "update_mode", "automatic")
     include_alpha = update_channel == "alpha"
     install_surface = build_guard_install_surface_payload()
     installer = str(install_surface.get("installer") or "")
@@ -3295,6 +3359,7 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
         "recovery_reinstall_available": recovery_reinstall_available,
         "recovery_reinstall_command": recovery_reinstall_command,
         "release_channel": "alpha" if include_alpha else update_channel,
+        "update_mode": update_mode,
     }
     if trusted_failure_reason is not None:
         payload["reason_code"] = trusted_failure_reason

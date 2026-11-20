@@ -1,5 +1,13 @@
 import { daemonApi, expect, expectNoErrorBoundary, test } from "./fixtures";
-import { expectedRows, loadPackageShims, managerCard, supplySeed } from "./supply-chain-helpers";
+import {
+  expectedRows,
+  loadPackageShims,
+  managerCard,
+  openActivity,
+  rosterSection,
+  showAllManagers,
+  supplySeed,
+} from "./supply-chain-helpers";
 
 type Receipt = {
   receipt_id: string;
@@ -92,6 +100,7 @@ test.describe("Supply chain actions against the live daemon", () => {
     const seed = supplySeed(state);
     await page.goto("/supply-chain");
     await expect(page.getByRole("heading", { level: 1, name: "Supply Chain", exact: true })).toBeVisible();
+    await openActivity(page);
     const rail = page.getByRole("region", { name: "Recent supply chain evidence" });
     await expect(rail.getByText("Workspace audit completed", { exact: true })).toBeVisible();
     await expect(
@@ -146,7 +155,9 @@ test.describe("Supply chain actions against the live daemon", () => {
     expect(receipts.map((receipt) => receipt.receipt_id)).toContain(receiptId);
 
     if (detected) {
-      await expect(card.getByText("Detected, not protected", { exact: true })).toBeVisible();
+      await showAllManagers(page);
+      await expect(rosterSection(page, "Not protected yet").getByRole("button", { name: `Open ${manager} manager details`, exact: true })).toBeVisible();
+      await expect(card.getByRole("button", { name: "Protect", exact: true })).toBeVisible();
     } else {
       await expect(card).toHaveCount(0);
     }
@@ -155,7 +166,10 @@ test.describe("Supply chain actions against the live daemon", () => {
     // A reload keeps the removal.
     await page.reload();
     await expect(page.getByRole("heading", { level: 1, name: "Supply Chain", exact: true })).toBeVisible();
-    if (detected) await expect(managerCard(page, manager).getByText("Detected, not protected", { exact: true })).toBeVisible();
+    if (detected) {
+      await showAllManagers(page);
+      await expect(rosterSection(page, "Not protected yet").getByRole("button", { name: `Open ${manager} manager details`, exact: true })).toBeVisible();
+    }
     await expect(managerCard(page, other).getByText("PATH broken", { exact: true })).toBeVisible();
 
     // Put it back so the machine ends in the seeded state.
@@ -172,14 +186,17 @@ test.describe("Supply chain actions against the live daemon", () => {
     expect(restored.installed_managers).toEqual(expect.arrayContaining([manager, other]));
   });
 
-  test("sync without Guard Cloud points to the workspace audit setup", async ({ page }) => {
+  test("sync without Guard Cloud asks for approval to sync intel only", async ({ page }) => {
     // Sync posts a package-protection change and holds its lock, so it runs
     // with the other changes instead of beside parallel read specs.
     await page.goto("/supply-chain");
     await expectNoErrorBoundary(page);
     await page.getByRole("button", { name: "Sync", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Finish workspace audit setup" });
+    // A standalone sync runs no audit afterwards, so the dialog must not promise one.
+    const dialog = page.getByRole("dialog", { name: "Approve supply-chain intel sync" });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Approve supply-chain intel sync" })).toBeVisible();
+    await expect(dialog.getByText("Run audit", { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("textbox", { name: "Approval password" })).toHaveValue("");
     await expect(dialog.getByRole("button", { name: "Sync supply-chain intel", exact: true })).toBeDisabled();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();

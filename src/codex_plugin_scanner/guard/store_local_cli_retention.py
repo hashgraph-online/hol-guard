@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -40,16 +40,6 @@ class StoreLocalCliRetentionMixin:
         except ValueError as error:
             raise LocalCliForgetError(str(error)) from None
 
-    def local_cli_replay_allowed(self, identity_hash: str, seen_at: str, *, now: str | None = None) -> bool:
-        """Return whether a history entry may restore or refresh this identity."""
-
-        return bool(
-            self._native_store_call(
-                "local_cli_replay_allowed",
-                {"identity_hash": identity_hash, "seen_at": seen_at, "now": now, "clock": utc_now_iso()},
-            )
-        )
-
     def prune_inactive_local_cli_observations(
         self,
         *,
@@ -79,25 +69,6 @@ def later_timestamp(current: object, candidate: str) -> str:
     if isinstance(current, str) and stored is not None and (replayed is None or replayed <= stored):
         return current
     return candidate
-
-
-def mark_shared_enrolled_servers(items: Iterable[dict[str, object]], enrolled_ids: Mapping[str, object]) -> None:
-    """Flag un-enrolled MCP records kept because an enrolled record shares their server."""
-
-    listed = list(items)
-    enrolled_servers = {
-        item.get("server_identity_hash") or item.get("identity_hash")
-        for item in listed
-        if item.get("cli_id") in enrolled_ids and item.get("surface") == "mcp"
-    }
-    enrolled_servers.discard(None)
-    for item in listed:
-        if (
-            item.get("surface") == "mcp"
-            and item.get("cli_id") not in enrolled_ids
-            and item.get("server_identity_hash") in enrolled_servers
-        ):
-            item["shares_enrolled_server"] = True
 
 
 def utc_now_iso() -> str:

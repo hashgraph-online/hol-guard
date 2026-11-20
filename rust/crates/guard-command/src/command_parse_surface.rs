@@ -144,11 +144,16 @@ pub(crate) fn parse_command_unbound(
 /// `bash -c`, `dash -c` and `ash -c`. A login shell (`-lc`) sources the profile
 /// files first and `zsh` reads `~/.zshenv` whatever option it is given, so
 /// those run code this text does not hold and keep the wrapper's own
-/// uncertainty. The bounded shape is what keeps the rest true: three words, a
-/// known shell, the `-c` option, and no expansion the parser would have to
-/// guess at. Anything else — an extra operand, `-s`, a prefix, a shell this
-/// text only names — keeps that uncertainty too, as does a script this parser
-/// cannot model exactly.
+/// uncertainty. The bounded shape is what keeps the rest true: a known shell,
+/// options that end in `-c` and change only how the script reacts to a
+/// failure, what it traces or how a glob matches (`-e`, `-u`, `-x`, `-f`,
+/// `-o pipefail`, `-O extglob` and the like, `--norc`), one script
+/// word, and no expansion the parser would have to guess at. A shell that
+/// does not know one of those options stops before the script runs, so the
+/// script is still the most the text runs. Anything else — an extra operand,
+/// `-s`, `-a`, `--posix`, `-O expand_aliases`, a prefix, a shell this text only names —
+/// keeps that uncertainty too, as does a script this parser cannot model
+/// exactly.
 ///
 /// A Windows agent runs PowerShell, which reads quotes differently from the
 /// shell this text names: `''` closes and reopens a POSIX single-quoted word
@@ -182,6 +187,19 @@ pub(crate) fn parse_inline_shell_script(
     }
     model.exact_raw_text = false;
     Some(model)
+}
+
+/// The script a bounded inline shell runs, when [`parse_inline_shell_script`]
+/// models `request` from that script rather than from the shell in front.
+///
+/// The contained sink plans the program it runs from the same words the
+/// review read. For `bash -ec 'pytest -q'` the review read `pytest -q`, so a
+/// sink that split the raw text would plan `bash` instead and refuse the run
+/// the review sent it.
+pub fn inline_shell_script_text(request: &CommandModelRequestV1) -> Option<String> {
+    let raw = request.command.trim();
+    parse_inline_shell_script(request, raw)?;
+    parser_wrappers::inline_shell_script(raw)
 }
 
 pub(crate) fn parse_explicit_powershell(
@@ -228,10 +246,11 @@ pub(crate) fn parse_posix_command(
         return Ok(uncertain(request, raw, "command_byte_limit_exceeded"));
     }
 
-    let raw_segments = if let Some(value) = contained_compile_check_segments(raw) {
+    let read = crate::shell_comment_lines::mask_comments(raw);
+    let raw_segments = if let Some(value) = contained_compile_check_segments(&read) {
         value
     } else {
-        match split_execution_segments(raw, preserve_unquoted_backslash) {
+        match split_execution_segments(&read, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
         }
@@ -240,11 +259,11 @@ pub(crate) fn parse_posix_command(
         return Ok(uncertain(request, raw, "command_segment_limit_exceeded"));
     }
 
-    let chars: Vec<char> = raw.chars().collect();
+    let chars: Vec<char> = read.chars().collect();
     let mut segments = Vec::with_capacity(raw_segments.len());
     let mut total_tokens = 0usize;
     for raw_segment in raw_segments {
-        let text: String = chars[raw_segment.start..raw_segment.end].iter().collect();
+        let mut text: String = chars[raw_segment.start..raw_segment.end].iter().collect();
         let tokens = match shell_tokens(&text, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
@@ -296,6 +315,38 @@ pub(crate) fn parse_posix_command(
                 arguments = operands;
             }
         }
+        // `[[ -d NAME ]]` asks what `[ -d NAME ]` asks, of less: inside
+        // `[[ ]]` the shell splits no word and expands no glob, so the
+        // modeled `[` form stands for at least the work this text does.
+        // Only a complete bracket pair is read that way. A `[[` the segment
+        // never closes is some other shape, and so is one `&&` or `||` has
+        // already split, because the closing `]]` is then in another segment.
+        // An arithmetic comparison is also left alone: `[[ ]]` evaluates both
+        // of its operands as arithmetic and resolves a bare name through the
+        // value it holds, so `X='a[$(id)]'; [[ $X -eq 0 ]]` runs `id`, which
+        // the `[` this would rewrite to never does.
+        //
+        // The delimiters have to be the reserved words themselves. Quote
+        // removal leaves `'[[' -f Cargo.toml ']]'` with these same tokens,
+        // but that text runs a command named `[[`, whose operands the shell
+        // splits and globs like any other command's. The segment's own text
+        // settles it: it is rewritten only when it opens and closes on the
+        // bare brackets.
+        if executable_index == 0
+            && executable.as_deref() == Some("[[")
+            && arguments.last().is_some_and(|last| last == "]]")
+            && !arguments.iter().any(|word| arithmetic_test(word))
+        {
+            if let Some(rewritten) = single_bracket_text(&text) {
+                executable = Some("[".to_owned());
+                tokens[executable_index] = "[".to_owned();
+                let closing = tokens.len() - 1;
+                tokens[closing] = "]".to_owned();
+                let closing = arguments.len() - 1;
+                arguments[closing] = "]".to_owned();
+                text = rewritten;
+            }
+        }
         if executable.as_deref().is_some_and(is_shell_control_keyword) {
             return Ok(uncertain(request, raw, "compound_shell_not_yet_supported"));
         }
@@ -323,6 +374,11 @@ pub(crate) fn parse_posix_command(
             && segments.last().is_some_and(|previous| {
                 let context = format!("top:{}", raw_segment.group_index);
                 read_only_fanout::xargs_follows_find(
+                    previous,
+                    raw_segment.pipeline_index,
+                    &context,
+                    &arguments,
+                ) || read_only_fanout::listing::xargs_follows(
                     previous,
                     raw_segment.pipeline_index,
                     &context,
@@ -409,4 +465,36 @@ pub(crate) fn uncertain(
         parser_profile: "posix-simple-v1".to_owned(),
         security_identity: String::new(),
     }
+}
+
+/// Whether this word is a `[[ ]]` operator whose operands the shell reads as
+/// arithmetic. Arithmetic evaluation resolves a bare name through the value it
+/// holds and keeps evaluating, so an operand can carry a command substitution
+/// the text in front of us never spells. `[` and `test` compare the two words
+/// as integers and stop there.
+fn arithmetic_test(word: &str) -> bool {
+    matches!(word, "-eq" | "-ne" | "-lt" | "-le" | "-gt" | "-ge")
+}
+
+/// The same segment text with its bracket pair written the way `[ ... ]`
+/// writes it. Layers that read a segment's own text rather than its words
+/// would otherwise still see the `[[` spelling the words no longer carry.
+fn single_bracket_text(text: &str) -> Option<String> {
+    let leading = text.len() - text.trim_start().len();
+    let trailing = text.len() - text.trim_end().len();
+    let inner = text[leading..text.len() - trailing]
+        .strip_prefix("[[")
+        .and_then(|rest| rest.strip_suffix("]]"))
+        // Each bracket has to be a whole word. `[['' -f NAME ]]` leaves the
+        // same tokens behind quote removal and opens on the same two
+        // characters, and bash runs it as a command named `[[`.
+        .filter(|inner| {
+            inner.starts_with(|c: char| c.is_ascii_whitespace())
+                && inner.ends_with(|c: char| c.is_ascii_whitespace())
+        })?;
+    Some(format!(
+        "{}[{inner}]{}",
+        &text[..leading],
+        &text[text.len() - trailing..]
+    ))
 }

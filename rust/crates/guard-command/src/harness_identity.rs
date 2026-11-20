@@ -6,7 +6,7 @@
 //! without a second, partial copy of the table.
 
 /// `(harness id, install aliases)` of every registered harness contract.
-const HARNESS_ALIASES: [(&str, &[&str]); 17] = [
+const HARNESS_ALIASES: [(&str, &[&str]); 18] = [
     ("codex", &["codex"]),
     ("claude-code", &["claude-code", "claude"]),
     ("opencode", &["opencode"]),
@@ -26,11 +26,17 @@ const HARNESS_ALIASES: [(&str, &[&str]); 17] = [
     ("omp", &["omp", "oh-my-pi"]),
     ("zcode", &["zcode", "zai", "z-code", "zai-zcode"]),
     ("devin", &["devin", "devin-cli", "cognition-devin"]),
+    ("muse", &["muse", "muse-code"]),
     ("paseo", &["paseo"]),
 ];
 
 /// Number of registered harness contracts.
 pub const REGISTERED_HARNESS_COUNT: usize = HARNESS_ALIASES.len();
+
+/// Every registered harness id, in contract-registry order.
+pub fn registered_harness_ids() -> impl Iterator<Item = &'static str> {
+    HARNESS_ALIASES.iter().map(|(harness, _)| *harness)
+}
 
 /// `canonical_harness_id`: a registry id or install alias, else `None`.
 pub fn canonical_harness_id(value: &str) -> Option<&'static str> {

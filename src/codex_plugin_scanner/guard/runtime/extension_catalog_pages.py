@@ -36,6 +36,10 @@ def native_call(home: Path, **request: object) -> dict[str, Any]:
         raise ExtensionCatalogUnavailableError("Native complete catalog producer unavailable")
     if reply.get("error") == "catalog_limit":
         raise ExtensionCatalogLimitError("Complete catalog exceeds native wire limits")
+    if reply.get("error") == "catalog_unavailable":
+        # A view evicted by a concurrent publish, or a lost draft or lease, is
+        # absence, not malformed metadata; callers downgrade instead of failing.
+        raise ExtensionCatalogUnavailableError("Native complete catalog view unavailable")
     payload = reply.get("payload")
     if not isinstance(payload, dict) or "error" in reply:
         raise ValueError("Native complete catalog producer rejected metadata")
@@ -96,8 +100,8 @@ class PreparedCatalogView:
             yield json.loads(self.request_bytes("page", ordinal))["page"]
 
     def legacy(self):
-        with self.pinned():
-            return native_call(self.guard_home, action="legacy", token=self.token)["catalog"]
+        # The native read holds the cache lock itself, so no transfer lease is taken.
+        return native_call(self.guard_home, action="legacy", token=self.token)["catalog"]
 
     @contextmanager
     def pinned(self):
@@ -148,6 +152,12 @@ def prepare_installed_catalog_view(
         "guard_version": guard_version,
         "generated_at": generated_at,
     }
+    # The native cache answers with a view this observation already produced, so
+    # an unchanged catalog is not marshalled again one extension at a time.
+    reused = native_call(guard_home, action="reuse", observation=observation)
+    if reused:
+        discovery.require_handle(handle, guard_home)
+        return PreparedCatalogView.from_native(guard_home, reused)
     draft = native_call(guard_home, action="begin", observation=observation)["draft"]
     try:
         for item in registry.extensions:

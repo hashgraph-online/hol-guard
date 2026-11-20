@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, cast
 
 import pytest
 
@@ -38,6 +36,10 @@ def test_resident_answers_match_shared_vectors(native_approval_reuse_runtime: Pa
     mismatches = []
     for vector in _VECTORS:
         kind, fields = _fields(vector)
+        if kind not in compose._FIELDS:
+            # The resident still answers kinds no Python caller sends; the
+            # Rust crate replays those vectors itself.
+            continue
         answer = compose.native_hook_compose(kind, fields, guard_home=native_approval_reuse_runtime)
         if answer != vector["expected"]:
             mismatches.append(vector["name"])
@@ -57,11 +59,8 @@ def _resident_returning(monkeypatch: pytest.MonkeyPatch, reply) -> None:
     monkeypatch.setattr(compose, "_resident_request", fake)
 
 
-_TOOL_GRANT_ANSWER = {
-    "approval_context_policy_action": "allow",
-    "current_policy_action": "allow",
-    "policy_action": "allow",
-}
+_CONFIG_FIELDS: dict[str, object] = {"policy_config": None, "artifact": None}
+_CONFIG_ANSWER = {"action": "allow", "auto_stop_events": []}
 
 
 def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
@@ -71,7 +70,7 @@ def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
         "request_sha256": "sha256:" + compose._canonical_request_sha256(request),
         "status": "ok",
         "code": "ok",
-        "payload": dict(_TOOL_GRANT_ANSWER),
+        "payload": dict(_CONFIG_ANSWER),
     }
     reply.update(overrides)
     return reply
@@ -79,7 +78,7 @@ def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
 
 def test_bound_answer_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request))
-    assert compose.native_hook_compose("tool_grant_apply", {}, guard_home=None) == _TOOL_GRANT_ANSWER
+    assert compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None) == _CONFIG_ANSWER
 
 
 def test_bound_validation_refusal_is_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,7 +92,7 @@ def test_bound_validation_refusal_is_value_error(monkeypatch: pytest.MonkeyPatch
         ),
     )
     with pytest.raises(compose.NativeHookComposeValidationError, match="signal list required"):
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
 
 
 @pytest.mark.parametrize(
@@ -112,23 +111,23 @@ def test_bound_validation_refusal_is_value_error(monkeypatch: pytest.MonkeyPatch
 def test_unbound_or_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, object]) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request, **overrides))
     with pytest.raises(compose.NativeHookComposeError):
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"current_policy_action": "allow"},
-        {**_TOOL_GRANT_ANSWER, "extra": 1},
-        {**_TOOL_GRANT_ANSWER, "policy_action": "bogus"},
-        {**_TOOL_GRANT_ANSWER, "policy_action": None},
-        {**_TOOL_GRANT_ANSWER, "current_policy_action": 1},
+        {"action": "allow"},
+        {**_CONFIG_ANSWER, "extra": 1},
+        {**_CONFIG_ANSWER, "action": "bogus"},
+        {**_CONFIG_ANSWER, "action": None},
+        {**_CONFIG_ANSWER, "auto_stop_events": 1},
     ],
 )
 def test_incomplete_or_mistyped_payloads_raise(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request, payload=payload))
     with pytest.raises(compose.NativeHookComposeError) as error:
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
     assert error.value.code == "native_hook_artifact_compose_payload_invalid"
 
 
@@ -145,36 +144,38 @@ def test_error_codes_are_sanitised(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda request: _good(request, status="error", code="native_hook_artifact_compose_schema_mismatch"),
     )
     with pytest.raises(compose.NativeHookComposeError) as known:
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
     assert known.value.code == "native_hook_artifact_compose_schema_mismatch"
     _resident_returning(monkeypatch, lambda request: _good(request, status="error", code="free text"))
     with pytest.raises(compose.NativeHookComposeError) as unknown:
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
     assert unknown.value.code == "native_hook_artifact_compose_unavailable"
 
 
 def test_unavailable_resident_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda _request: None)
     with pytest.raises(compose.NativeHookComposeError):
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
 
 
 def test_missing_prerequisite_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request))
     monkeypatch.setattr(compose, "ensure_resident_prerequisite", lambda _home: False)
     with pytest.raises(compose.NativeHookComposeError):
-        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+        compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
 
 
 @pytest.mark.parametrize(
     ("kind", "fields"),
     [
         ("unknown_kind", {}),
-        ("tool_grant_apply", {"extra": 1}),
-        ("grant_settle", {"current_action": "allow"}),
-        ("policy_composition", {}),
-        ("policy_composition", {"approval_source": "policy"}),
+        ("config_action", {"policy_config": None}),
+        ("config_action", {**_CONFIG_FIELDS, "extra": 1}),
+        ("trusted_override", {"policy_action": "allow"}),
+        ("package_firewall_access", {}),
+        # Kinds the resident answers but no Python caller sends are refused.
         ("policy_stack", {"event_name": "PreToolUse"}),
+        ("tool_grant_apply", {}),
     ],
 )
 def test_request_key_set_is_exact(monkeypatch: pytest.MonkeyPatch, kind: str, fields: dict[str, object]) -> None:
@@ -219,14 +220,10 @@ def test_a_kind_added_after_the_op_requires_its_own_feature(monkeypatch: pytest.
     assert required == [compose.HOOK_ARTIFACT_COMPOSE_PACKAGE_REUSE_FEATURE]
 
 
-def test_a_second_kind_added_after_the_op_requires_its_own_feature(monkeypatch: pytest.MonkeyPatch) -> None:
-    required = _feature_recorder(monkeypatch, payload={"reason": None})
-    compose.native_hook_compose(
-        "remembered_rule_reason",
-        {"remembered_rules": "enabled", "integrity_message": None, "artifact_summary": "git push"},
-        guard_home=None,
-    )
-    assert required == [compose.HOOK_ARTIFACT_COMPOSE_REMEMBERED_RULE_FEATURE]
+def test_the_kinds_the_op_shipped_with_require_the_op_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    required = _feature_recorder(monkeypatch)
+    compose.native_hook_compose("config_action", _CONFIG_FIELDS, guard_home=None)
+    assert required == [compose.HOOK_ARTIFACT_COMPOSE_FEATURE]
 
 
 def test_the_signal_composition_kind_requires_its_own_feature(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -250,129 +247,6 @@ def test_the_signal_composition_kind_requires_its_own_feature(monkeypatch: pytes
     assert required == [compose.HOOK_ARTIFACT_COMPOSE_SIGNAL_COMPOSITION_FEATURE]
 
 
-def test_the_policy_composition_kind_requires_the_policy_tail_feature(monkeypatch: pytest.MonkeyPatch) -> None:
-    composition = dict.fromkeys(
-        (
-            "current_config_action",
-            "current_action_override",
-            "trusted_cli_override",
-            "untrusted_hook_payload_hint",
-            "package_action",
-            "data_flow_action",
-            "scanner_action",
-            "current_composed_action",
-            "saved_policy_action",
-            "approval_reuse_source",
-            "trusted_request_override",
-            "trusted_request_override_reason",
-            "authoritative_action",
-        )
-    )
-    required = _feature_recorder(
-        monkeypatch,
-        payload={
-            "policy_composition": composition,
-            "evidence": {"source": "policy_composition", **composition},
-            "approval_source": "policy",
-        },
-    )
-    answer = compose.native_hook_compose(
-        "policy_composition",
-        dict.fromkeys(compose._FIELDS["policy_composition"]),
-        guard_home=None,
-    )
-    assert answer["approval_source"] == "policy"
-    assert required == [compose.HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE]
-
-
-def test_the_policy_stack_kind_requires_the_policy_tail_feature(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The stack answers local eligibility now, so a runtime without it cannot serve the stack."""
-
-    required = _feature_recorder(monkeypatch)
-    with pytest.raises(compose.NativeHookComposeError):
-        compose.native_hook_compose(
-            "policy_stack",
-            dict.fromkeys(compose._FIELDS["policy_stack"]),
-            guard_home=None,
-        )
-    assert required == [compose.HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE]
-
-
-def test_a_policy_stack_answer_without_local_eligibility_is_refused() -> None:
-    """The answer shape names local eligibility, so a stack reply lacking it is malformed."""
-
-    assert compose._ANSWERS["policy_stack"]["local_eligibility_required"] == "b"
-    assert not compose._answer_valid(
-        "policy_stack", {k: None for k in compose._ANSWERS["policy_stack"] if k != "local_eligibility_required"}
-    )
-
-
-def test_the_kinds_the_op_shipped_with_require_the_op_feature(monkeypatch: pytest.MonkeyPatch) -> None:
-    required = _feature_recorder(monkeypatch)
-    compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
-    assert required == [compose.HOOK_ARTIFACT_COMPOSE_FEATURE]
-
-
-def test_every_reported_rule_state_is_put_to_the_resident() -> None:
-    """Which states earn a reason is the resident's rule, not a second copy here."""
-
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
-
-    asked: list[object] = []
-
-    def compose_reason(_kind: str, fields: dict[str, object], **_kwargs: object) -> dict[str, object]:
-        asked.append(fields["remembered_rules"])
-        return {"reason": None}
-
-    artifact = SimpleNamespace(artifact_type="tool_action_request", name="git push", metadata={}, command="git push")
-    for state in ["enabled", "unknown", "disabled", None]:
-        reason = policy._remembered_rule_rejection_reason(
-            composer=compose_reason,
-            guard_home=None,
-            response_payload={"remembered_rule_rejection": {"trust_status": {"remembered_rules": state}}},
-            artifact=cast("Any", artifact),
-        )
-        assert reason is None, state
-    assert asked == ["enabled", "unknown", "disabled", "unknown"]
-
-
-def test_a_payload_without_a_rejection_asks_the_resident_nothing() -> None:
-    """Only an actual rejection is worth a round trip."""
-
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
-
-    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise AssertionError("the resident was asked about a rejection that never happened")
-
-    artifact = SimpleNamespace(artifact_type="tool_action_request", name="git push", metadata={}, command="git push")
-    assert (
-        policy._remembered_rule_rejection_reason(
-            composer=refuse,
-            guard_home=None,
-            response_payload={"remembered_rule_rejection": None},
-            artifact=cast("Any", artifact),
-        )
-        is None
-    )
-
-
-def test_a_claimed_saved_allow_is_read_back_when_the_resident_cannot_settle() -> None:
-    """An unreachable resident must not turn a consumed approval into an allow."""
-
-    from codex_plugin_scanner.guard.cli import commands_hook_native_eval as evaluation
-
-    consumed = [{"code": "saved_package_approval", "approval_claim_disposition": "consumed"}]
-    retained = [{"code": "saved_package_approval", "approval_claim_disposition": "retained"}]
-    unknown = [{"code": "saved_package_approval"}]
-    other = [{"code": "saved_package_block"}]
-
-    assert evaluation._claimed_saved_package_allow(consumed) == "consumed"
-    assert evaluation._claimed_saved_package_allow(retained) == "retained"
-    assert evaluation._claimed_saved_package_allow(unknown) == "retained"
-    assert evaluation._claimed_saved_package_allow(other) is None
-    assert evaluation._claimed_saved_package_allow([]) is None
-
-
 def test_the_policy_lookup_selection_requires_its_own_feature(monkeypatch: pytest.MonkeyPatch) -> None:
     required = _feature_recorder(monkeypatch)
     with pytest.raises(compose.NativeHookComposeError):
@@ -394,3 +268,37 @@ def test_integer_answers_reject_anything_but_an_integer(
     _resident_returning(monkeypatch, lambda request: _good(request, payload=payload))
     with pytest.raises(compose.NativeHookComposeError):
         compose.native_hook_compose("policy_lookup_select", {"lookups": []}, guard_home=None)
+
+
+def test_the_live_allow_precheck_is_bounded_where_its_envelopes_are(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The precheck carries two action envelopes, so the default cap is too small.
+
+    An envelope the hook adapter accepted must not be refused on the way to the
+    resident: that would deny an action the user had already approved.
+    """
+
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(compose, "_resolve_digest_home", lambda _home: Path("/tmp/hook-compose-home"))
+    monkeypatch.setattr(compose, "ensure_resident_prerequisite", lambda _home: True)
+
+    def fake(*, request, **kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        return _good(
+            request,
+            payload={
+                "review_required": False,
+                "claimed_saved_allow_hash": None,
+                "claimed_approval_request_id": None,
+            },
+        )
+
+    monkeypatch.setattr(compose, "_resident_request", fake)
+
+    answer = compose.native_hook_compose(
+        "codex_live_allow_precheck",
+        dict.fromkeys(compose._FIELDS["codex_live_allow_precheck"]),
+        guard_home=None,
+    )
+
+    assert answer["review_required"] is False
+    assert seen["max_request_bytes"] == 4 * 1024 * 1024

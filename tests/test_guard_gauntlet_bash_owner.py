@@ -21,8 +21,8 @@ from ci.gauntlet.contained_core import contained_calls, request_proofs
 from ci.gauntlet.evidence import assess_case, reconcile
 from ci.gauntlet.fixtures import create_fixture
 from ci.gauntlet.input_evidence import input_digest
+from tests.gauntlet_contained_helpers import _capture_log, _request
 from tests.test_guard_gauntlet_approval_retry_omp import _case, _scenario
-from tests.test_guard_gauntlet_contained_core import _capture_log, _request
 
 
 def _wrapper(digest: str, call_id: str) -> str:

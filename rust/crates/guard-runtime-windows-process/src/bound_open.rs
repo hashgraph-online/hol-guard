@@ -6,7 +6,8 @@ use std::path::{Component, Path, PathBuf};
 use winapi::shared::minwindef::{DWORD, FALSE, FILETIME};
 use winapi::shared::ntdef::HANDLE;
 use winapi::um::fileapi::{
-    GetFileInformationByHandle, GetFileType, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_TAG_INFO,
+    GetFileInformationByHandle, GetFileType, GetFinalPathNameByHandleW, BY_HANDLE_FILE_INFORMATION,
+    FILE_ATTRIBUTE_TAG_INFO,
 };
 use winapi::um::minwinbase::{FileAttributeTagInfo, FileIdInfo};
 use winapi::um::winbase::{
@@ -65,13 +66,15 @@ struct HandleInfo {
 ///
 /// The times are raw `FILETIME` ticks. `file_index` is the little-endian
 /// `FILE_ID_INFO` identifier, or the 64-bit `nFileIndex` on file systems
-/// without one, as CPython's `win32_xstat` fills `st_ino`.
+/// without one, as CPython's `win32_xstat` fills `st_ino`; `volume_serial`
+/// is the serial it fills `st_dev` with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PathStat {
     pub last_write_time: u64,
     pub creation_time: u64,
     pub size: u64,
     pub file_index: u128,
+    pub volume_serial: u64,
 }
 
 /// Read one handle's identity. `require_tag` refuses a handle whose reparse
@@ -194,11 +197,23 @@ pub fn regular_file_id(path: &Path, follow_leaf: bool) -> io::Result<(FileId, u3
 /// directory is read through one handle, as CPython's `win32_xstat` slow
 /// path opens it.
 pub fn path_stat(path: &Path) -> io::Result<PathStat> {
+    stat_with_flags(path, FILE_FLAG_BACKUP_SEMANTICS)
+}
+
+/// `os.lstat` for `path`: a link at the leaf is read itself, not followed.
+pub fn link_stat(path: &Path) -> io::Result<PathStat> {
+    stat_with_flags(
+        path,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+    )
+}
+
+fn stat_with_flags(path: &Path, flags: DWORD) -> io::Result<PathStat> {
     let file = open_raw_with_flags(
         path,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         FILE_READ_ATTRIBUTES,
-        FILE_FLAG_BACKUP_SEMANTICS,
+        flags,
     )?;
     let info = handle_info(&file, false)?;
     Ok(PathStat {
@@ -206,6 +221,7 @@ pub fn path_stat(path: &Path) -> io::Result<PathStat> {
         creation_time: info.creation_time,
         size: info.size,
         file_index: u128::from_le_bytes(info.id.id),
+        volume_serial: info.id.volume_serial,
     })
 }
 
@@ -234,6 +250,35 @@ pub fn open_skill_directory(path: &Path) -> io::Result<std::fs::File> {
 /// Return the identity of the file behind an open handle.
 pub fn handle_file_id(file: &std::fs::File) -> io::Result<FileId> {
     Ok(handle_info(file, true)?.id)
+}
+
+/// The normalized path the open handle refers to, spelled as
+/// `std::fs::canonicalize` spells it (with the `\\?\` prefix).
+///
+/// This is where the handle points now, not the path it was opened by, so a
+/// link swapped in or out of an ancestor after the open cannot change it.
+pub fn handle_final_path(file: &std::fs::File) -> io::Result<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    // FILE_NAME_NORMALIZED | VOLUME_NAME_DOS.
+    const FLAGS: DWORD = 0;
+    let raw = file.as_raw_handle() as HANDLE;
+    let mut buffer = vec![0u16; 512];
+    loop {
+        // SAFETY: The buffer holds `buffer.len()` writable UTF-16 units and
+        // `raw` stays open for the call.
+        let length = unsafe {
+            GetFinalPathNameByHandleW(raw, buffer.as_mut_ptr(), buffer.len() as DWORD, FLAGS)
+        } as usize;
+        if length == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if length < buffer.len() {
+            return Ok(PathBuf::from(OsString::from_wide(&buffer[..length])));
+        }
+        // A too-small buffer reports the size it needs, terminator included.
+        buffer.resize(length, 0);
+    }
 }
 
 /// Open an existing single-link regular file for reading by walking its

@@ -11,7 +11,9 @@
 //! The `generation` section decides startup's trusted control state from
 //! the store's local rows: it adopts a single newer authenticated generation,
 //! completes or abandons a pending generation, and marks cutover complete once
-//! no legacy row remains.
+//! no legacy row remains. The `reconcile` section decides only the fate of a
+//! pending generation, over rows the caller ships from its own open
+//! transaction.
 //!
 //! The key arrives as base64url without padding, is held zeroized for the
 //! duration of the request, and never appears in a result or an error.
@@ -28,11 +30,19 @@ pub const POLICY_INTEGRITY_ROWS_FEATURE: &str = "policy-integrity-rows-v1";
 /// Capability advertised by the runtime when the request may carry a
 /// `generation` section.
 pub const POLICY_INTEGRITY_GENERATION_FEATURE: &str = "policy-integrity-generation-v1";
+/// Capability advertised by the runtime when the request may carry a
+/// `reconcile` section.
+pub const POLICY_INTEGRITY_RECONCILE_FEATURE: &str = "policy-integrity-reconcile-v1";
 
 /// Largest canonical request serialization the op will accept.
 pub const POLICY_INTEGRITY_ROWS_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Most verify plus sign items one request may carry.
 pub const POLICY_INTEGRITY_ROWS_MAX_ITEMS: usize = 1024;
+/// Most rows one `reconcile` section may carry. The decision runs over every
+/// local row, but the rows arrive in chunks that are folded into counters, so
+/// this bounds a single request rather than the store. A store of any size can
+/// settle its pending generation by sending more chunks.
+pub const POLICY_INTEGRITY_RECONCILE_MAX_ROWS: usize = 16_384;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -56,6 +66,10 @@ pub struct PolicyIntegrityRowsRequestV1 {
     /// key; answered in the payload's `generation` section.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<PolicyIntegrityGenerationRequestV1>,
+    /// Pending-generation reconcile over rows the caller supplies. Needs the
+    /// key; answered in the payload's `reconcile` section.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconcile: Option<PolicyIntegrityReconcileRequestV1>,
 }
 
 /// Decide the startup policy-integrity control state from the local rows of
@@ -67,6 +81,69 @@ pub struct PolicyIntegrityGenerationRequestV1 {
     pub guard_home: String,
     /// The normalized control state the store currently trusts.
     pub trusted_state: Value,
+}
+
+/// Decide what becomes of a pending generation, over rows the caller ships
+/// rather than rows read from the store.
+///
+/// The store is deliberately not read here. This runs while the caller holds
+/// an open transaction, whose rows a separate read-only connection would not
+/// see, so the caller passes the rows its own connection returned.
+///
+/// A store larger than one request sends its rows in chunks. Each chunk is
+/// folded into [`PolicyIntegrityReconcileTallyV1`] counters and handed back,
+/// the caller carries those counters into the next chunk, and the last chunk
+/// asks for the decision. The decision itself is taken only here, from the
+/// counters; the caller never interprets them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityReconcileRequestV1 {
+    /// The normalized control state the store currently trusts.
+    pub trusted_state: Value,
+    /// This chunk of the store's local `policy_decisions` rows, as JSON
+    /// objects. Remote sources are excluded by the caller's own query.
+    pub rows: Vec<Value>,
+    /// The counters folded from the chunks already sent for this store, or
+    /// `None` for the first chunk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carried: Option<PolicyIntegrityReconcileTallyV1>,
+    /// `true` decides the pending generation from `carried` plus `rows`;
+    /// `false` returns their running counters for the next chunk to carry.
+    pub decide: bool,
+}
+
+/// What the rows seen so far say about the pending generation.
+///
+/// Every field counts rows, so chunks add: the decision rule reads the totals
+/// exactly as it would read one pass over the whole store.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityReconcileTallyV1 {
+    /// Rows folded so far.
+    pub rows: u64,
+    /// A row carries an integrity version older than the current one.
+    pub has_legacy: bool,
+    /// Rows at the current integrity version.
+    pub pending_candidates: u64,
+    /// Rows that verify at the pending generation.
+    pub pending_valid: u64,
+    /// Rows that do not verify at the pending generation but do verify at the
+    /// current one.
+    pub current_valid: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityReconcileOutcomeV1 {
+    /// The control state the store should trust, present when the request
+    /// asked for the decision. Equal to `trusted_state` when the pending
+    /// generation is neither completed nor abandoned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_state: Option<Value>,
+    /// The running counters, present when the request did not ask for the
+    /// decision. The caller carries them into its next chunk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tally: Option<PolicyIntegrityReconcileTallyV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,6 +194,8 @@ pub struct PolicyIntegrityRowsPayloadV1 {
     pub sign: Vec<PolicyIntegritySignatureV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<PolicyIntegrityGenerationOutcomeV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconcile: Option<PolicyIntegrityReconcileOutcomeV1>,
 }
 
 /// `PolicyIntegrityVerificationResult` fields, one per verify item in order.

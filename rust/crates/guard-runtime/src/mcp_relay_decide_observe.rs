@@ -17,9 +17,10 @@
 //!   executed action is `allow` and the `observe_mode` item (observed and
 //!   authoritative action) follows the decision's own evidence in the allow
 //!   receipt. It queues no inbox row. Under `blocked_request_mode = "ask"`
-//!   the proxy first consults the native prompt and inline elicitation,
-//!   which the resident cannot answer, so the call defers there and the
-//!   session runs under the proxy (`mcp_relay_decide_session.rs`).
+//!   the shared route consults the native prompt and the inline prompt
+//!   first. The relay answers both (`mcp_relay_decide_ask.rs`), so only a
+//!   call neither approves nor denies reaches the observe forward, and
+//!   `_observe_tool_forward` records it the same way under either mode.
 //!
 //! The resident answers each of these. The observe-forward evidence is a
 //! forward's (`mcp_relay_decide.rs`), held until the relay completes the
@@ -33,7 +34,7 @@
 //! for every other forward. A catalog boundary change before the write leaves
 //! the relay's "no native decision" answer, as for every forward.
 
-use super::{Routed, ROUTE_UNSUPPORTED};
+use super::{Routed, ASK_MODE, ROUTE_UNSUPPORTED};
 use crate::mcp_tool_policy_decision::Decision;
 use guard_contracts::McpObserveToolForwardQueryV1;
 use serde_json::{json, Value};
@@ -76,13 +77,14 @@ pub(super) fn downgrade(
 }
 
 /// `_observe_tool_forward` of the call's decision: the forward it records
-/// and the evidence the resident appends to the decision's own. Only under
-/// `safe-alternative`: under `ask` the proxy first prompts for the call.
+/// and the evidence the resident appends to the decision's own. Only under a
+/// blocked-request mode the resident routes: `safe-alternative`, or `ask`
+/// once the call's prompts have fallen through.
 pub(super) fn forward(
     blocked_request_mode: Option<&str>,
     decision: &Decision,
 ) -> Result<(Routed, Option<Vec<Value>>), &'static str> {
-    if blocked_request_mode != Some(SAFE_ALTERNATIVE_MODE) {
+    if !matches!(blocked_request_mode, Some(SAFE_ALTERNATIVE_MODE | ASK_MODE)) {
         return Err(ROUTE_UNSUPPORTED);
     }
     let observed = crate::mcp_proxy_route::observe_tool_forward(&McpObserveToolForwardQueryV1 {

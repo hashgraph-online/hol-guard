@@ -83,8 +83,17 @@ fn a_request_round_trips_to_the_bytes_the_caller_sent() {
             "artifact_type": "instruction",
         }],
     });
+    // The current caller leaves the kind to the resident and sends no key.
+    let current = json!({
+        "schema": INVENTORY_SOURCE_EVIDENCE_REQUEST_SCHEMA,
+        "request_id": "",
+        "home_dir": "/home/example",
+        "include_symlinks": false,
+        "follow_unsafe_symlinks": false,
+        "entries": [{"harness": "claude", "artifact_type": "instruction"}],
+    });
 
-    for wire in [full, sparse] {
+    for wire in [full, sparse, current] {
         assert_eq!(serde_json::to_value(parse(&wire)).expect("value"), wire);
     }
 }
@@ -289,4 +298,157 @@ mod links {
 
         assert_eq!(evidence(&wire)[0]["source_of_truth"], Value::Null);
     }
+}
+
+#[test]
+fn answers_the_item_kind_the_artifact_type_maps_onto() {
+    let wire = json!({
+        "schema": INVENTORY_SOURCE_EVIDENCE_REQUEST_SCHEMA,
+        "request_id": "",
+        "home_dir": "/home/example",
+        "include_symlinks": false,
+        "follow_unsafe_symlinks": false,
+        "entries": [
+            {"harness": "claude", "artifact_type": "instruction"},
+            {"harness": "claude", "artifact_type": "gateway_config"},
+        ],
+    });
+    let answers = evidence(&wire);
+    let kinds: Vec<&str> = answers
+        .iter()
+        .map(|answer| answer["item_kind"].as_str().expect("item_kind"))
+        .collect();
+    assert_eq!(kinds, vec!["overlay", "agent"]);
+}
+
+#[test]
+fn accepts_an_entry_that_leaves_the_item_kind_to_the_resident() {
+    let wire = json!({
+        "schema": INVENTORY_SOURCE_EVIDENCE_REQUEST_SCHEMA,
+        "request_id": "",
+        "home_dir": "/home/example",
+        "include_symlinks": false,
+        "follow_unsafe_symlinks": false,
+        "entries": [{"harness": "claude", "artifact_type": "skill"}],
+    });
+    assert_eq!(parse(&wire).entries[0].item_kind, None);
+    assert_eq!(evidence(&wire)[0]["item_kind"], json!("skill"));
+}
+
+#[test]
+fn every_entry_shape_is_advertised() {
+    // v3 is this resident: it derives the kind and the instruction role. v2
+    // and v1 stay advertised because a client built before either change
+    // still speaks this wire schema and this op still answers it.
+    let features = crate::resident_op_features::RESIDENT_OP_FEATURES;
+    assert!(features.contains(&guard_contracts::INVENTORY_SOURCE_EVIDENCE_FEATURE));
+    assert!(features.contains(&guard_contracts::INVENTORY_SOURCE_EVIDENCE_PREVIOUS_FEATURE));
+    assert!(features.contains(&guard_contracts::INVENTORY_SOURCE_EVIDENCE_FIRST_FEATURE));
+}
+
+fn instruction_role(artifact_type: &str, config_path: &str) -> Value {
+    let wire = json!({
+        "schema": INVENTORY_SOURCE_EVIDENCE_REQUEST_SCHEMA,
+        "request_id": "",
+        "home_dir": "/home/example",
+        "include_symlinks": false,
+        "follow_unsafe_symlinks": false,
+        "entries": [{
+            "harness": "claude",
+            "artifact_type": artifact_type,
+            "config_path": config_path,
+        }],
+    });
+    evidence(&wire)[0]["instruction_role"].clone()
+}
+
+#[test]
+fn reads_the_instruction_role_an_overlay_path_names() {
+    // The same grammar the discovery walk applies: the file's own name first,
+    // then the directory an instruction document sits under.
+    assert_eq!(
+        instruction_role("instruction", "/home/example/code/AGENTS.md"),
+        json!("agents_md")
+    );
+    assert_eq!(
+        instruction_role("instruction", "/home/example/code/docs/product/brief.md"),
+        json!("product_md")
+    );
+    assert_eq!(
+        instruction_role("instruction", "/home/example/code/.cursor/rules/style.mdc"),
+        json!("cursor_rules")
+    );
+}
+
+#[test]
+fn leaves_the_instruction_role_unanswered_when_the_path_names_none() {
+    // An ordinary document under no recognized directory is still an overlay;
+    // it just has no role to record, and inventing one would be a guess.
+    assert_eq!(
+        instruction_role("instruction", "/home/example/code/notes/scratch.md"),
+        Value::Null
+    );
+    // A `rules` directory is a cursor rule only under `.cursor`; an ordinary
+    // one named the same way is not.
+    assert_eq!(
+        instruction_role("instruction", "/home/example/code/src/rules/guide.md"),
+        Value::Null
+    );
+    assert_eq!(instruction_role("instruction", ""), Value::Null);
+}
+
+#[test]
+fn reads_the_role_from_the_path_the_harness_configured() {
+    // The caller anchors a relative config path so the resident has something
+    // to resolve, and the directory it anchors to is wherever the scan ran.
+    // The role has to keep reading the configured path: `notes.md` names no
+    // role, however many role-shaped components the working directory has.
+    let wire = |config_path: &str, configured_path: &str| {
+        json!({
+            "schema": INVENTORY_SOURCE_EVIDENCE_REQUEST_SCHEMA,
+            "request_id": "",
+            "home_dir": "/home/example",
+            "include_symlinks": false,
+            "follow_unsafe_symlinks": false,
+            "entries": [{
+                "harness": "claude",
+                "artifact_type": "instruction",
+                "config_path": config_path,
+                "configured_path": configured_path,
+            }],
+        })
+    };
+    assert_eq!(
+        evidence(&wire(
+            "/home/example/code/docs/security/notes.md",
+            "notes.md"
+        ))[0]["instruction_role"],
+        Value::Null
+    );
+    assert_eq!(
+        evidence(&wire(
+            "/home/example/code/.cursor/rules/notes.md",
+            "notes.md"
+        ))[0]["instruction_role"],
+        Value::Null
+    );
+    // A configured path that does name a role keeps it, anchored or not.
+    assert_eq!(
+        evidence(&wire(
+            "/home/example/code/docs/security/notes.md",
+            "docs/security/notes.md"
+        ))[0]["instruction_role"],
+        json!("security_md")
+    );
+}
+
+#[test]
+fn reads_no_instruction_role_for_an_artifact_that_is_not_an_overlay() {
+    // A skill's config path can be a Markdown document too. The role names
+    // what an instruction overlay is, so a skill never carries one however
+    // its path is spelled.
+    assert_eq!(
+        instruction_role("skill", "/home/example/code/AGENTS.md"),
+        Value::Null
+    );
 }

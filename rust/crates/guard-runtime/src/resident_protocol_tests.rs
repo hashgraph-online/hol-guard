@@ -173,3 +173,26 @@ fn prompt_capability_is_portable_and_containment_matches_dispatch() {
         .iter()
         .any(|feature| feature == "cursor-hook-bridge-v1"));
 }
+
+#[test]
+fn command_admission_failures_reach_the_publisher_unchanged() {
+    // A publisher that cannot tell which admission check rejected its binding
+    // has nothing to recover from: every push looks like a malformed request,
+    // so the resident keeps no policy and every prompt fails closed. Each
+    // admission failure must therefore survive the safe-error transport as
+    // itself.
+    // Read the declared vocabulary rather than a hand-picked subset. A list
+    // written out here only ever covers the codes someone remembered to add,
+    // so a newly declared code could be dropped from the transport and no test
+    // would notice.
+    assert!(!guard_contracts::NATIVE_COMMAND_CONTROL_ERROR_CODES.is_empty());
+    for &code in guard_contracts::NATIVE_COMMAND_CONTROL_ERROR_CODES {
+        let response: Value = serde_json::from_slice(&safe_error_response(code, false))
+            .expect("admission error is JSON");
+        assert_eq!(
+            response["error"], code,
+            "{code} was rewritten by the transport"
+        );
+        assert_eq!(response["retryable"], false);
+    }
+}

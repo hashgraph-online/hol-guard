@@ -435,7 +435,21 @@ pub(crate) fn write_cache(payload: &Value, source: &ManagedPolicySource) {
         return;
     };
     serialized.push(b'\n');
+    // An unchanged cache is left in place, so its change signature, which the
+    // Python caller keys its memo on, stays the same from one load to the next.
+    if cache_is_current(&path, &serialized, source.system) {
+        return;
+    }
     let _ = replace_restricted_file(&path, &serialized);
+}
+
+/// The cache already holds exactly `bytes` and is still machine-controlled. A
+/// cache that lost its owner or gained a write bit is rewritten restricted.
+fn cache_is_current(path: &Path, bytes: &[u8], system: MachineSystem) -> bool {
+    fs::symlink_metadata(path)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.len() == bytes.len() as u64)
+        && machine_controlled_file_is_trusted(path, system)
+        && fs::read(path).is_ok_and(|current| current == bytes)
 }
 
 /// `json.dumps(payload, sort_keys=True)`, which the cache is written as. A

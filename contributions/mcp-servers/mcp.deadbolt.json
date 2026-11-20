@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.deadbolt",
+  "version": "1.0.0",
+  "name": "DEADBOLT Governance MCP",
+  "description": "2-hop AST blast-radius lease planner, slop-breaker policy floor, SHA-256 cryptographic audit chain verifier, and staged PR gate MCP server (kruschdev/deadbolt v0.1.0). Local work-order hydration requires review; 2-hop AST blast-radius mapping and audit-chain verification inherit Guard policy; reconciliation checks and verified stage apply/PR dispatch require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/deadbolt"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/deadbolt-evolve-software-factory-governance.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "deadbolt-mcp"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "local-sqlite-write",
+    "external-model-request",
+    "working-tree-patch-apply"
+  ],
+  "tools": [
+    {
+      "name": "deadbolt_hydrate_work_order",
+      "state": "review"
+    },
+    {
+      "name": "deadbolt_map_blast_radius",
+      "state": "inherit"
+    },
+    {
+      "name": "deadbolt_verify_audit_chain",
+      "state": "inherit"
+    },
+    {
+      "name": "deadbolt_validate_reconciliation",
+      "state": "review"
+    },
+    {
+      "name": "deadbolt_apply_verified_stage",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/deadbolt",
+    "https://github.com/kruschdev/deadbolt/blob/main/src/mcp/deadbolt-mcp.js",
+    "https://github.com/kruschdev/deadbolt/blob/main/README.md",
+    "https://krusch.dev/articles/deadbolt-evolve-software-factory-governance.html"
+  ],
+  "saferAlternatives": [
+    "Use deadbolt_map_blast_radius and deadbolt_verify_audit_chain to inspect 2-hop AST dependency cones and SHA-256 audit ledgers without mutating state.",
+    "Pass runCrossModel=false on deadbolt_validate_reconciliation when you want deterministic local invariant checks without external model referee calls, and keep deadbolt_apply_verified_stage on Review."
+  ]
+}

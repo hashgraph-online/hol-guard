@@ -14,22 +14,29 @@ from jsonschema import Draft202012Validator
 
 from codex_plugin_scanner.guard.extension_builder.discover import discover
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.io import canonical_json
+from codex_plugin_scanner.guard.extension_builder.io import canonical_json, checked_path, parse_json, read_bytes
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit, load_kit, write_kit
 from codex_plugin_scanner.guard.extension_builder.listing import (
     CATEGORY_LABELS,
     LISTING_SCHEMA_V1,
     LISTING_SCHEMA_V2,
+    MAX_LISTING_BYTES,
     MAX_TAGLINE_LENGTH,
     category_for_extension,
     listing_schema,
     listing_template,
-    load_listing,
     validate_listing,
 )
 from codex_plugin_scanner.guard.extension_builder.listing_cli import main
 from codex_plugin_scanner.guard.extension_builder.review import default_review
 from tests.extension_builder_support import REPOSITORY, cli_document, make_kit, metadata
+
+
+def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
+    path = checked_path(path)
+    if path.name != f"{expected_id}.json":
+        raise BuilderError("listing_identity", "Listing filename must match the native contribution ID.")
+    return validate_listing(parse_json(read_bytes(path, limit=MAX_LISTING_BYTES)), expected_id=expected_id)
 
 
 def listing() -> dict[str, object]:

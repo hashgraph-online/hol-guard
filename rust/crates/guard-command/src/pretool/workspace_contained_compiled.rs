@@ -1,8 +1,8 @@
 //! Compiled-toolchain work admitted to the workspace sandbox.
 //!
-//! [`super::package`] decides the managers that fetch what they run. `go` and
-//! `cargo` are the two whose local verbs compile what the workspace already
-//! has, so they are read here.
+//! [`super::package`] decides the managers that fetch what they run. `go`,
+//! `cargo` and `mvn` are the ones whose local verbs compile what the
+//! workspace already has, so they are read here.
 //!
 //! `go` is admitted with its module cache and toolchain read-only beside the
 //! workspace. A verb only counts as local inside a module the directory it
@@ -20,13 +20,35 @@
 //! the private tree. `~/.cargo/config.toml` and `~/.cargo/credentials.toml`
 //! stay out, which keeps registry tokens out of the run, and the fetching
 //! verbs keep the admission they have today.
+//!
+//! Cargo reads its own options in front of that verb, and a developer spells
+//! them there without changing what the run does: `cargo --offline test` and
+//! `cargo -q test` run the test the bare verb runs, and `--locked`,
+//! `--offline` and `--frozen` each ask for less than it does. They are read
+//! past, up to the first option this module does not know, so an option that
+//! names a config key, an unstable flag or another directory keeps the
+//! admission it has.
+//!
+//! Maven is admitted for the lifecycle phases that build and test the project
+//! the directory holds. Its plugins run dependency code the way `build.rs`
+//! does, which is what the sandbox bounds. The artifacts it resolves live in
+//! `~/.m2/repository`, granted read-only; the run gets its own local
+//! repository with that one linked in, so Maven takes its locks and writes
+//! its own state inside the private tree, and runs offline, which turns an
+//! artifact the host has not fetched into an immediate error rather than a
+//! download the firewall never saw. A `mvnw` run executes the Maven the
+//! project pins, which the wrapper looks for below its Maven user home: the
+//! run gets its own, holding a link to each distribution the host has already
+//! unpacked in `~/.m2/wrapper/dists`, also granted read-only.
 
 use std::path::Path;
 
 // A Go build compiles the sources the module cache already holds and writes
 // its objects to a private build cache. Only the verbs that stay there are
-// local: `get`, `install`, `mod` and `work` reach a registry, and `tool` and
-// `clean` are neither a build nor a read.
+// local: `get`, `install` and `work` reach a registry, and `clean` deletes
+// rather than builds. `tool` and `mod` are launchers for a whole second set
+// of work, so neither is on this list; the few subcommands of each that only
+// report on what the workspace already holds are read below.
 const GO_LOCAL_VERBS: &[&str] = &[
     "build", "test", "vet", "fmt", "list", "doc", "env", "version", "run", "generate",
 ];
@@ -34,40 +56,364 @@ const GO_LOCAL_VERBS: &[&str] = &[
 // into a target directory the workspace owns. Only the verbs that stay there
 // are local: `install`, `add`, `update`, `publish` and the rest reach a
 // registry, and `vendor` and `fetch` exist to populate a cache.
+//
+// The second group is the subcommands cargo resolves to a `cargo-NAME`
+// program the host already has. Each one named here drives cargo's own build
+// of the workspace and reads what it produced -- a coverage run of the test
+// suite, a snapshot suite, an expansion, a read of which dependencies the
+// crate uses -- so the work reaches no further than `test` and `build`
+// already do. `mutants` edits the crate's own sources between those runs and
+// puts them back, which stays inside the directory the sandbox already lets a
+// build write, as long as it is working on the crate the directory holds:
+// the options below move that choice, so each is read. A name that is not on
+// this list keeps its review, because
+// cargo would run whatever program carries it: `audit` and `deny` fetch an
+// advisory database, which is the registry reach the first group is held back
+// for.
 const CARGO_LOCAL_VERBS: &[&str] = &[
-    "build", "b", "test", "t", "check", "c", "clippy", "fmt", "doc", "d", "run", "r", "bench",
-    "tree", "metadata", "version", "nextest",
+    "build",
+    "b",
+    "test",
+    "t",
+    "check",
+    "c",
+    "clippy",
+    "fmt",
+    "doc",
+    "d",
+    "run",
+    "r",
+    "bench",
+    "tree",
+    "metadata",
+    "version",
+    "nextest",
+    "llvm-cov",
+    "tarpaulin",
+    "insta",
+    "expand",
+    "machete",
+    "udeps",
+    "mutants",
+];
+// Cargo's own options stand in front of the verb. These say only how cargo
+// reports what it does, and how strictly it treats the lockfile and the
+// network: each of the last three narrows what a run may reach, so a line
+// carrying one asks for less than the bare verb does. Everything else cargo
+// reads there -- `--config`, `-Z`, `-C` -- changes what the run resolves or
+// where it looks for it, which is what the rest of this decision rests on.
+const CARGO_INERT_OPTIONS: &[&str] = &[
+    "-q",
+    "--quiet",
+    "-v",
+    "-vv",
+    "--verbose",
+    "--locked",
+    "--offline",
+    "--frozen",
+];
+// The one inert option that takes its value as the next word.
+const CARGO_COLOR_OPTION: &str = "--color";
+// A subcommand cargo resolves to its own program reads its own options, and
+// two of them pick the crate it works on in place of the directory the run
+// starts in. `cargo-mutants` takes `-d`/`--dir` and `cargo-tarpaulin` takes
+// `-r`/`--root`; each then builds and runs that crate's tests, and mutants
+// writes its mutations into that crate's sources, which is the reach
+// `local_cargo_work` otherwise holds to the workspace. A line carrying one is
+// read against the workspace the way `--manifest-path` is.
+const CARGO_SUBCOMMAND_DIRECTORY_OPTIONS: &[(&str, &[&str])] = &[
+    ("mutants", &["-d", "--dir"]),
+    ("tarpaulin", &["-r", "--root"]),
 ];
 
 /// Whether `go` runs a local verb inside a module that `directory` holds.
-/// Outside a module these verbs read the wider GOPATH, and the sandbox has no
-/// network to resolve a package by import path, so they keep the admission
-/// they have. A version an argument names is one go resolves through the
-/// module proxy, and `go list`'s `-u` and `-versions` ask the proxy what else
-/// a module has, as does `-retracted`, so each of those keeps that admission
-/// too.
-pub(super) fn local_go_work(arguments: &[&str], directory: &Path) -> bool {
+/// A module the directory holds is the one go finds by ascending from it, as
+/// go itself does, stopping at the workspace root. Outside a module these
+/// verbs read the wider GOPATH, and the sandbox has no network to resolve a
+/// package by import path, so they keep the admission they have. A version an
+/// argument names is one go resolves through the module proxy, and `go
+/// list`'s `-u` and `-versions` ask the proxy what else a module has, as does
+/// `-retracted`, so each of those keeps that admission too.
+///
+/// A leading `-C` is read by the caller, which moves `directory` to the one it
+/// names before this decision, because where the run stands is what the module
+/// search below rests on.
+/// The directory go's `-C` moves to, and how many words it takes.
+///
+/// go reads this flag only as the first word of the command and chdirs before
+/// it reads anything else, in either spelling, so the verb behind it is the
+/// work `cd <dir> && go <verb>` is. go itself ignores a `-C` with nothing
+/// behind it, and so does this.
+pub(super) fn go_chdir<'a>(arguments: &[&'a str]) -> Option<(&'a str, usize)> {
+    match arguments {
+        ["-C", target, rest @ ..] if !rest.is_empty() => Some((target, 2)),
+        [first, rest @ ..] if !rest.is_empty() => first
+            .strip_prefix("-C=")
+            .filter(|target| !target.is_empty())
+            .map(|target| (target, 1)),
+        _ => None,
+    }
+}
+
+pub(super) fn local_go_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
     let Some((verb, rest)) = arguments.split_first() else {
         return false;
     };
-    GO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str())
+    let verb = verb.to_ascii_lowercase();
+    (GO_LOCAL_VERBS.contains(&verb.as_str())
+        || (verb == "tool" && local_go_tool(rest))
+        || (verb == "mod" && local_go_mod(rest)))
         && !rest
             .iter()
             .any(|argument| names_a_go_fetch(argument) || argument.contains('@'))
-        && directory.join("go.mod").is_file()
+        && super::cd::first_from(directory, workspace, |probe| probe.join("go.mod").is_file())
+            .is_some()
 }
 
-/// Whether `cargo` runs a local verb against a package that `directory`
-/// holds. A leading `+toolchain` selects a rustup toolchain, which the run
-/// may read. Outside a package cargo has nothing to compile and would search
-/// upward out of the workspace, so those commands keep the admission they
-/// have.
-pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path) -> bool {
-    arguments
+/// The `go mod` subcommands that only report on the module already resolved.
+///
+/// Most of what `go mod` carries either reaches a registry or rewrites the
+/// module files: `download` and `tidy` fetch, `init` and `edit` write
+/// `go.mod`, and `vendor` copies a tree of dependencies into the workspace.
+/// Three of them only report. `graph` prints the requirement graph, `verify`
+/// rehashes the modules the cache already holds against `go.sum`, and `why`
+/// names the import that pulls a package in. Each reads the build list that
+/// the admitted `go build` and `go list` runs already read and writes
+/// nothing, so a contained run of one reaches no further than those do --
+/// including when the cache is short of a dependency, where all of them alike
+/// fail against a sandbox that has no network.
+///
+/// Only the flags those three carry themselves are accepted, in the spelling
+/// that keeps the value attached, because a word this does not know is one go
+/// reads for something else.
+fn local_go_mod(arguments: &[&str]) -> bool {
+    let Some((subcommand, rest)) = arguments.split_first() else {
+        return false;
+    };
+    let flags: &[&str] = match subcommand.to_ascii_lowercase().as_str() {
+        // `-go` picks the version the graph is pruned for, `-x` echoes the
+        // work as it goes.
+        "graph" => &["-go", "-x"],
+        "verify" => &[],
+        // `-m` reads the operands as modules rather than packages, and
+        // `-vendor` answers from the vendor directory instead of the cache.
+        "why" => &["-m", "-vendor"],
+        _ => return false,
+    };
+    rest.iter().all(|word| {
+        !word.starts_with('-')
+            || flags.contains(&word.split_once('=').map_or(*word, |(flag, _)| flag))
+    })
+}
+
+/// The `go tool` subcommands that read what a run inside the workspace has
+/// already produced.
+///
+/// `go tool` is a launcher: the name behind it selects a program the
+/// toolchain carries, and most of them do more than read. `pprof` serves a
+/// web interface and fetches a profile over the network, `test2json` runs the
+/// test binary it is given, and `compile`, `link` and `objdump` are build
+/// steps that take their own paths. `cover` is the exception: it reads a
+/// coverage profile the admitted `go test -coverprofile` run just wrote and
+/// renders it, which reaches no further than that run did.
+fn local_go_tool(arguments: &[&str]) -> bool {
+    let Some((name, rest)) = arguments.split_first() else {
+        return false;
+    };
+    name.eq_ignore_ascii_case("cover") && cover_renders_a_profile(rest)
+}
+
+/// Whether `go tool cover`'s arguments only render a profile to a file.
+///
+/// Each flag here takes a value, in either of go's spellings (`-func=x` and
+/// `-func x`), and nothing else is accepted, so a word this does not know
+/// keeps the review the launcher has. `-html` with no `-o` starts a local
+/// web server and opens a browser on it, which is not the file render this
+/// admits, so it is refused as well.
+fn cover_renders_a_profile(arguments: &[&str]) -> bool {
+    let mut renders = false;
+    let mut html = false;
+    let mut output = false;
+    let mut index = 0;
+    while let Some(word) = arguments.get(index) {
+        let (flag, attached) = match word.split_once('=') {
+            Some((flag, value)) => (flag, Some(value)),
+            None => (*word, None),
+        };
+        let value = match attached {
+            Some(value) => {
+                index += 1;
+                value
+            }
+            None => {
+                let Some(value) = arguments.get(index + 1) else {
+                    return false;
+                };
+                index += 2;
+                *value
+            }
+        };
+        if value.is_empty() || value.starts_with('-') {
+            return false;
+        }
+        match flag {
+            "-func" => renders = true,
+            "-html" => {
+                renders = true;
+                html = true;
+            }
+            "-o" => output = true,
+            _ => return false,
+        }
+    }
+    renders && (!html || output)
+}
+
+/// Whether `cargo` runs a local verb against a package reachable from
+/// `directory`. Cargo finds the manifest by ascending, and the search here
+/// ascends with it as far as the workspace root, which is what a run inside a
+/// crate of a workspace needs. A leading `+toolchain` selects a rustup
+/// toolchain, which the run may read. With no manifest anywhere below the
+/// workspace root cargo has nothing to compile and would search upward out of
+/// the workspace, so those commands keep the admission they have.
+///
+/// `--manifest-path` replaces that search with the manifest it names, which
+/// must be a `Cargo.toml` inside the workspace, spelled without a parent step.
+/// A subcommand's own directory option moves the whole run the same way, and
+/// is read against the workspace the same way.
+pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
+    let Some(verb) = cargo_verb(arguments) else {
+        return false;
+    };
+    let verb = verb.to_ascii_lowercase();
+    CARGO_LOCAL_VERBS.contains(&verb.as_str())
+        && subcommand_directory_within(&verb, arguments, directory, workspace)
+        && match manifest_path(arguments) {
+            Some(Some(manifest)) => manifest_within(&directory.join(manifest), workspace),
+            Some(None) => false,
+            None => super::cd::first_from(directory, workspace, |probe| {
+                probe.join("Cargo.toml").is_file()
+            })
+            .is_some(),
+        }
+}
+
+/// Whether the crate a subcommand's own directory option picks is one the
+/// workspace holds. A subcommand with no such option, and a line that does
+/// not carry it, are left to the manifest search above.
+fn subcommand_directory_within(
+    verb: &str,
+    arguments: &[&str],
+    directory: &Path,
+    workspace: &Path,
+) -> bool {
+    let Some((_, flags)) = CARGO_SUBCOMMAND_DIRECTORY_OPTIONS
         .iter()
-        .find(|argument| !argument.starts_with('+'))
-        .is_some_and(|verb| CARGO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str()))
-        && directory.join("Cargo.toml").is_file()
+        .find(|(subcommand, _)| *subcommand == verb)
+    else {
+        return true;
+    };
+    match directory_option(arguments, flags) {
+        None => true,
+        Some(Some(value)) => manifest_within(&directory.join(value).join("Cargo.toml"), workspace),
+        Some(None) => false,
+    }
+}
+
+/// The directory one of `flags` names, as the next argument, behind an `=`,
+/// or attached to a short flag the way clap reads one. `None` when the line
+/// carries no such flag; `Some(None)` when it has no value or more than one
+/// stands on the line, which leaves no one directory to judge.
+fn directory_option<'a>(arguments: &[&'a str], flags: &[&str]) -> Option<Option<&'a str>> {
+    let mut found: Option<Option<&'a str>> = None;
+    for (index, argument) in arguments.iter().enumerate() {
+        let Some(flag) = flags.iter().find(|flag| argument.starts_with(**flag)) else {
+            continue;
+        };
+        let rest = &argument[flag.len()..];
+        let value = if rest.is_empty() {
+            arguments.get(index + 1).copied()
+        } else if let Some(attached) = rest.strip_prefix('=') {
+            Some(attached).filter(|value| !value.is_empty())
+        } else if flag.starts_with("--") {
+            // A long option that merely shares this prefix is another option.
+            continue;
+        } else {
+            // A short flag carries its value attached.
+            Some(rest)
+        };
+        if found.is_some() {
+            return Some(None);
+        }
+        found = Some(value);
+    }
+    found
+}
+
+/// The verb cargo runs, read the way cargo reads it: past a `+toolchain`,
+/// past the options above, and stopping at the first word that is neither.
+/// `None` when an option this walk does not read stands in front of the verb,
+/// because what such an option sets -- a config key, an unstable flag, the
+/// directory cargo starts from -- is what the rest of this decision rests on.
+fn cargo_verb<'a>(arguments: &[&'a str]) -> Option<&'a str> {
+    let mut words = arguments.iter();
+    while let Some(word) = words.next() {
+        if word.starts_with('+') {
+            continue;
+        }
+        let Some(option) = word.strip_prefix('-') else {
+            return Some(word);
+        };
+        if option.is_empty() {
+            return None;
+        }
+        if CARGO_INERT_OPTIONS.contains(word) {
+            continue;
+        }
+        if *word == CARGO_COLOR_OPTION {
+            words.next()?;
+            continue;
+        }
+        if word.starts_with(&format!("{CARGO_COLOR_OPTION}=")) {
+            continue;
+        }
+        return None;
+    }
+    None
+}
+
+/// The manifest cargo's `--manifest-path` names, as the next argument or
+/// behind an `=`. `Some(None)` when the flag has no value or appears twice,
+/// which leaves no one manifest to judge.
+pub(super) fn manifest_path<'a>(arguments: &[&'a str]) -> Option<Option<&'a str>> {
+    let mut named = arguments.iter().enumerate().filter(|(_, argument)| {
+        **argument == "--manifest-path" || argument.starts_with("--manifest-path=")
+    });
+    let (index, flag) = named.next()?;
+    if named.next().is_some() {
+        return Some(None);
+    }
+    Some(match flag.split_once('=') {
+        Some((_, value)) => Some(value).filter(|value| !value.is_empty()),
+        None => arguments.get(index + 1).copied(),
+    })
+}
+
+/// Whether `manifest` is an existing `Cargo.toml` that resolves inside
+/// `workspace`.
+fn manifest_within(manifest: &Path, workspace: &Path) -> bool {
+    manifest
+        .file_name()
+        .is_some_and(|name| name == "Cargo.toml")
+        && manifest.is_file()
+        && !manifest
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+        && workspace.canonicalize().is_ok_and(|root| {
+            manifest
+                .canonicalize()
+                .is_ok_and(|manifest| manifest.starts_with(root))
+        })
 }
 
 /// Whether an argument names one of the flags that send a Go verb to a module
@@ -84,4 +430,81 @@ fn names_a_go_fetch(argument: &str) -> bool {
         name.split_once('=').map_or(name, |(name, _)| name),
         "u" | "versions" | "retracted"
     )
+}
+
+// A Maven lifecycle phase compiles and tests the sources the project holds,
+// resolving its dependencies from the local repository the host has already
+// filled. Only the phases that stay inside the build directory are local:
+// `install` and `deploy` publish what they built, and every other word here
+// would be a plugin goal.
+const MAVEN_LOCAL_PHASES: &[&str] = &[
+    "clean",
+    "compile",
+    "package",
+    "process-classes",
+    "process-resources",
+    "process-test-resources",
+    "resources",
+    "test",
+    "test-compile",
+    "validate",
+    "verify",
+];
+// Maven options that take their value as the next argument. The value is not
+// a phase, so it must not be read as one.
+const MAVEN_VALUE_OPTIONS: &[&str] = &[
+    "--activate-profiles",
+    "--builder",
+    "--file",
+    "--global-settings",
+    "--log-file",
+    "--projects",
+    "--settings",
+    "--threads",
+    "--toolchains",
+    "-b",
+    "-f",
+    "-gs",
+    "-l",
+    "-P",
+    "-p",
+    "-pl",
+    "-s",
+    "-t",
+    "-T",
+];
+// Options that tell Maven to go to a remote repository. A build that names
+// one is asking for the fetch the package firewall exists to review.
+const MAVEN_FETCH_OPTIONS: &[&str] = &["--update-snapshots", "-u", "-U"];
+
+/// Whether `mvn` runs lifecycle phases against a project that `directory`
+/// holds. A phase compiles and tests what the checkout already has, reading
+/// its dependencies from the local repository the sandbox grants read-only,
+/// so there is nothing left for the firewall to decide. A plugin goal
+/// (`dependency:get`, `versions:use-latest-releases`) carries a colon and
+/// keeps the admission it has, as does a run with no `pom.xml` to build,
+/// since outside a project Maven resolves everything it needs from a remote
+/// repository.
+pub(super) fn local_maven_work(arguments: &[&str], directory: &Path) -> bool {
+    let mut named_a_phase = false;
+    let mut skip_value = false;
+    for argument in arguments {
+        if skip_value {
+            skip_value = false;
+            continue;
+        }
+        if argument.starts_with('-') {
+            let name = argument.split_once('=').map_or(*argument, |(name, _)| name);
+            if MAVEN_FETCH_OPTIONS.contains(&name) {
+                return false;
+            }
+            skip_value = MAVEN_VALUE_OPTIONS.contains(&name) && !argument.contains('=');
+            continue;
+        }
+        if !MAVEN_LOCAL_PHASES.contains(&argument.to_ascii_lowercase().as_str()) {
+            return false;
+        }
+        named_a_phase = true;
+    }
+    named_a_phase && !skip_value && directory.join("pom.xml").is_file()
 }

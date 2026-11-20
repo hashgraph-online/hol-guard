@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 
-from codex_plugin_scanner.guard.adapters.capability_report import (
+from harness_capability_report import (
     build_capability_report,
     render_capability_report_json,
     render_capability_report_markdown,

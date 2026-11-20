@@ -27,6 +27,10 @@ pub mod catalog_read_model;
 mod catalog_read_projection;
 #[path = "../../guard-command/src/catalog_read_query.rs"]
 mod catalog_read_query;
+#[path = "../../guard-command/src/cloud_action_binding.rs"]
+pub mod cloud_action_binding;
+#[path = "../../guard-command/src/cloud_action_canonical.rs"]
+mod cloud_action_canonical;
 #[path = "../../guard-command/src/cloud_audit_sync.rs"]
 pub mod cloud_audit_sync;
 #[path = "../../guard-command/src/cloud_scrub_shell.rs"]
@@ -45,8 +49,6 @@ mod codex_output_py;
 mod codex_output_search;
 #[path = "../../guard-command/src/codex_output_shlex.rs"]
 mod codex_output_shlex;
-#[path = "../../guard-command/src/codex_output_source_paths.rs"]
-mod codex_output_source_paths;
 #[path = "../../guard-command/src/command_ascii_comparison.rs"]
 mod command_ascii_comparison;
 #[path = "../../guard-command/src/command_common_cli_matchers.rs"]
@@ -65,6 +67,8 @@ pub mod command_model;
 mod command_operand_matchers;
 #[path = "../../guard-command/src/command_option_parsing.rs"]
 pub mod command_option_parsing;
+#[path = "../../guard-command/src/command_reviewed_literal.rs"]
+mod command_reviewed_literal;
 #[path = "../../guard-command/src/command_segment_parsing.rs"]
 mod command_segment_parsing;
 #[path = "../../guard-command/src/command_specialized_matchers.rs"]
@@ -77,9 +81,25 @@ mod command_structured_matchers;
 mod command_tokens;
 #[path = "../../guard-command/src/contained_argv.rs"]
 pub mod contained_argv;
+#[path = "../../guard-command/src/contained_expectation.rs"]
+mod contained_expectation;
+#[path = "../../guard-command/src/contained_git.rs"]
+mod contained_git;
+#[path = "../../guard-command/src/contained_inline_target.rs"]
+mod contained_inline_target;
+#[path = "../../guard-command/src/contained_node_tool.rs"]
+mod contained_node_tool;
+#[path = "../../guard-command/src/contained_package_test.rs"]
+pub mod contained_package_test;
+#[path = "../../guard-command/src/contained_prefix.rs"]
+mod contained_prefix;
+#[path = "../../guard-command/src/contained_run_prefix.rs"]
+mod contained_run_prefix;
 #[cfg(unix)]
 #[path = "../../guard-command/src/contained_runner/mod.rs"]
 pub mod contained_runner;
+#[path = "../../guard-command/src/containment_compatibility.rs"]
+mod containment_compatibility;
 #[path = "../../guard-command/src/contributed_mcp_decision.rs"]
 pub mod contributed_mcp_decision;
 #[path = "../../guard-command/src/contributed_mcp_url.rs"]
@@ -110,6 +130,8 @@ pub mod egress_broker;
 mod egress_spool;
 #[path = "../../guard-command/src/env_wrapper.rs"]
 mod env_wrapper;
+#[path = "../../guard-command/src/environment_name_filters.rs"]
+pub(crate) mod environment_name_filters;
 #[path = "../../guard-command/src/environment_secret_dump.rs"]
 pub mod environment_secret_dump;
 #[path = "../../guard-command/src/executable_flag_contract.rs"]
@@ -118,6 +140,11 @@ mod executable_flag_contract;
 pub mod extension_control;
 #[path = "../../guard-command/src/false_positive_rules.rs"]
 pub mod false_positive_rules;
+#[cfg(unix)]
+#[path = "../../guard-command/src/forwarded_settings.rs"]
+pub mod forwarded_settings;
+#[path = "../../guard-command/src/github_additional_commands.rs"]
+mod github_additional_commands;
 #[path = "../../guard-command/src/github_capability_contract.rs"]
 pub mod github_capability_contract;
 #[path = "../../guard-command/src/github_capability_interaction.rs"]
@@ -130,6 +157,8 @@ pub mod github_workflow_authorization;
 pub mod github_workflow_operations;
 #[path = "../../guard-command/src/guard_sync_transport.rs"]
 pub mod guard_sync_transport;
+#[path = "../../guard-command/src/harness_attribution.rs"]
+pub mod harness_attribution;
 #[path = "../../guard-command/src/harness_config_names.rs"]
 mod harness_config_names;
 #[path = "../../guard-command/src/harness_identity.rs"]
@@ -155,6 +184,8 @@ mod launch_identity_common;
 #[cfg(windows)]
 #[path = "../../guard-command/src/launch_identity_windows.rs"]
 mod launch_identity_windows;
+#[path = "../../guard-command/src/lifecycle_scripts_flag.rs"]
+pub mod lifecycle_scripts_flag;
 #[path = "../../guard-command/src/local_supply_chain.rs"]
 pub mod local_supply_chain;
 #[path = "../../guard-command/src/native_command_catalog.rs"]
@@ -165,6 +196,8 @@ pub mod native_command_controls;
 pub mod native_command_program;
 #[path = "../../guard-command/src/network_url.rs"]
 pub mod network_url;
+#[path = "../../guard-command/src/node_build_output.rs"]
+pub mod node_build_output;
 #[path = "../../guard-command/src/npm_source_spec.rs"]
 pub mod npm_source_spec;
 #[path = "../../guard-command/src/ordered_json.rs"]
@@ -173,6 +206,8 @@ pub mod ordered_json;
 pub mod package_approval;
 #[path = "../../guard-command/src/package_execution_context.rs"]
 pub mod package_execution_context;
+#[path = "../../guard-command/src/package_extension_ids.rs"]
+pub mod package_extension_ids;
 #[path = "../../guard-command/src/package_intent_common.rs"]
 pub mod package_intent_common;
 #[path = "../../guard-command/src/package_intent_parser.rs"]
@@ -222,6 +257,8 @@ pub mod redacted_command_tokens;
 mod runtime_read_paths;
 #[path = "../../guard-command/src/secret_path_probe.rs"]
 pub mod secret_path_probe;
+#[path = "../../guard-command/src/sed_substitution.rs"]
+mod sed_substitution;
 #[path = "../../guard-command/src/sfrs_constants.rs"]
 mod sfrs_constants;
 #[path = "../../guard-command/src/sfrs_developer_graph.rs"]
@@ -318,6 +355,10 @@ pub mod shell_execution_context;
 mod shell_execution_context_support;
 #[path = "../../guard-command/src/shell_model_limits.rs"]
 mod shell_model_limits;
+#[path = "../../guard-command/src/shell_secret_read_glob.rs"]
+mod shell_secret_read_glob;
+#[path = "../../guard-command/src/shell_secret_read_stdin_search.rs"]
+mod shell_secret_read_stdin_search;
 #[path = "../../guard-command/src/shell_secret_read_support.rs"]
 mod shell_secret_read_support;
 #[path = "../../guard-command/src/shell_structure.rs"]
@@ -328,10 +369,17 @@ pub mod source_cli;
 pub mod supply_chain_package_eval;
 #[path = "../../guard-command/src/target_identities.rs"]
 pub mod target_identities;
+#[path = "../../guard-command/src/tsc_project.rs"]
+mod tsc_project;
 #[path = "../../guard-command/src/typescript_launch_evidence.rs"]
 pub mod typescript_launch_evidence;
+#[path = "../../guard-command/src/vite_output.rs"]
+pub mod vite_output;
 #[path = "../../guard-command/src/workspace_inventory.rs"]
 pub mod workspace_inventory;
+#[cfg(unix)]
+#[path = "../../guard-command/src/workspace_roots.rs"]
+pub mod workspace_roots;
 use guard_hook_payload::{
     hook_adapter_cline_tables, hook_adapter_prepare_cursor, hook_adapter_pyjson,
     hook_adapter_pytext,
@@ -363,16 +411,22 @@ pub mod restricted_command;
 pub mod restricted_pytest;
 #[path = "../../guard-command/src/safe_decode/mod.rs"]
 pub mod safe_decode;
+#[path = "../../guard-command/src/shell_comment_lines.rs"]
+mod shell_comment_lines;
 #[path = "../../guard-command/src/shims/mod.rs"]
 pub mod shims;
 #[path = "../../guard-command/src/strict_json.rs"]
 pub mod strict_json;
 #[path = "../../guard-command/src/supply_chain_bundle.rs"]
 pub mod supply_chain_bundle;
+#[path = "../../guard-command/src/supply_chain_bundle_cache_trust.rs"]
+pub mod supply_chain_bundle_cache_trust;
 #[path = "../../guard-command/src/supply_chain_package_identity.rs"]
 pub mod supply_chain_package_identity;
 #[path = "../../guard-command/src/supply_chain_risk.rs"]
 pub mod supply_chain_risk;
+#[path = "../../guard-command/src/supply_chain_support.rs"]
+pub mod supply_chain_support;
 pub(crate) use command_parse_surface::{
     default_dialect, default_provenance, default_transport, is_fd_dup_redirect,
     parse_command_unbound, parse_explicit_powershell, parse_inline_shell_script,

@@ -1,6 +1,8 @@
 //! Parity vectors recorded from the legacy Python package-protect projection
 //! (`_apply_package_protect_projection` and its helpers) before deletion. The
-//! per-call receipt id and timestamp are masked.
+//! per-call receipt id and timestamp are masked. The execution context's
+//! `portable_summary` text was later reworded in place when a saved approval
+//! came to hold in any checkout of the same repository origin.
 
 use super::*;
 use flate2::read::GzDecoder;

@@ -1,363 +1,334 @@
-"""Handle-bound Windows atomic replacement primitives for native state."""
+"""Owner-private Windows state files, kept by the native runtime.
+
+The runtime's ``windows-private-state`` command reads, replaces and deletes
+each file through held directory handles and checks its owner and DACL, and
+creates or repairs the private directories they live in; these wrappers
+encode the request and raise its failure code.
+
+A process that already talks to the resident runtime for the Guard home the
+file lives in asks that resident; elsewhere each request starts a runtime
+process. Idle workers recheck the same handful of files every second, so a
+read the runtime verified is remembered for a short window while the file,
+and the directory it was read from, keep the identity they had on both sides
+of that read. Any write or delete through
+these wrappers forgets the file, and a replaced, rewritten, created or
+removed file misses at once.
+"""
 
 from __future__ import annotations
 
-from contextlib import suppress
+import base64
+import binascii
+import os
+import stat
+import threading
+import time
+from collections import OrderedDict
 from pathlib import Path
-from typing import Any
 
-from ..safe_output_windows import _FileDispositionInformation, _FileRenameInfo, _IoStatusBlock
-from .native_policy_snapshot_constants import (
-    _WINDOWS_ERROR_ALREADY_EXISTS,
-    _WINDOWS_ERROR_FILE_EXISTS,
-    NativePolicySnapshotError,
-)
-from .native_policy_snapshot_windows_support import _windows_write_chunks_and_flush
+from .native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_BYTES, NativePolicySnapshotError
 
-_WINDOWS_FILE_RENAME_INFORMATION = 10
-_WINDOWS_FILE_DISPOSITION_INFO = 4
+_PRIVATE_STATE_FEATURE = "native-windows-private-state-v1"
+_PRIVATE_DIRECTORY_FEATURE = "native-windows-private-directory-v1"
+_PRIVATE_STATE_COMMAND = "windows-private-state"
+_PRIVATE_STATE_SCHEMA = "windows-private-state.v1"
+_PRIVATE_STATE_TIMEOUT_SECONDS = 10.0
+_PRIVATE_STATE_ANSWER_OVERHEAD = 4096
+# How long a verified read stands in for the runtime while nothing about the
+# file or its directory has changed. Content changes are seen at once through
+# the file identity; the window bounds how long an ACL change made in place by
+# the file's owner goes unseen.
+_PRIVATE_READ_RECHECK_SECONDS = 60.0
+_PRIVATE_READ_MEMO_ENTRIES = 32
 
-
-def _snapshot_api() -> Any:
-    """Resolve façade hooks lazily, preserving established monkeypatch seams."""
-
-    from . import native_policy_snapshot
-
-    return native_policy_snapshot
-
-
-def _windows_handle_value(handle: Any) -> int:
-    value = getattr(handle, "value", handle)
-    if not isinstance(value, int) or value < 0:
-        raise NativePolicySnapshotError("native_policy_windows_handle_invalid")
-    return value
+# (directory, name, private root, byte limit) -> (identity, content, verified at)
+_ReadKey = tuple[str, str, str, int]
+_Identity = tuple[tuple[int, int], tuple[int, int, int, int] | None]
+_clock = time.monotonic
+_private_reads_lock = threading.Lock()
+_private_reads: OrderedDict[_ReadKey, tuple[_Identity, bytes | None, float]] = OrderedDict()
 
 
-def _windows_child_name(name: str) -> str:
-    if not name or name in {".", ".."} or any(character in name for character in ("/", "\\", ":", "\x00")):
-        raise NativePolicySnapshotError("native_policy_windows_path_invalid")
-    return name
-
-
-def _windows_rename_file_handle(
-    kernel32: Any,
-    handle: Any,
-    parent_handle: Any,
-    name: str,
+def _private_state_answer(
+    request: dict[str, object],
     *,
-    replace_if_exists: bool = True,
-) -> None:
-    """Rename an open file relative to an already verified parent handle."""
+    output_limit: int,
+    feature: str,
+) -> dict[str, object] | None:
+    from .mdm.runtime_request import runtime_answer
+    from .native_policy_snapshot_windows_resident import resident_private_state_answer
 
-    import ctypes
-
-    _ = kernel32
-    encoded_name = _windows_child_name(name).encode("utf-16-le")
-    file_name_offset = _FileRenameInfo.file_name.offset
-    buffer = ctypes.create_string_buffer(ctypes.sizeof(_FileRenameInfo) + len(encoded_name))
-    info = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfo)).contents
-    info.replace_if_exists = replace_if_exists
-    info.root_directory = _windows_handle_value(parent_handle)
-    info.file_name_length = len(encoded_name)
-    ctypes.memmove(ctypes.addressof(buffer) + file_name_offset, encoded_name, len(encoded_name))
-    native_library = ctypes.WinDLL("ntdll", use_last_error=True)
-    native_library.NtSetInformationFile.argtypes = [
-        ctypes.c_void_p,
-        ctypes.POINTER(_IoStatusBlock),
-        ctypes.c_void_p,
-        ctypes.c_uint32,
-        ctypes.c_int,
-    ]
-    native_library.NtSetInformationFile.restype = ctypes.c_long
-    native_library.RtlNtStatusToDosError.argtypes = [ctypes.c_long]
-    native_library.RtlNtStatusToDosError.restype = ctypes.c_uint32
-    status_block = _IoStatusBlock()
-    status = int(
-        native_library.NtSetInformationFile(
-            ctypes.c_void_p(_windows_handle_value(handle)),
-            ctypes.byref(status_block),
-            buffer,
-            ctypes.sizeof(buffer),
-            _WINDOWS_FILE_RENAME_INFORMATION,
-        )
+    body = {"schema": _PRIVATE_STATE_SCHEMA, **request}
+    answer = resident_private_state_answer(body, output_limit=output_limit)
+    if answer is not None:
+        return answer
+    return runtime_answer(
+        feature,
+        _PRIVATE_STATE_COMMAND,
+        body,
+        output_limit=output_limit,
+        timeout_seconds=_PRIVATE_STATE_TIMEOUT_SECONDS,
     )
-    if status < 0:
-        ctypes.set_last_error(int(native_library.RtlNtStatusToDosError(status)))
-        if not replace_if_exists and ctypes.get_last_error() in {
-            _WINDOWS_ERROR_FILE_EXISTS,
-            _WINDOWS_ERROR_ALREADY_EXISTS,
-        }:
-            raise FileExistsError(name)
-        raise NativePolicySnapshotError("native_policy_windows_replace_failed")
 
 
-def _windows_delete_file_handle(kernel32: Any, handle: Any) -> None:
-    """Delete a temporary only through its still-open, identity-bound handle."""
+def _private_state(
+    op: str,
+    field: str,
+    *,
+    directory: Path,
+    name: str | None,
+    private_root: Path | None,
+    output_limit: int = _PRIVATE_STATE_ANSWER_OVERHEAD,
+    feature: str = _PRIVATE_STATE_FEATURE,
+    **request: object,
+) -> object:
+    """The runtime's `field` answer for one file or directory, or its failure code raised."""
 
-    import ctypes
-    from ctypes import wintypes
+    body: dict[str, object] = {"op": op, "directory": str(directory), **request}
+    if name is not None:
+        body["name"] = name
+    if private_root is not None:
+        body["private_root"] = str(private_root)
+    answer = _private_state_answer(body, output_limit=output_limit, feature=feature)
+    if answer is None:
+        raise NativePolicySnapshotError("native_windows_private_state_unavailable")
+    error = answer.get("error")
+    if isinstance(error, str) and error:
+        raise NativePolicySnapshotError(error)
+    if field not in answer:
+        raise NativePolicySnapshotError("native_windows_private_state_unavailable")
+    return answer[field]
 
-    disposition = _FileDispositionInformation(delete_file=True)
-    set_information = kernel32.SetFileInformationByHandle
-    set_information.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
-    set_information.restype = wintypes.BOOL
-    if not set_information(
-        handle,
-        _WINDOWS_FILE_DISPOSITION_INFO,
-        ctypes.byref(disposition),
-        ctypes.sizeof(disposition),
-    ):
-        raise NativePolicySnapshotError("native_policy_windows_temporary_cleanup_failed")
+
+def _remembers_private_reads() -> bool:
+    return os.name == "nt"
 
 
-def _windows_file_identity(information: Any) -> tuple[int, int, int] | None:
-    fields = ("dwVolumeSerialNumber", "nFileIndexHigh", "nFileIndexLow")
-    if not all(hasattr(information, field) for field in fields):
+def _path_key(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _read_key(directory: Path, name: str, private_root: Path | None, maximum_bytes: int) -> _ReadKey:
+    root = "" if private_root is None else _path_key(private_root)
+    return _path_key(directory), os.path.normcase(name), root, maximum_bytes
+
+
+def _private_identity(directory: Path, name: str) -> _Identity | None:
+    """The directory and file identity, or ``None`` when it cannot be trusted.
+
+    A directory reached through a junction or link, a file that is a link, or
+    anything that is not a plain file has no identity and is never remembered.
+    A missing file in a plain directory has the file part ``None``.
+    """
+
+    from .store_base import _windows_path_is_direct
+
+    directory_key = _path_key(directory)
+    if not _windows_path_is_direct(directory_key):
+        return None
+    try:
+        directory_stat = os.lstat(directory_key)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(directory_stat.st_mode) or not directory_stat.st_ino:
+        return None
+    try:
+        file_stat = os.lstat(os.path.join(directory_key, name))
+    except FileNotFoundError:
+        return (directory_stat.st_dev, directory_stat.st_ino), None
+    except OSError:
+        return None
+    if not stat.S_ISREG(file_stat.st_mode) or not file_stat.st_ino:
+        return None
+    if getattr(file_stat, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
         return None
     return (
-        int(information.dwVolumeSerialNumber),
-        int(information.nFileIndexHigh),
-        int(information.nFileIndexLow),
+        (directory_stat.st_dev, directory_stat.st_ino),
+        (file_stat.st_dev, file_stat.st_ino, file_stat.st_size, file_stat.st_mtime_ns),
     )
 
 
-def _windows_prepare_replace_destination(
+def _remembered_read(key: _ReadKey, directory: Path, name: str) -> tuple[bool, bytes | None]:
+    with _private_reads_lock:
+        remembered = _private_reads.get(key)
+    if remembered is None:
+        return False, None
+    identity, content, verified_at = remembered
+    if _clock() - verified_at >= _PRIVATE_READ_RECHECK_SECONDS:
+        return False, None
+    if _private_identity(directory, name) != identity:
+        return False, None
+    return True, content
+
+
+def _remember_read(key: _ReadKey, identity: _Identity, content: bytes | None, verified_at: float) -> None:
+    with _private_reads_lock:
+        _private_reads[key] = (identity, content, verified_at)
+        _private_reads.move_to_end(key)
+        while len(_private_reads) > _PRIVATE_READ_MEMO_ENTRIES:
+            _private_reads.popitem(last=False)
+
+
+def _forget_private_file(directory: Path, name: str) -> None:
+    directory_key = _path_key(directory)
+    name_key = os.path.normcase(name)
+    with _private_reads_lock:
+        for key in [key for key in _private_reads if key[0] == directory_key and key[1] == name_key]:
+            del _private_reads[key]
+
+
+def _windows_read_private_file(
+    directory: Path,
+    name: str,
     *,
-    api: Any,
-    parent_path: Path,
-    destination_name: str,
-    descriptor: Any,
-    dacl: Any,
-    owner_sid: str,
-    replace_existing: bool,
-) -> Path:
-    """Verify an existing destination, then close it so rename can replace it."""
+    maximum_bytes: int,
+    private_root: Path | None = None,
+) -> bytes | None:
+    """One owner-private file of at most `maximum_bytes`, or ``None`` when missing.
 
-    target_path = parent_path / destination_name
-    try:
-        target_kernel32, target_handle, _target_information = api._windows_open_handle(
-            target_path,
-            directory=False,
-            repair=True,
-            share_delete=True,
-            rename_source=True,
-        )
-    except FileNotFoundError:
-        return target_path
-    try:
-        api._windows_verify_private_owner(target_handle, owner_sid=owner_sid)
-        api._windows_apply_private_dacl(target_kernel32, target_handle, descriptor, dacl, False)
-        api._windows_verify_private_dacl(target_handle, owner_sid=owner_sid, directory=False)
-        if not replace_existing:
-            raise FileExistsError(str(target_path))
-    finally:
-        api._windows_close_handle(target_kernel32, target_handle)
-    return target_path
+    With `private_root` the directories below it are created or repaired
+    first, as a writer's are; without one the directory is only held.
+    """
+
+    if not _remembers_private_reads():
+        return _runtime_read_private_file(directory, name, maximum_bytes=maximum_bytes, private_root=private_root)
+    key = _read_key(directory, name, private_root, maximum_bytes)
+    hit, remembered = _remembered_read(key, directory, name)
+    if hit:
+        return remembered
+    before = _private_identity(directory, name)
+    verified_at = _clock()
+    content = _runtime_read_private_file(directory, name, maximum_bytes=maximum_bytes, private_root=private_root)
+    # Only a file that held one identity across the whole runtime read is
+    # remembered, and only when the runtime saw the same presence.
+    if before is not None and (before[1] is None) == (content is None) and _private_identity(directory, name) == before:
+        _remember_read(key, before, content, verified_at)
+    return content
 
 
-def _windows_rename_releasing_barrier(
+def _runtime_read_private_file(
+    directory: Path,
+    name: str,
     *,
-    api: Any,
-    kernel32: Any,
-    source_handle: Any,
-    parent_path: Path,
-    parent_handle: Any,
-    destination_name: str,
-    replace_existing: bool,
-    directory_handles: list[tuple[Any, Any]] | None,
-) -> None:
-    """Rename through a share-delete parent after releasing the exclusive barrier."""
-
-    rename_kernel32 = None
-    rename_handle = None
-    released = False
-    try:
-        root_handle = parent_handle
-        if directory_handles is not None:
-            exclusive_kernel32, exclusive_handle = directory_handles.pop()
-            released = True
-            api._windows_close_handle(exclusive_kernel32, exclusive_handle)
-            rename_kernel32, rename_handle, _rename_information = api._windows_open_handle(
-                parent_path,
-                directory=True,
-                rename_parent=True,
-            )
-            root_handle = rename_handle
-        _windows_rename_file_handle(
-            kernel32,
-            source_handle,
-            root_handle,
-            destination_name,
-            replace_if_exists=replace_existing,
-        )
-    finally:
-        if rename_handle is not None:
-            api._windows_close_handle(rename_kernel32, rename_handle)
-        if released and directory_handles is not None:
-            restored_kernel32, restored_handle, _restored = api._windows_open_handle(
-                parent_path,
-                directory=True,
-                lock=True,
-                add_file=True,
-            )
-            directory_handles.append((restored_kernel32, restored_handle))
-
-
-def _windows_commit_private_file_handle(
-    *,
-    api: Any,
-    kernel32: Any,
-    source_handle: Any,
-    source_information: Any,
-    parent_path: Path,
-    parent_handle: Any,
-    destination_name: str,
-    descriptor: Any,
-    dacl: Any,
-    owner_sid: str,
-    kind: str,
-    replace_existing: bool = True,
-    rename_state: list[bool] | None = None,
-    directory_handles: list[tuple[Any, Any]] | None = None,
-) -> None:
-    """Validate the old target, then replace it through bound handles."""
-
-    destination_name = _windows_child_name(destination_name)
-    source_identity = _windows_file_identity(source_information)
-    api._windows_verify_private_dacl(source_handle, owner_sid=owner_sid, directory=False)
-    target_path = _windows_prepare_replace_destination(
-        api=api,
-        parent_path=parent_path,
-        destination_name=destination_name,
-        descriptor=descriptor,
-        dacl=dacl,
-        owner_sid=owner_sid,
-        replace_existing=replace_existing,
+    maximum_bytes: int,
+    private_root: Path | None,
+) -> bytes | None:
+    encoded = _private_state(
+        "read",
+        "content_b64",
+        directory=directory,
+        name=name,
+        private_root=private_root,
+        output_limit=(maximum_bytes + 2) // 3 * 4 + _PRIVATE_STATE_ANSWER_OVERHEAD,
+        maximum_bytes=maximum_bytes,
     )
-    _windows_rename_releasing_barrier(
-        api=api,
-        kernel32=kernel32,
-        source_handle=source_handle,
-        parent_path=parent_path,
-        parent_handle=parent_handle,
-        destination_name=destination_name,
-        replace_existing=replace_existing,
-        directory_handles=directory_handles,
-    )
-    if rename_state is not None:
-        rename_state[0] = True
-    api._windows_verify_private_dacl(source_handle, owner_sid=owner_sid, directory=False)
+    if encoded is None:
+        return None
+    if not isinstance(encoded, str):
+        raise NativePolicySnapshotError("native_windows_private_state_invalid")
     try:
-        committed_kernel32, committed_handle, committed_information = api._windows_open_handle(
-            target_path,
-            directory=False,
-            share_delete=True,
-        )
-    except (FileNotFoundError, NativePolicySnapshotError) as error:
-        raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed") from error
-    try:
-        if source_identity is not None and _windows_file_identity(committed_information) != source_identity:
-            raise NativePolicySnapshotError(f"native_policy_snapshot_{kind}_identity_failed")
-        api._windows_verify_private_dacl(committed_handle, owner_sid=owner_sid, directory=False)
-    finally:
-        api._windows_close_handle(committed_kernel32, committed_handle)
+        content = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise NativePolicySnapshotError("native_windows_private_state_invalid") from error
+    if not content or len(content) > maximum_bytes:
+        raise NativePolicySnapshotError("native_windows_private_state_invalid")
+    return content
+
+
+def _windows_read_snapshot_bytes(
+    path: Path,
+    *,
+    maximum_bytes: int = POLICY_SNAPSHOT_MAX_BYTES,
+) -> bytes | None:
+    """Read one owner-private state file while its directory is held."""
+
+    return _windows_read_private_file(path.parent, path.name, maximum_bytes=maximum_bytes)
 
 
 def _windows_write_private_file_atomic(
     *,
-    parent_path: Path,
-    parent_handle: Any,
-    temporary_name: str,
-    destination_name: str,
+    directory: Path,
+    name: str,
     payload: bytes,
     maximum_bytes: int,
-    kind: str,
-    replace_existing: bool = True,
-    directory_handles: list[tuple[Any, Any]] | None = None,
+    private_root: Path | None = None,
 ) -> None:
-    """Create, write, and commit a private file while parent handles remain held."""
+    """Replace one owner-private file so readers see old or new content, never a partial one.
+
+    The directories from `private_root` (`directory` itself by default) down
+    are created or repaired first.
+    """
 
     if not payload or len(payload) > maximum_bytes:
         raise NativePolicySnapshotError("native_policy_windows_write_too_large")
-    temporary_name = _windows_child_name(temporary_name)
-    destination_name = _windows_child_name(destination_name)
-    api = _snapshot_api()
-    with api._windows_private_descriptor(False) as (_advapi32, descriptor, dacl, owner_sid):
-        temporary_path = parent_path / temporary_name
-        kernel32, handle, information = api._windows_open_handle(
-            temporary_path,
-            directory=False,
-            create_new=True,
-            descriptor=descriptor,
-            rename_source=True,
+    _forget_private_file(directory, name)
+    try:
+        _private_state(
+            "write",
+            "written",
+            directory=directory,
+            name=name,
+            private_root=private_root,
+            maximum_bytes=maximum_bytes,
+            content_b64=base64.b64encode(payload).decode("ascii"),
         )
-        renamed = [False]
-        try:
-            api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-            _windows_write_chunks_and_flush(kernel32, handle, payload)
-            _windows_commit_private_file_handle(
-                api=api,
-                kernel32=kernel32,
-                source_handle=handle,
-                source_information=information,
-                parent_path=parent_path,
-                parent_handle=parent_handle,
-                destination_name=destination_name,
-                descriptor=descriptor,
-                dacl=dacl,
-                owner_sid=owner_sid,
-                kind=kind,
-                replace_existing=replace_existing,
-                rename_state=renamed,
-                directory_handles=directory_handles,
-            )
-        except BaseException:
-            # The source remains at the temporary name until rename succeeds,
-            # so cleanup stays identity-bound to this handle for all failures,
-            # including bounded writes and FlushFileBuffers.
-            if not renamed[0]:
-                with suppress(BaseException):
-                    _windows_delete_file_handle(kernel32, handle)
-            raise
-        finally:
-            api._windows_close_handle(kernel32, handle)
+    finally:
+        _forget_private_file(directory, name)
 
 
 def _windows_delete_private_child(
     *,
-    parent_path: Path,
-    parent_handle: Any,
+    directory: Path,
     name: str,
-) -> None:
-    """Delete one state child only through its verified parent and file handles."""
+    private_root: Path | None = None,
+) -> bool:
+    """Delete one owner-private file through its verified handle; whether it existed.
 
-    name = _windows_child_name(name)
-    _windows_handle_value(parent_handle)
-    api = _snapshot_api()
+    A file already missing from a plain directory needs no runtime: idle
+    publishers clear an acknowledgment that is usually not there.
+    """
+
+    _forget_private_file(directory, name)
+    if _remembers_private_reads():
+        identity = _private_identity(directory, name)
+        if identity is not None and identity[1] is None:
+            return False
     try:
-        kernel32, handle, _information = api._windows_open_handle(
-            parent_path / name,
-            directory=False,
-            rename_source=True,
-            share_delete=True,
+        return (
+            _private_state(
+                "delete",
+                "deleted",
+                directory=directory,
+                name=name,
+                private_root=private_root,
+            )
+            is True
         )
-    except FileNotFoundError:
-        return
-    try:
-        owner_sid = api._windows_owner_sid()
-        api._windows_verify_private_owner(handle, owner_sid=owner_sid)
-        api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-        _windows_delete_file_handle(kernel32, handle)
     finally:
-        api._windows_close_handle(kernel32, handle)
+        _forget_private_file(directory, name)
+
+
+def _windows_ensure_private_directory(path: Path, *, private_root: Path | None = None) -> None:
+    """Create `path` and its missing ancestors, and make it owner-private.
+
+    The directories from `private_root` (`path` itself by default) down are
+    created or have their ACLs repaired; missing ancestors are created private.
+    """
+
+    _private_state(
+        "ensure",
+        "ensured",
+        directory=Path(os.path.abspath(path)),
+        name=None,
+        private_root=None if private_root is None else Path(os.path.abspath(private_root)),
+        feature=_PRIVATE_DIRECTORY_FEATURE,
+    )
 
 
 __all__ = [
-    "_windows_commit_private_file_handle",
-    "_windows_delete_file_handle",
     "_windows_delete_private_child",
-    "_windows_file_identity",
-    "_windows_handle_value",
-    "_windows_rename_file_handle",
+    "_windows_ensure_private_directory",
+    "_windows_read_private_file",
+    "_windows_read_snapshot_bytes",
     "_windows_write_private_file_atomic",
 ]

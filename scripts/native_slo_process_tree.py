@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 # Sample with the operating system's own ``ps`` rather than a PATH lookup.
@@ -12,6 +15,26 @@ from pathlib import Path
 # a benchmark session has closed its resident, when the resident-backed
 # command-path trust helper has no runtime to answer.
 _SYSTEM_PS_PATHS = (Path("/bin/ps"), Path("/usr/bin/ps"))
+_RSS_OBSERVER: ContextVar[Callable[[dict[str, int]], None] | None] = ContextVar("slo_rss_observer", default=None)
+
+
+@contextmanager
+def observe_rss_reads(observer: Callable[[dict[str, int]], None]) -> Iterator[None]:
+    """Observe the same OS snapshot used by the gate, without changing its value.
+
+    Explicit diagnostic callers receive only aggregate bytes/counts. No PID,
+    executable, path, environment or additional process probe is exposed.
+    """
+    token = _RSS_OBSERVER.set(observer)
+    try:
+        yield
+    finally:
+        _RSS_OBSERVER.reset(token)
+
+
+def rss_observation_active() -> bool:
+    """Explicit diagnostic profiles require a complete process-tree snapshot."""
+    return _RSS_OBSERVER.get() is not None
 
 
 def _system_ps_path() -> Path | None:
@@ -70,7 +93,19 @@ def process_tree_rss_bytes(process_ids: tuple[int, ...]) -> int | None:
     rss_kib = sum(
         rss_kib for process_id, _parent_process_id, rss_kib in process_rows if process_id in included_process_ids
     )
-    return rss_kib * 1024
+    rss_bytes = rss_kib * 1024
+    observer = _RSS_OBSERVER.get()
+    if observer is not None:
+        root_rss_bytes = sum(rss for pid, _ppid, rss in process_rows if pid in root_process_ids) * 1024
+        observer(
+            {
+                "rss_bytes": rss_bytes,
+                "root_rss_bytes": root_rss_bytes,
+                "descendant_rss_bytes": rss_bytes - root_rss_bytes,
+                "processes": len(included_process_ids),
+            }
+        )
+    return rss_bytes
 
 
-__all__ = ["process_tree_rss_bytes"]
+__all__ = ["observe_rss_reads", "process_tree_rss_bytes", "rss_observation_active"]

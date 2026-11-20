@@ -3,9 +3,9 @@
 Run from a source tree whose ``guard/runtime/embedded_script_evidence.py`` still
 derived the entries in Python (heredoc extraction and command parsing went
 through the native resident; owner matching, execution status, hashing and
-truncation were Python). That module now delegates to the native
-``embedded_script_evidence`` shell helper action, so this script documents how
-``vectors.json`` was produced rather than re-running against the current tree.
+truncation were Python). That module has since been retired in favour of the
+native ``embedded_script_evidence`` shell helper action, so this script documents
+how ``vectors.json`` was produced rather than re-running against the current tree.
 
 Two cases carry hand-edited entries rather than what the owner produced.
 ``heredoc_comment`` recorded a heredoc for ``echo hi # <<EOF``; a word-initial

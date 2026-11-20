@@ -22,8 +22,8 @@
 //! call is forwarded rather than blocked on them, so there is no approval
 //! center to open and nothing to answer the client with: the proxy raises the
 //! desktop notice alone, through the `notify=True` its queue takes by default.
-//! The relay carries those notices on the forward's receipt for the drain to
-//! raise, which is where every other surface this lane leaves is raised.
+//! The resident raises those notices itself once the rows are written, and
+//! carries any it cannot read on the forward's receipt for the drain to raise.
 //!
 //! Two differences from the `ask` row are the proxy's own, and both are kept:
 //!
@@ -147,6 +147,16 @@ pub(super) fn queue(
                 redaction_level,
             );
             notices.push(write(request, oauth_source, action, args)?);
+        }
+        // The proxy's queue raises each notice as its row is written. The
+        // resident raises them together once both are; notices it cannot read
+        // stay on the record for the daemon to raise.
+        if crate::hook_direct_evidence::notice::raise_approvals(
+            &request.guard_home,
+            oauth_source,
+            &notices,
+        ) {
+            notices.clear();
         }
     }
     // `(*fresh_scanner_evidence, *composed["evidence_append"])`: the receipt's

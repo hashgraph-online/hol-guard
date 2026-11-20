@@ -16,7 +16,7 @@ from ..native_command_model import _canonical_command_from_native
 from ..native_pretool import review_pre_tool_native
 from .command_evaluation import CompositeCommandEvaluation, evaluate_command
 from .command_model import CanonicalCommand
-from .extension_control_runtime import ExtensionControlRuntimeSnapshot, current_extension_control_snapshot
+from .extension_control_runtime import ExtensionControlRuntimeSnapshot
 from .github_workflow_authorization import GitHubWorkflowAuthorization
 from .native_command_extension_evidence import NativeCommandExtensionEvidenceError
 
@@ -26,11 +26,6 @@ class NativeCommandEvaluation:
     evaluation: CompositeCommandEvaluation
     payload: dict[str, object]
     snapshot: ExtensionControlRuntimeSnapshot
-
-    @property
-    def native_minimum_action(self) -> str:
-        """Native classification before authenticated host policy proofs."""
-        return str(self.payload["minimum_action"])
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -56,6 +51,8 @@ def native_command_review(
     execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
     record_health: bool = True,
+    admit_unenrolled: bool = False,
+    timeout_ceiling_seconds: float = 1.0,
 ) -> NativeCommandReview | None:
     """The resident's review of ``command``, or None without a usable native result.
 
@@ -66,9 +63,18 @@ def native_command_review(
     the command would run in. The rules that have to prove an inherited
     variable away read it from there; without it the runtime answers from its
     own process environment, which in the resident daemon is not the caller's.
+
+    ``admit_unenrolled`` also reviews on a device that never enrolled. Only the
+    advisory allow hint asks for it, to tell such a device what setup unlocks;
+    every other caller keeps treating any authority failure as no review.
+
+    The review carries the extension evidence the resident decided it on, so
+    it can be resolved against ``extension_control_snapshot``.
     """
-    snapshot = extension_control_snapshot or current_extension_control_snapshot()
-    if snapshot is None or snapshot.authority_failure is not None:
+    snapshot = extension_control_snapshot
+    if snapshot is None or (
+        snapshot.authority_failure is not None and not (admit_unenrolled and snapshot.awaiting_enrollment)
+    ):
         return None
     native = review_pre_tool_native(
         command,
@@ -78,6 +84,8 @@ def native_command_review(
         execution_environment=execution_environment,
         timeout_seconds=timeout_seconds,
         record_health=record_health,
+        extension_evidence=True,
+        timeout_ceiling_seconds=timeout_ceiling_seconds,
     )
     if native is None:
         return None
@@ -136,6 +144,8 @@ def review_command_native(
     execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
     record_health: bool = True,
+    admit_unenrolled: bool = False,
+    timeout_ceiling_seconds: float = 1.0,
 ) -> NativeCommandEvaluation | None:
     """Return a bound native projection, or None without a usable native result."""
     review = native_command_review(
@@ -147,6 +157,8 @@ def review_command_native(
         execution_environment=execution_environment,
         timeout_seconds=timeout_seconds,
         record_health=record_health,
+        admit_unenrolled=admit_unenrolled,
+        timeout_ceiling_seconds=timeout_ceiling_seconds,
     )
     if review is None:
         return None

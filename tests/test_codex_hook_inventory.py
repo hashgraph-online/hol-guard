@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+import sys
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.codex_toml_support import dump_toml, read_toml_payload
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
     CODEX_HOOK_INVENTORY_UNKNOWN_HANDLER,
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
@@ -243,7 +244,7 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
     trusted_interpreter = tmp_path / "trusted-python"
     _write(trusted_interpreter, "fixture interpreter\n")
     trusted_interpreter.chmod(0o700)
-    monkeypatch.setattr(codex_adapter, "_guard_python_executable", lambda: str(trusted_interpreter))
+    monkeypatch.setattr(sys, "executable", str(trusted_interpreter))
     _write(
         hooks_path,
         json.dumps(
@@ -260,8 +261,8 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
         + "\n",
     )
 
-    codex_adapter.CodexHarnessAdapter().install(
-        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+    harness_support.install(
+        "codex", HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
     )
 
     installed = read_toml_payload(home_dir / ".codex" / "config.toml")
@@ -383,35 +384,3 @@ def test_symlink_config_source_fails_closed_before_writes(
     assert "codex_hook_inventory_source_unreadable" in captured.err
     assert external_path.read_text(encoding="utf-8") == external_content
     assert (home_dir / ".codex" / "config.toml").exists() is False
-
-
-def test_source_change_after_inventory_stops_before_activation_write(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    hooks_path = workspace_dir / ".codex" / "hooks.json"
-    original_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 first.py"), "enabled": False}]}}
-    changed_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 changed.py"), "enabled": False}]}}
-    _write(hooks_path, json.dumps(original_payload, indent=2) + "\n")
-    original_verify = codex_adapter._require_hook_inventory_sources_unchanged
-
-    def mutate_then_verify(
-        *,
-        config_payloads: Mapping[Path, dict[str, object]],
-        hook_payloads: Mapping[Path, dict[str, object]],
-    ) -> None:
-        _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
-        original_verify(config_payloads=config_payloads, hook_payloads=hook_payloads)
-
-    monkeypatch.setattr(codex_adapter, "_require_hook_inventory_sources_unchanged", mutate_then_verify)
-
-    rc = main(_install_args(home_dir, workspace_dir))
-    captured = capsys.readouterr()
-
-    assert rc == 1
-    assert "codex_hook_inventory_source_changed" in captured.err
-    assert (home_dir / ".codex" / "config.toml").exists() is False
-    assert json.loads(hooks_path.read_text(encoding="utf-8")) == changed_payload

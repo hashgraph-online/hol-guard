@@ -99,6 +99,27 @@ To test the alpha:
 - CLI: `hol-guard update --alpha`, or install the exact version with `uv tool install 'hol-guard==<VERSION>'`.
 - Desktop: select the Alpha update channel. Desktop offers only alpha Core builds that still have a live `alpha/v<VERSION>` prerelease with signed sidecars.
 
+### Cut an alpha from a pull request
+
+A repository admin can publish the current head of any pull request as a main-train alpha without merging it. Run `Publish to PyPI` from `main`, so the workflow file on `main` is what runs:
+
+```sh
+gh workflow run "Publish to PyPI" --repo hashgraph-online/hol-guard --ref main \
+  -f release_channel=alpha \
+  -f release_train=main \
+  -f release_version=next \
+  -f expected_sha=<pull-request-head-sha> \
+  -f pull_request=<number>
+```
+
+- `expected_sha` must be that pull request's head at dispatch, including a head that lives in a fork. The workflow builds that commit and publishes the next `X.Y.0aN`.
+- A person who is not a repository admin can start the workflow, and the admin check stops it before it builds. The GitHub Actions bot cannot use this input. Any repository admin can publish; the two-maintainer allowlist applies only to an ordinary main alpha.
+- Release scripts in the publish jobs come from `main`. The pull request is the source that gets compiled. That build does not write the main release caches, and it does not publish a container image.
+- Leave `pull_request` empty for a normal main or `release/3.0` alpha. This path does not change those dispatches.
+- PyPI and the `alpha/v<VERSION>` prerelease are published. Desktop Core sidecars are not, because those feeds only accept a commit that is already on `main`.
+- Install it with `uv tool install 'hol-guard==<VERSION>'` or `hol-guard update --alpha`.
+- The Delete alpha release workflow only removes an alpha whose commit is still on `main`. Remove a pull request alpha with `gh release delete` below.
+
 ### Delete a test alpha
 
 Run the `Delete alpha release` workflow with the alpha `version`. It deletes the `alpha/v<VERSION>` prerelease, its tag, the Desktop Core sidecars attached to it, and the matching container image. Guard and Desktop alpha updates stop offering that version immediately.

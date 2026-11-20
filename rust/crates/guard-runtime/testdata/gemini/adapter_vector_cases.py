@@ -456,4 +456,8 @@ def cases(harness: str) -> list[dict]:
         from kimi_vector_cases import kimi_cases
 
         return kimi_cases()
+    if harness == "cline":
+        from cline_vector_cases import cline_cases
+
+        return cline_cases()
     return gemini_cases() + gemini_extra() if harness == "gemini" else antigravity_cases()

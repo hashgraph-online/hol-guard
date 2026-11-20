@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import json
 
-from codex_plugin_scanner.guard.retry_lineage import capture_retry_lineage
-
 T1 = "2026-07-18T20:00:00+00:00"
 T2 = "2026-07-18T20:05:00+00:00"
 T3 = "2026-07-18T20:10:00+00:00"
@@ -20,12 +18,19 @@ PAST = "2000-01-01T00:00:00+00:00"
 #: `PAST` and `FUTURE`; the Python test pins the wrapper clock to this value.
 NOW = "2026-10-10T12:00:00+00:00"
 
-LINEAGE = capture_retry_lineage(
-    {"session_id": "provider-session", "tool_call_id": "call-1", "cwd": "/work/space"},
-    harness="codex",
-    original_request_id="req-orig",
-)
-assert LINEAGE is not None
+# The record the retired Python capture produced for session
+# "provider-session", tool call "call-1", workspace "/work/space" and original
+# request "req-orig"; the store treats it as an opaque, canonical record.
+LINEAGE: dict[str, object] = {
+    "version": 1,
+    "source": "hook",
+    "harness": "codex",
+    "session_id": "provider-session",
+    "tool_call_id": "call-1",
+    "original_request_id": "req-orig",
+    "workspace_sha256": "670ff979f4d8c331e31ac28450fa6dde6de0ae8357122648a62e700fe4ab3a4e",
+    "lineage_id": "f1ea4ab64f670ddbe1a3186e251de0a9fba68ec9e035b8f584b86cefc94d546d",
+}
 TAMPERED_LINEAGE = {**LINEAGE, "harness": "claude-code"}
 
 

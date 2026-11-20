@@ -35,7 +35,7 @@ def test_rss_failure_retains_stage_and_request_accounting(failure: str) -> None:
 
     session = SimpleNamespace(
         observe=observe,
-        daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=stats))),
+        daemon=SimpleNamespace(hook_capacity=stats),
     )
 
     def baseline(run_wave: Callable[[], tuple[list[Observation], int]], **_kwargs: object) -> int:

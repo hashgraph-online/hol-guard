@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.codex_hook_state_support import fixed_hook_state
+from tests.cursor_test_support import cursor_agent_on_path
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -22,10 +24,6 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = _context(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._command_available",
-        lambda _command: True,
-    )
     command = "python -I ./codex_daemon_hook_bridge.py '{}'"
     hook_entry = {
         "matcher": "*",
@@ -54,22 +52,13 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
-        lambda _context, **_kwargs: {
-            "event_matches": {
-                "PreToolUse": False,
-                "PermissionRequest": False,
-                "UserPromptSubmit": False,
-                "PostToolUse": False,
-            },
-            "integrity_status": "tampered",
-            "integrity_reason": "codex_hook_interpreter_path_mismatch",
-        },
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
+        fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("codex").diagnostics(context)
+    payload = harness_ops.diagnostics("codex", context)
 
     assert payload["native_hook_state"]["managed_hook_installed"] is True
     assert payload["native_hook_state"]["protection_active"] is False
@@ -109,14 +98,11 @@ def test_doctor_treats_managed_cursor_hooks_as_guard_install(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert payload["setup_status"] == "active"
     assert any(artifact["artifact_type"] == "guard_hook" for artifact in payload["artifacts"])
@@ -143,14 +129,11 @@ def test_doctor_ignores_name_only_cursor_hook_marker(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = harness_ops.diagnostics("cursor", context)
 
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in payload["artifacts"])
     assert payload["setup_status"] != "active"
@@ -176,15 +159,11 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
-    adapter = get_adapter("cursor")
-    missing_payload = adapter.diagnostics(context)
+    missing_payload = harness_ops.diagnostics("cursor", context)
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in missing_payload["artifacts"])
     assert missing_payload["setup_status"] != "active"
 
@@ -207,18 +186,15 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
         ),
         encoding="utf-8",
     )
-    disabled_payload = adapter.diagnostics(context)
+    disabled_payload = harness_ops.diagnostics("cursor", context)
     assert not any(artifact["artifact_type"] == "guard_hook" for artifact in disabled_payload["artifacts"])
     assert disabled_payload["setup_status"] != "active"
 
 
-def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
-    from codex_plugin_scanner.guard.codex_hook_registration import (
-        finalize_codex_doctor_setup_status,
-        finalize_codex_doctor_warnings,
-    )
+def test_codex_doctor_result_drops_false_uninstalled_copy() -> None:
+    from codex_plugin_scanner.guard.codex_hook_registration import codex_doctor_result
 
-    warnings = finalize_codex_doctor_warnings(
+    warnings, status = codex_doctor_result(
         [
             "codex config was found, but Guard is not installed for this harness. "
             "Run `hol-guard install codex` to enable protection."
@@ -229,39 +205,52 @@ def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
             "managed_hook_installed": True,
             "integrity_status": "stale",
         },
+        "partial",
     )
 
     assert not any("Guard is not installed" in warning for warning in warnings)
     assert any("do not match this Guard CLI" in warning for warning in warnings)
-    assert (
-        finalize_codex_doctor_setup_status(
-            "partial",
-            {"managed_hook_installed": True, "protection_active": False},
-            warnings,
-        )
-        == "broken"
+    assert status == "broken"
+    installed = {"managed_hook_installed": True, "protection_active": True}
+    assert codex_doctor_result([], installed, "partial") == ([], "active")
+    assert codex_doctor_result(["codex command is not available"], installed, "partial")[1] == "broken"
+    assert codex_doctor_result([], {"managed_hook_installed": False}, "active")[1] == "broken"
+
+
+def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    command = "hol-guard guard hook codex"
+    hook_entry = {
+        "matcher": "*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": command,
+                "statusMessage": "HOL Guard checking tool action",
+            }
+        ],
+    }
+    events = ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+    config_path = context.home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("[features]\nhooks = true\n", encoding="utf-8")
+    (context.home_dir / ".codex" / "hooks.json").write_text(
+        json.dumps({"hooks": {event: [hook_entry] for event in events}}),
+        encoding="utf-8",
     )
-    assert (
-        finalize_codex_doctor_setup_status(
-            "partial",
-            {"managed_hook_installed": True, "protection_active": True},
-            warnings,
-        )
-        == "active"
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
+        fixed_hook_state(verified=True),
     )
-    assert (
-        finalize_codex_doctor_setup_status(
-            "partial",
-            {"managed_hook_installed": True, "protection_active": True},
-            ["codex command is not available"],
-        )
-        == "broken"
-    )
-    assert (
-        finalize_codex_doctor_setup_status(
-            "active",
-            {"managed_hook_installed": False, "protection_active": False},
-            [],
-        )
-        == "broken"
-    )
+
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+
+    payload = harness_ops.diagnostics("codex", context)
+
+    # Codex is gone, so its managed hooks cannot run and cannot leave anything
+    # unprotected either. That is leftover configuration, not a broken setup.
+    assert payload["setup_status"] == "not_found"
+    assert any("hol-guard uninstall codex" in warning for warning in payload["warnings"])

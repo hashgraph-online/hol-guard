@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_native_review_fence import (
+from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import (
     LEASE_WAIT_SECONDS,
     native_review_fence,
 )

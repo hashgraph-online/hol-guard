@@ -24,7 +24,7 @@ use guard_contracts::write_json_string;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::daemon_policy_authority::load_guard_daemon_auth_token;
 use crate::hook_env_stamp::{dumps, json_string};
-use crate::native_review_link::{live_review_url, OPEN_GUARD};
+use crate::native_review_link::{carries_handoff_link, live_review_url, OPEN_GUARD};
 use crate::pyjson;
 
 /// `print(json.dumps({"permission": "allow"}))`.
@@ -139,7 +139,8 @@ fn now_micros() -> Option<i64> {
 /// `_cursor_reason`, with a loopback review link signed as
 /// `live_approval_review_url` signs it from `guard_home`'s daemon auth
 /// token. A link this bridge does not reproduce is shown unsigned, unless
-/// the client would sign it: then `None`, and the bridge does not answer.
+/// the client would sign it: then `None`, and the bridge does not answer. A
+/// reason that already carries the signed link is shown as it is.
 fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
     let hook_output = response.get("hookSpecificOutput").and_then(OValue::as_map);
     let decision = response.get("decision_v2_json").and_then(OValue::as_map);
@@ -156,20 +157,36 @@ fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
     let Some(review_url) = review_url(response) else {
         return Some(reason.unwrap_or(DEFAULT_BLOCK_REASON).to_owned());
     };
+    // The daemon and the resident already link a paused review with a signed
+    // link (a session fragment, or the short `/<expires>-<mac>` path); signing
+    // its raw prefix again would stack a second token.
+    let signed_prefix = format!("{review_url}#guard-token=");
+    if let Some(reason) = reason.filter(|reason| {
+        reason.contains(&signed_prefix) || carries_handoff_link(reason, review_url)
+    }) {
+        return Some(crate::desktop_review_link::with_desktop_link(
+            reason.to_owned(),
+            guard_home,
+            review_url,
+        ));
+    }
     let token = load_guard_daemon_auth_token(guard_home);
     let live_url = match now_micros() {
         Some(now) => live_review_url(review_url, token.as_deref(), now)?,
         None => review_url.to_owned(),
     };
     let suffix = format!("{OPEN_GUARD} {live_url}.");
-    Some(match reason {
+    let linked = match reason {
         None => format!("{NEEDS_APPROVAL} {suffix}"),
         Some(reason) if live_url != review_url && reason.contains(review_url) => {
             reason.replacen(review_url, &live_url, 1)
         }
         Some(reason) if reason.contains(&live_url) => reason.to_owned(),
         Some(reason) => format!("{reason} {suffix}"),
-    })
+    };
+    Some(crate::desktop_review_link::with_desktop_link(
+        linked, guard_home, review_url,
+    ))
 }
 
 /// `print(json.dumps(response))` for the client's string-valued answer,

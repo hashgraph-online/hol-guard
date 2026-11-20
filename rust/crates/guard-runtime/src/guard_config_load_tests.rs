@@ -61,6 +61,38 @@ fn python_parity_vectors_match() {
 }
 
 #[test]
+fn only_an_explicit_false_turns_the_workspace_assessment_worker_off() {
+    for (value, enabled) in [
+        ("false", false),
+        ("true", true),
+        ("\"false\"", true),
+        ("0", true),
+        ("\"no\"", true),
+    ] {
+        let root = scratch("assessment-setting");
+        fs::write(
+            root.join("home/config.toml"),
+            format!("workspace_assessment_enabled = {value}\n"),
+        )
+        .unwrap();
+        let request = LoadRequest {
+            schema: SCHEMA.to_owned(),
+            guard_home: root.join("home"),
+            workspace: None,
+            require_canonical_workspace: false,
+            managed: None,
+        };
+        let config = load(&request).unwrap();
+        assert_eq!(
+            config["workspace_assessment_enabled"],
+            json!(enabled),
+            "workspace_assessment_enabled = {value}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[test]
 fn run_command_reports_load_failure_as_data() {
     let root = scratch("failure");
     fs::write(root.join("home/config.toml"), "mode = = x").unwrap();
@@ -98,6 +130,22 @@ fn missing_home_directory_loads_defaults() {
     let config = load(&request).unwrap();
     assert_eq!(config["protection_posture"], json!("protected"));
     assert_eq!(config["mode"], json!("prompt"));
+    assert_eq!(config["update_mode"], json!("automatic"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn update_mode_is_coerced_from_home_config() {
+    let root = scratch("update-mode");
+    fs::write(root.join("home/config.toml"), "update_mode = 'off'\n").unwrap();
+    let request = LoadRequest {
+        schema: SCHEMA.to_owned(),
+        guard_home: root.join("home"),
+        workspace: None,
+        require_canonical_workspace: false,
+        managed: None,
+    };
+    assert_eq!(load(&request).unwrap()["update_mode"], json!("off"));
     let _ = fs::remove_dir_all(root);
 }
 

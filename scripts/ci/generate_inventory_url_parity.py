@@ -1,9 +1,9 @@
 r"""Record the inventory URL-redaction corpus the Rust port must match.
 
-`inventory_contract_redaction.redact_url` and `classify_endpoint_host` push an
-untrusted endpoint string through CPython's `urllib.parse`, so the port has to
-reproduce that parser rather than an RFC-correct one. Four behaviours decide
-the output and none of them is the Rust default:
+`redact_url` and `classify_endpoint_host` push an untrusted endpoint string
+through CPython's `urllib.parse`, so the port has to reproduce that parser
+rather than an RFC-correct one. Four behaviours decide the output and none of
+them is the Rust default:
 
 1. `urlsplit` only *lstrips* the C0-control-or-space set and then deletes every
    tab, CR and LF anywhere in the URL, so `"ht\ntp://h/"` parses with scheme
@@ -19,12 +19,16 @@ the output and none of them is the Rust default:
    one, so `::ffff:10.0.0.1` classifies `local_private` while `::ffff:8.8.8.8`
    does not.
 
-Run this after changing the URL half of the redaction module and commit the
-regenerated fixture; `python_url_tests.rs` and `inventory_redaction_tests.rs`
-read it. Run it from the repository root on the interpreter the project
-targets. `urllib.parse` is not frozen across releases, so a different
-interpreter would record cases the port was never written against and the
-fixture would still look green:
+The grammar now lives in the resident, and the shipped module delegates to
+it, so this generator reads the CPython bodies kept beside it in
+`scripts/ci/inventory_url_reference.py` instead. Asking the runtime for the
+corpus would pin the port against itself.
+
+Run this after changing that reference and commit the regenerated fixture;
+`python_url_tests.rs` and `inventory_redaction_tests.rs` read it. Run it from
+the repository root on the interpreter the project targets. `urllib.parse` is
+not frozen across releases, so a different interpreter would record cases the
+port was never written against and the fixture would still look green:
 
     uv run --python 3.12 --no-project python \
         scripts/ci/generate_inventory_url_parity.py
@@ -37,7 +41,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from codex_plugin_scanner.guard.inventory_contract_redaction import (
+from inventory_url_reference import (
     classify_endpoint_host,
     redact_headers,
     redact_url,
@@ -129,6 +133,20 @@ REDACT_URLS: list[str] = [
     "https:////double-slash-path?token=x",
     "https:relative-path?token=x",
     "",
+    # An authority that is nothing but userinfo once had the hostname fall
+    # back to it; `userinfo_never_survives_the_authority` reads these rows.
+    "http://user:private-value@",
+    "https://user:private-value@/api?token=private-value&mode=fast",
+    "https://user:private-value@example.test:8443/api",
+    "http://user:private-value@[::1]:8080/api",
+    "http://[::1]:8080/api?token=private-value&mode=fast",
+    # The endpoint shapes a harness inventory actually exports.
+    "https://user:pass@example.com/mcp?token=value&mode=safe",
+    "https://example.com/mcp?auth=value&mode=safe",
+    "https://example.com/mcp?mode=safe;token=value",
+    "http://localhost:${PORT}/mcp?auth=value",
+    "http://[2001:db8::1]:8080/mcp?token=value",
+    "http://[not-an-ip]/mcp?token=value",
 ]
 
 CLASSIFY_HOSTS: list[str | None] = [
@@ -154,6 +172,10 @@ CLASSIFY_HOSTS: list[str | None] = [
     "http://127.0.0.01/leading-zero-octet",
     "not-a-url",
     "http://[fe80::1%25eth0]/zone",
+    # The endpoint shapes a harness inventory actually exports.
+    "https://user:pass@example.com/mcp?token=value",
+    "http://172.20.4.5:8080/mcp",
+    "http://[not-an-ip]/mcp",
 ]
 
 HEADER_NAMES: list[list[str]] = [
@@ -164,6 +186,7 @@ HEADER_NAMES: list[list[str]] = [
     ["X-Auth-Token", "x-bearer", "x-password", "x-credential", "x-secret"],
     ["apiXkey", "api-key", "api_key"],
     ["X-Credent\u0131al", "X-T\u0131ken"],
+    ["Authorization", "X-Trace"],
 ]
 
 

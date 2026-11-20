@@ -7,45 +7,33 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_git_execution_safety
-from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
-from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import native_command_evaluation
+from tests.live_hook_review_support import (
+    LIVE_ALLOWS_RETIRED_REVIEW,
+    LIVE_REVIEWS_RETIRED_ALLOW,
+    live_allows_retired_review_on,
+    live_reviews_retired_allow_on,
+    live_shell_review,
+    quietly_allowed,
+)
 
 
-@pytest.fixture(autouse=True)
-def _patient_native_review(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep loaded CI runners from turning routine answers into fail-closed timeouts.
+def _reviewed(
+    command: str,
+    *,
+    home: Path,
+    harness: str = "pi",
+    cwd: Path | None = None,
+    environment: dict[str, str] | None = None,
+) -> dict[str, object] | None:
+    """The live hook answer when it reviews ``command``, or None when it allows it quietly."""
 
-    The hook path gives native review 0.5 s. A coverage shard can spend longer than
-    that starting the evaluator, and Guard then (correctly) reports
-    ``native_unavailable``. These tests are about the verdict, not the latency
-    budget, so the native call gets the 1 s ceiling that ``review_pre_tool_native``
-    allows any caller.
-    """
-
-    review = native_command_evaluation.review_command_native
-
-    def patient(*args: object, **kwargs: object) -> object:
-        kwargs.setdefault("timeout_seconds", 1.0)
-        return review(*args, **kwargs)
-
-    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", patient)
-
-
-def _artifact(command: str, *, home: Path) -> GuardArtifact | None:
-    return _hook_runtime_artifact(
-        harness="pi",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".guard",
-        workspace=None,
+    if cwd is None:
+        cwd = home / "projects" / "current"
+        cwd.mkdir(parents=True, exist_ok=True)
+    result = live_shell_review(
+        command, home_dir=home, cwd=cwd, harness=harness, tool_name="Bash", environment=environment
     )
+    return None if quietly_allowed(result) else result
 
 
 def _init_repository(path: Path) -> None:
@@ -80,11 +68,12 @@ def _init_push_repository(path: Path, *, branch: str = "fix/about-partners-link"
     )
 
 
+@LIVE_REVIEWS_RETIRED_ALLOW
 def test_compound_current_branch_push_to_verified_origin_is_routine(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     # Routine push needs global Git config to belong to the account running Git.
@@ -94,7 +83,7 @@ def test_compound_current_branch_push_to_verified_origin_is_routine(
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is None
+    assert _reviewed(command, home=home) is None
 
 
 @pytest.mark.parametrize(
@@ -108,15 +97,15 @@ def test_compound_current_branch_push_to_verified_origin_is_routine(
     ),
 )
 def test_compound_push_keeps_widened_or_mismatched_operations_guarded(
-    tmp_path: Path,
+    live_hook_root: Path,
     push: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     _init_push_repository(workspace)
 
-    assert _artifact(f"cd {workspace} && {push} 2>&1 | tail -2", home=home) is not None
+    assert _reviewed(f"cd {workspace} && {push} 2>&1 | tail -2", home=home) is not None
 
 
 @pytest.mark.parametrize(
@@ -143,11 +132,11 @@ def test_compound_push_keeps_widened_or_mismatched_operations_guarded(
     ),
 )
 def test_compound_push_rejects_repository_execution_or_routing_config(
-    tmp_path: Path,
+    live_hook_root: Path,
     key: str,
     value: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     _init_push_repository(workspace)
@@ -160,11 +149,11 @@ def test_compound_push_rejects_repository_execution_or_routing_config(
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
-def test_compound_push_rejects_executable_pre_push_hook(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_compound_push_rejects_executable_pre_push_hook(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     _init_push_repository(workspace)
@@ -181,14 +170,14 @@ def test_compound_push_rejects_executable_pre_push_hook(tmp_path: Path) -> None:
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
 def test_compound_push_rejects_symlinked_repository_pre_push_hook(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
@@ -202,11 +191,11 @@ def test_compound_push_rejects_symlinked_repository_pre_push_hook(
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
-def test_compound_push_rejects_repository_configured_external_hook(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_compound_push_rejects_repository_configured_external_hook(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     external_hooks = home / "hooks"
     workspace.mkdir(parents=True)
@@ -224,11 +213,11 @@ def test_compound_push_rejects_repository_configured_external_hook(tmp_path: Pat
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
-def test_compound_push_rejects_worktree_configured_external_hook(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_compound_push_rejects_worktree_configured_external_hook(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     external_hooks = home / "hooks"
     workspace.mkdir(parents=True)
@@ -251,14 +240,14 @@ def test_compound_push_rejects_worktree_configured_external_hook(tmp_path: Path)
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
 def test_compound_push_rejects_redirected_global_pre_push_hook(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     hooks = home / "global-hooks"
     workspace.mkdir(parents=True)
@@ -276,11 +265,11 @@ def test_compound_push_rejects_redirected_global_pre_push_hook(
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
-def test_compound_push_rejects_multiple_origin_urls(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_compound_push_rejects_multiple_origin_urls(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     _init_push_repository(workspace)
@@ -301,7 +290,7 @@ def test_compound_push_rejects_multiple_origin_urls(tmp_path: Path) -> None:
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home) is not None
 
 
 @pytest.mark.parametrize(
@@ -318,23 +307,22 @@ def test_compound_push_rejects_multiple_origin_urls(tmp_path: Path) -> None:
     ),
 )
 def test_compound_push_rejects_repository_routing_environment(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    live_hook_root: Path,
     variable: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     _init_push_repository(workspace)
-    monkeypatch.setenv(variable, "redirected")
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
 
-    assert _artifact(command, home=home) is not None
+    assert _reviewed(command, home=home, environment={variable: "redirected"}) is not None
 
 
-def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+@LIVE_REVIEWS_RETIRED_ALLOW
+def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "projects" / "workspace"
     repository = workspace / "repository"
     repository.mkdir(parents=True)
@@ -359,7 +347,7 @@ def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(tmp_path: 
             '&& echo "---STATUS---" && git -C repository status --short | head -20',
         )
     )
-    artifact = _artifact(command, home=home)
+    artifact = _reviewed(command, home=home)
 
     assert artifact is None
 
@@ -368,57 +356,51 @@ def test_compound_git_refresh_and_inspection_is_evaluated_as_one_unit(tmp_path: 
     "log_args",
     ("-5 --oneline", "--oneline -20 origin/main", "origin/main -1 --oneline"),
 )
-def test_compound_git_inspection_accepts_bounded_log_forms(tmp_path: Path, log_args: str) -> None:
-    home = tmp_path / "home"
+def test_compound_git_inspection_accepts_bounded_log_forms(live_hook_root: Path, log_args: str) -> None:
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     workspace.mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && git log {log_args}", home=home) is None
+    assert _reviewed(f"cd {workspace} && git log {log_args}", home=home) is None
 
 
 @pytest.mark.parametrize(
     "inspection",
     (
         "git show origin/main:public/example.txt | head -20",
-        "git diff origin/main -- public/example.txt | head -20",
+        pytest.param(
+            "git diff origin/main -- public/example.txt | head -20", marks=live_reviews_retired_allow_on("linux")
+        ),
     ),
 )
-def test_compound_git_inspection_accepts_safe_revision_paths(tmp_path: Path, inspection: str) -> None:
-    home = tmp_path / "home"
+def test_compound_git_inspection_accepts_safe_revision_paths(live_hook_root: Path, inspection: str) -> None:
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     (workspace / "public").mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && {inspection}", home=home) is None
+    assert _reviewed(f"cd {workspace} && {inspection}", home=home) is None
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
 def test_cross_workspace_git_show_accepts_bounded_revision_directory(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     harness: str,
 ) -> None:
     for key in ("GIT_EXTERNAL_DIFF", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"):
         monkeypatch.delenv(key, raising=False)
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     active_workspace = home / "projects" / "active"
     inspected_workspace = home / "projects" / "inspected"
     active_workspace.mkdir(parents=True)
     _init_repository(inspected_workspace)
     (inspected_workspace / "workers" / "services").mkdir(parents=True)
 
-    artifact = _hook_runtime_artifact(
+    artifact = _reviewed(
+        f"cd {inspected_workspace} && git show b56514561 -- workers/services/ 2>&1 | head -60",
+        home=home,
         harness=harness,
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {
-                "command": (f"cd {inspected_workspace} && git show b56514561 -- workers/services/ 2>&1 | head -60")
-            },
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".guard",
-        workspace=active_workspace,
+        cwd=active_workspace,
     )
 
     assert artifact is None
@@ -427,9 +409,9 @@ def test_cross_workspace_git_show_accepts_bounded_revision_directory(
 @pytest.mark.parametrize(
     "inspection",
     (
-        "git show b56514561 -- ../outside | head -60",
+        pytest.param("git show b56514561 -- ../outside | head -60", marks=LIVE_ALLOWS_RETIRED_REVIEW),
         "git show b56514561 -- .env | head -60",
-        "git show $REVISION -- workers/services/ | head -60",
+        pytest.param("git show $REVISION -- workers/services/ | head -60", marks=LIVE_ALLOWS_RETIRED_REVIEW),
         "git show b56514561 --ext-diff -- workers/services/ | head -60",
         "git show b56514561 --textconv -- workers/services/ | head -60",
         "git show b56514561 -- workers/services/ | sh",
@@ -437,30 +419,24 @@ def test_cross_workspace_git_show_accepts_bounded_revision_directory(
     ),
 )
 def test_cross_workspace_git_show_keeps_unsafe_variants_guarded(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     inspection: str,
 ) -> None:
     for key in ("GIT_EXTERNAL_DIFF", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"):
         monkeypatch.delenv(key, raising=False)
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     active_workspace = home / "projects" / "active"
     inspected_workspace = home / "projects" / "inspected"
     active_workspace.mkdir(parents=True)
     _init_repository(inspected_workspace)
     (inspected_workspace / "workers" / "services").mkdir(parents=True)
 
-    artifact = _hook_runtime_artifact(
+    artifact = _reviewed(
+        f"cd {inspected_workspace} && {inspection}",
+        home=home,
         harness="pi",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": f"cd {inspected_workspace} && {inspection}"},
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".guard",
-        workspace=active_workspace,
+        cwd=active_workspace,
     )
 
     assert artifact is not None
@@ -474,13 +450,13 @@ def test_cross_workspace_git_show_keeps_unsafe_variants_guarded(
     ),
 )
 def test_cross_workspace_git_show_rejects_configured_textconv(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     inspection: str,
 ) -> None:
     for key in ("GIT_EXTERNAL_DIFF", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"):
         monkeypatch.delenv(key, raising=False)
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     active_workspace = home / "projects" / "active"
     inspected_workspace = home / "projects" / "inspected"
     active_workspace.mkdir(parents=True)
@@ -491,29 +467,23 @@ def test_cross_workspace_git_show_rejects_configured_textconv(
     )
     (inspected_workspace / "workers" / "services").mkdir(parents=True)
 
-    artifact = _hook_runtime_artifact(
+    artifact = _reviewed(
+        f"cd {inspected_workspace} && {inspection}",
+        home=home,
         harness="pi",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": f"cd {inspected_workspace} && {inspection}"},
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".guard",
-        workspace=active_workspace,
+        cwd=active_workspace,
     )
 
     assert artifact is not None
 
 
 def test_cross_workspace_git_show_rejects_textconv_in_git_c_target(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for key in ("GIT_EXTERNAL_DIFF", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"):
         monkeypatch.delenv(key, raising=False)
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     active_workspace = home / "projects" / "active"
     repositories = home / "projects" / "repositories"
     inspected_workspace = repositories / "inspected"
@@ -525,21 +495,11 @@ def test_cross_workspace_git_show_rejects_textconv_in_git_c_target(
     )
     (inspected_workspace / "workers" / "services").mkdir(parents=True)
 
-    artifact = _hook_runtime_artifact(
+    artifact = _reviewed(
+        f"cd {repositories} && git -C inspected show b56514561 -- workers/services/ 2>&1 | head -60",
+        home=home,
         harness="pi",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {
-                "command": (
-                    f"cd {repositories} && git -C inspected show b56514561 -- workers/services/ 2>&1 | head -60"
-                )
-            },
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".guard",
-        workspace=active_workspace,
+        cwd=active_workspace,
     )
 
     assert artifact is not None
@@ -554,11 +514,11 @@ def test_cross_workspace_git_show_rejects_textconv_in_git_c_target(
     ),
 )
 def test_compound_git_inspection_rejects_path_shadowed_git(
-    tmp_path: Path,
+    live_hook_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     inspection: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     _init_repository(workspace)
     shadow_bin = workspace / "bin"
@@ -568,7 +528,7 @@ def test_compound_git_inspection_rejects_path_shadowed_git(
     shadow_git.chmod(0o755)
     monkeypatch.setenv("PATH", f"{shadow_bin}:{os.environ.get('PATH', '')}")
 
-    assert _artifact(f"cd {workspace} && {inspection}", home=home) is not None
+    assert _reviewed(f"cd {workspace} && {inspection}", home=home) is not None
 
 
 @pytest.mark.parametrize(
@@ -577,26 +537,23 @@ def test_compound_git_inspection_rejects_path_shadowed_git(
         "GIT_CONFIG",
         "GIT_CONFIG_COUNT",
         "GIT_CONFIG_GLOBAL",
-        "GIT_CONFIG_NOSYSTEM",
+        pytest.param("GIT_CONFIG_NOSYSTEM", marks=LIVE_ALLOWS_RETIRED_REVIEW),
         "GIT_CONFIG_PARAMETERS",
         "GIT_CONFIG_SYSTEM",
     ),
 )
 def test_compound_git_inspection_rejects_config_routing_environment(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    live_hook_root: Path,
     key: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     _init_repository(workspace)
-    monkeypatch.setenv(key, "1")
-
-    assert _artifact(f"cd {workspace} && git show HEAD", home=home) is not None
+    assert _reviewed(f"cd {workspace} && git show HEAD", home=home, environment={key: "1"}) is not None
 
 
-def test_compound_git_c_status_checks_target_repository_fsmonitor(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_compound_git_c_status_checks_target_repository_fsmonitor(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     repository = workspace / "repository"
     _init_repository(repository)
@@ -606,36 +563,36 @@ def test_compound_git_c_status_checks_target_repository_fsmonitor(tmp_path: Path
         capture_output=True,
     )
 
-    assert _artifact(f"cd {workspace} && git -C repository status --short", home=home) is not None
+    assert _reviewed(f"cd {workspace} && git -C repository status --short", home=home) is not None
 
 
 @pytest.mark.parametrize(
     "inspection",
     (
-        "git show origin/main:../settings.txt",
-        "git show origin/main:/settings.txt",
-        "git diff origin/main -- ../settings.txt",
-        "git diff origin/main -- /settings.txt",
+        pytest.param("git show origin/main:../settings.txt", marks=LIVE_ALLOWS_RETIRED_REVIEW),
+        pytest.param("git show origin/main:/settings.txt", marks=LIVE_ALLOWS_RETIRED_REVIEW),
+        pytest.param("git diff origin/main -- ../settings.txt", marks=live_allows_retired_review_on("darwin")),
+        pytest.param("git diff origin/main -- /settings.txt", marks=live_allows_retired_review_on("darwin")),
     ),
 )
-def test_compound_git_inspection_rejects_escaping_revision_paths(tmp_path: Path, inspection: str) -> None:
-    home = tmp_path / "home"
+def test_compound_git_inspection_rejects_escaping_revision_paths(live_hook_root: Path, inspection: str) -> None:
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     workspace.mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && {inspection}", home=home) is not None
+    assert _reviewed(f"cd {workspace} && {inspection}", home=home) is not None
 
 
 @pytest.mark.parametrize("repository", ("projects/repository", "./projects/repository", "."))
 def test_compound_git_inspection_accepts_bounded_relative_repository_paths(
-    tmp_path: Path,
+    live_hook_root: Path,
     repository: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "workspace"
     (workspace / "projects" / "repository").mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && git -C {repository} status --short | head -20", home=home) is None
+    assert _reviewed(f"cd {workspace} && git -C {repository} status --short | head -20", home=home) is None
 
 
 @pytest.mark.parametrize(
@@ -647,35 +604,37 @@ def test_compound_git_inspection_accepts_bounded_relative_repository_paths(
         "git -C ../outside fetch origin main",
         "git -C projects/../../outside status --short",
         "git -C /outside status --short",
-        "git -C ~/outside status --short",
+        pytest.param("git -C ~/outside status --short", marks=LIVE_ALLOWS_RETIRED_REVIEW),
         "git -C projects/$TARGET status --short",
         "git -C repository status --short | sh",
         "git -C repository status --short > report.txt",
-        "git log -101 --oneline",
-        "git log --all --oneline -5",
+        pytest.param("git log -101 --oneline", marks=LIVE_ALLOWS_RETIRED_REVIEW),
+        pytest.param("git log --all --oneline -5", marks=LIVE_ALLOWS_RETIRED_REVIEW),
     ),
 )
 def test_compound_git_recovery_keeps_ambiguous_or_mutating_commands_guarded(
-    tmp_path: Path,
+    live_hook_root: Path,
     suffix: str,
 ) -> None:
-    home = tmp_path / "home"
+    home = live_hook_root / "home"
     workspace = home / "projects" / "workspace"
     (workspace / "repository").mkdir(parents=True)
 
-    assert _artifact(f"cd {workspace} && {suffix}", home=home) is not None
+    assert _reviewed(f"cd {workspace} && {suffix}", home=home) is not None
 
 
-def test_compound_git_recovery_rejects_dynamic_or_preceding_execution(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_compound_git_recovery_rejects_dynamic_cd(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     workspace = home / "projects" / "workspace"
     (workspace / "repository").mkdir(parents=True)
 
-    assert _artifact("cd $TARGET && git -C repository fetch origin main", home=home) is not None
-    assert (
-        _artifact(
-            f"printf ready && cd {workspace} && git -C repository status --short",
-            home=home,
-        )
-        is not None
-    )
+    assert _reviewed("cd $TARGET && git -C repository fetch origin main", home=home) is not None
+
+
+@LIVE_ALLOWS_RETIRED_REVIEW
+def test_compound_git_recovery_rejects_preceding_execution(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
+    workspace = home / "projects" / "workspace"
+    (workspace / "repository").mkdir(parents=True)
+
+    assert _reviewed(f"printf ready && cd {workspace} && git -C repository status --short", home=home) is not None

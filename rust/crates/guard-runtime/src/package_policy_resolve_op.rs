@@ -32,7 +32,7 @@ use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluati
 mod approvals;
 use approvals::{
     is_durable_exact_artifact_approval, is_fresh_artifact_approval,
-    is_legacy_package_local_approval,
+    is_legacy_package_local_approval, is_waited_exact_cloud_package_approval,
 };
 
 const LOCAL_HARNESS: &str = "guard-cli";
@@ -253,9 +253,13 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let approval_request = request.approval_request.as_ref();
     let legacy_local_approval =
         decision.is_some_and(|row| is_legacy_package_local_approval(row, approval_request));
+    let waited_exact_cloud_approval = decision.is_some_and(|row| {
+        is_waited_exact_cloud_package_approval(row, approval_request, &request.artifact_id)
+    });
     let fresh_local_approval = decision
         .is_some_and(|row| is_fresh_artifact_approval(row, approval_request))
-        || legacy_local_approval;
+        || legacy_local_approval
+        || waited_exact_cloud_approval;
     let durable_exact_approval =
         decision.is_some_and(|row| is_durable_exact_artifact_approval(row, &request.artifact_id));
     let current_value = json!(effective.as_str());
@@ -283,6 +287,7 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     };
     let claim_needed = request.claim_saved_approval && reuse.should_claim;
     let claim = match (claim_needed, decision) {
+        (true, Some(_)) if waited_exact_cloud_approval => Some("exact_cloud"),
         (true, Some(_)) if request.daemon_authority => Some("daemon"),
         (true, Some(_)) if legacy_local_approval => Some("legacy_local"),
         (true, Some(_)) => Some("store"),

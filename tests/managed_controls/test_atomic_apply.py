@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.atomic_apply import (
+from tests.managed_controls.atomic_apply import (
     AppliedManagedControls,
     AtomicApplyError,
     AtomicManagedControlsStore,

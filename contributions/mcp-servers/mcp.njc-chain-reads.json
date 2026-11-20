@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.njc-chain-reads",
+  "version": "1.0.0",
+  "name": "New Jazz City chain reads",
+  "description": "Hosted MCP at https://njc-tx-explain.departmentofjazz.workers.dev/mcp. Free chain reads for agents on Robinhood Chain, Base and Solana (transaction explainer, ERC-8004 control check, open-jobs board). Paid reads return an x402 price and run only with a payment attached; settling that payment moves USDG or USDC from the caller's wallet. No other chain writes. Guard's contributed tool defaults are off until you enable this catalog entry.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.nebulamji",
+    "displayName": "New Jazz City",
+    "url": "https://github.com/nebulamji/rh-tx-explain"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/nebulamji/rh-tx-explain",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://njc-tx-explain.departmentofjazz.workers.dev/mcp",
+    "serverNames": [
+      "njc-chain-reads",
+      "rh-tx-explain"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-public-data-read",
+    "external-payment-request"
+  ],
+  "tools": [
+    {
+      "name": "explain_transaction",
+      "state": "inherit"
+    },
+    {
+      "name": "who_controls_agent",
+      "state": "inherit"
+    },
+    {
+      "name": "jobs_board",
+      "state": "inherit"
+    },
+    {
+      "name": "money_trail",
+      "state": "review"
+    },
+    {
+      "name": "line_read",
+      "state": "review"
+    },
+    {
+      "name": "transfer_read",
+      "state": "review"
+    },
+    {
+      "name": "sol_trail",
+      "state": "review"
+    },
+    {
+      "name": "base_trail",
+      "state": "review"
+    },
+    {
+      "name": "halt_check",
+      "state": "review"
+    },
+    {
+      "name": "usdg_ledger",
+      "state": "review"
+    },
+    {
+      "name": "wallet_handover",
+      "state": "review"
+    },
+    {
+      "name": "poison_check",
+      "state": "review"
+    },
+    {
+      "name": "income_read",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "saferAlternatives": [
+    "Use only the free tools (explain_transaction, who_controls_agent, jobs_board); they need no payment or key and change nothing.",
+    "Keep the paid read tools on Review: a call with an attached x402 payment moves USDG or USDC from the caller's wallet. Without a payment they only return the price."
+  ]
+}

@@ -5,13 +5,11 @@
 
 from __future__ import annotations
 
-import secrets
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Protocol
 
 from ..native_github_workflow import (
-    GitHubWorkflowDescriptor,
     GitHubWorkflowLineage,
     github_workflow_validated_lineage,
 )
@@ -22,9 +20,7 @@ from ..workflow_capabilities import (
 )
 from .github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from .github_workflow_authorization import (
-    GitHubWorkflowAuthorization,
     WorkflowCapabilityStore,
-    claim_github_workflow_authorization,
     issue_github_workflow_capability_binding,
 )
 
@@ -66,8 +62,8 @@ def issue_resolved_github_workflow_capability(
             existing = None
         if existing is not None:
             return _existing_matches(existing, lineage)
-        key, key_id = store._policy_integrity_secret_material(create=False)
-        if key is None or key_id is None:
+        # The resident signs the claim; this only confirms the local key exists.
+        if any(part is None for part in store._policy_integrity_secret_material(create=False)):
             return False
         issued_at = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
         if issued_at.tzinfo is None:
@@ -85,61 +81,9 @@ def issue_resolved_github_workflow_capability(
             not_before=format_utc_timestamp(issued_at),
             expires_at=format_utc_timestamp(issued_at + _CAPABILITY_TTL),
             max_uses=_CAPABILITY_MAX_USES,
-            key=key,
-            key_id=key_id,
         )
         return signed.claim.capability_id == capability_id
     except (KeyError, TypeError, ValueError, WorkflowCapabilityError):
-        return False
-
-
-def claim_resolved_github_workflow_authorization(
-    store: GitHubWorkflowRuntimeStore,
-    request_id: str,
-    descriptor: GitHubWorkflowDescriptor,
-) -> GitHubWorkflowAuthorization | None:
-    """Atomically claim the exact capability using only persisted Guard lineage."""
-
-    try:
-        request = store.get_approval_request(request_id)
-        if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
-            return None
-        lineage = _validated_lineage(store, request)
-        if lineage.record != descriptor.record:
-            return None
-        capability_id = lineage.capability_id
-        return claim_github_workflow_authorization(
-            store,
-            capability_id,
-            descriptor.record.binding,
-            descriptor.command_identity,
-            invocation_id=f"github-invocation-{secrets.token_hex(16)}",
-            subject_id=lineage.session_id,
-            task_id=lineage.operation_id,
-            issuer_id=_ISSUER_ID,
-            approval_provenance_id=request_id,
-        )
-    except (KeyError, TypeError, ValueError, WorkflowCapabilityError):
-        return None
-
-
-def resolved_github_workflow_capability_preflight(
-    store: GitHubWorkflowRuntimeStore,
-    request_id: str,
-    descriptor: GitHubWorkflowDescriptor,
-) -> bool:
-    """Verify exact persisted workflow lineage and signed claim before revalidation."""
-
-    try:
-        request = store.get_approval_request(request_id)
-        if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
-            return False
-        lineage = _validated_lineage(store, request)
-        if lineage.record != descriptor.record:
-            return False
-        signed = store.lookup_workflow_capability(lineage.capability_id)
-        return signed is not None and _existing_matches(signed, lineage)
-    except (KeyError, OSError, TypeError, ValueError, WorkflowCapabilityError):
         return False
 
 
@@ -156,26 +100,6 @@ def approval_record_from_approval_request(request: Mapping[str, object]) -> GitH
             return None
         candidates.append(GitHubWorkflowApprovalRecord.from_dict(payload))
     return candidates[0] if len(candidates) == 1 else None
-
-
-def github_workflow_capability_required(store: GitHubWorkflowRuntimeStore, request_id: str) -> bool:
-    """Return whether a claimed approval is marked as a workflow task."""
-
-    try:
-        request = store.get_approval_request(request_id)
-        if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
-            return False
-        evidence = request.get("scanner_evidence")
-        if not isinstance(evidence, list):
-            return False
-        marked = [
-            item
-            for item in evidence
-            if isinstance(item, Mapping) and item.get("source") == "github_workflow_approval_record"
-        ]
-        return len(marked) > 0
-    except Exception:
-        return True
 
 
 def github_workflow_requires_local_once(request: Mapping[str, object]) -> bool:
@@ -245,10 +169,7 @@ def _required_string(payload: Mapping[str, object], key: str) -> str:
 
 __all__ = (
     "approval_record_from_approval_request",
-    "claim_resolved_github_workflow_authorization",
-    "github_workflow_capability_required",
     "github_workflow_requires_local_once",
     "issue_github_workflow_capability_for_resolution",
     "issue_resolved_github_workflow_capability",
-    "resolved_github_workflow_capability_preflight",
 )

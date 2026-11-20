@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,7 +20,7 @@ def native(monkeypatch, tmp_path):
         return b"runtime"
 
     @contextmanager
-    def verified_executable(raw):
+    def verified_executable(raw, sha256=None):
         calls["copies"] += 1
         yield Path(tmp_path / "runtime")
 
@@ -50,69 +51,6 @@ def test_session_verifies_once_and_only_when_native_is_used(native):
     lifecycle.invoke("offline", operation="three")
     lifecycle.invoke("offline", operation="four")
     assert native == {"verify": 3, "copies": 3, "runs": 4}
-
-
-@pytest.fixture
-def answers(monkeypatch):
-    requests = []
-    monkeypatch.setattr(active_security, "_key", lambda store: b"k" * 32)
-    monkeypatch.setattr(lifecycle, "runtime_fingerprint", lambda: ((1, 2),))
-    monkeypatch.setattr(active_security, "_ANSWERS", type(active_security._ANSWERS)())
-
-    def invoke(kind, **fields):
-        requests.append(fields)
-        if fields.get("record") == "bad":
-            raise ValueError("active_security_invalid")
-        return {"active_matches": True, "publication": {"epoch": len(requests)}}
-
-    monkeypatch.setattr(lifecycle, "invoke", invoke)
-    return requests
-
-
-def test_pure_answers_are_reused_for_identical_requests(answers):
-    first = active_security.invoke("resume", object(), record="r", activation_digest="a")
-    first["publication"]["epoch"] = 99
-    second = active_security.invoke("resume", object(), record="r", activation_digest="a")
-    assert second == {"active_matches": True, "publication": {"epoch": 1}}
-    assert len(answers) == 1
-
-    active_security.invoke("resume", object(), record="r", activation_digest="b")
-    active_security.invoke("binding", object(), record="r", binding={})
-    assert len(answers) == 3
-
-
-def test_stateful_operations_and_failures_are_never_reused(answers):
-    for _ in range(2):
-        active_security.invoke("begin", object(), record="r", publication="p")
-    assert len(answers) == 2
-
-    for _ in range(2):
-        with pytest.raises(ValueError, match="active_security_invalid"):
-            active_security.invoke("read", object(), record="bad")
-    assert len(answers) == 4
-
-
-def test_answers_stay_bounded(answers):
-    for index in range(active_security._ANSWERS_LIMIT + 5):
-        active_security.invoke("read", object(), record=str(index))
-    assert len(active_security._ANSWERS) == active_security._ANSWERS_LIMIT
-    active_security.invoke("read", object(), record="0")
-    assert len(answers) == active_security._ANSWERS_LIMIT + 6
-
-
-def test_a_replaced_or_missing_runtime_is_asked_again(answers, monkeypatch):
-    active_security.invoke("read", object(), record="r")
-    monkeypatch.setattr(lifecycle, "runtime_fingerprint", lambda: ((3, 4),))
-    active_security.invoke("read", object(), record="r")
-    assert len(answers) == 2
-
-    def missing():
-        raise FileNotFoundError
-
-    monkeypatch.setattr(lifecycle, "runtime_fingerprint", missing)
-    active_security.invoke("read", object(), record="r")
-    active_security.invoke("read", object(), record="r")
-    assert len(answers) == 4
 
 
 def test_runtime_fingerprint_tracks_the_installed_files(monkeypatch, tmp_path):
@@ -308,3 +246,35 @@ def test_an_authoring_refusal_keeps_its_code_through_the_session(native, authori
     with pytest.raises(NativeSourceCompilerError) as raised:
         bundle_baseline.validation_base({}, Path("compiler"), installed=True, directory=tmp_path)
     assert raised.value.code == "refused"
+
+
+def test_a_startup_migration_verifies_the_runtime_once_for_its_migrate_and_write(native, monkeypatch):
+    # A fresh home's first start migrates and then writes the floor it gets
+    # back, and both reach the runtime. On Windows each separate check of the
+    # kept copy re-reads about 100 MB.
+    from codex_plugin_scanner.guard.catalog_delivery import lifecycle_store
+
+    @contextmanager
+    def no_legacy(store):
+        yield {}
+
+    monkeypatch.setattr(lifecycle_store, "require_exclusive_command_control_mutation_lease", lambda home: None)
+    monkeypatch.setattr(lifecycle_store, "legacy_transport", no_legacy)
+    monkeypatch.setattr(lifecycle_store, "read", lambda store: None)
+    monkeypatch.setattr(lifecycle_store, "_stamp", lambda store: None)
+    monkeypatch.setattr(lifecycle_store, "_key", lambda store: b"k")
+    monkeypatch.setattr(lifecycle_store, "_mark", lambda store, stamp: None)
+    monkeypatch.setattr(lifecycle, "release_evidence", lambda authority: {})
+    monkeypatch.setattr(
+        transport, "_decode_output", lambda stdout, returncode, stderr: {"record": "floor", "stamp": "stamp"}
+    )
+    written = []
+
+    def write(store, record):
+        lifecycle.invoke("read", key="6b", floor=record)
+        written.append(record)
+
+    monkeypatch.setattr(lifecycle_store, "write", write)
+    lifecycle_store.migrate_installed(SimpleNamespace(guard_home=Path("/guard")), object())
+    assert written == ["floor"]
+    assert native == {"verify": 1, "copies": 1, "runs": 2}

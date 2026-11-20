@@ -64,7 +64,7 @@ fn codex_hook_identity(artifact: &Map<String, Value>) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// `_hash_payload`.
+/// The payload the artifact hash is taken over.
 fn hash_payload(artifact: &Map<String, Value>) -> Value {
     if let Some(identity) = codex_hook_identity(artifact) {
         return json!({
@@ -182,7 +182,7 @@ fn redact_url(value: &str) -> String {
 }
 
 /// `_redact_arg`: mask an inline header or query-style credential.
-fn redact_arg(value: &str) -> String {
+pub fn redact_arg(value: &str) -> String {
     let lowered = value.to_lowercase();
     if lowered.contains("authorization:")
         || lowered.contains("api-key:")

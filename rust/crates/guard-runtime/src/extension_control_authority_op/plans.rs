@@ -12,16 +12,18 @@ use serde_json::{json, Map, Value};
 use super::layers::{layers_from_json, validate_serialized_layers};
 use super::records::{
     authenticated_record, degraded, field, fields_match, private_hash, query_row, row_int,
-    row_py_int, row_str, row_text, tampered, verify_record, Anchor, Fault, Phase, Res, Row,
-    SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
+    row_py_int, row_str, row_text, snapshot_pack_binding, tampered, verify_record, Anchor, Fault,
+    Phase, Res, Row, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
 };
 use super::{Ctx, View, PROTECTED, RECOVERY_REQUIRED};
 use crate::extension_control_proof::{mutation_digest, Mutation};
 use crate::policy_bundle_time::from_isoformat;
 
-/// A request that failed after preparing its transition may be retried with
+/// A request that died after preparing its transition may be retried with
 /// the same single-use proof, which needs the prepared row and its proof
-/// reservation to survive. Only rows older than this are abandoned.
+/// reservation to survive. Only rows older than this are abandoned, unless
+/// the caller names the row as its own: a request that failed in process
+/// takes its row back at once rather than refuse every other save.
 const ABANDONED_TRANSITION_GRACE_MICROS: i64 = 300 * 1_000_000;
 
 /// What resuming a prepared transition comes to.
@@ -95,7 +97,7 @@ pub(super) fn sealed(payload: Value, key: &[u8], purpose: &str) -> Res<Value> {
     Ok(json!({ "json": record, "digest": digest, "mac": mac }))
 }
 
-fn with_pack(mut payload: Value, pack_record_digest: Option<&str>) -> Value {
+pub(super) fn with_pack(mut payload: Value, pack_record_digest: Option<&str>) -> Value {
     if let (Some(digest), Value::Object(fields)) = (pack_record_digest, &mut payload) {
         fields.insert("command_pack_record_digest".to_owned(), json!(digest));
     }
@@ -250,10 +252,9 @@ impl Ctx<'_> {
             .request
             .revision
             .ok_or_else(|| tampered("extension control transition head mismatch"))?;
-        let Some(row) = self.pending_transition(revision)? else {
+        let Some((_, outcome, pack)) = self.resume_verdict(revision)? else {
             return Ok(plan("absent", Map::new()));
         };
-        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, None)?;
         Ok(plan(
             outcome.as_str(),
             Map::from_iter([
@@ -263,10 +264,27 @@ impl Ctx<'_> {
         ))
     }
 
+    /// The prepared row at `revision`, what resuming it for its own request
+    /// comes to and the command pack it binds; `None` when there is no row.
+    /// A commit retry sends the view it read, so a row that view already
+    /// shows committed comes back `current`, as in `commit_plan`.
+    pub(super) fn resume_verdict(&self, revision: i64) -> Res<Option<(Row, Resume, Value)>> {
+        let Some(row) = self.pending_transition(revision)? else {
+            return Ok(None);
+        };
+        let current = match (&self.request.retry_proof, &self.request.view) {
+            (Some(_), Some(_)) => Some(View::from_value(self.request.view.as_ref())?),
+            _ => None,
+        };
+        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, current.as_ref())?;
+        Ok(Some((row, outcome, pack)))
+    }
+
     /// `rollback_plan`: `_roll_back_abandoned_transition`. The prepared row
     /// above the committed head is abandoned only when the anchor never
-    /// moved past that head and the row outlived its retry window; anything
-    /// else keeps it for its own retry or explicit recovery.
+    /// moved past that head and the row outlived its retry window, or the
+    /// caller names it as its own failed write; anything else keeps it for
+    /// its own retry or explicit recovery.
     pub(super) fn rollback_plan(&self) -> Res<Value> {
         let keep = || Ok(plan("keep", Map::new()));
         let (Some(revision), Some(snapshot_digest), Some(now)) = (
@@ -288,190 +306,50 @@ impl Ctx<'_> {
         let Some(pending) = self.pending_transition(revision + 1)? else {
             return keep();
         };
-        if row_str(&pending, "phase")? != Phase::Prepared.as_str() {
-            return keep();
-        }
         // `_prepared_row_is_stale`: an unreadable clock keeps the row.
         let stale = utc_micros(&row_str(&pending, "created_at")?).is_some_and(|created| {
             now.saturating_sub(created) >= ABANDONED_TRANSITION_GRACE_MICROS
         });
-        if !stale {
+        // A commit that failed before anchoring its own row abandons it at
+        // once. Waiting out the retry window would refuse every save in the
+        // meantime, and only a writer lease would ever clear it afterwards.
+        let own = self
+            .request
+            .own_transition_digest
+            .as_deref()
+            .is_some_and(|digest| {
+                row_str(&pending, "transition_digest").is_ok_and(|row| row == digest)
+            });
+        if (!stale && !own) || !self.pending_carries_no_authority(&pending)? {
             return keep();
         }
-        match Expected::of_row(&pending).and_then(|expected| self.resume(&pending, &expected, None))
-        {
-            Ok((Resume::Abandon, _)) => Ok(plan(
-                "abandon",
-                Map::from_iter([("revision".to_owned(), json!(revision + 1))]),
-            )),
-            // A transition this reader may not abandon is left for its own
-            // retry or explicit recovery.
-            Ok(_) | Err(Fault::Tampered(_)) => keep(),
+        Ok(plan(
+            "abandon",
+            Map::from_iter([("revision".to_owned(), json!(revision + 1))]),
+        ))
+    }
+
+    /// Whether the prepared row above the committed head carries no authority
+    /// of its own: the vault anchor still pins the committed snapshot below
+    /// it, and the row authenticates as a prepare that anchor never moved
+    /// past. Such a row decides nothing the device enforces, so a reader that
+    /// cannot remove it may still serve the committed view, and a writer may
+    /// not take the revision it holds.
+    ///
+    /// A transition that fails to authenticate as that shape is not one a
+    /// caller may discount: it is left for its own retry or for explicit
+    /// recovery.
+    pub(super) fn pending_carries_no_authority(&self, pending: &Row) -> Res<bool> {
+        if row_str(pending, "phase")? != Phase::Prepared.as_str() {
+            return Ok(false);
+        }
+        match Expected::of_row(pending).and_then(|expected| self.resume(pending, &expected, None)) {
+            Ok((Resume::Abandon, _)) => Ok(true),
+            Ok(_) | Err(Fault::Tampered(_)) => Ok(false),
             Err(fault) => Err(fault),
         }
     }
-
-    /// `commit_plan`: the checks `commit_extension_control_layers` makes
-    /// under the lease, and the records it seals when they pass.
-    pub(super) fn commit_plan(&self) -> Res<Value> {
-        let key = self.require_key()?;
-        let catalog_digest = self.catalog_digest()?;
-        let (Some(commit), Some(created_at)) =
-            (self.request.commit.as_ref(), self.request.now.as_deref())
-        else {
-            return Err(tampered("invalid extension control commit request"));
-        };
-        let current = View::from_value(self.request.view.as_ref())?;
-        validate_serialized_layers(&commit.layers_json)?;
-        // The proof was granted for one mutation digest. Recompute it from the
-        // layers and identities this plan seals, so a grant cannot commit
-        // anything other than what was approved.
-        let layers = layers_from_json(&commit.layers_json)?;
-        let sealed_digest = mutation_digest(&Mutation {
-            previous_revision: commit.expected_revision,
-            catalog_digest,
-            layers: &layers,
-            actor_id: &commit.actor_id,
-            idempotency_key: &commit.idempotency_key,
-            nonce: &commit.nonce,
-        })
-        .map_err(|_| tampered("invalid extension control commit request"))?;
-        if sealed_digest != commit.mutation_digest {
-            return Err(tampered("extension control proof does not match mutation"));
-        }
-        let actor_hash = private_hash(&commit.actor_id, key, "actor");
-        let idempotency_hash = private_hash(&commit.idempotency_key, key, "idempotency");
-        let nonce_hash = private_hash(&commit.nonce, key, "nonce");
-        let proof_hash = private_hash(&commit.proof_id, key, "proof");
-        let hashes = json!({
-            "actor": actor_hash,
-            "idempotency": idempotency_hash,
-            "nonce": nonce_hash,
-            "proof": proof_hash,
-        });
-        let proof = query_row(
-            self.connection,
-            "select * from extension_control_authority_proof where proof_id_hash = ?",
-            params![proof_hash],
-        )?;
-        let replay = query_row(
-            self.connection,
-            "select * from extension_control_authority_transition where idempotency_key_hash = ?",
-            params![idempotency_hash],
-        )?;
-        if let Some(proof) = &proof {
-            let Some(replay) = &replay else {
-                return Err(tampered("extension control authority proof replay"));
-            };
-            let phase = Phase::parse(&row_text(replay, "phase")?)
-                .ok_or_else(|| degraded("invalid extension control authority phase"))?;
-            if phase == Phase::Committed {
-                return Err(tampered("extension control authority proof replay"));
-            }
-            if row_text(proof, "mutation_digest")? != commit.mutation_digest
-                || row_py_int(proof, "transition_revision")? != row_int(replay, "revision")?
-            {
-                return Err(tampered("extension control authority proof state conflict"));
-            }
-        }
-        if let Some(replay) = &replay {
-            let expected = Expected {
-                catalog_digest: catalog_digest.to_owned(),
-                layers_json: commit.layers_json.clone(),
-                actor_hash: actor_hash.clone(),
-                idempotency_hash: idempotency_hash.clone(),
-                nonce_hash: nonce_hash.clone(),
-                expected_revision: commit.expected_revision,
-            };
-            let (outcome, pack) = self.resume(replay, &expected, Some(&current))?;
-            return Ok(plan(
-                outcome.as_str(),
-                Map::from_iter([
-                    ("revision".to_owned(), json!(row_int(replay, "revision")?)),
-                    ("command_pack_record_digest".to_owned(), pack),
-                    ("proof_recorded".to_owned(), json!(proof.is_some())),
-                    ("hashes".to_owned(), hashes),
-                ]),
-            ));
-        }
-        if current.health == RECOVERY_REQUIRED && !self.request.rollback_attempted {
-            // A different request abandoned its prepared transition before
-            // anchoring it; a read that may roll it back lets this one proceed.
-            return Ok(plan("reread", Map::new()));
-        }
-        if current.health != PROTECTED {
-            return Err(tampered("extension control authority unavailable"));
-        }
-        if current.revision != commit.expected_revision {
-            return Err(tampered("extension control authority revision conflict"));
-        }
-        let seen = |sql: &str, value: &str| -> Res<bool> {
-            Ok(query_row(self.connection, sql, params![value])?.is_some())
-        };
-        if seen(
-            "select 1 from extension_control_authority_transition where nonce_hash = ?",
-            &nonce_hash,
-        )? {
-            return Err(tampered("extension control authority nonce replay"));
-        }
-        if seen(
-            "select 1 from extension_control_authority_proof where proof_id_hash = ?",
-            &proof_hash,
-        )? {
-            return Err(tampered("extension control authority proof replay"));
-        }
-        let previous_digest = row_text(
-            &self
-                .snapshot_row()?
-                .ok_or_else(|| tampered("extension control authority snapshot missing"))?,
-            "snapshot_digest",
-        )?;
-        let revision = current.revision + 1;
-        let pack = commit.pack_record_digest.as_deref();
-        let snapshot = sealed(
-            with_pack(
-                json!({
-                    "revision": revision,
-                    "catalog_digest": catalog_digest,
-                    "layers_json": commit.layers_json,
-                    "previous_digest": previous_digest,
-                    "committed_at": created_at,
-                }),
-                pack,
-            ),
-            key,
-            SNAPSHOT_PURPOSE,
-        )?;
-        let transition = sealed(
-            with_pack(
-                json!({
-                    "revision": revision,
-                    "previous_revision": current.revision,
-                    "previous_digest": previous_digest,
-                    "snapshot_digest": snapshot["digest"],
-                    "catalog_digest": catalog_digest,
-                    "actor_id_hash": actor_hash,
-                    "idempotency_key_hash": idempotency_hash,
-                    "nonce_hash": nonce_hash,
-                    "created_at": created_at,
-                    "phase": Phase::Prepared.as_str(),
-                }),
-                pack,
-            ),
-            key,
-            TRANSITION_PURPOSE,
-        )?;
-        Ok(plan(
-            "prepare",
-            Map::from_iter([
-                ("revision".to_owned(), json!(revision)),
-                ("previous_revision".to_owned(), json!(current.revision)),
-                ("previous_digest".to_owned(), json!(previous_digest)),
-                ("created_at".to_owned(), json!(created_at)),
-                ("hashes".to_owned(), hashes),
-                ("snapshot".to_owned(), snapshot),
-                ("transition".to_owned(), transition),
-            ]),
-        ))
-    }
 }
+
+#[path = "commit_plan.rs"]
+mod commit_plan;

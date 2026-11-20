@@ -5,9 +5,7 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import timedelta
 
-from lab_support import _safe_identifier
-
-from codex_plugin_scanner.guard.mdm.cloud_control import (
+from cloud_control import (
     CONFIG_SCHEMA,
     ContractError,
     iso,
@@ -18,6 +16,7 @@ from codex_plugin_scanner.guard.mdm.cloud_control import (
     validate_health,
     validate_policy,
 )
+from lab_support import _safe_identifier
 
 
 def _validate_publication(

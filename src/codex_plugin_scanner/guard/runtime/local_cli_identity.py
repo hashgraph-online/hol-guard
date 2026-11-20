@@ -3,57 +3,20 @@
 from __future__ import annotations
 
 import re
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from ..native_local_cli_identity import native_unlisted_cli_identities
+from ..native_local_cli_identity import native_local_cli_recognition, native_unlisted_cli_identities
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
-from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
-from .command_tokens import executable_name
-from .custom_extension_suggestion import NATIVE_UNAVAILABLE_MESSAGE, common_utility_verdict
+from .command_model import CanonicalCommand, CommandSegment
+from .custom_extension_suggestion import NATIVE_UNAVAILABLE_MESSAGE
 
 LocalCliKind = Literal["executable", "script"]
 
 REGISTRY_PACKAGE_PATH_CLASS = "registry-package"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
-_INTERPRETER_NAMES = frozenset(
-    {
-        "ash",
-        "bash",
-        "bun",
-        "dash",
-        "deno",
-        "ksh",
-        "lua",
-        "node",
-        "nodejs",
-        "osascript",
-        "perl",
-        "php",
-        "powershell",
-        "pwsh",
-        "python",
-        "python3",
-        "ruby",
-        "rscript",
-        "sh",
-        "ts-node",
-        "tsx",
-        "zsh",
-    }
-)
-_RESERVED_TOOL_NAMES = frozenset({"hol-guard", "hol_guard", "guard"})
-_SCRIPT_LAUNCHERS = {
-    ".py": "python3",
-    ".js": "node",
-    ".mjs": "node",
-    ".cjs": "node",
-    ".ts": "tsx",
-    ".rb": "ruby",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,20 +83,21 @@ def _native_identities(
     command_text: str, *, cwd: Path, home_dir: Path | None, compound: bool
 ) -> tuple[UnlistedCliIdentity, ...]:
     records = native_unlisted_cli_identities(command_text, cwd=cwd, home_dir=home_dir, compound=compound)
-    return tuple(
-        UnlistedCliIdentity(
-            cli_id=record["cli_id"],
-            name=record["name"],
-            kind=record["kind"],
-            identity_hash=record["identity_hash"],
-            example_label=record["example_label"],
-            interpreter_name=record["interpreter_name"],
-            source_path=record["source_path"],
-            path_class=record["path_class"],
-            runner=record["runner"],
-            identity_source=record["identity_source"],
-        )
-        for record in records
+    return tuple(_identity(record) for record in records)
+
+
+def _identity(record: dict[str, Any]) -> UnlistedCliIdentity:
+    return UnlistedCliIdentity(
+        cli_id=record["cli_id"],
+        name=record["name"],
+        kind=record["kind"],
+        identity_hash=record["identity_hash"],
+        example_label=record["example_label"],
+        interpreter_name=record["interpreter_name"],
+        source_path=record["source_path"],
+        path_class=record["path_class"],
+        runner=record["runner"],
+        identity_source=record["identity_source"],
     )
 
 
@@ -156,48 +120,20 @@ def is_local_cli_id(value: str) -> bool:
     return _CLI_ID_PATTERN.fullmatch(value) is not None
 
 
-def is_reserved_tool_name(name: str) -> bool:
-    return _normalize_tool_name(name) in _RESERVED_TOOL_NAMES
-
-
 def recognize_operator_cli(
-    command_text: str,
-    *,
-    cwd: Path,
-    home_dir: Path,
-    registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    command_text: str, *, cwd: Path, home_dir: Path
 ) -> tuple[UnlistedCliIdentity | None, str, str]:
-    """Identify a pasted command or file path. Returns (identity, error_code, message)."""
+    """Identify a pasted command or file path. Returns (identity, error_code, message).
 
-    stripped = command_text.strip()
-    if not stripped:
-        return None, "missing_command", "Paste a command or a path to the tool."
-    candidates = _recognition_candidates(stripped, cwd=cwd, home_dir=home_dir)
-    last_code = "unrecognized_command"
-    last_message = (
-        "Guard could not turn that into one tool. Paste a single command, "
-        "not a pipeline, and include the script or binary path."
-    )
-    owned = catalog_owned_executables(registry)
-    for candidate in candidates:
-        identity = identify_unlisted_cli(candidate, cwd=cwd, home_dir=home_dir)
-        if identity is not None:
-            return identity, "", ""
-        exe = _first_executable_name(candidate, cwd=cwd, home_dir=home_dir)
-        if exe is not None:
-            verdict = common_utility_verdict(exe)
-            if verdict is None:
-                return None, "native_unavailable", NATIVE_UNAVAILABLE_MESSAGE
-            if verdict["common_utility"]:
-                return None, "common_shell_utility", verdict["reject_message"]
-        if exe is not None and is_reserved_tool_name(exe):
-            return None, "reserved_tool", "Guard itself is not added as a custom extension."
-        if exe is not None and exe in owned and not _is_interpreter_name(exe):
-            return None, "already_built_in", f"{exe} is already a built-in Guard extension."
-        if "&&" in candidate or "||" in candidate or "|" in candidate:
-            last_code = "compound_command"
-            last_message = "Paste only the tool itself. Wrappers, pipes, and chained commands are not covered."
-    return None, last_code, last_message
+    The native runtime owns recognition. When it cannot answer, the operator
+    is told so instead of being shown a guessed refusal.
+    """
+
+    answer = native_local_cli_recognition(command_text, cwd=cwd, home_dir=home_dir)
+    if answer is None:
+        return None, "native_unavailable", NATIVE_UNAVAILABLE_MESSAGE
+    identity = answer["identity"]
+    return (None if identity is None else _identity(identity)), answer["error_code"], answer["message"]
 
 
 def _safe_primary_segment(segment: CommandSegment) -> bool:
@@ -211,53 +147,12 @@ def _safe_primary_segment(segment: CommandSegment) -> bool:
     )
 
 
-def _is_interpreter_name(name: str) -> bool:
-    base = name.lower()
-    if base.endswith(".exe") or base.endswith(".cmd"):
-        base = base.rsplit(".", 1)[0]
-    if base in _INTERPRETER_NAMES:
-        return True
-    return base.startswith("python3.")
+def local_cli_recognition_candidates(
+    command_text: str, *, cwd: Path, home_dir: Path, guard_home: Path | None = None
+) -> tuple[str, ...]:
+    """Return pasted-command variants Guard can bind to a single file, or none while the runtime cannot answer."""
 
-
-def _normalize_tool_name(name: str) -> str:
-    base = name.strip().lower()
-    if base.endswith(".exe") or base.endswith(".cmd"):
-        return base.rsplit(".", 1)[0]
-    return base
-
-
-def local_cli_recognition_candidates(command_text: str, *, cwd: Path, home_dir: Path) -> tuple[str, ...]:
-    """Return pasted-command variants Guard can bind to a single file."""
-
-    return _recognition_candidates(command_text, cwd=cwd, home_dir=home_dir)
-
-
-def _recognition_candidates(command_text: str, *, cwd: Path, home_dir: Path) -> tuple[str, ...]:
-    expanded = command_text.replace("~/", f"{home_dir}/")
-    candidates = [expanded]
-    path = Path(expanded).expanduser()
-    if not path.is_absolute():
-        path = cwd / path
-    try:
-        resolved = path.resolve()
-    except OSError:
-        return tuple(candidates)
-    if resolved.is_file():
-        quoted = shlex.quote(str(resolved))
-        launcher = _SCRIPT_LAUNCHERS.get(resolved.suffix.lower())
-        if launcher is not None:
-            candidates.append(f"{launcher} {quoted}")
-        else:
-            candidates.append(quoted)
-    return tuple(dict.fromkeys(candidates))
-
-
-def _first_executable_name(command_text: str, *, cwd: Path, home_dir: Path) -> str | None:
-    try:
-        model = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    except ValueError:
-        return None
-    if not model.segments:
-        return None
-    return executable_name(model.segments[0].executable)
+    answer = native_local_cli_recognition(
+        command_text, cwd=cwd, home_dir=home_dir, answer="candidates", guard_home=guard_home
+    )
+    return () if answer is None else tuple(answer["candidates"])

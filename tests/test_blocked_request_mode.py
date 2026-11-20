@@ -5,15 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.blocked_request_mode import safe_alternative_reason
-from codex_plugin_scanner.guard.cli.commands_support_prompts import _runtime_artifact_native_reason
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, update_guard_settings
-from codex_plugin_scanner.guard.models import GuardArtifact
-
-
-def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
-    """Fail when a reason the CLI still composes locally reaches the resident."""
-
-    raise AssertionError("the resident must not be asked for this reason")
 
 
 def test_prompt_mode_defaults_and_round_trip(tmp_path: Path) -> None:
@@ -36,33 +28,6 @@ def test_workspace_cannot_enable_prompts(tmp_path: Path) -> None:
     workspace.mkdir()
     (workspace / ".hol-guard.toml").write_text('blocked_request_mode = "ask"\n')
     assert load_guard_config(tmp_path / "guard-home", workspace=workspace).blocked_request_mode == "safe-alternative"
-
-
-def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
-    guidance = safe_alternative_reason("HOL Guard blocked this action.")
-    artifact = GuardArtifact(
-        artifact_id="guarded-tool",
-        harness="zcode",
-        artifact_type="prompt_request",
-        name="Guarded tool",
-        source_scope="project",
-        config_path="config.json",
-        command=None,
-        args=(),
-        transport="stdio",
-    )
-    reason = _runtime_artifact_native_reason(
-        artifact,
-        {
-            "policy_action": "block",
-            "blocked_request_guidance": guidance,
-            "decision_v2_json": {"harness_message": "Wait for approval."},
-        },
-        composer=_composer_never_called,
-        guard_home=None,
-    )
-    assert reason == guidance
-    assert "Wait for approval" not in reason
 
 
 @pytest.mark.parametrize(
@@ -91,21 +56,30 @@ def test_package_hint_names_the_frozen_install_without_promising_it() -> None:
     text = safe_alternative_reason("Blocked.", reason_code="native_package_review", approval_queued=True)
     assert "`bun install --frozen-lockfile --ignore-scripts`" in text
     assert "`npm ci --ignore-scripts`" in text
-    assert "If this was already that form" in text
+    # pnpmfile runs inside the pnpm process, so `--ignore-scripts` alone does not
+    # make a pnpm install script-free and the runtime will not prove that form.
+    assert "`pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile`" in text
+    assert "if this was already that form" in text
     assert "Use `--ignore-scripts`" not in text
+    # The lockfile-only forms exist only for npm, pnpm and bun; a pip, uv or cargo install
+    # must not read as if one of them would pass.
+    assert "For npm, pnpm and bun, an install" in text
+    assert "Other package managers, such as pip, uv or cargo, have no form Guard passes" in text
 
 
 def test_package_hint_leaves_the_approval_step_to_the_queue_state() -> None:
     # Without an inbox row, the hint must not send the agent to ask for an approval that cannot be given.
     text = safe_alternative_reason("Blocked.", reason_code="native_package_review", approval_queued=False)
-    assert "If this was already that form" in text
+    assert "if this was already that form" in text
     assert "approve this install" not in text
     assert "No approval is waiting in HOL Guard" in text
 
 
 def test_specific_deny_text_without_queued_approval_points_to_no_approval() -> None:
     text = safe_alternative_reason("Blocked.", reason_code="native_policy_reapproval_required", approval_queued=False)
-    assert text.startswith("Blocked. No approval is waiting in HOL Guard")
+    assert text.startswith(
+        "Blocked. Guard rule: `native_policy_reapproval_required`. No approval is waiting in HOL Guard"
+    )
     assert "Ask the user to approve" not in text
     assert "hol-guard approvals" not in text
 
@@ -215,3 +189,12 @@ def test_direct_read_review_leaves_out_the_search_advice() -> None:
         approval_queued=True,
     )
     assert "A search is checked" in search
+
+
+def test_deny_text_names_only_a_plain_rule_identifier() -> None:
+    # The agent can tell holds apart by rule; an unknown or odd code names nothing.
+    named = safe_alternative_reason("Held.", reason_code="native_network_review", approval_queued=True)
+    assert "Guard rule: `native_network_review`." in named
+    for code in ("unknown", "", "Native-Rule", "a`b", "x" * 65):
+        text = safe_alternative_reason("Held.", reason_code=code, approval_queued=True)
+        assert "Guard rule:" not in text

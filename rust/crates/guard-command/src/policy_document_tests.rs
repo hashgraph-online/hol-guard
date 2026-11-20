@@ -157,3 +157,200 @@ fn extensions_round_trip_and_change_the_native_document_digest() {
         run("digest", &json!({"value":changed}))["ok"]
     );
 }
+
+fn document_with_commands(commands: Value) -> Value {
+    json!({"spec":{"rules":[
+        {"match":{"paths":["/tmp"]}},
+        {"match":{"commands":commands}},
+    ]}})
+}
+
+#[test]
+fn every_command_expression_a_document_carries_comes_back_with_its_rule() {
+    let output = run(
+        "command_expressions",
+        &json!({"value":document_with_commands(json!({
+            "combinator":"any",
+            "conditions":[
+                {"field":"command","operator":"startsWith","value":"  docker   compose  "},
+                {"field":"command","operator":"exact","value":"git push","caseSensitive":true},
+            ],
+        }))}),
+    );
+
+    assert_eq!(
+        output["ok"],
+        json!({"expressions":[{
+            "index":1,
+            "expression":{"combinator":"any","conditions":[
+                {"operator":"startsWith","value":"docker compose","case_sensitive":false},
+                {"operator":"exact","value":"git push","case_sensitive":true},
+            ]},
+        }]})
+    );
+}
+
+#[test]
+fn a_rule_outside_the_dialect_names_itself_on_the_ok_channel() {
+    for (value, code) in [
+        (
+            json!({"field":"command","operator":"exact","value":" "}),
+            "command_value_required",
+        ),
+        (
+            json!({"field":"path","operator":"exact","value":"git push"}),
+            "unsupported_command_condition_field",
+        ),
+        (
+            json!({"field":"command","operator":"matches","value":"git push"}),
+            "unsupported_command_pattern_operator",
+        ),
+    ] {
+        let output = run(
+            "command_expressions",
+            &json!({"value":document_with_commands(json!({
+                "combinator":"all","conditions":[value],
+            }))}),
+        );
+
+        assert_eq!(output["ok"], json!({"invalid":{"index":1,"code":code}}));
+    }
+}
+
+#[test]
+fn a_document_without_command_rules_carries_no_expressions() {
+    let output = run(
+        "command_expressions",
+        &json!({"value":json!({"spec":{"rules":[{"match":{"paths":["/tmp"]}}]}})}),
+    );
+
+    assert_eq!(output["ok"], json!({"expressions":[]}));
+}
+
+fn document_with_rule_match(effect: &str, matcher: Value) -> Value {
+    json!({"document":{
+        "apiVersion":"guard.hashgraphonline.com/v1alpha1","kind":"GuardPolicy",
+        "metadata":{"id":"cloud-policy","name":"Cloud policy","revision":3},
+        "spec":{"defaults":{"mode":"prompt"},"rules":[{
+            "id":"block-install","enabled":true,"effect":effect,"match":matcher,
+            "lifetime":{"mode":"permanent","expiresAt":null},
+            "provenance":{"source":"cloud","createdAt":"2026-01-01T00:00:00Z"},
+        }]},
+    }})
+}
+
+fn exact_shell_id(command: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!(
+        "memory:exact-shell-command:{}",
+        hex::encode(Sha256::digest(command.as_bytes()))
+    )
+}
+
+#[test]
+fn an_exact_command_rule_compiles_to_the_key_the_hook_looks_up() {
+    let command = "bun install --frozen-lockfile --ignore-scripts";
+    let output = run(
+        "compile",
+        &document_with_rule_match("block", json!({"commands":[command]})),
+    );
+
+    let rows = output["ok"].as_array().expect("compiled rows");
+    assert_eq!(rows.len(), 1, "{output}");
+    let decision = &rows[0]["decision"];
+    assert_eq!(decision["artifact_id"], exact_shell_id(command));
+    assert_eq!(decision["action"], "block");
+    assert_eq!(decision["scope"], "artifact");
+    assert_eq!(decision["harness"], "*");
+    assert_eq!(decision["workspace"], Value::Null);
+    assert_eq!(rows[0]["rule_id"], "block-install");
+}
+
+#[test]
+fn an_exact_command_rule_keeps_its_harness_and_workspace_narrowing() {
+    let output = run(
+        "compile",
+        &document_with_rule_match(
+            "block",
+            json!({"commands":["git push","git push --force"],"harnesses":["codex","claude-code"],
+                "workspaces":["/repo"]}),
+        ),
+    );
+
+    let rows = output["ok"].as_array().expect("compiled rows");
+    let mut keys: Vec<(String, String, String, String)> = rows
+        .iter()
+        .map(|row| {
+            let decision = &row["decision"];
+            (
+                decision["artifact_id"].as_str().unwrap().to_owned(),
+                decision["harness"].as_str().unwrap().to_owned(),
+                decision["scope"].as_str().unwrap().to_owned(),
+                decision["workspace"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    keys.sort();
+    let mut expected = Vec::new();
+    for command in ["git push", "git push --force"] {
+        for harness in ["claude-code", "codex"] {
+            expected.push((
+                exact_shell_id(command),
+                harness.to_owned(),
+                "workspace".to_owned(),
+                "/repo".to_owned(),
+            ));
+        }
+    }
+    expected.sort();
+    assert_eq!(keys, expected);
+}
+
+#[test]
+fn an_exact_command_cannot_be_combined_with_artifact_tool_or_publisher_selectors() {
+    for (key, value) in [
+        ("artifacts", json!(["npm:left-pad"])),
+        ("tools", json!(["shell"])),
+        ("publishers", json!(["acme"])),
+    ] {
+        let mut matcher = json!({"commands":["git push"]});
+        matcher[key] = value;
+        let output = run("compile", &document_with_rule_match("block", matcher));
+        assert_eq!(
+            output["error"]["code"], "unsupported_policy_match",
+            "{key}: {output}"
+        );
+    }
+}
+
+#[test]
+fn a_command_expression_still_needs_a_newer_runtime() {
+    let output = run(
+        "compile",
+        &document_with_rule_match(
+            "block",
+            json!({"commands":{"combinator":"any","conditions":[
+                {"field":"command","operator":"startsWith","value":"bun install"},
+            ]}}),
+        ),
+    );
+    assert_eq!(
+        output["error"]["code"], "command_expression_requires_guard_3_1_runtime",
+        "{output}"
+    );
+}
+
+#[test]
+fn a_local_policy_document_still_refuses_a_review_rule() {
+    // Review rules arrive only in signed Cloud bundles (`compile_bundle`); a
+    // local policy file or import keeps allowing or blocking.
+    let output = run(
+        "compile",
+        &document_with_rule_match("review", json!({"tools":["mcp-tool"]})),
+    );
+
+    assert_eq!(
+        output["error"]["code"], "unsupported_policy_effect",
+        "{output}"
+    );
+}

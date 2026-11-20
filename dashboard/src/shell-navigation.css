@@ -182,6 +182,13 @@
   line-height: 1;
 }
 
+/* Status flag (e.g. a pre-release marker): same geometry as the count
+ * badge, in the attention-indigo pre-release tone. */
+.guard-shell-navigation-link__flag {
+  background: rgb(124 140 253 / 0.16);
+  color: #4f5bd5;
+}
+
 .guard-shell-navigation-update-dot {
   position: absolute;
   top: 0.35rem;

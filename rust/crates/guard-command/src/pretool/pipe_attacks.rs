@@ -15,33 +15,43 @@ use crate::{assignment_name, executable_basename, CanonicalCommandV1};
 mod stdin_programs;
 use stdin_programs::runs_stdin_program;
 
-pub(super) const REMOTE_CODE: (&str, &str) = (
+pub(crate) const REMOTE_CODE: (&str, &str) = (
     "native_remote_code_execution",
     "HOL Guard blocked a command that pipes downloaded content into a shell or interpreter, which runs remote code without review. Download it to a file, inspect it, and ask the user before running it.",
 );
-pub(super) const ENVIRONMENT_EXFILTRATION: (&str, &str) = (
+pub(crate) const ENVIRONMENT_EXFILTRATION: (&str, &str) = (
     "native_secret_exfiltration",
     "HOL Guard blocked a command that sends environment variables, which often hold secrets, over the network. Send only the specific non-secret values the request needs.",
 );
 
 const MAX_STEPS: usize = 64;
 
-/// The attack `model` pipes, as `(reason_code, reason)`.
-pub(super) fn pipe_attack(model: &CanonicalCommandV1) -> Option<(&'static str, &'static str)> {
+/// The first attack `model` pipes, as `(reason_code, reason)`.
+pub(crate) fn pipe_attack(model: &CanonicalCommandV1) -> Option<(&'static str, &'static str)> {
+    pipe_attacks(model).into_iter().next()
+}
+
+/// Every distinct attack `model` pipes, in the order its pipelines show them.
+pub(crate) fn pipe_attacks(model: &CanonicalCommandV1) -> Vec<(&'static str, &'static str)> {
+    let mut found = Vec::new();
     if model.dialect != "posix" || model.transport != "shell_string" {
-        return None;
+        return found;
     }
     let raw = model.normalized_text.as_str();
     let preserve_backslash = cfg!(windows);
-    let segments = split_pipelines_including_background(raw, preserve_backslash).ok()?;
+    let Ok(segments) = split_pipelines_including_background(raw, preserve_backslash) else {
+        return found;
+    };
     if segments.len() > MAX_STEPS {
-        return None;
+        return found;
     }
     let chars: Vec<char> = raw.chars().collect();
     let mut steps = Vec::with_capacity(segments.len());
     for segment in segments {
         let text: String = chars[segment.start..segment.end].iter().collect();
-        let tokens = shell_tokens(&text, preserve_backslash).ok()?;
+        let Ok(tokens) = shell_tokens(&text, preserve_backslash) else {
+            return found;
+        };
         steps.push((segment.group_index, segment.pipeline_index, tokens));
     }
     for (index, (group, position, earlier)) in steps.iter().enumerate() {
@@ -53,15 +63,18 @@ pub(super) fn pipe_attack(model: &CanonicalCommandV1) -> Option<(&'static str, &
             })
         {
             let later = program_words(later);
-            if fetches(earlier) && runs_stdin_program(later) {
-                return Some(REMOTE_CODE);
+            if fetches(earlier) && runs_stdin_program(later) && !found.contains(&REMOTE_CODE) {
+                found.push(REMOTE_CODE);
             }
-            if dumps_environment(earlier) && sends_stdin(later) {
-                return Some(ENVIRONMENT_EXFILTRATION);
+            if dumps_environment(earlier)
+                && sends_stdin(later)
+                && !found.contains(&ENVIRONMENT_EXFILTRATION)
+            {
+                found.push(ENVIRONMENT_EXFILTRATION);
             }
         }
     }
-    None
+    found
 }
 
 /// The program and its arguments after assignments and launch wrappers.

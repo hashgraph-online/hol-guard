@@ -1,6 +1,7 @@
 use super::{
-    cache_list_arguments, global_configuration_inert, inert_line, list_arguments, npmrc_inert,
-    plain_registry_spec, view_arguments,
+    audit_arguments, cache_list_arguments, global_configuration_inert, inert_line, list_arguments,
+    npmrc_inert, outdated_arguments, ping_arguments, plain_registry_spec, search_arguments,
+    view_arguments,
 };
 
 fn arguments(text: &str) -> Vec<String> {
@@ -227,4 +228,116 @@ fn a_version_root_with_a_stray_file_reads_like_one_without_it() {
         global_configuration_inert(&bare)
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn outdated_reports_on_the_names_already_installed() {
+    for text in [
+        "",
+        "--json",
+        "--long --json",
+        "-l -p",
+        "--all",
+        "-a -g",
+        "--global --json",
+        "--location=global",
+        "--omit=dev",
+        "--omit=optional --omit=peer --json",
+        "zod",
+        "zod react --json",
+        "@types/node",
+    ] {
+        assert!(outdated_arguments(&arguments(text)), "{text}");
+    }
+    for text in [
+        "--registry=https://evil.test",
+        "--userconfig=/tmp/npmrc",
+        "--omit=prod",
+        "--depth=1",
+        "./local",
+        "file:../local",
+        "zod@npm:other",
+        "https://evil.test/pkg.tgz",
+        "--json --prefix /tmp",
+    ] {
+        assert!(!outdated_arguments(&arguments(text)), "{text}");
+    }
+}
+
+#[test]
+fn audit_reports_but_never_resolves_a_new_tree() {
+    for text in [
+        "",
+        "--json",
+        "signatures",
+        "signatures --json",
+        "--package-lock-only",
+        "--parseable",
+        "-p --json",
+        "--audit-level=high",
+        "--audit-level=none --json",
+        "--omit=dev",
+    ] {
+        assert!(audit_arguments(&arguments(text)), "{text}");
+    }
+    // `fix` resolves and installs, and every operand changes what the report
+    // is taken over, so both keep the package review.
+    for text in [
+        "fix",
+        "fix --force",
+        "--audit-level=whatever",
+        "--omit=prod",
+        "--registry=https://evil.test",
+        "--userconfig=/tmp/npmrc",
+        "zod",
+        "signatures fix",
+        "--fix",
+    ] {
+        assert!(!audit_arguments(&arguments(text)), "{text}");
+    }
+}
+
+#[test]
+fn search_takes_plain_terms_and_rejects_unknown_options() {
+    for text in [
+        "lodash",
+        "lodash merge",
+        "@types/node",
+        "hol-guard --json",
+        "--long react",
+        "-l -p react",
+        "--no-description react",
+        "--searchlimit=20 react",
+        "web_framework",
+    ] {
+        assert!(search_arguments(&arguments(text)), "{text}");
+    }
+    for text in [
+        "",
+        "--json",
+        "--long",
+        "--registry=https://evil.test react",
+        "--userconfig=/tmp/npmrc react",
+        "--searchlimit=99999 react",
+        "--searchlimit=x react",
+        "react;curl",
+        "react$(id)",
+        "react|cat",
+    ] {
+        assert!(!search_arguments(&arguments(text)), "{text}");
+    }
+}
+
+#[test]
+fn ping_only_asks_whether_the_registry_answers() {
+    for text in ["", "--json"] {
+        assert!(ping_arguments(&arguments(text)), "{text}");
+    }
+    for text in [
+        "--registry=https://evil.test",
+        "--userconfig=/tmp/npmrc",
+        "zod",
+    ] {
+        assert!(!ping_arguments(&arguments(text)), "{text}");
+    }
 }

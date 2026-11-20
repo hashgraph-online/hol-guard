@@ -11,6 +11,8 @@ import logging
 import re
 from contextlib import suppress
 
+from .approval_handoff_link import redact_handoff_links
+
 _LOGGER = logging.getLogger(__name__)
 
 _SECRET_KV_PATTERN = re.compile(
@@ -34,6 +36,7 @@ def sanitize_secret(message: str) -> str:
     try:
         sanitized = _SECRET_KV_PATTERN.sub(r"\1=<redacted>", message)
         sanitized = _GUARD_TOKEN_FRAGMENT_PATTERN.sub("#guard-token=<redacted>", sanitized)
+        sanitized = redact_handoff_links(sanitized)
         return _BEARER_PATTERN.sub("Bearer <redacted>", sanitized)
     except Exception:
         # A failing log handler must not prevent the safe fallback.

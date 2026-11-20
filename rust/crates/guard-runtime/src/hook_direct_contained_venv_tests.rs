@@ -1,5 +1,6 @@
 //! The contained route hands the sink the command the denial was answered
-//! for. A virtualenv activation exports settings and runs nothing else, so
+//! for. A trailing group is decided as the list inside it, and a virtualenv
+//! activation exports settings and runs nothing else, so
 //! the pre-tool pass projects `source .venv/bin/activate && pytest -q` to
 //! `.venv/bin/pytest -q` and answers for that; the sink models no shell
 //! builtin, so the snapshot has to carry the projected text or the sink
@@ -8,7 +9,7 @@
 #![cfg(unix)]
 
 use super::request::REQUEST_FILE_NAME;
-use super::{route_on, Host, SinkTarget};
+use super::{route_on, unprojected_sink_command, Host, SinkTarget};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,7 +116,7 @@ fn routed_from(root: &Path, command: &str, payload_cwd: Option<&str>) -> (Value,
     };
     let host = Host {
         platform: |_| true,
-        native: |_, _, _| None,
+        native: |_, _, _, _| None,
     };
     let temp = root.join("tmp");
     let (response, snapshot) = route_on(
@@ -161,6 +162,33 @@ fn an_activation_reaches_the_sink_as_the_program_it_hands_the_verdict_to() {
 }
 
 #[test]
+fn a_trailing_group_reaches_the_sink_as_the_list_inside_it() {
+    let root = scratch("group");
+    environment(&root.join("project"), &["pytest"]);
+    // The pre-tool pass decides `(.venv/bin/pytest -q)` as the list inside
+    // its parentheses. A snapshot that kept the parenthesis handed the sink a
+    // program named `(.venv/bin/pytest`, which it refused to resolve.
+    for (command, projected) in [
+        ("(.venv/bin/pytest -q)", ".venv/bin/pytest -q"),
+        ("{ .venv/bin/pytest -q; }", ".venv/bin/pytest -q"),
+        (
+            "(source .venv/bin/activate && pytest -q)",
+            ".venv/bin/pytest -q",
+        ),
+    ] {
+        let (snapshot, _) = routed(&root, command);
+        assert_eq!(
+            snapshot["payload"]["tool_input"]["command"], projected,
+            "{command}"
+        );
+        for entry in fs::read_dir(root.join("tmp")).unwrap().flatten() {
+            fs::remove_dir_all(entry.path()).unwrap();
+        }
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn the_route_reads_the_workspace_the_edge_answered_with() {
     let root = scratch("spelling");
     environment(&root.join("project"), &["pytest"]);
@@ -201,5 +229,38 @@ fn a_command_the_activation_scan_cannot_read_keeps_its_own_bytes() {
         fs::remove_dir_all(root.join("tmp")).unwrap();
         fs::create_dir_all(root.join("tmp")).unwrap();
     }
+    fs::remove_dir_all(root).unwrap();
+}
+
+fn tool_input(command: &str) -> Map<String, Value> {
+    serde_json::from_value(json!({ "command": command })).unwrap()
+}
+
+/// The native sink when it runs `.venv/bin/pytest -q` and nothing else.
+fn projected_only(
+    _response: &Value,
+    input: &Map<String, Value>,
+    _workspace: &str,
+    _home: &str,
+) -> Option<String> {
+    let command = input.get("command")?.as_str()?;
+    (command == ".venv/bin/pytest -q").then(|| "/runtime".to_owned())
+}
+
+#[test]
+fn the_edge_decides_the_sink_on_the_projected_call() {
+    let root = scratch("edge");
+    let workspace = root.join("project");
+    environment(&workspace, &["pytest"]);
+    let workspace = workspace.to_str().unwrap();
+    let home = root.to_str().unwrap();
+    // The edge rewrites the unprojected snapshot, so it has to ask the
+    // native sink about the call the denial was answered for.
+    let activated = tool_input("source .venv/bin/activate && pytest -q");
+    let command = unprojected_sink_command(&denial(), &activated, workspace, home, projected_only)
+        .expect("the projected call runs in the native sink");
+    assert_eq!(command[0], "/runtime");
+    let plain = tool_input("pytest -q");
+    assert!(unprojected_sink_command(&denial(), &plain, workspace, home, projected_only).is_none());
     fs::remove_dir_all(root).unwrap();
 }

@@ -504,3 +504,83 @@ fn direct_mcp_rejects_noncanonical_commands_and_launch_arguments() {
         Err("command_source_mcp_contract_invalid")
     ));
 }
+
+#[test]
+fn first_party_display_name_does_not_change_trust_digest() {
+    let mut trust: Value = serde_json::from_slice(TRUST).unwrap();
+    trust["classes"]["first-party"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!("command.example-cli"));
+    let shown = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_eq!(shown.catalog[0]["publisher"]["id"], "hol");
+    assert_eq!(shown.catalog[0]["publisher"]["displayName"], "HOL");
+    trust["publishers"]["hol"]["displayName"] = serde_json::json!("Hashgraph Online");
+    let previous = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_eq!(
+        previous.catalog[0]["publisher"]["displayName"],
+        "Hashgraph Online"
+    );
+    assert_eq!(
+        shown.program["trust_digest"],
+        previous.program["trust_digest"]
+    );
+    trust["classes"]["first-party"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|id| id != "command.example-cli");
+    trust["classes"]["trusted-library"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!("command.example-cli"));
+    let moved = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_ne!(shown.program["trust_digest"], moved.program["trust_digest"]);
+}
+
+#[test]
+fn external_publisher_display_name_changes_trust_digest() {
+    let mut source: Value = serde_json::from_slice(EXAMPLE).unwrap();
+    source["extension"]["publisher"] = serde_json::json!({
+        "id":"community.example","display_name":"Example Contributor"
+    });
+    let named = compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).unwrap();
+    source["extension"]["publisher"]["display_name"] = serde_json::json!("Renamed Contributor");
+    let renamed = compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).unwrap();
+    assert_eq!(named.catalog[0]["trust_class"], "external");
+    assert_ne!(
+        named.program["trust_digest"],
+        renamed.program["trust_digest"]
+    );
+    source["extension"]["publisher"]["id"] = serde_json::json!("hol");
+    assert!(compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).is_err());
+}
+
+#[test]
+fn a_tee_stage_keeps_its_pipeline_evidence_when_the_rewrite_does_not_settle() {
+    // `cmd | tee PATH` is evaluated as `cmd > PATH`, but a target the
+    // redirect projection cannot bound leaves the redirect in the text, and
+    // the shell parser models no segments for it. The pipeline's own
+    // segments carry the extension evidence, so the unsettled rewrite must
+    // not replace them.
+    let output = compiled();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "example-cli destroy | tee destroy.log"},
+        }),
+        Some(&controls(&output, true, false)),
+        None,
+    );
+    assert_eq!(result.minimum_action, "review");
+    let segments: Vec<_> = result
+        .command_extensions
+        .as_ref()
+        .into_iter()
+        .flat_map(|batch| &batch.observations)
+        .filter(|observation| observation.rule_id == "command.example-cli.destroy")
+        .flat_map(|observation| observation.effective_segment_indexes.iter().copied())
+        .collect();
+    assert_eq!(segments, vec![0]);
+}

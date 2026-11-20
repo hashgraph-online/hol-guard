@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 
 import { ExtensionControlApiError } from "../extension-controls-api";
-import { isRetryableProtectionChangeError, isStaleProtectionDataError, protectionChangeErrorMessage } from "./protection-change-error";
+import {
+  authorityRecoverySentence,
+  isRetryableProtectionChangeError,
+  isStaleProtectionDataError,
+  knownProtectionChangeMessage,
+  protectionChangeErrorMessage,
+} from "./protection-change-error";
 
 // Every code the daemon's extension-control API can answer a mutation with.
 const CODES = [
@@ -222,5 +228,21 @@ for (const code of ["approval_required", "authority_apply_failed", "control_limi
   assert.ok(!isStaleProtectionDataError(apiError(code)), code);
 }
 assert.ok(!isStaleProtectionDataError(new Error("catalog_conflict")));
+
+// A failure before anything is written has no uncertain outcome to report:
+// unknown codes and code-less protocol errors get no sentence here, so a
+// preview never claims the change may have been saved.
+const unavailable = new ExtensionControlApiError("authority_unavailable", 503, "authority_unavailable");
+assert.match(knownProtectionChangeMessage(unavailable) ?? "", /could not open its local protection authority/);
+assert.equal(knownProtectionChangeMessage(new ExtensionControlApiError("future_code", 500, "future_code")), undefined);
+assert.equal(knownProtectionChangeMessage(new ExtensionControlApiError("Guard returned invalid JSON (500)", 500)), undefined);
+assert.equal(knownProtectionChangeMessage(new Error("authority_unavailable")), undefined);
+
+// A read names the repair without saying anything about a save.
+const readRecovery = authorityRecoverySentence(unavailable, "C:\\Guard\\hol-guard.exe command controls recover-authority", "powershell") ?? "";
+assert.match(readRecovery, /C:\\Guard\\hol-guard\.exe command controls recover-authority/);
+assert.match(readRecovery, /PowerShell/);
+assert.doesNotMatch(readRecovery, /sav/);
+assert.equal(authorityRecoverySentence(new ExtensionControlApiError("revision_conflict", 409, "revision_conflict")), undefined);
 
 console.log("protection-change-error ok");

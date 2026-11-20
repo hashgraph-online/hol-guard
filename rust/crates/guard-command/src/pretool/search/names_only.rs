@@ -54,7 +54,7 @@ fn visible_walk_target(value: &str, context: ReadContext<'_>) -> bool {
         return false;
     };
     if tree::inside_agent_state(&root, context)
-        || !super::rg_whitelist::roots_proven(&[value], context)
+        || !super::rg_whitelist::roots_proven(&[value], &[], context)
     {
         return false;
     }

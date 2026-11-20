@@ -9,9 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_http import dispatch_local_cli_post
-from codex_plugin_scanner.guard.daemon.mcp_discovery_jobs import DiscoveryJobError, McpDiscoveryJobs
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.mcp_discovery_jobs import DiscoveryJobError, McpDiscoveryJobs
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import run_mcp_catalog
 from codex_plugin_scanner.guard.store import GuardStore
@@ -117,6 +116,7 @@ def test_cancel_before_start_launches_nothing(tmp_path: Path):
         "mcp_launch_failed",
         "mcp_transport_failed",
         "mcp_initialize_failed",
+        "mcp_server_exited",
         "mcp_protocol_unsupported",
         "mcp_capability_rejected",
     ],
@@ -165,9 +165,7 @@ def test_refresh_api_requires_process_consent_and_cancel_does_not_mutate_grants(
         with pytest.raises(LocalCliApiError, match="Confirm starting"):
             service.refresh_job({"cli_id": identity.cli_id})
         assert not entered.is_set()
-        job = dispatch_local_cli_post(
-            service,
-            "/v1/local-clis/refresh-job",
+        job = service.refresh_job(
             {
                 "cli_id": identity.cli_id,
                 "confirm_process_start": True,
@@ -188,14 +186,14 @@ def test_configured_inventory_uses_read_adapters_and_never_launches(tmp_path: Pa
     calls = []
     monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda **_kwargs: calls.append("configuration"))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_observed_mcp_tools",
         lambda *_args, **_kwargs: calls.append("observations"),
     )
 
     def forbidden_launch(*_args, **_kwargs):
         pytest.fail("configuration discovery must not launch a server")
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server", forbidden_launch)
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server", forbidden_launch)
     try:
         job = service.refresh_job({"operation": "configured-connections"})
         assert _finished(service._discovery_jobs, str(job["job_id"]))["state"] == "complete"
@@ -226,7 +224,7 @@ def test_configured_inventory_reports_failed_stage_without_private_exception(
     else:
         monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda **_kwargs: None)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+            "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_observed_mcp_tools",
             lambda *_args, **_kwargs: fail(),
         )
     try:

@@ -9,13 +9,13 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
-from codex_plugin_scanner.guard import runtime_transition
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec
+from codex_plugin_scanner.guard import native_runner_authority
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import prepare_authenticated_hook_publication_inverse
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_hook_paths_support import hook_secret_path
 
 from .test_codex_hook_recovery import crash, installed  # noqa: F401 -- shared isolated fixture
 
@@ -37,21 +37,31 @@ def test_inverse_plan_is_read_only_and_binds_foreign_config_for_review(installed
         script = r"""
 import os, sys
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_transition_files
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
-original = codex.mark_owned_hook_publication_conflict
+original = native_transition_files.publication
 def conflict_after_publication(*args, **kwargs):
     config = home / '.codex/config.toml'
     config.write_bytes(config.read_bytes() + b'\n# intervening writer\n')
     raise OSError('injected readback failure with foreign config')
-def exit_after_signed_conflict(*args, **kwargs):
-    original(*args, **kwargs)
-    os._exit(17)
-codex._require_hook_semantics_readback = conflict_after_publication
-codex.mark_owned_hook_publication_conflict = exit_after_signed_conflict
-codex.CodexHarnessAdapter().install(context)
+def exit_after_signed_conflict(op, *args, **kwargs):
+    if op != 'abort':
+        return original(op, *args, **kwargs)
+    try:
+        original(op, *args, **kwargs)
+    finally:
+        os._exit(17)
+from tests import codex_install_flow_support as flow
+from tests import codex_publication_steps
+flow.publish_hooks = codex_publication_steps.stepwise_publish_hooks
+codex_publication_steps.install_stepwise_codex()
+codex_publication_steps.readback = conflict_after_publication
+native_transition_files.publication = exit_after_signed_conflict
+harness_support.install("codex", context)
 raise RuntimeError('signed conflict boundary was not reached')
 """
         child = subprocess.run(
@@ -194,16 +204,24 @@ def test_inverse_plan_forwards_original_deadline_to_artifact_comparison(installe
     before = participant_digests(context, config, manifest)
     with codex_install_transaction(context.guard_home, config, actor="review-artifact-deadline"):
         plan = prepare_authenticated_hook_publication_inverse(_hook_manifest_spec(context))
-        clock = [0.0]
-        monkeypatch.setattr(integrity.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(integrity.time, "monotonic", lambda: 0.0)
+        forwarded: list[object] = []
+        ask = native_runner_authority.native_runner_authority
 
-        def expires_during_digest(*_args, **_kwargs):
-            clock[0] = 2.0
-            runtime_transition._check_inverse_deadline()
-            raise AssertionError("Original deadline was not forwarded to artifact hashing")
+        def expires_in_the_resident(kind: str, request: dict[str, object], **kwargs: object) -> dict[str, object]:
+            asked = kind == "transition_files" and request.get("op") == "publication_inverse_verify"
+            if not asked or "budget" not in request:
+                return ask(kind, request, **kwargs)
+            budget = request["budget"]
+            assert isinstance(budget, dict)
+            forwarded.append(min(value for value in budget.values() if isinstance(value, int)))
+            # The resident sees the original inverse deadline already spent.
+            spent = {**budget, "inverse_ms": 0}
+            return ask(kind, {**request, "budget": spent}, **kwargs)
 
-        monkeypatch.setattr(runtime_transition, "_artifact_digest", expires_during_digest)
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", expires_in_the_resident)
         with pytest.raises(TransitionError) as failure, integrity.hook_validation_deadline(1.0):
             plan.compare_before()
         assert failure.value.reason == "deadline_exceeded"
+        assert forwarded and forwarded[0] == 1000
     assert participant_digests(context, config, manifest) == before

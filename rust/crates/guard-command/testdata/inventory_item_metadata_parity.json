@@ -1559,6 +1559,243 @@
       "risk_level": "medium"
     },
     {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
       "artifact_type": "plugin",
       "capabilities": [
         "unknown"
@@ -1914,7 +2151,7 @@
       "kind": "plugin"
     }
   ],
-  "note": "Generated by scripts/ci/generate_inventory_item_metadata_parity.py. Each entry records what codex_plugin_scanner.guard.inventory_contract_metadata returns, so the Rust port is pinned to observed behaviour.",
+  "note": "Generated by scripts/ci/generate_inventory_item_metadata_parity.py. Each entry records what the retired CPython in scripts/ci/inventory_item_metadata_reference.py returned, so the Rust port is pinned to observed behaviour.",
   "python_version": "3.12.12",
   "resolve_content_hash": [
     {

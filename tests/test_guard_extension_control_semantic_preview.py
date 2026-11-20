@@ -5,8 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
-from codex_plugin_scanner.guard.daemon.extension_control_semantic_preview import build_extension_control_event_targets
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
+    ExtensionControlApiError,
+    ExtensionControlApiService,
+)
+from codex_plugin_scanner.guard.extension_controls.extension_control_semantic_preview import (
+    build_extension_control_event_targets,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,

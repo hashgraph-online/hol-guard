@@ -54,12 +54,17 @@ def _write_pnpm_workspace(workspace_dir: Path, *, extra_dependency: str | None =
         encoding="utf-8",
     )
 
-def _write_linked_git_worktrees(primary: Path, linked: Path) -> None:
+def _write_linked_git_worktrees(
+    primary: Path,
+    linked: Path,
+    *,
+    origin: str = "https://example.test/team/app.git",
+) -> None:
     linked.mkdir(parents=True, exist_ok=True)
     common_git_dir = primary / ".git"
     common_git_dir.mkdir()
     (common_git_dir / "config").write_text(
-        '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://example.test/team/app.git\n',
+        f'[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = {origin}\n',
         encoding="utf-8",
     )
     linked_git_dir = common_git_dir / "worktrees" / linked.name

@@ -9,6 +9,8 @@ from codex_plugin_scanner.guard.project_identity import is_portable_project_iden
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.portable_identity_vector_cases import FIXTURE_PATH, SCHEMA, build_fixture, materialize
 
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
+
 _NOW = "2026-10-14T12:00:00+00:00"
 
 
@@ -22,7 +24,7 @@ def _case(case_id: str) -> dict[str, object]:
     return next(case for case in cases if case["id"] == case_id)
 
 
-def test_checked_in_vectors_match_the_python_resolver(tmp_path: Path) -> None:
+def test_checked_in_vectors_match_the_resident_resolver(tmp_path: Path) -> None:
     base = tmp_path.resolve()
 
     assert build_fixture(lambda case_id: base / case_id) == _fixture()

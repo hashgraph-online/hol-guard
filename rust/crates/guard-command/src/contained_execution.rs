@@ -250,8 +250,10 @@ pub struct ContainmentInput {
     pub kind: String,
 }
 
-/// `HealthSeverity` / `ProtectionCheckStatus` / `ProtectionSignal`
-/// (protection_health.py :17-66).
+/// The status vocabulary `$GUARD_HOME/protection/containment.json` records
+/// (`containment_health.py`). These are not `protection_health.py`'s check
+/// statuses, which this comment used to cite: that module reports
+/// `pass`/`unknown`/`fail` per check and is ported in `protection_health.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ProtectionCheckStatus {
     Ok,

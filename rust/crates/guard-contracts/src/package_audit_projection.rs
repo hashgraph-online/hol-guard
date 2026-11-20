@@ -1,7 +1,8 @@
 //! `PackageAuditProjection` — wire contract for the resident op that owns the
 //! pure projections of a workspace supply-chain audit: the receipt authority
 //! map, bundle advisory-alias enrichment, the CI severity gate, the
-//! and the empty-inventory outcome.
+//! empty-inventory outcome and the supply-chain findings of a workspace
+//! assessment run.
 //!
 //! The caller supplies only what the resident cannot read (the audit result it
 //! just assembled). The resident reads the cached advisory bundle from the
@@ -135,6 +136,30 @@ pub struct PackageAuditProtectProjectionQueryV1 {
     pub project_execution_action: bool,
 }
 
+/// Project a local audit payload into a worktree's supply-chain findings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageAuditWorkspaceFindingsQueryV1 {
+    pub worktree_key: String,
+    /// The local audit payload exactly as the assessment run received it.
+    pub payload: Value,
+}
+
+/// Keep each package finding under the id the worktree's last run gave it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageAuditPackageIdentitiesQueryV1 {
+    /// The new run's findings, every detector included.
+    pub findings: Vec<Value>,
+    /// The last assessed run's findings exactly as stored.
+    pub earlier: Vec<Value>,
+    /// `[ecosystem, name, version]` of every package the audit read; absent
+    /// when the audit stopped early. Left out again when serialized, as the
+    /// client sent it, so the request digest matches the client's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listed: Option<Vec<[String; 3]>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "query", rename_all = "snake_case")]
 pub enum PackageAuditQueryV1 {
@@ -147,6 +172,8 @@ pub enum PackageAuditQueryV1 {
     CiGate(PackageAuditCiGateQueryV1),
     EmptyOutcome(PackageAuditEmptyOutcomeQueryV1),
     ProtectProjection(PackageAuditProtectProjectionQueryV1),
+    WorkspaceFindings(PackageAuditWorkspaceFindingsQueryV1),
+    PackageIdentities(PackageAuditPackageIdentitiesQueryV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -9,7 +9,6 @@ not qualify Desktop transitions, releases or installed migration.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import signal
 import socket
@@ -21,11 +20,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner import __version__
-from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.daemon import manager
-from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding, verified_live_guard_daemon_identity
+from codex_plugin_scanner.guard import native_daemon_manage as manager
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
+from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding, verified_live_guard_daemon_identity
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition_codex_observer import observe_configured_codex_hook
 from codex_plugin_scanner.guard.store import GuardStore
@@ -39,24 +38,6 @@ def test_real_frozen_daemon_identity_and_exact_retirement(tmp_path, monkeypatch,
         pytest.skip("requires an explicitly selected frozen qualification artifact")
     executable = Path(selected).resolve(strict=True)
     native = None
-    launches = []
-    real_launch = observer.run_isolated_hook_process
-
-    def observed_launch(*args, **kwargs):
-        result = real_launch(*args, **kwargs)
-        output = json.loads(result.stdout) if result.stdout else {}
-        decision = output.get("hookSpecificOutput", {}).get("permissionDecision")
-        launches.append(
-            {
-                "returncode": result.returncode,
-                "decision": decision,
-                "stdout_bytes": len(result.stdout),
-                "stderr_bytes": len(result.stderr),
-            }
-        )
-        return result
-
-    monkeypatch.setattr(observer, "run_isolated_hook_process", observed_launch)
     if protected:
         native_selected = os.environ.get("HOL_GUARD_FROZEN_QUALIFICATION_NATIVE")
         if native_selected is None:
@@ -127,7 +108,7 @@ def test_real_frozen_daemon_identity_and_exact_retirement(tmp_path, monkeypatch,
             token = process_start_token(daemon_pid, deadline_monotonic=deadline)
             assert token is not None
             if protected:
-                connected = real_launch(
+                connected = run_isolated_hook_process(
                     [
                         str(executable),
                         "apps",
@@ -166,7 +147,7 @@ def test_real_frozen_daemon_identity_and_exact_retirement(tmp_path, monkeypatch,
                             receipt_store=store,
                         )
                 except Exception as error:
-                    pytest.fail(f"frozen protection refused: {type(error).__name__}; launches={launches}")
+                    pytest.fail(f"frozen protection refused: {type(error).__name__}")
                 assert proof.allow_receipt["authority"] == proof.deny_receipt["authority"] == "rust"
                 assert proof.allow_receipt["decision"] == "allow"
                 assert proof.deny_receipt["decision"] == "deny"

@@ -46,7 +46,7 @@ const MAX_ARCHIVE_PATH_BYTES: usize = 16 * 1024;
 /// equivalent, so `run_inspection` also watches the inherited liveness pipe
 /// and polls `getppid` for a reparent onto init.
 #[cfg(unix)]
-fn arm_parent_death_guard() -> i32 {
+pub(crate) fn arm_parent_death_guard() -> i32 {
     #[cfg(target_os = "linux")]
     {
         let _ = nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGKILL));

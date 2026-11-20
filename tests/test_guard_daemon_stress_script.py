@@ -285,6 +285,9 @@ def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> 
         env=environment,
         timeout=90,
     )
+    assert completed.stdout.strip(), (
+        f"stress script printed no result (exit {completed.returncode}): {completed.stderr[-4000:]}"
+    )
     loaded = cast(object, json.loads(completed.stdout))
     assert isinstance(loaded, dict)
     result = cast(dict[str, object], loaded)

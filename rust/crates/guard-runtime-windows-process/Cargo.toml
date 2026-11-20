@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [lib]
 name = "guard_runtime_windows_process"
@@ -22,9 +23,12 @@ winapi = { workspace = true, features = [
     "namedpipeapi",
     "processenv",
     "processthreadsapi",
+    "securitybaseapi",
+    "shellapi",
     "shlobj",
     "stringapiset",
     "synchapi",
+    "sysinfoapi",
     "tlhelp32",
     "winbase",
     "winerror",

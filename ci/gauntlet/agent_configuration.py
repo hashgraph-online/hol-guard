@@ -20,6 +20,7 @@ def write_agent_configuration(
     memory_bank: bool = False,
     github_tool: bool = False,
     structured_tasks: bool = False,
+    tool_call_loop_guard: bool = True,
 ) -> None:
     """Point the actual OMP provider at the transparent live relay.
 
@@ -46,6 +47,11 @@ def write_agent_configuration(
     a tool that is unavailable in this session. The fixture supplies the `gh`
     stub, so only the scenarios that ask for the tool turn the toggle on and the
     rest keep their tool inventory unchanged.
+
+    Oh My Pi's own tool-call loop guard steers the model away from the fifth
+    identical call in a row, so a loop case never reaches the sixth call that
+    Guard is meant to stop. Loop cases turn it off; every other scenario keeps
+    the SDK default.
     """
     path.mkdir(mode=0o700)
     # The eval scenario exercises the guarded JavaScript session-tool bridge;
@@ -62,6 +68,8 @@ def write_agent_configuration(
         configuration["github"] = {"enabled": True}
     if structured_tasks:
         configuration["task"] = {"structured": True}
+    if not tool_call_loop_guard:
+        configuration["model"] = {"toolCallLoopGuard": {"enabled": False}}
     (path / "config.yml").write_text(json.dumps(configuration), encoding="utf-8")
     configuration = {
         "providers": {

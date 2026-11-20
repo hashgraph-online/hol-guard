@@ -31,6 +31,7 @@ use crate::claude_hook_bridge_http::{LoopbackConnection, MAX_DAEMON_RESPONSE_BYT
 use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
 use crate::codex_hook_bridge_direct::grok_direct_answer;
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::hook_env_stamp::{current_environment, dumps, set_member, stamp_hook_input_text, Stamp};
 use crate::pyjson::PyVal;
 
@@ -41,6 +42,7 @@ const STATE_FILE: &str = "daemon-state.json";
 const TOKEN_FILE: &str = "daemon-auth-token";
 const SETTINGS_FILE: &str = "config.toml";
 const HOOK_PATH: &str = "/v1/hooks/grok";
+/// Why the resident did not answer a hook the daemon now reviews.
 const READINESS_PATH: &str = "/v1/hooks/grok/readiness";
 const PROMPT_EVENT: &str = "UserPromptSubmit";
 const PRETOOL_EVENT: &str = "PreToolUse";
@@ -151,13 +153,14 @@ impl Client {
     }
 
     /// `_http_json(_loopback_url(host, port, path), token, data=body,
-    /// timeout=timeout)`.
+    /// timeout=timeout)`, naming the resident's miss when there was one.
     fn http_json(
         &self,
         daemon: &Daemon,
         path: &str,
         body: Option<&[u8]>,
         timeout: f64,
+        miss: Option<DirectMiss>,
     ) -> Option<Vec<(String, PyVal)>> {
         let now = Instant::now();
         let deadline = capped(now, timeout, self.deadline);
@@ -175,6 +178,9 @@ impl Client {
         let mut headers = vec![("X-Guard-Token", daemon.token.as_str())];
         if body.is_some() {
             headers.push(("Content-Type", "application/json"));
+        }
+        if let Some(miss) = miss {
+            headers.push((DIRECT_MISS_HEADER, miss.code()));
         }
         headers.push(("Connection", "close"));
         let mut connection = LoopbackConnection::new(&daemon.host, daemon.port);
@@ -221,7 +227,8 @@ impl Client {
             let mut request = String::new();
             let body = PyVal::Dict(vec![("cwd".to_owned(), PyVal::Str(workspace))]);
             dumps(&body, true, false, &mut request);
-            let ready = self.http_json(daemon, READINESS_PATH, Some(request.as_bytes()), left)?;
+            let ready =
+                self.http_json(daemon, READINESS_PATH, Some(request.as_bytes()), left, None)?;
             let is =
                 |key: &str, expected: bool| member(&ready, key) == Some(&PyVal::Bool(expected));
             if !is("ready", true) {
@@ -244,9 +251,9 @@ impl Client {
         &self,
         payload: &[(String, PyVal)],
         deadline: Instant,
-    ) -> Option<String> {
+    ) -> Result<String, DirectMiss> {
         let mut stamped = payload.to_vec();
-        stamp_remaining(&mut stamped, deadline)?;
+        stamp_remaining(&mut stamped, deadline).ok_or(DirectMiss::Late)?;
         self.direct_answer(PROMPT_EVENT, &dump_object(&stamped), seconds_left(deadline))
     }
 
@@ -289,7 +296,8 @@ impl Client {
                     break;
                 }
                 let path = format!("/v1/requests/{}", quote_component(request_id));
-                let Some(status) = self.http_json(&daemon, &path, None, left.min(POLL_SECONDS))
+                let Some(status) =
+                    self.http_json(&daemon, &path, None, left.min(POLL_SECONDS), None)
                 else {
                     continue;
                 };
@@ -321,7 +329,7 @@ impl Client {
     /// The resident's answer for a hook it reviews as the daemon would, asked
     /// within half the daemon's timeout so a slow resident leaves the daemon
     /// time to answer.
-    fn direct_answer(&self, event: &str, text: &str, timeout: f64) -> Option<String> {
+    fn direct_answer(&self, event: &str, text: &str, timeout: f64) -> Result<String, DirectMiss> {
         let deadline = capped(Instant::now(), timeout * 0.5, self.deadline);
         grok_direct_answer(
             &self.guard_home,
@@ -394,7 +402,7 @@ impl Client {
         let resident = if event == PROMPT_EVENT {
             let deadline = capped(Instant::now(), timeout, self.deadline);
             let resident = self.prompt_direct_answer(&payload, deadline);
-            if resident.is_none() {
+            if resident.is_err() {
                 if self
                     .prepare_prompt(&daemon, &mut payload, deadline)
                     .is_none()
@@ -412,13 +420,19 @@ impl Client {
             self.direct_answer(&event, &text, timeout)
         };
         let answer = match resident {
-            Some(answer) => json_object(&answer),
-            None => {
+            Ok(answer) => json_object(&answer),
+            Err(miss) => {
                 timeout = timeout.min(seconds_left(self.deadline));
                 if timeout <= 0.0 {
                     return Self::fail(prefix);
                 }
-                self.http_json(&daemon, HOOK_PATH, Some(text.as_bytes()), timeout)
+                self.http_json(
+                    &daemon,
+                    HOOK_PATH,
+                    Some(text.as_bytes()),
+                    timeout,
+                    Some(miss),
+                )
             }
         };
         let Some((native, exit_code)) = answer.and_then(|response| to_native(&response, &event))
@@ -435,59 +449,9 @@ impl Client {
     }
 }
 
-/// How long a hook whose client this bridge cannot read waits for its input.
-const UNREADABLE_CLIENT_INPUT: Duration = Duration::from_secs(5);
-
-/// `_fail("{}")`: the answer when the hook could not be read at all.
-fn fail_closed() -> i32 {
-    write_stdout(&failure_stdout("{}"));
-    0
-}
-
-/// The failure answer for a hook whose client this bridge cannot read,
-/// rendered for the hook's own event so an observer stays non-blocking.
-/// Input `route` would answer as a PreToolUse still fails as one.
-fn client_unreadable_stdout(raw: &[u8]) -> String {
-    let body = raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw);
-    let text = std::str::from_utf8(body)
-        .ok()
-        .filter(|_| raw.len() <= MAX_HOOK_INPUT_BYTES)
-        .filter(|text| {
-            json_object(text).is_some_and(|payload| {
-                !pretool_event_conflict(&payload) && event_labels_are_ascii(&payload)
-            })
-        });
-    failure_stdout(text.unwrap_or("{}"))
-}
-
-/// Answer one Grok hook. `python_argv` is `[python, "-I", script, config]`.
-pub(crate) fn run(python_argv: &[String], started: Instant) -> i32 {
-    let client = read_client_constants(Path::new(&python_argv[2])).and_then(|constants| {
-        let invocation = invocation(&python_argv[3], &constants.guard_home)?;
-        let budget = Duration::try_from_secs_f64(constants.timeout_seconds).ok()?;
-        Some(Client {
-            guard_home: PathBuf::from(&constants.guard_home),
-            timeout_seconds: constants.timeout_seconds,
-            invocation,
-            deadline: started.checked_add(budget)?,
-        })
-    });
-    let Some(client) = client else {
-        // No install writes a client this bridge cannot read, so the hook
-        // fails closed rather than running Python.
-        let Input::Read(raw) = read_hook_input(started + UNREADABLE_CLIENT_INPUT) else {
-            return fail_closed();
-        };
-        write_stdout(&client_unreadable_stdout(&raw));
-        return 0;
-    };
-    let Input::Read(raw) = read_hook_input(client.deadline) else {
-        return fail_closed();
-    };
-    let Route::Respond { stdout, exit_code } = client.route(&raw);
-    write_stdout(&stdout);
-    exit_code
-}
+#[path = "bounded_hook_bridge_grok_entry.rs"]
+mod entry;
+pub(crate) use entry::{names_grok, run, run_config};
 
 /// Stamp the time left as the daemon receives it. `None` once the deadline
 /// has passed.
@@ -510,7 +474,3 @@ fn stamp_remaining(payload: &mut Vec<(String, PyVal)>, deadline: Instant) -> Opt
 #[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_grok_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "bounded_hook_bridge_grok_client_tests.rs"]
-mod client_tests;

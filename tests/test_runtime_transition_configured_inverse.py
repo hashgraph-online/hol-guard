@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import subprocess
-import sys
+import tempfile
 import time
 import uuid
 from dataclasses import replace
@@ -19,12 +20,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, require_high_risk, update_settings
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
-from codex_plugin_scanner.guard.daemon.manager import _guard_daemon_pid_is_proven_dead
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_daemon_manage import _guard_daemon_pid_is_proven_dead
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime_transition import (
@@ -41,40 +41,32 @@ from codex_plugin_scanner.guard.runtime_transition_native_capture import (
     _process_snapshot,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
+from tests.guard_daemon_state_signing import load_authenticated_daemon_state
 
 from .test_runtime_transition import transition  # noqa: F401 -- isolated owner/authority fixture
 
-DAEMON_PROCESS = r"""
-import os, sys, time
-from pathlib import Path
-from codex_plugin_scanner.guard.daemon import server
-from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
-from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
-from codex_plugin_scanner.guard.store import GuardStore
-from tests.owned_daemon_test_support import publish_ready_pid
-home, guard, ready = map(Path, sys.argv[1:])
-# Isolate unrelated cloud/background jobs, retaining real serving and policy.
-for name in ('_start_aibom_inventory_refresh', '_start_supply_chain_bundle_refresh', '_start_headless_cloud_sync'):
-    setattr(server.GuardDaemonServer, name, lambda _self: None)
-server.start_command_queue_worker = lambda _store, existing: existing
-server.start_cloud_sync_sync_worker = lambda _store, existing, **_kwargs: existing
-_ctl_cloud_sync._queue_headless_cloud_sync = lambda **_kwargs: {'status': 'not_configured'}
-daemon = server.GuardDaemonServer(GuardStore(guard), host='127.0.0.1', port=0, home_dir=home)
-try:
-    daemon.start()
-    publish_ready_pid(ready, os.getpid())
-    if sys.stdin.readline().strip() != 'stop':
-        raise RuntimeError('Exact fixture stop required')
-finally:
-    daemon.stop()
-    # The shared resident holds the approval-gate grants and outlives the daemon,
-    # exactly as in production. Only this process's resident clients are closed.
-    if not close_native_resident_clients(guard, deadline_monotonic=time.monotonic() + 5):
-        raise RuntimeError('Native resident clients not closed')
-"""
+
+def _descendant_pids(pid, deadline):
+    """Every process below ``pid``: the daemon runs its native workers under
+    its worker host, not as its own children."""
+
+    found, frontier = [], [pid]
+    while frontier:
+        children = []
+        for parent in frontier:
+            try:
+                children.extend(_child_pids(parent, deadline))
+            except NativeCaptureError:
+                continue
+        found.extend(children)
+        frontier = children
+    return found
 
 
 class OwnedDaemonLifecycle:
+    """Runs the production daemon (``daemon-serve``) as a real owned process."""
+
     def __init__(self, home, guard, native_path):
         self.home, self.guard, self.native_path = home, guard, native_path
         self.child = None
@@ -83,8 +75,14 @@ class OwnedDaemonLifecycle:
         self.native_retired = []
 
     def start(self, deadline):
+        from codex_plugin_scanner.guard.cli.daemon_serve import launch_configuration
+
         assert self.child is None
-        ready = self.home / f"owned-daemon-ready-{len(self.pids)}"
+        self.log = tempfile.TemporaryFile()  # noqa: SIM115 -- closed with the child
+        config = launch_configuration(self.guard, 0, user_home=self.home)
+        config["workers"] = True
+        # A pytest home idles out after seconds; this daemon lives across the transition.
+        config["idle_timeout_seconds"] = None
         environment = {
             **os.environ,
             "HOME": str(self.home),
@@ -92,24 +90,27 @@ class OwnedDaemonLifecycle:
             "HOL_GUARD_HOME": str(self.guard),
         }
         child = subprocess.Popen(
-            [sys.executable, "-c", DAEMON_PROCESS, str(self.home), str(self.guard), str(ready)],
+            [str(self.native_path), "daemon-serve", "--guard-home", str(config["guard_home"]), "--port", "0"],
             env=environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            # A full stderr pipe would stall the daemon; nothing drains it
+            # until stop.
+            stderr=self.log,
             start_new_session=True,
         )
         self.child = child
         self.stop_requested = False
-        while time.monotonic() < deadline and child.poll() is None:
-            if ready.exists():
-                state = load_authenticated_daemon_state(self.guard)
-                assert state is not None and state["pid"] == child.pid
-                assert ready.read_text() == str(child.pid)
-                self.pids.append(child.pid)
-                return
-            time.sleep(0.01)
+        assert child.stdin is not None and child.stdout is not None
+        child.stdin.write(json.dumps(config, separators=(",", ":")).encode("utf-8") + b"\n")
+        child.stdin.flush()
+        announced = child.stdout.readline()
+        if announced and time.monotonic() < deadline:
+            assert json.loads(announced)["pid"] == child.pid
+            state = load_authenticated_daemon_state(self.guard)
+            assert state is not None and state["pid"] == child.pid
+            self.pids.append(child.pid)
+            return
         raise RuntimeError(f"Owned daemon startup did not complete; exit={child.poll()}")
 
     def stop(self, deadline):
@@ -117,7 +118,7 @@ class OwnedDaemonLifecycle:
         child = self.child
         native = []
         while time.monotonic() < deadline:
-            for pid in _child_pids(child.pid, deadline):
+            for pid in _descendant_pids(child.pid, deadline):
                 try:
                     snapshot = _process_snapshot(pid, deadline)
                 except NativeCaptureError:
@@ -130,10 +131,13 @@ class OwnedDaemonLifecycle:
                 break
             time.sleep(0.01)
         assert native, "Capture actual native policy workers before retiring the daemon"
-        assert all(snapshot.ppid == child.pid and snapshot.uid == os.getuid() for snapshot in native)
+        assert all(snapshot.uid == os.getuid() for snapshot in native)
         self.stop_requested = True
-        _stdout, stderr = child.communicate(input="stop\n", timeout=max(0.01, deadline - time.monotonic()))
-        assert child.returncode == 0, stderr
+        # `hol-guard daemon stop` retires the daemon with SIGTERM.
+        child.send_signal(signal.SIGTERM)
+        child.communicate(timeout=max(0.01, deadline - time.monotonic()))
+        self.log.seek(0)
+        assert child.returncode in {0, -signal.SIGTERM}, self.log.read()[-4000:]
         assert _guard_daemon_pid_is_proven_dead(child.pid)
         while time.monotonic() < deadline and not all(_guard_daemon_pid_is_proven_dead(item.pid) for item in native):
             time.sleep(0.01)
@@ -147,7 +151,9 @@ class OwnedDaemonLifecycle:
             return
         child = self.child
         try:
-            child.communicate(input="stop\n" if child.poll() is None and not self.stop_requested else None, timeout=5)
+            if child.poll() is None and not self.stop_requested:
+                child.send_signal(signal.SIGTERM)
+            child.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             child.terminate()
             try:
@@ -172,8 +178,7 @@ def test_configured_native_inverse_restores_binding_store_and_selection(
     workspace.mkdir()
     context = HarnessContext(home, None, fixture_runtime.home, home_override_explicit=True)
     store = GuardStore(context.guard_home)
-    adapter = CodexHarnessAdapter()
-    manifest = adapter.install(context)
+    manifest = harness_support.install("codex", context)
     store.set_managed_install("codex", True, None, manifest, "isolated-native-inverse")
     identity = native_runtime_status().identity
     assert identity is not None
@@ -240,14 +245,20 @@ def test_configured_native_inverse_restores_binding_store_and_selection(
             lifecycle.start(time.monotonic() + 20)
         # Startup may refresh launchers; capture the actual running generation.
         before_row = store.list_managed_installs()[0]
-        prepared = adapter.prepare_install(context)
+        prepared = harness_install_ops.prepare_install("codex", context)
         assert any(change.before != change.after for change in prepared.files), "exercise actual binding publication"
         before_files = {change.path: change.before for change in prepared.files if change.expected_digest is None}
         after_row = {**before_row, "manifest": prepared.manifest, "updated_at": "candidate-fixture"}
         plan = replace(
             fixture_plan,
             operation_id=str(uuid.uuid4()),
-            files=(*prepared.files, selection, dependency),
+            # The handler runs the native runtime, so the prepared install may
+            # already pin it as a packaged file; name it once.
+            files=(
+                *prepared.files,
+                selection,
+                *((dependency,) if all(change.path != dependency.path for change in prepared.files) else ()),
+            ),
             managed_installs=(TransitionInstall("codex", before_row, after_row),),
             native_runtimes={"candidate": native, "predecessor": native},
             deadline_epoch=time.time() + 60,

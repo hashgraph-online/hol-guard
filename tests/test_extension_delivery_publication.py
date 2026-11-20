@@ -198,3 +198,48 @@ def test_publication_cli_reports_a_root_that_was_not_selected(publisher, monkeyp
     )
     command.main()
     assert json.loads(capsys.readouterr().out) == result
+
+
+@pytest.mark.parametrize("draft", [True, False])
+def test_an_interrupted_upload_is_replaced_only_in_a_draft(publisher, monkeypatch, draft):
+    """A gateway error mid-upload leaves a placeholder asset that cannot be
+    downloaded; a retry into the same draft must replace it, not read it."""
+    import hashlib
+
+    digest = hashlib.sha256(b"x").hexdigest()
+    spec = {"sha256": digest, "length": 1}
+    expected = {"done.zip": spec, "cut.zip": spec}
+    calls, uploads = [], []
+    release = {"id": 7, "tag_name": "tag", "target_commitish": "1" * 40, "prerelease": True, "draft": draft}
+    monkeypatch.setattr(publisher, "release", lambda tag: release)
+    monkeypatch.setattr(publisher, "verify_tag", lambda *args, **kwargs: None)
+    monkeypatch.setattr(publisher, "pace_write", lambda: None)
+    monkeypatch.setattr(
+        publisher,
+        "asset_inventory",
+        lambda identity: {
+            "done.zip": {"id": 1, "name": "done.zip", "state": "uploaded", "size": 1, "digest": "sha256:" + digest},
+            "cut.zip": {"id": 2, "name": "cut.zip", "state": "starter", "size": 1, "digest": None},
+        },
+    )
+    monkeypatch.setattr(publisher, "download_asset", lambda *args: pytest.fail("placeholder was downloaded"))
+
+    def upload(identity, path, *, expected):
+        uploads.append(path)
+        return {"id": 3, "name": path, "state": "uploaded", "size": 1, "digest": "sha256:" + digest}
+
+    def github(*args):
+        calls.append(args)
+        return json.dumps({"draft": False, "tag_name": "tag"})
+
+    monkeypatch.setattr(publisher, "upload_asset", upload)
+    monkeypatch.setattr(publisher, "github", github)
+    paths = {name: name for name in expected}
+    if not draft:
+        with pytest.raises(ValueError, match="upload is incomplete"):
+            publisher.publish_assets("tag", "1" * 40, paths, expected)
+        assert calls == [] and uploads == []
+        return
+    publisher.publish_assets("tag", "1" * 40, paths, expected)
+    assert uploads == ["cut.zip"]
+    assert calls[0][1].endswith("/releases/assets/2") and calls[0][-1] == "DELETE"

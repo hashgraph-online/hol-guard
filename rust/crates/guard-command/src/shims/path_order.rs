@@ -51,7 +51,7 @@ pub fn get_path_order_status(
     };
     let shim_dir = facts.resolve(&facts.expanduser(&context.shim_dir())?)?;
     let shim_path = facts.join(&shim_dir, command);
-    let effective_path = path_env.unwrap_or_else(|| context.env_path());
+    let effective_path = context.search_path(path_env);
     let mut shim_dir_index: Option<usize> = None;
     let mut real_dir_index: Option<usize> = None;
     let mut foreign_shim_index: Option<usize> = None;
@@ -163,7 +163,7 @@ fn object(value: Value) -> Map<String, Value> {
 fn filtered_manager_path(context: &ShimContext, path_env: Option<&str>) -> String {
     let facts = &context.facts;
     let shim_dir_abs = facts.expanded_abspath(&context.shim_dir());
-    let effective_path = path_env.unwrap_or_else(|| context.env_path());
+    let effective_path = context.search_path(path_env);
     let separator = context.pathsep();
     effective_path
         .split(separator)

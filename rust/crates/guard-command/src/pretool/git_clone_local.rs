@@ -92,9 +92,10 @@ fn proven(
     let (effective, _repository) = probe.config()?;
     // A configured template directory hands the new repository hooks that
     // later commands in it would run; a conditional include could set one.
+    let git_dir = destination.join(".git");
     let templated = effective.keys().any(|key| {
-        let key = key.to_ascii_lowercase();
-        key == "init.templatedir" || key.starts_with("includeif.")
+        key.eq_ignore_ascii_case("init.templatedir")
+            || super::git_conditional_include::could_apply(key, &git_dir, context.home_dir)
     });
     if templated {
         return None;
@@ -114,6 +115,7 @@ fn proven(
         source_context,
         deadline,
         execution_environment,
+        &mut None,
     )?
     .then_some(destination)
 }
@@ -200,8 +202,19 @@ fn parse(segment: &CommandSegmentV1) -> Option<LocalClone<'_>> {
             // Options that change how much of the repository is copied, and
             // whether a tree is checked out at all. None of them names a
             // program, a template or another repository.
+            //
+            // `--shared` is one of them. It leaves the objects where they
+            // are and writes an `objects/info/alternates` in the new
+            // repository naming the source, which this proof has already
+            // bounded to the home directory or an owned temporary one. An
+            // alternates entry names an object store, never a program, and
+            // the checkout Git runs afterwards is the same one `--local`
+            // runs. The coupling it creates between the copy and the source
+            // is the coupling `git worktree add` already creates, which is
+            // proved by the same execution-free screen below.
             "-q" | "--quiet" | "-v" | "--verbose" | "-n" | "--no-checkout" | "-l" | "--local"
-            | "--no-hardlinks" | "--single-branch" | "--no-single-branch" | "--no-tags" => {
+            | "-s" | "--shared" | "--no-hardlinks" | "--single-branch" | "--no-single-branch"
+            | "--no-tags" => {
                 index += 1;
             }
             "-b" | "--branch" => {

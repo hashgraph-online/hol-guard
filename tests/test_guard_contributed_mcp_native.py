@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -10,24 +12,26 @@ import pytest
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import load_mcp_contribution_payloads, mcp_tool_state
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.temporary_mcp_approvals import temporary_mcp_grant_selector
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_case_batches import package_case_batches
+from .mcp_contribution_client import mcp_tool_state
 from .mcp_recorded_expectations import expected_decision, recorded
 from .test_guard_mcp_server_grants import _artifact, _AuthorityStore, _layer
 from .test_guard_temporary_mcp_approvals import _artifact as _browser_click_artifact
-from .test_guard_temporary_mcp_approvals import _evaluate
+from .test_guard_temporary_mcp_approvals import _evaluate, temporary_mcp_grant_selector
 
 _ACTIONS = ("allow", "warn", "review", "require-reapproval", "block")
 _LOCKDOWN_REASON = "This MCP tool is blocked by its authenticated extension authority."
+_MCP_SOURCES = Path(__file__).resolve().parents[1] / "contributions" / "mcp-servers"
 
 
-def _package_cases() -> list[tuple[str, str, str, str, str]]:
+def _cases_from(payloads) -> list[tuple[str, str, str, str, str]]:
     cases: list[tuple[str, str, str, str, str]] = []
-    for payload in load_mcp_contribution_payloads():
+    for payload in payloads:
         launch = payload["launch"]
         if launch["kind"] != "package-launcher":
             continue
@@ -37,12 +41,31 @@ def _package_cases() -> list[tuple[str, str, str, str, str]]:
     return cases
 
 
+def _package_cases(root: Path | None = None) -> list[tuple[str, str, str, str, str]]:
+    return _cases_from(load_mcp_contribution_payloads(root))
+
+
+# Collection precedes the fixtures that route authenticated native metadata, and
+# validating a contribution asks the resident for its URL grammar. Parametrize
+# from the source files as written; every test compares these cases with the
+# resident-validated load, so a contribution validation would change still fails.
+_SOURCE_PACKAGE_CASES = _cases_from(
+    json.loads(path.read_text(encoding="utf-8")) for path in sorted(_MCP_SOURCES.glob("mcp.*.json"))
+)
+
+
+@pytest.fixture(scope="module")
+def native_package_cases():
+    """Defer the per-worker inventory load until function fixtures route native calls."""
+    return cache(_package_cases)
+
+
 def _identity(command: str, package: str):
     args = ("-y", package) if command == "npx" else (package,)
     return build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio")
 
 
-def test_recorded_expectations_cover_every_state_lockdown_and_action() -> None:
+def test_recorded_expectations_cover_every_state_lockdown_and_action(native_package_cases) -> None:
     rows = {(row["state"], row["lockdown"], row["action"]) for row in recorded()["decision_table"]}
     assert rows == {
         (state, lockdown, action)
@@ -50,13 +73,23 @@ def test_recorded_expectations_cover_every_state_lockdown_and_action() -> None:
         for lockdown in (False, True)
         for action in _ACTIONS
     }
-    assert {state for *_rest, state in _package_cases()} <= {"allow", "review", "block", "inherit"}
+    native_cases = native_package_cases()
+    assert {state for *_rest, state in native_cases} <= {"allow", "review", "block", "inherit"}
+    assert sorted(native_cases) == sorted(_SOURCE_PACKAGE_CASES)
 
 
 @pytest.mark.parametrize("lockdown", [False, True])
-def test_resident_matches_the_recorded_expectations_for_every_bundled_package(lockdown: bool) -> None:
+@pytest.mark.parametrize(
+    "case_batch", package_case_batches(_SOURCE_PACKAGE_CASES), ids=lambda cases: cases[0][0] + "-" + cases[0][3]
+)
+def test_resident_matches_the_recorded_expectations_for_every_bundled_package(
+    lockdown: bool, case_batch: list[tuple[str, str, str, str, str]], native_package_cases
+) -> None:
+    selected = set(case_batch)
+    native_batch = [case for case in native_package_cases() if case in selected]
+    assert sorted(native_batch) == sorted(case_batch)
     mismatches: list[str] = []
-    for mcp_id, command, package, tool, state in _package_cases():
+    for mcp_id, command, package, tool, state in native_batch:
         catalog_id = "command." + mcp_id.replace(".", "-")
         layer = _layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED, lockdown=lockdown)
         store = _AuthorityStore((layer,))
@@ -125,3 +158,34 @@ def test_saved_approval_gate_allow_lifts_a_review_when_the_catalog_is_answered(t
     store, artifact = _store_with_saved_server_allow(tmp_path)
     lifted = _evaluate(tmp_path, store, artifact, {"uid": "button-1"})
     assert (lifted.action, lifted.source) == ("allow", "temporary-mcp-grant")
+
+
+@pytest.mark.parametrize("lockdown", [False, True])
+def test_rei_skills_pinned_and_unpinned_launches_enforce_review(lockdown: bool) -> None:
+    """The actual bundled contribution must protect installs and future tools."""
+    layer = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-rei-skills", ControlState.ENABLED, lockdown=lockdown)
+    store = _AuthorityStore((layer,))
+    for package in ("rei-skills@6.2.0", "rei-skills", "rei-skills@6.3.0"):
+        identity = build_mcp_server_identity(
+            config_path="", command="npx", args=("-y", package, "mcp"), transport="stdio"
+        )
+        for tool in ("rei_install_skill", "unlisted_tool", "rei_get_skill"):
+            artifact = _artifact(identity, tool)
+            for action in _ACTIONS:
+                if lockdown:
+                    expected = None if action == "block" else ("block", recorded()["source"], _LOCKDOWN_REASON)
+                else:
+                    state = "inherit" if tool == "rei_get_skill" else "review"
+                    expected = expected_decision(state, False, action)
+                assert extension_driver.apply_contributed_mcp_decision(store, artifact, action) == expected
+
+
+def test_rei_skills_inactive_and_cloud_only_enablement_contribute_no_decision() -> None:
+    artifact = _artifact(_identity("npx", "rei-skills@6.2.0"), "rei_install_skill")
+    catalog_id = "command.mcp-rei-skills"
+    for layers in (
+        (),
+        (_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),),
+        (_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.DISABLED),),
+    ):
+        assert extension_driver.apply_contributed_mcp_decision(_AuthorityStore(layers), artifact, "allow") is None

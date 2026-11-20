@@ -9,7 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     MAX_LOCAL_CLI_COMMANDS,
     OTHER_COMMAND_ID,
-    slug_local_cli_command_id,
+    slug_local_cli_command_ids,
 )
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import (
     McpProbeError,
@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     MCP_PACKAGE_PROBE_TIMEOUT_SECONDS,
     MCP_PROBE_OUTPUT_LIMIT,
     McpCatalogResult,
-    probe_env,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 
@@ -38,6 +37,7 @@ pytestmark = pytest.mark.usefixtures("native_mcp_probe")
         ("invalid_launch", "mcp_launch_failed"),
         ("transport_failed", "mcp_transport_failed"),
         ("initialize_failed", "mcp_initialize_failed"),
+        ("server_exited", "mcp_server_exited"),
         ("invalid_initialize", "mcp_initialize_failed"),
         ("invalid_discovery", "mcp_initialize_failed"),
         ("unsupported_protocol", "mcp_protocol_unsupported"),
@@ -114,9 +114,9 @@ def test_probe_identity_matches_runtime_builder(tmp_path: Path) -> None:
     assert probed.identity.identity_hash == expected.identity_hash
     assert probed.status == "ok"
     ids = [tool.command_id for tool in probed.tools]
-    assert slug_local_cli_command_id("read_file") in ids
-    assert slug_local_cli_command_id("read.file") != slug_local_cli_command_id("read-file")
-    assert slug_local_cli_command_id("READ_FILE") != slug_local_cli_command_id("read_file")
+    assert slug_local_cli_command_ids(("read_file",))[0] in ids
+    assert slug_local_cli_command_ids(("read.file",))[0] != slug_local_cli_command_ids(("read-file",))[0]
+    assert slug_local_cli_command_ids(("READ_FILE",))[0] != slug_local_cli_command_ids(("read_file",))[0]
     assert OTHER_COMMAND_ID in ids
 
 
@@ -416,35 +416,6 @@ def test_package_launcher_uses_longer_probe_timeout(tmp_path: Path, monkeypatch)
     assert captured["timeout"] == MCP_PACKAGE_PROBE_TIMEOUT_SECONDS
     assert probed is not None
     assert any(tool.name == "list_pages" for tool in probed.tools)
-
-
-def test_probe_env_reuses_npm_cache(tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / "home"
-    npm = home / ".npm"
-    npm.mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.delenv("npm_config_cache", raising=False)
-    monkeypatch.delenv("NPM_CONFIG_CACHE", raising=False)
-    isolated = tmp_path / "probe-tmp"
-    isolated.mkdir()
-    env = probe_env(str(isolated))
-    assert env["HOME"] == str(isolated)
-    assert env["npm_config_cache"] == str(npm)
-    assert env["NPM_CONFIG_CACHE"] == str(npm)
-    assert "npm_config_yes" not in env
-    assert "NPM_CONFIG_YES" not in env
-
-
-def test_probe_env_resolves_relative_npm_cache(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "rel-cache").mkdir()
-    monkeypatch.setenv("NPM_CONFIG_CACHE", "rel-cache")
-    monkeypatch.delenv("npm_config_cache", raising=False)
-    env = probe_env(str(tmp_path / "probe-tmp"))
-    resolved = str((tmp_path / "rel-cache").resolve())
-    assert env["npm_config_cache"] == resolved
-    assert env["NPM_CONFIG_CACHE"] == resolved
-    assert Path(env["npm_config_cache"]).is_absolute()
 
 
 def test_incomplete_pagination_retains_explicit_partial_inventory(tmp_path: Path) -> None:

@@ -15,7 +15,15 @@ export function resolvedStateForItem<T extends { requestId: string }>(
 export function approvalGateRefreshNeeded(err: unknown): boolean {
   if (!(err instanceof GuardRequestResolutionError)) return false;
   const code = err.payload?.["error"];
-  return (err.status === 423 && code === "approval_gate_locked") || code === "approval_gate_totp_required";
+  return (err.status === 423 && code === "approval_gate_locked") || approvalGateDemandedCode(err);
+}
+
+/**
+ * The server refused a decision for want of an authenticator code. Its "recently confirmed"
+ * state can still say otherwise after a refresh, so only a fresh code may answer this.
+ */
+export function approvalGateDemandedCode(err: unknown): boolean {
+  return err instanceof GuardRequestResolutionError && err.payload?.["error"] === "approval_gate_totp_required";
 }
 
 /**

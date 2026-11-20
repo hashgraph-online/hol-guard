@@ -85,20 +85,51 @@ fn evaluate_with_owner(
         _ => return refused("incomplete_scope_contract", Some(&derived)),
     }
 
+    match persist_gate(
+        &derived,
+        action,
+        &request.applied_scope,
+        request.persist_policy,
+        request.scope_narrowed,
+        request.contract_version.is_some(),
+    ) {
+        Ok(persist_policy) => json!({
+            "outcome": "selected",
+            "persist_policy": persist_policy,
+            "contract": contract_value(&derived),
+        }),
+        Err(reason) => refused(reason, Some(&derived)),
+    }
+}
+
+/// The two eligibility gates every recorded approval passes, shared with
+/// `ApprovalScopeSelect`, which answers them in the same ask as the scope.
+///
+/// Returns the persistence the decision is recorded with, or the reason the
+/// decision is refused. `contract_echoed` is whether the client resolved
+/// against a contract it read; the caller has already checked that contract
+/// against `derived`.
+pub(crate) fn persist_gate(
+    derived: &ScopeContract,
+    action: &str,
+    applied_scope: &str,
+    persist_policy: Option<bool>,
+    scope_narrowed: bool,
+    contract_echoed: bool,
+) -> Result<Option<bool>, &'static str> {
     // A narrowed selection covers less than the user chose, so remembering it
     // would save a decision nobody made.
-    let mut persist_policy = request.persist_policy;
-    if request.scope_narrowed {
+    let mut persist_policy = persist_policy;
+    if scope_narrowed {
         persist_policy = None;
-    } else if request.applied_scope == "artifact" && persist_policy == Some(true) {
-        if request.contract_version.is_some() {
+    } else if applied_scope == "artifact" && persist_policy == Some(true) {
+        if contract_echoed {
             if !derived.exact_action_persistence_eligible {
-                let reason = if action == "allow" {
+                return Err(if action == "allow" {
                     "saved_allow_scope_ineligible"
                 } else {
                     "saved_block_scope_ineligible"
-                };
-                return refused(reason, Some(&derived));
+                });
             }
         } else {
             // A client that read no contract cannot know whether this request
@@ -112,19 +143,14 @@ fn evaluate_with_owner(
     // because the agent's next attempt matches the saved row instead of
     // reusing a one-time approval.
     if action == "allow"
-        && !can_run_once(&derived)
-        && !(request.applied_scope == "artifact"
+        && !can_run_once(derived)
+        && !(applied_scope == "artifact"
             && persist_policy == Some(true)
-            && can_persist_exact_version(&derived))
+            && can_persist_exact_version(derived))
     {
-        return refused("execution_binding_unavailable", Some(&derived));
+        return Err("execution_binding_unavailable");
     }
-
-    json!({
-        "outcome": "selected",
-        "persist_policy": persist_policy,
-        "contract": contract_value(&derived),
-    })
+    Ok(persist_policy)
 }
 
 /// `ApprovalScopeContract.can_run_once`.

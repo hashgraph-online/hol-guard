@@ -127,6 +127,48 @@ pub(crate) fn write_snapshot(temp: &Path, serialized: &[u8]) -> Option<PathBuf> 
     None
 }
 
+/// The snapshot at `path`, read the way it was written: through an
+/// owner-only directory and a mode-0600 regular file this account owns, at
+/// most `MAX_REQUEST_BYTES`, without following a link at either level.
+pub(crate) fn read_snapshot(path: &Path) -> Option<Vec<u8>> {
+    use nix::fcntl::{open, openat, OFlag};
+    use nix::sys::stat::Mode;
+    use std::io::Read;
+    let uid = getuid().as_raw();
+    let directory = open(
+        path.parent()?,
+        OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+        Mode::empty(),
+    )
+    .ok()?;
+    let parent = std::fs::File::from(directory);
+    let metadata = parent.metadata().ok()?;
+    if metadata.uid() != uid || metadata.mode() & 0o7777 != 0o700 {
+        return None;
+    }
+    let file = openat(
+        &parent,
+        REQUEST_FILE_NAME,
+        OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC,
+        Mode::empty(),
+    )
+    .ok()?;
+    let file = std::fs::File::from(file);
+    let metadata = file.metadata().ok()?;
+    if !metadata.file_type().is_file()
+        || metadata.mode() & 0o7777 != 0o600
+        || metadata.uid() != uid
+        || metadata.len() > MAX_REQUEST_BYTES as u64
+    {
+        return None;
+    }
+    let mut raw = Vec::new();
+    file.take(MAX_REQUEST_BYTES as u64 + 1)
+        .read_to_end(&mut raw)
+        .ok()?;
+    Some(raw)
+}
+
 /// A new owner-only directory under `temp`, named as `mkdtemp` names one.
 fn private_directory(temp: &Path) -> Option<PathBuf> {
     for _ in 0..NAME_ATTEMPTS {

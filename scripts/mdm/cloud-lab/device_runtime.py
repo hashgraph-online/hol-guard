@@ -9,10 +9,9 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from cloud_control import ContractError, public_pem
 from device_agent import Device
 from lab_common import json_bytes, read_json
-
-from codex_plugin_scanner.guard.mdm.cloud_control import ContractError, public_pem
 
 
 class DeviceHandler(BaseHTTPRequestHandler):

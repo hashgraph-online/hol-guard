@@ -1,0 +1,114 @@
+{
+  "schema": "guard.supply-chain-bundle-producer-vector.v1",
+  "description": "Signed supply-chain bundle response whose canonical payload keeps non-ASCII text as UTF-8 and sorts keys by code point.",
+  "verify_at_epoch_seconds": 1792890000,
+  "response": {
+    "bundle": {
+      "advisories": [
+        {
+          "advisoryId": "GHSA-uni0-code-test",
+          "aliases": [
+            "CVE-2026-0001"
+          ],
+          "confidence": 900,
+          "exploitLevel": "none",
+          "knownExploited": false,
+          "malwareState": "none",
+          "normalizedSeverity": "high",
+          "recommendedFixVersion": "2.0.1",
+          "sourceKey": "ghsa",
+          "summary": "Path traversal \u2014 the parser doesn\u2019t reject \u201c..\u201d segments in caf\u00e9 \u30d1\u30c3\u30b1\u30fc\u30b8 names \ud83d\ude00",
+          "title": "Cr\u00e9ation de chemin non s\u00e9curis\u00e9e"
+        }
+      ],
+      "bundleVersion": "1792000000000-unicode01",
+      "emergencyDenylist": [],
+      "expiresAt": "2026-10-25T12:00:00.000Z",
+      "feedSnapshotHash": "feed-snapshot-unicode",
+      "generatedAt": "2026-10-25T00:00:00.000Z",
+      "keyId": "unicode-fixture-key",
+      "packages": [
+        {
+          "confidence": 900,
+          "defaultAction": "warn",
+          "ecosystem": "npm",
+          "exploitLevel": "none",
+          "knownExploited": false,
+          "malwareState": "none",
+          "name": "unicode-demo",
+          "namespace": null,
+          "normalizedSeverity": "high",
+          "packageAgeState": "established",
+          "purl": "pkg:npm/unicode-demo@2.0.0",
+          "reachability": "unknown",
+          "recommendedFixVersion": "2.0.1",
+          "relatedAdvisoryIds": [
+            "GHSA-uni0-code-test"
+          ],
+          "riskScore": 700,
+          "sourceIntegrityState": "verified",
+          "version": "2.0.0"
+        }
+      ],
+      "policyHash": "policy-hash-unicode",
+      "policyRules": [],
+      "scoringVersion": "scf-v1",
+      "sourceHashes": [
+        {
+          "payloadHash": "ghsa-feed-hash",
+          "sourceKey": "ghsa",
+          "staleStatus": "fresh"
+        }
+      ],
+      "tier": "premium",
+      "workspaceId": "11111111-1111-4111-8111-111111111111"
+    },
+    "payloadHash": "a9f9b3a63b8097d500f4c8b1fe7557e34c417c07f323bb60b88220f10d8e1475",
+    "signature": "Cc2WLN++WJfMfy8L7UPpJ2uIklxCmlNm/V0FBBMkWGqUinpswAIkzfrddhE77tdExbU2IzTUVd7PJQuisfJa/F23RZYzR9mfR3e6rDJoJ+zLNs+HATTlP1GRqUJgN7r7UYAQqlBizmPOuP/Y9L+nJlm8gidHmHPNV/YLjc2kwVWreBDA+46xCmCib1FnjOHIyVq3N/sDjNXuuAgzGqgLPQJTmZlwVRhOWDaKsmmncHihX5WohBEgsV4BhD0LRmTv2WVHf1iArdiFNgd9s1PAHka+T7JgFOijEfaLEdPykdqt3qz9CO6ZnCjaJsCxJ4uAWcY79J8GOGOyrxUtDQHihQ==",
+    "signatureAlgorithm": "rsa-pss-sha256",
+    "verificationKeys": [
+      {
+        "fingerprintSha256": "bb511cc15032aa7d95a178cc1445880405a42f8b9899e992b6f2c45517b48d31",
+        "keyId": "unicode-fixture-key",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyrNWO4KuvARzxjqKE5yx\n5/unxJYMiX2uPKU1AUgrQI60zApHVOetXXIcMQ8k/8I1SKFJE8icNGVSPlJF9yBe\n6ZAEzXybHlLJYQsvlyEZ/nTEBVlKvKevHqyZQtPAFyNilIQ59mAPkILW0Z17RQFR\n7aSv1D/hT5hyPwveIPTcZpGMU6WjErpcL+ZIPf4uVOAjMD1KFFVsOkDkCJ0yTaw0\n8AgWlcQyGu77ASTXHuzCDJVC7scMVDoinHUGp0acGGoJZr+vtV2/4+IZFCzF3vLa\nMHe/R580O8AalLRimzmoavLKJuodQmFWETe8XZUOuMMx/uzj5l6uTlv7kie9HSBd\nmwIDAQAB\n-----END PUBLIC KEY-----",
+        "state": "active",
+        "validUntil": null
+      }
+    ]
+  },
+  "canonical_payload_utf8": "{\"advisories\":[{\"advisoryId\":\"GHSA-uni0-code-test\",\"aliases\":[\"CVE-2026-0001\"],\"confidence\":900,\"exploitLevel\":\"none\",\"knownExploited\":false,\"malwareState\":\"none\",\"normalizedSeverity\":\"high\",\"recommendedFixVersion\":\"2.0.1\",\"sourceKey\":\"ghsa\",\"summary\":\"Path traversal \u2014 the parser doesn\u2019t reject \u201c..\u201d segments in caf\u00e9 \u30d1\u30c3\u30b1\u30fc\u30b8 names \ud83d\ude00\",\"title\":\"Cr\u00e9ation de chemin non s\u00e9curis\u00e9e\"}],\"bundleVersion\":\"1792000000000-unicode01\",\"emergencyDenylist\":[],\"expiresAt\":\"2026-10-25T12:00:00.000Z\",\"feedSnapshotHash\":\"feed-snapshot-unicode\",\"generatedAt\":\"2026-10-25T00:00:00.000Z\",\"keyId\":\"unicode-fixture-key\",\"packages\":[{\"confidence\":900,\"defaultAction\":\"warn\",\"ecosystem\":\"npm\",\"exploitLevel\":\"none\",\"knownExploited\":false,\"malwareState\":\"none\",\"name\":\"unicode-demo\",\"namespace\":null,\"normalizedSeverity\":\"high\",\"packageAgeState\":\"established\",\"purl\":\"pkg:npm/unicode-demo@2.0.0\",\"reachability\":\"unknown\",\"recommendedFixVersion\":\"2.0.1\",\"relatedAdvisoryIds\":[\"GHSA-uni0-code-test\"],\"riskScore\":700,\"sourceIntegrityState\":\"verified\",\"version\":\"2.0.0\"}],\"policyHash\":\"policy-hash-unicode\",\"policyRules\":[],\"scoringVersion\":\"scf-v1\",\"sourceHashes\":[{\"payloadHash\":\"ghsa-feed-hash\",\"sourceKey\":\"ghsa\",\"staleStatus\":\"fresh\"}],\"tier\":\"premium\",\"workspaceId\":\"11111111-1111-4111-8111-111111111111\"}",
+  "string_vectors": [
+    {
+      "text": "plain ascii",
+      "canonical": "{\"text\":\"plain ascii\"}"
+    },
+    {
+      "text": "quote \" backslash \\ slash /",
+      "canonical": "{\"text\":\"quote \\\" backslash \\\\ slash /\"}"
+    },
+    {
+      "text": "\u0000\b\t\n\f\r\u001f",
+      "canonical": "{\"text\":\"\\u0000\\b\\t\\n\\f\\r\\u001f\"}"
+    },
+    {
+      "text": "\u007f delete",
+      "canonical": "{\"text\":\"\u007f delete\"}"
+    },
+    {
+      "text": "line\u2028paragraph\u2029separator",
+      "canonical": "{\"text\":\"line\u2028paragraph\u2029separator\"}"
+    },
+    {
+      "text": "bom\ufeff and \uffff",
+      "canonical": "{\"text\":\"bom\ufeff and \uffff\"}"
+    },
+    {
+      "text": "astral \ud83d\ude00 \ud800\udc00 \udbff\udfff",
+      "canonical": "{\"text\":\"astral \ud83d\ude00 \ud800\udc00 \udbff\udfff\"}"
+    },
+    {
+      "text": "caf\u00e9 \u2014 \u201cquoted\u201d \u30d1\u30c3\u30b1\u30fc\u30b8",
+      "canonical": "{\"text\":\"caf\u00e9 \u2014 \u201cquoted\u201d \u30d1\u30c3\u30b1\u30fc\u30b8\"}"
+    }
+  ]
+}

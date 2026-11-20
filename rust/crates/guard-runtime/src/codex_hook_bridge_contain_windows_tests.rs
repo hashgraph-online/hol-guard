@@ -1,6 +1,6 @@
-//! The Windows Codex contained rewrite: Python parity for the PowerShell
-//! quoting, the bootstrap's package root, the launching Codex's name and
-//! the snapshot the sink reads.
+//! The Windows Codex contained rewrite: Python parity for the sink command
+//! line, the bootstrap's package root, the launching Codex's name and the
+//! snapshot the sink reads.
 
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -15,6 +15,16 @@ use crate::pyjson::{parse_mapping_lone_surrogates, PyVal};
 const PYTHON: &str = r"C:\Python\python.exe";
 const BOOTSTRAP: &str = r"import sys;sys.path.insert(0, 'C:\\Guard\\site-packages');from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))";
 const PYTHON_DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_python_eval_readonly_containment_required","required_execution_profile":"python-eval-readonly-v1","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}"#;
+
+/// A host whose runtime runs no sink itself.
+fn no_native(
+    _: &serde_json::Value,
+    _: &serde_json::Map<String, serde_json::Value>,
+    _: &str,
+    _: &str,
+) -> Option<String> {
+    None
+}
 
 fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
@@ -54,6 +64,65 @@ fn powershell_join_refuses_arguments_it_cannot_carry() {
     ] {
         assert_eq!(powershell_join(&argv), None, "{argv:?}");
     }
+}
+
+#[test]
+fn the_sink_line_is_one_both_shells_read_the_same_way() {
+    let argv = owned(&[
+        PYTHON,
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0, 'C:/Guard/site-packages');from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))",
+        "guard",
+        r"C:\Users\a b\x;$y&`z`",
+    ]);
+    assert_eq!(
+        sink_command_line(&argv).as_deref(),
+        Some(concat!(
+            "C:/Python/python.exe '-I' '-c' ",
+            "'import sys;sys.path.insert(0,sys.argv.pop(1));from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))' ",
+            r"'C:/Guard/site-packages' 'guard' 'C:\Users\a b\x;$y&`z`'",
+        ))
+    );
+    let frozen = owned(&[r"C:\Guard\hol-guard.exe", "execute-contained-test"]);
+    assert_eq!(
+        sink_command_line(&frozen).as_deref(),
+        Some("C:/Guard/hol-guard.exe 'execute-contained-test'")
+    );
+}
+
+#[test]
+fn a_sink_line_only_powershell_reads_is_the_fallback() {
+    // A program path no bare word can hold, or an argument with a quote in
+    // it, keeps the PowerShell call operator form.
+    for (argv, expected) in [
+        (
+            owned(&[r"C:\Program Files\py.exe", "x"]),
+            r"& 'C:\Program Files\py.exe' 'x'",
+        ),
+        (
+            owned(&[r"C:\Guard\hol-guard.exe", "it's"]),
+            r"& 'C:\Guard\hol-guard.exe' 'it''s'",
+        ),
+        (
+            owned(&[r"\\server\py.exe", "x"]),
+            r"& '\\server\py.exe' 'x'",
+        ),
+        (
+            owned(&[PYTHON, "-I", "-c", BOOTSTRAP, "guard"]),
+            &format!(
+                "& '{PYTHON}' '-I' '-c' '{}' 'guard'",
+                BOOTSTRAP.replace('\'', "''")
+            ),
+        ),
+    ] {
+        assert_eq!(
+            sink_command_line(&argv).as_deref(),
+            Some(expected),
+            "{argv:?}"
+        );
+    }
+    assert_eq!(sink_command_line(&owned(&[PYTHON, "say \"hi\""])), None);
 }
 
 #[test]
@@ -109,14 +178,14 @@ fn a_tilde_workspace_expands_only_for_the_current_user() {
     assert_eq!(plain_path(r"\\?\C:\x"), r"C:\x");
 }
 
-/// The request file a routed PowerShell command names.
+/// The request file a routed sink command names.
 fn request_path(command: &str) -> String {
     let (_, rest) = command.split_once("'--request-file' '").unwrap();
     rest.split_once('\'').unwrap().0.to_owned()
 }
 
 #[test]
-fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
+fn a_contained_python_call_is_rewritten_to_a_sink_command_both_shells_run() {
     let workspace = tempfile::tempdir().unwrap();
     let resolved = plain_path(
         std::fs::canonicalize(workspace.path())
@@ -148,6 +217,7 @@ fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
         prefix: &installed,
         guard_home: r"C:\Users\a\.hol-guard",
         home: r"C:\Users\a",
+        native: no_native,
     };
     let deny = parse_mapping_lone_surrogates(PYTHON_DENY).unwrap().value;
     let routed = routed(&deny, &payload, false, &target).unwrap();
@@ -178,7 +248,7 @@ fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
         .is_some_and(|name| name.starts_with(REQUEST_DIRECTORY_PREFIX)));
     assert!(
         command.starts_with(&format!(
-            "& '{PYTHON}' '-I' '-c' 'import sys;sys.path.insert(0, ''C:/Guard/site-packages'');"
+            "C:/Python/python.exe '-I' '-c' '{ARGV_BOOTSTRAP}' 'C:/Guard/site-packages' "
         )),
         "{command}"
     );
@@ -197,7 +267,7 @@ fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
 }
 
 #[test]
-fn a_call_powershell_cannot_quote_keeps_the_denial() {
+fn a_call_no_shell_can_quote_keeps_the_denial() {
     let workspace = tempfile::tempdir().unwrap();
     let payload = serde_json::json!({
         "hook_event_name": "PreToolUse",
@@ -221,6 +291,7 @@ fn a_call_powershell_cannot_quote_keeps_the_denial() {
         prefix: &installed,
         guard_home: r"C:\Users\a\.hol-guard",
         home: "C:\\Users\\a \"quoted\"",
+        native: no_native,
     };
     let deny = parse_mapping_lone_surrogates(PYTHON_DENY).unwrap().value;
     assert_eq!(routed(&deny, &payload, false, &target), None::<PyVal>);
@@ -272,4 +343,62 @@ fn only_day_old_plain_snapshots_are_reclaimed() {
     assert!(!stale.exists());
     assert!(fresh.join(REQUEST_FILE_NAME).exists());
     assert!(other.join(REQUEST_FILE_NAME).exists());
+}
+
+/// Removes a snapshot directory the test wrote under the real temporary
+/// directory, whatever the test left in it.
+struct Written(std::path::PathBuf);
+
+impl Drop for Written {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn snapshot() -> (std::path::PathBuf, Written) {
+    let request = write_snapshot(br#"{"schema":"x"}"#).unwrap();
+    let directory = Written(request.parent().unwrap().to_path_buf());
+    (request, directory)
+}
+
+#[test]
+fn a_snapshot_reads_back_only_from_directly_inside_the_temporary_directory() {
+    let (request, directory) = snapshot();
+    assert_eq!(
+        read_snapshot(&request).as_deref(),
+        Some(&br#"{"schema":"x"}"#[..])
+    );
+    let nested = directory
+        .0
+        .join(format!("{REQUEST_DIRECTORY_PREFIX}nested"));
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join(REQUEST_FILE_NAME), b"{}").unwrap();
+    assert_eq!(read_snapshot(&nested.join(REQUEST_FILE_NAME)), None);
+    let elsewhere = tempfile::tempdir().unwrap();
+    let outside = elsewhere
+        .path()
+        .join(format!("{REQUEST_DIRECTORY_PREFIX}outside"));
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join(REQUEST_FILE_NAME), b"{}").unwrap();
+    assert_eq!(read_snapshot(&outside.join(REQUEST_FILE_NAME)), None);
+}
+
+#[test]
+fn a_linked_snapshot_is_refused() {
+    let (request, directory) = snapshot();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let second = elsewhere.path().join("second-name");
+    std::fs::hard_link(&request, &second).unwrap();
+    assert_eq!(read_snapshot(&request), None);
+    std::fs::remove_file(&second).unwrap();
+    assert!(read_snapshot(&request).is_some());
+    let linked = directory.0.with_file_name(format!(
+        "{REQUEST_DIRECTORY_PREFIX}linked-{}",
+        std::process::id()
+    ));
+    let _linked = Written(linked.clone());
+    if std::os::windows::fs::symlink_dir(&directory.0, &linked).is_ok() {
+        assert_eq!(read_snapshot(&linked.join(REQUEST_FILE_NAME)), None);
+        let _ = std::fs::remove_dir(&linked);
+    }
 }

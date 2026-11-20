@@ -60,6 +60,23 @@ pub struct ExtensionControlRegistryV1 {
     pub permissions: Vec<ExtensionControlRegistryPermissionV1>,
 }
 
+/// One row of the Extension Control Center: what an extension or a
+/// permission resolves to for command evaluation, and what the local and the
+/// managed layer set on it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlProjectedRowV1 {
+    /// `allowed` or `blocked`.
+    pub effective_state: String,
+    /// The local layer's control on it: `enabled`, `disabled` or `inherited`.
+    pub local_state: String,
+    /// The managed layer's control on it, read the same way.
+    pub managed_state: String,
+    /// The resolver's factor codes and `resolver.`-prefixed failure codes,
+    /// sorted and unique.
+    pub reason_codes: Vec<String>,
+}
+
 /// One resolution asked against a scenario's layers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -95,6 +112,16 @@ pub enum ExtensionControlQueryV1 {
     Resolve {
         registry: ExtensionControlRegistryV1,
         scenarios: Vec<ExtensionControlScenarioV1>,
+    },
+    /// One page of the Extension Control Center's rows: the registry's
+    /// leading extensions, then its leading permissions, each resolved for
+    /// command evaluation against `layers`. The page begins at row `start`.
+    Project {
+        registry: ExtensionControlRegistryV1,
+        layers: Vec<NativeExtensionControlLayerV1>,
+        /// As in [`ExtensionControlScenarioV1::authority_failure`].
+        authority_failure: Option<String>,
+        start: u32,
     },
     /// The digest that identifies the runtime snapshot of one authority view.
     SnapshotDigest {
@@ -252,6 +279,10 @@ pub enum ExtensionControlPayloadV1 {
     },
     Resolve {
         scenarios: Vec<ExtensionControlScenarioResultV1>,
+    },
+    /// The answer to `project`: the page's rows, in order.
+    Project {
+        rows: Vec<ExtensionControlProjectedRowV1>,
     },
     SnapshotDigest {
         digest: String,

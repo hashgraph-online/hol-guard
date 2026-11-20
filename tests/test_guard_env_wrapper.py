@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.env_wrapper import parse_env_wrapper
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.env_wrapper_test_support import parse_env_wrapper
 from tests.shell_wrapper_test_support import native_shell_normalization
 
 

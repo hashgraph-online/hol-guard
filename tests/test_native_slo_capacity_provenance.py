@@ -12,7 +12,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
+from codex_plugin_scanner.guard.route_metrics import RouteMetricsRecorder
 from scripts import native_slo_capacity as capacity
 from scripts import native_slo_session as session_module
 from scripts.native_slo_adapter import Observation
@@ -179,7 +179,7 @@ def test_unexplained_response_error_or_counter_reset_keeps_wave_fail_closed(fail
 def test_real_interleaving_proves_resident_and_explicit_or_terminal_native_overload(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], explicit: bool
 ) -> None:
-    metrics = HookMetricsRecorder()
+    metrics = RouteMetricsRecorder()
     barrier = threading.Barrier(2, timeout=1)
     native_overloads = [0]
 

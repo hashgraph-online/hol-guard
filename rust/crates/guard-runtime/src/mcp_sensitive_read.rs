@@ -33,8 +33,14 @@ fn string(text: &str) -> Value {
 }
 
 fn current_action(config: &McpSensitiveReadConfigV1) -> GuardAction {
-    let risk = config
-        .risk_action
+    let resolved = config.guard_config.as_ref().and_then(|facts| {
+        crate::risk_action::configured_risk_action(
+            facts,
+            "local_secret_read",
+            config.harness.as_deref(),
+        )
+    });
+    let risk = resolved
         .as_deref()
         .filter(|text| !text.is_empty())
         .unwrap_or(REQUIRE_REAPPROVAL);

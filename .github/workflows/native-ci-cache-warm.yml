@@ -36,7 +36,7 @@ env:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     concurrency:
       group: native-ci-build-${{ github.sha }}-linux
@@ -63,7 +63,7 @@ jobs:
 
   windows:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     concurrency:
       group: native-ci-build-${{ github.sha }}-windows
       cancel-in-progress: false

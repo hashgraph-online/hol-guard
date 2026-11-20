@@ -15,42 +15,24 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.native_shell_request_authority import shell_request_authority
 from codex_plugin_scanner.guard.risk import (
-    artifact_risk_signals,
-    artifact_risk_signals_typed,
     artifact_risk_signals_v2,
     artifact_risk_summary,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.git_execution_safety import git_binary_path_is_trusted
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_static_safety import (
-    _path_text_is_within_root_text,
-    _script_has_aliased_risky_import,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
-    classify_sensitive_path,
-    extract_sensitive_file_read_request,
-    extract_sensitive_file_read_request_artifact,
-    extract_sensitive_file_read_request_from_action,
     extract_sensitive_tool_action_request,
-    is_file_read_tool_name,
-)
-from codex_plugin_scanner.guard.runtime.secret_sensitivity import (
-    SecretContentMatch,
-    SecretPathMatch,
-    classify_secret_content,
-    classify_secret_path,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.artifact_risk_support import artifact_risk_signals, artifact_risk_signals_typed
+from tests.incident_context_support import build_incident_context
 
 LOCAL_COMPOSE_SAFE_CASES = (
     "docker compose up -d postgres",
@@ -543,227 +525,6 @@ def test_incident_context_keeps_context_for_generic_config_file_names():
     )
 
     assert "workspace/global_tools/config.toml" in incident["trigger_summary"]
-
-
-def test_secret_file_path_classifier_stays_precise(tmp_path):
-    env_match = classify_sensitive_path(".env")
-    env_local_match = classify_sensitive_path("/workspace/.env.local")
-    aws_match = classify_sensitive_path("~/.aws/credentials", home_dir=tmp_path)
-
-    assert env_match is not None
-    assert env_match.path_class == "local .env file"
-    assert env_local_match is not None
-    assert env_local_match.path_class == "local .env file"
-    assert aws_match is not None
-    assert aws_match.path_class == "AWS shared credentials file"
-    assert aws_match.normalized_path.endswith(".aws/credentials")
-    assert classify_sensitive_path("README.md") is None
-    assert classify_sensitive_path(".envrc") is None
-
-
-@pytest.mark.parametrize(
-    ("path", "family"),
-    [
-        (".env", "local .env file"),
-        (".npmrc", "npm registry credentials"),
-        (".pypirc", "Python package credentials"),
-        ("~/.aws/" + "credentials", "AWS shared credentials file"),
-        ("~/.ssh/id_rsa", "SSH private key"),
-        ("~/.ssh/id_ed25519", "SSH private key"),
-        ("~/.gnupg/private-keys-v1.d/example.key", "GnuPG key material"),
-        ("~/.docker/" + "config.json", "Docker client config"),
-        ("~/.kube/config", "Kubernetes config"),
-        (".terraform.tfvars", "Terraform variable secrets"),
-    ],
-)
-def test_secret_sensitivity_module_classifies_planned_secret_path_families(tmp_path, path, family):
-    match = classify_secret_path(path, home_dir=tmp_path)
-
-    assert isinstance(match, SecretPathMatch)
-    assert match.family == family
-    assert match.path_class == family
-    assert match.path == match.normalized_path
-    assert match.sensitivity in {"high", "critical"}
-    assert match.reason
-
-
-@pytest.mark.parametrize(
-    ("path", "family"),
-    [
-        ("wallet.key", "wallet/private-key file"),
-        ("private-key.pem", "wallet/private-key file"),
-        ("operator-private-key.txt", "wallet/private-key file"),
-    ],
-)
-def test_secret_sensitivity_module_classifies_wallet_private_key_filenames(tmp_path, path, family):
-    match = classify_secret_path(path, home_dir=tmp_path)
-
-    assert isinstance(match, SecretPathMatch)
-    assert match.family == family
-    assert match.sensitivity == "critical"
-
-
-@pytest.mark.parametrize(
-    ("content", "family"),
-    [
-        ("//registry.npmjs.org/:_authToken=" + "n" * 36, "npm auth token"),
-        ('//registry.npmjs.org/:_authToken="' + "n" * 36 + '"', "npm auth token"),
-        ('MY_NPM_TOKEN="' + "n" * 36 + '"', "npm auth token"),
-        ("token=" + "ghp_" + "A" * 36, "GitHub token"),
-        ("token=" + "github_pat_" + "A" * 22 + "_" + "B" * 59, "GitHub token"),
-        ("aws_access_key_id=" + "AKIA" + "A" * 16, "AWS access key"),
-        ("OPENAI_API_KEY=" + "sk-" + "A" * 32, "OpenAI API key"),
-        ("OPENAI_API_KEY=sk-proj-" + "A" * 24 + "-test-" + "B" * 24, "OpenAI API key"),
-        ("ANTHROPIC_API_KEY=" + "sk-ant-api03-" + "A" * 60, "Anthropic API key"),
-        ("HEDERA_PRIVATE_KEY=" + "a" * 64, "Hedera private key"),
-        ('HEDERA_PRIVATE_KEY="' + "a" * 64 + '"', "Hedera private key"),
-        (("-----BEGIN " + "") + "PRIVATE KEY-----\nredacted\n-----END " + "PRIVATE KEY-----", "PEM private key"),
-        ("Authorization: Bearer " + "A" * 32, "generic bearer token"),
-        ("Authorization: Bearer " + "A" * 24 + "-test-" + "B" * 24, "generic bearer token"),
-        ('TOKEN="' + "A" * 24 + '"', "credential assignment"),
-        ("auth_token='" + "B" * 24 + "'", "credential assignment"),
-        ('{"password": "' + "C" * 24 + '"}', "credential assignment"),
-        ("MY_TOKEN=fixture-token", "credential assignment"),
-        ('MY_NPM_TOKEN="fixture-token"', "credential assignment"),
-        ('{"OPENAI_API_KEY": "fixture-key"}', "credential assignment"),
-    ],
-)
-def test_secret_content_classifier_detects_planned_secret_content(content, family):
-    matches = classify_secret_content(content)
-
-    assert any(isinstance(match, SecretContentMatch) and match.family == family for match in matches)
-
-
-def test_secret_content_classifier_does_not_upgrade_npm_token_prose():
-    matches = classify_secret_content("Docs say npm token: use an environment variable instead.")
-
-    assert not any(match.family == "npm auth token" for match in matches)
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        "API_TOKEN=example-token",
-        "password=dummy-value",
-        "token=definitely-invalid",
-        "secret=fake-value",
-        "auth_token=canary-token",
-        "OPENAI_API_KEY=sk-test",
-        "https://api.example.test/health?token=definitely-invalid",
-        "Authorization: Bearer definitely-invalid",
-    ],
-)
-def test_secret_content_classifier_suppresses_sample_token_values(content):
-    assert classify_secret_content(content) == ()
-
-
-def test_file_read_request_classifier_is_argument_aware(tmp_path):
-    env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
-    claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
-    copilot_request = extract_sensitive_file_read_request("view", {"path": ".env"})
-
-    assert is_file_read_tool_name("read_file") is True
-    assert is_file_read_tool_name("Read") is True
-    assert is_file_read_tool_name("view") is True
-    assert is_file_read_tool_name("write_file") is False
-    assert env_request is not None
-    assert env_request.path_match.path_class == "local .env file"
-    assert claude_request is not None
-    assert claude_request.path_match.path_class == "SSH client config"
-    assert copilot_request is not None
-    assert copilot_request.path_match.path_class == "local .env file"
-    assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
-    assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
-
-
-def test_file_read_request_classifier_uses_exact_normalized_action_paths(tmp_path):
-    action = normalize_codex_hook_payload(
-        {
-            "event": "PreToolUse",
-            "toolName": "Read",
-            "toolInput": {"filePath": ".env.local"},
-        },
-        workspace=tmp_path / "workspace",
-        home_dir=tmp_path,
-    )
-
-    request = extract_sensitive_file_read_request_from_action(action, cwd=tmp_path / "workspace", home_dir=tmp_path)
-
-    assert request is not None
-    assert request.tool_name == "Read"
-    assert request.path_match.family == "local .env file"
-
-
-def test_file_read_request_classifier_skips_redacted_action_paths(tmp_path):
-    action = normalize_codex_hook_payload(
-        {
-            "event": "PreToolUse",
-            "toolName": "Read",
-            "toolInput": {"filePath": str(tmp_path.parent / "outside" / ".env")},
-        },
-        workspace=tmp_path / "workspace",
-        home_dir=tmp_path / "home",
-    )
-
-    request = extract_sensitive_file_read_request_from_action(action, cwd=tmp_path / "workspace", home_dir=tmp_path)
-
-    assert action.target_paths == (".../.env",)
-    assert request is None
-
-
-@pytest.mark.parametrize(
-    ("path", "family"),
-    [
-        (".env", "local .env file"),
-        (".npmrc", "npm registry credentials"),
-        (".pypirc", "Python package credentials"),
-        ("~/.aws/" + "credentials", "AWS shared credentials file"),
-        ("~/.ssh/id_rsa", "SSH private key"),
-        ("~/.ssh/id_ed25519", "SSH private key"),
-        ("~/.gnupg/private-keys-v1.d/example.key", "GnuPG key material"),
-        ("~/.docker/" + "config.json", "Docker client config"),
-        ("~/.kube/config", "Kubernetes config"),
-        (".terraform.tfvars", "Terraform variable secrets"),
-    ],
-)
-def test_file_read_request_classifier_covers_planned_secret_paths(tmp_path, path, family):
-    request = extract_sensitive_file_read_request("Read", {"file_path": path}, home_dir=tmp_path)
-
-    assert request is not None
-    assert request.path_match.family == family
-
-
-def test_file_read_request_artifact_hash_is_exact_to_tool_and_path():
-    def artifact_for(path: str):
-        _request, artifact = extract_sensitive_file_read_request_artifact(
-            "read_file",
-            {"path": path},
-            harness="claude-code",
-            config_path="/workspace/.claude/settings.local.json",
-            source_scope="project",
-        )
-        assert artifact is not None
-        return artifact
-
-    first_artifact = artifact_for(".env")
-    same_artifact = artifact_for(".env")
-    different_artifact = artifact_for(".env.local")
-
-    assert artifact_hash(first_artifact) == artifact_hash(same_artifact)
-    assert artifact_hash(first_artifact) != artifact_hash(different_artifact)
-
-
-def test_an_ordinary_read_earns_no_request_artifact():
-    request, artifact = extract_sensitive_file_read_request_artifact(
-        "read_file",
-        {"path": "src/app.py"},
-        harness="claude-code",
-        config_path="/workspace/.claude/settings.local.json",
-        source_scope="project",
-    )
-
-    assert request is None
-    assert artifact is None
 
 
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_null():
@@ -1372,7 +1133,7 @@ def test_tool_action_request_classifier_reviews_native_coauthored_commit_redirec
     assert request.canonical_command.confidence == "exact"
     assert request.guard_default_action is None
     native = real_native_command_evaluation(request.command_text, cwd=tmp_path)
-    assert native.native_minimum_action == "review"
+    assert native.payload["minimum_action"] == "review"
     assert native.evaluation.minimum_action == "review"
 
 
@@ -1812,17 +1573,6 @@ def test_tool_action_request_classifier_allows_pr_create_with_attached_static_bo
     )
 
     assert request is None
-
-
-def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_body():
-    # The flag lives in the native kernel now; ask it the same question directly.
-    assert not shell_request_authority(
-        "_gh_pr_create_body_has_shell_command_substitution",
-        {
-            "command_text": "echo $(date) && env -S'gh pr create --body \"Verification: `python -m build`\"'",
-            "depth": 0,
-        },
-    )
 
 
 @pytest.mark.parametrize("lookup_flag", ["-v", "-V", "-pv"])
@@ -3705,10 +3455,6 @@ def test_tool_action_request_classifier_detects_rm_with_attached_stdin_redirecti
     assert request.action_class == "destructive shell command"
 
 
-def test_script_has_aliased_risky_import_ignores_null_byte_parse_failures():
-    assert not _script_has_aliased_risky_import("print('ok')\x00from pathlib import Path as P")
-
-
 def test_tool_action_request_classifier_allows_python_time_sleep_one_liner(tmp_path, monkeypatch):
     _prefer_guard_interpreter_on_path(monkeypatch)
     request = extract_sensitive_tool_action_request(
@@ -4402,18 +4148,6 @@ def test_tool_action_request_classifier_detects_fd_prefixed_curl_heredoc_upload(
         "credential exfiltration shell command",
         "shell file upload command",
     }
-
-
-def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monkeypatch):
-    def fake_normcase(value: str) -> str:
-        return value.replace("\\", "/").lower()
-
-    monkeypatch.setattr("os.path.normcase", fake_normcase)
-
-    assert _path_text_is_within_root_text(
-        "C:\\Users\\Michael\\Workspace\\config.toml",
-        "c:\\users\\michael\\workspace",
-    )
 
 
 def test_tool_action_request_classifier_detects_nested_relative_curl_config_file_upload(tmp_path):

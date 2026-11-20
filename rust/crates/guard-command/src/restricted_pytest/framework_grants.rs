@@ -108,7 +108,12 @@ mod tests {
             written.join("bin/tool"),
             toolchain.join("bin/tool"),
         ];
-        let grants = framework_grants(&executables, &workspace, &[output.clone()], |_| true);
+        let grants = framework_grants(
+            &executables,
+            &workspace,
+            std::slice::from_ref(&output),
+            |_| true,
+        );
 
         assert_eq!(grants.roots, vec![toolchain]);
         assert!(grants.interpreters.is_empty());

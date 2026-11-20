@@ -17,7 +17,98 @@ mod metadata;
 pub(super) use metadata::{credential_file_metadata_operand, global_package_listing_operand};
 
 /// Home components holding a `bin` directory of installed tools.
-const TOOL_ROOTS: [&str; 6] = [".bun", ".cargo", ".deno", ".local", ".npm-global", "go"];
+const TOOL_ROOTS: [&str; 7] = [
+    ".bun",
+    ".cargo",
+    ".deno",
+    ".local",
+    ".npm-global",
+    ".volta",
+    "go",
+];
+
+/// Version managers keep one `bin` per installed runtime version, a fixed
+/// number of components below their root, such as
+/// `~/.nvm/versions/node/v24.1.0/bin`. Each layout spells the components
+/// before the version and the ones between the version and `bin`; `*` stands
+/// for the tool a multi-runtime manager installed (`~/.asdf/installs/ruby`).
+/// The manager writes that tree when it installs a release, so it holds the
+/// runtime's own programs and the files it unpacked beside them, never the
+/// manager's settings or caches, which sit higher up and stay guarded.
+const VERSIONED_BIN_LAYOUTS: [(&[&str], &[&str]); 8] = [
+    (&[".nvm", "versions", "node"], &[]),
+    (&[".fnm", "node-versions"], &["installation"]),
+    (
+        &[".local", "share", "fnm", "node-versions"],
+        &["installation"],
+    ),
+    (&[".volta", "tools", "image", "node"], &[]),
+    (&[".pyenv", "versions"], &[]),
+    (&[".rbenv", "versions"], &[]),
+    (&[".asdf", "installs", "*"], &[]),
+    (&[".local", "share", "mise", "installs", "*"], &[]),
+];
+
+/// A version or tool name such as `v24.1.0`, `3.12.4` or `ruby`: plain
+/// characters only, so it cannot climb out of the tree or hide as a dot
+/// directory.
+fn plain_version(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with('.')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b".-_+".contains(&byte))
+}
+
+/// The index of the `bin` component when `names` (relative to home) passes
+/// through one version's `bin` directory of a version manager.
+fn versioned_bin_index(names: &[String]) -> Option<usize> {
+    VERSIONED_BIN_LAYOUTS.iter().find_map(|(before, after)| {
+        let bin = before.len() + 1 + after.len();
+        (names.len() > bin
+            && names[..before.len()]
+                .iter()
+                .zip(before.iter())
+                .all(|(name, part)| name == part || (*part == "*" && plain_version(name)))
+            && plain_version(&names[before.len()])
+            && names[before.len() + 1..bin]
+                .iter()
+                .zip(after.iter())
+                .all(|(name, part)| name == part)
+            && names[bin] == "bin")
+            .then_some(bin)
+    })
+}
+
+fn home_names(path: &Path, home_dir: &str) -> Option<Vec<String>> {
+    path.strip_prefix(home_dir)
+        .ok()?
+        .components()
+        .map(|component| match component {
+            Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The installed version a versioned `bin` directory belongs to, such as
+/// `~/.nvm/versions/node/v24.1.0`. Its launchers link into the same tree:
+/// `bin/npm` points at `../lib/node_modules/npm/bin/npm-cli.js`.
+fn version_root(bin_dir: &Path, home_dir: &str) -> Option<PathBuf> {
+    let names = home_names(bin_dir, home_dir)?;
+    if versioned_bin_index(&names)? + 1 != names.len() {
+        return None;
+    }
+    bin_dir.parent().map(Path::to_path_buf)
+}
+
+/// Package-manager state directories created directly inside `node_modules`.
+/// A package manager owns every one of them, so a listing prints installed
+/// package names and link metadata rather than anything the agent wrote, and
+/// none of them is where a tool keeps credentials. Any other dot directory
+/// below the project keeps its review.
+const MODULE_STATE_DIRS: [&str; 4] = [".bin", ".cache", ".pnpm", ".vite"];
 
 /// Bin directories a probe spells in full, outside home. Package managers own
 /// these paths, so a name below one of them is an installed tool rather than a
@@ -34,23 +125,21 @@ const SYSTEM_BIN_DIRS: [&str; 6] = [
 /// Split an operand into the bin directory it names and the single child below
 /// it, if any. Anything deeper, or below another directory, is not a probe.
 fn split_bin_target(expanded: &str, home_dir: &str) -> Option<(PathBuf, Option<String>)> {
-    if let Ok(relative) = Path::new(expanded).strip_prefix(home_dir) {
-        let names: Vec<String> = relative
-            .components()
-            .map(|component| match component {
-                Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
-                _ => None,
-            })
-            .collect::<Option<_>>()?;
-        let (root, child) = match names.as_slice() {
-            [root, bin] if bin == "bin" => (root, None),
-            [root, bin, child] if bin == "bin" => (root, Some(child.clone())),
+    if Path::new(expanded).starts_with(home_dir) {
+        let names = home_names(Path::new(expanded), home_dir)?;
+        let bin = match names.as_slice() {
+            [root, bin, ..] if bin == "bin" && TOOL_ROOTS.contains(&root.as_str()) => 1,
+            _ => versioned_bin_index(&names)?,
+        };
+        let (directory, rest) = names.split_at(bin + 1);
+        let child = match rest {
+            [] => None,
+            [child] => Some(child.clone()),
             _ => return None,
         };
-        if !TOOL_ROOTS.contains(&root.as_str()) {
-            return None;
-        }
-        return Some((Path::new(home_dir).join(root).join("bin"), child));
+        let mut bin_dir = PathBuf::from(home_dir);
+        bin_dir.extend(directory);
+        return Some((bin_dir, child));
     }
     let directory = SYSTEM_BIN_DIRS.iter().find(|directory| {
         expanded == **directory || expanded.starts_with(&format!("{directory}/"))
@@ -100,6 +189,9 @@ pub(super) fn tool_bin_listing_operand(value: &str, context: super::PathContext<
         || value.starts_with('-')
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\'])
         || value.contains(['*', '?', '[', ']', '{', '}'])
+        // A tilde operand is expanded by the shell, not by Guard. Never
+        // prove a different home tree than the one the shell will list.
+        || (value.starts_with('~') && !context.shell_home_matches)
         || !super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;
@@ -143,8 +235,12 @@ pub(super) fn tool_bin_listing_operand(value: &str, context: super::PathContext<
     {
         return false;
     }
+    let inside = |directory: &Path| {
+        std::fs::canonicalize(directory).is_ok_and(|directory| canonical.starts_with(directory))
+    };
     canonical.is_file()
-        && (std::fs::canonicalize(&bin_dir).is_ok_and(|bin| canonical.starts_with(bin))
+        && (inside(&bin_dir)
+            || version_root(&bin_dir, home_dir).is_some_and(|root| inside(&root))
             || super::read_paths::resolved_path_allowed_for_operation(
                 &canonical,
                 context.home_dir,
@@ -154,11 +250,13 @@ pub(super) fn tool_bin_listing_operand(value: &str, context: super::PathContext<
             ))
 }
 
-/// `ls <root>/node_modules/.bin` or `ls <root>/node_modules/.bin/<name>`:
-/// checking whether a package bin is installed in a readable checkout. The
-/// root must clear the ordinary directory read screens. `node_modules` and
-/// `.bin` must each be absent or a real directory, so neither can redirect the
-/// listing elsewhere. The named child may be absent, a regular file, or a link
+/// `ls <root>/node_modules/<state dir>`, or `ls <root>/node_modules/.bin/<name>`:
+/// checking what a package manager installed in a readable checkout. The
+/// root must clear the ordinary directory read screens. `node_modules` and the
+/// state directory must each be absent or a real directory, so neither can
+/// redirect the listing elsewhere. The state directory is absent whenever the
+/// project uses another package manager, which is exactly what such a listing
+/// asks, so an absent one is a listing of nothing rather than a refusal. The named child may be absent, a regular file, or a link
 /// to a file inside the same `node_modules` or one that clears every read
 /// screen. A directory child is refused, because `ls` would list its contents.
 pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<'_>) -> bool {
@@ -168,6 +266,9 @@ pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\'])
         || value.contains(['*', '?', '[', ']', '{', '}'])
         || value.split('/').any(|part| part == "." || part == "..")
+        // A node_modules metadata probe must inspect the same home that
+        // the shell expands from a leading tilde.
+        || (value.starts_with('~') && !context.shell_home_matches)
         || !super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;
@@ -191,10 +292,12 @@ pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<
             _ => None,
         })
         .collect();
-    let (tail, child) = match names.as_slice() {
-        [.., modules, bin] if *modules == "node_modules" && *bin == ".bin" => (2, None),
+    let (tail, state, child) = match names.as_slice() {
+        [.., modules, state] if *modules == "node_modules" && MODULE_STATE_DIRS.contains(state) => {
+            (2, *state, None)
+        }
         [.., modules, bin, child] if *modules == "node_modules" && *bin == ".bin" => {
-            (3, Some(*child))
+            (3, *bin, Some(*child))
         }
         _ => return false,
     };
@@ -212,7 +315,7 @@ pub(super) fn node_bin_listing_operand(value: &str, context: super::PathContext<
         return false;
     }
     let modules = root.join("node_modules");
-    let bin_dir = modules.join(".bin");
+    let bin_dir = modules.join(state);
     let absent_or_directory = |path: &Path| match std::fs::symlink_metadata(path) {
         Ok(metadata) => metadata.is_dir(),
         Err(error) => error.kind() == std::io::ErrorKind::NotFound,

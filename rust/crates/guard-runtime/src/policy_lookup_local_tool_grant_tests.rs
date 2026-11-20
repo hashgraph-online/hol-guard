@@ -14,6 +14,12 @@ const CAPABILITY_DIGEST: &str = "ba31c0bc03d0b765cf7c135722e999bc8781e64809f537e
 const ANY_DIGEST: &str = "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1";
 const SIGNED_AT: &str = "2029-01-01T00:00:00+00:00";
 
+/// The selector of one lookup's grant, which the shared derivation builds
+/// from the tool identity and capability rather than from the lookup itself.
+fn grant_selector(grant: &LocalToolGrantLookupV1, target: &str) -> String {
+    selector(&grant.tool_identity_hash, &grant.capability, target)
+}
+
 fn grant(current_action: &str) -> LocalToolGrantLookupV1 {
     LocalToolGrantLookupV1 {
         tool_identity_hash: IDENTITY.to_owned(),
@@ -103,11 +109,11 @@ fn store(tag: &str) -> (std::path::PathBuf, Connection) {
 #[test]
 fn selectors_match_the_python_grant_ids() {
     assert_eq!(
-        selector(&grant("review"), "capability"),
+        grant_selector(&grant("review"), "capability"),
         format!("local-tool-grant:v1:{IDENTITY}:capability:{CAPABILITY_DIGEST}")
     );
     assert_eq!(
-        selector(&grant("review"), "version"),
+        grant_selector(&grant("review"), "version"),
         format!("local-tool-grant:v1:{IDENTITY}:version:{ANY_DIGEST}")
     );
 }
@@ -117,13 +123,13 @@ fn the_capability_grant_answers_before_the_version_grant() {
     let (path, connection) = store("both");
     insert_row(
         &connection,
-        &selector(&grant("review"), "capability"),
+        &grant_selector(&grant("review"), "capability"),
         "trusted-local-tool",
         "capability grant",
     );
     insert_row(
         &connection,
-        &selector(&grant("review"), "version"),
+        &grant_selector(&grant("review"), "version"),
         "trusted-local-tool",
         "version grant",
     );
@@ -137,7 +143,7 @@ fn the_version_grant_answers_when_the_capability_has_none() {
     let (path, connection) = store("version-only");
     insert_row(
         &connection,
-        &selector(&grant("require-reapproval"), "version"),
+        &grant_selector(&grant("require-reapproval"), "version"),
         "trusted-local-tool",
         "version grant",
     );
@@ -150,7 +156,7 @@ fn a_row_another_source_filed_under_the_selector_is_not_a_grant() {
     let (path, connection) = store("foreign-source");
     insert_row(
         &connection,
-        &selector(&grant("review"), "capability"),
+        &grant_selector(&grant("review"), "capability"),
         "approval-gate",
         "not a grant",
     );
@@ -170,7 +176,7 @@ fn an_action_no_review_asked_for_is_never_lifted() {
     let (path, connection) = store("blocked");
     insert_row(
         &connection,
-        &selector(&grant("block"), "capability"),
+        &grant_selector(&grant("block"), "capability"),
         "trusted-local-tool",
         "capability grant",
     );

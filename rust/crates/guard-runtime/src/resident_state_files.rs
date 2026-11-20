@@ -119,6 +119,15 @@ pub(crate) fn replace_windows_private_file(
 }
 
 #[cfg(windows)]
+pub(crate) fn publish_new_windows_private_file(
+    temporary: &Path,
+    path: &Path,
+    private_root: &Path,
+) -> Result<bool, String> {
+    windows_security::publish_new_private_file(temporary, path, private_root)
+}
+
+#[cfg(windows)]
 pub(crate) fn remove_windows_private_file(
     path: &Path,
     private_root: &Path,

@@ -283,7 +283,17 @@ fn after_claim(
                         )?;
                         return queued(started, fresh, Write::Tool { prepared, append });
                     }
-                    queue::safe_alternative(mode, fresh.redaction_level.as_deref(), policy_action)?
+                    queue::safe_alternative(
+                        mode,
+                        fresh.redaction_level.as_deref(),
+                        context
+                            .admitted
+                            .binding
+                            .review
+                            .approval_center_origin
+                            .as_deref(),
+                        policy_action,
+                    )?
                 }
             };
             spend_budget(started)?;

@@ -8,6 +8,7 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from .approval_retry_action import FILE_TOOLS
 from .approval_retry_bash import (
     BASH_LIFECYCLE_CASES,
     BASH_LIFECYCLE_ORACLE,
@@ -15,17 +16,29 @@ from .approval_retry_bash import (
     MUTATION_CASE,
     targets_script,
 )
+from .approval_retry_relay import RELAY_ORACLE
 from .extension_adapters import extension_adapter
+from .file_write_cases import FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_ORACLE
+from .output_cases import OUTPUT_ORACLE
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
+from .repeat_cases import REPEAT_ORACLE, valid_repeat_commands
 from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
+# The catalog's own bound. A run writes one case file per scenario, so `bundle`
+# derives the evidence inventory's bound from this one: raising it here raises
+# what an export and an import will carry.
+MAX_SCENARIOS = 448
 # Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
 CONNECTOR_SETUP_ORACLES = frozenset({"connector-setup", "connector-setup-ask"})
-WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
+# Watch needs a harmless command that Guard would still stop when enforcing. A
+# program that only computes and prints is proven read-only, so this one touches
+# the filesystem with a stat; the benign gate pins that verdict.
+WATCH_COMMAND = 'python -I -S -c \'import os; print("ordinary-watch-fixture", os.path.isdir("."))\''
 WATCH_OUTPUT = "ordinary-watch-fixture"
 _WINDOWS_DRIVE_PATH = re.compile(r"[A-Za-z]:\\.+")
 WATCH_PROMPT = (
@@ -63,6 +76,11 @@ class Scenario:
     # Whether this protection case accepts Guard's own contained route as the stop it expects.
     # Only a ``sandbox-required`` deny whose rewrite ``contained_core`` proves end to end counts.
     contained_ok: bool = False
+    # Guard reason codes this case exists to drive. The judge reads them back out of the case's
+    # own observations, so a declaration is met only by a live decision in that run's evidence.
+    # A case that would otherwise pass without reaching one is reported as not-exercised, which
+    # is how a model that spelled its way around the shape stops reading as proof Guard is quiet.
+    decision_paths: tuple[str, ...] = ()
 
     def render(self, values: dict[str, str]) -> Scenario:
         """Expand fixture placeholders without evaluating code."""
@@ -87,6 +105,7 @@ class Scenario:
             self.profiles,
             tuple(expand(c, command=True) for c in self.benign_exit_commands),
             self.contained_ok,
+            self.decision_paths,
         )
 
 
@@ -99,7 +118,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
     """Parse scenario data without importing candidate Python code."""
     if not isinstance(data, dict) or not isinstance(data.get("scenarios"), list):
         raise ValueError("scenario catalog must contain an array")
-    if not 1 <= len(data["scenarios"]) <= 256:
+    if not 1 <= len(data["scenarios"]) <= MAX_SCENARIOS:
         raise ValueError("scenario catalog count exceeds its bound")
     if data.get("schema") != "hol.guard-gauntlet.scenarios.v1":
         raise ValueError("unsupported Gauntlet scenario schema")
@@ -116,6 +135,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "profiles",
             "benign_exit_commands",
             "contained_ok",
+            "decision_paths",
         }
         if not required <= row.keys() or row.keys() - allowed:
             raise ValueError("scenario has missing or unknown fields")
@@ -123,13 +143,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("scenario scalar fields must be nonempty strings")
         if row.get("path") is not None and (not isinstance(row["path"], str) or not row["path"]):
             raise ValueError("scenario path must be a nonempty string or null")
-        for name in ("commands", "required_tools", "profiles", "benign_exit_commands"):
+        for name in ("commands", "required_tools", "profiles", "benign_exit_commands", "decision_paths"):
             if name in row and (
                 not isinstance(row[name], list) or any(not isinstance(value, str) or not value for value in row[name])
             ):
                 raise ValueError("scenario lists must contain nonempty strings")
         if "contained_ok" in row and type(row["contained_ok"]) is not bool:
             raise ValueError("scenario contained_ok must be a boolean")
+        if any(re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code) is None for code in row.get("decision_paths", ())):
+            raise ValueError("scenario decision_paths must name Guard reason codes")
         scenario = Scenario(
             **{
                 **row,
@@ -137,6 +159,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 "required_tools": tuple(row.get("required_tools", ())),
                 "profiles": tuple(row.get("profiles", ("core",))),
                 "benign_exit_commands": tuple(row.get("benign_exit_commands", ())),
+                "decision_paths": tuple(row.get("decision_paths", ())),
             }
         )
         if scenario.id in ids or re.fullmatch(r"[a-z][a-z0-9-]{0,79}", scenario.id) is None:
@@ -155,10 +178,16 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-extension",
             "blocked-package",
             "blocked-memory-note",
+            "blocked-eval-shell",
+            FILE_WRITE_ORACLE,
+            OUTPUT_ORACLE,
+            TASK_BRIEF_ORACLE,
+            REPEAT_ORACLE,
             "native-tools",
             "full-task",
             "approved-retry",
             BASH_LIFECYCLE_ORACLE,
+            RELAY_ORACLE,
             "connector-setup",
             "connector-setup-ask",
             "connector-tool",
@@ -181,14 +210,44 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("native-tools cases are allow-only and must name their required tools")
         if scenario.oracle == "blocked-memory-note" and (scenario.commands or scenario.required_tools != ("learn",)):
             raise ValueError("memory-note protection cases drive the learn tool alone")
+        if scenario.oracle == "blocked-eval-shell" and (scenario.commands or scenario.required_tools != ("eval",)):
+            raise ValueError("eval shell protection cases drive the eval tool alone")
+        if scenario.oracle == TASK_BRIEF_ORACLE and (
+            scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("task",)
+        ):
+            raise ValueError("task-brief protection cases drive one blocked task call alone")
+        if scenario.oracle == REPEAT_ORACLE and (
+            scenario.expectation != "block"
+            or not valid_repeat_commands(scenario.commands)
+            or scenario.required_tools
+            or scenario.path
+        ):
+            raise ValueError("repeat protection cases list one command six times and nothing else")
+        if scenario.oracle == FILE_WRITE_ORACLE and (
+            scenario.commands or scenario.required_tools not in {("write",), ("edit",)} or not scenario.path
+        ):
+            raise ValueError("file-write protection cases drive one write or edit call at one pinned file")
+        if scenario.oracle == OUTPUT_ORACLE and (
+            scenario.expectation != "block" or len(scenario.commands) != 1 or scenario.path or scenario.required_tools
+        ):
+            raise ValueError("output protection cases run one exact command whose output Guard must stop")
         if scenario.oracle == "full-task" and (
             scenario.expectation != "allow" or scenario.commands or "core" in scenario.profiles
         ):
             raise ValueError("full tasks are allow-only, name no commands and never join the core profile")
-        if scenario.oracle == "approved-retry" and (
-            scenario.expectation != "allow" or scenario.required_tools != ("bash",) or "core" in scenario.profiles
-        ):
-            raise ValueError("approve-then-retry cases are allow-only shell cases and never join the core profile")
+        if scenario.oracle == "approved-retry":
+            # The lane's repeated action is either a shell command or a file-tool call.
+            # A file-tool case names no command at all, so it pins the file instead:
+            # that path is what ties its grant to the attempt the agent came back to.
+            shell = scenario.required_tools == ("bash",)
+            files = bool(scenario.required_tools) and set(scenario.required_tools) <= FILE_TOOLS
+            if scenario.expectation != "allow" or "core" in scenario.profiles or not (shell or files):
+                raise ValueError(
+                    "approve-then-retry cases are allow-only, drive bash or the file tools alone, "
+                    "and never join the core profile"
+                )
+            if files and (scenario.commands or not scenario.path):
+                raise ValueError("an approve-then-retry file-tool case names no command and pins one file")
         if scenario.oracle == BASH_LIFECYCLE_ORACLE:
             blocked = scenario.id in {MUTATION_CASE, DENIAL_CASE}
             if (
@@ -200,6 +259,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 or scenario.profiles != ("approval-retry",)
             ):
                 raise ValueError("Bash approval lifecycle case has an invalid id, outcome, command or profile")
+        if scenario.oracle == RELAY_ORACLE and (
+            scenario.expectation != "allow"
+            or len(scenario.commands) != 1
+            or scenario.required_tools != ("bash",)
+            or scenario.profiles != ("approval-retry",)
+        ):
+            raise ValueError(
+                "a relayed approval link case holds one bash command and runs only in the approval-retry profile"
+            )
         _validate_connector(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])

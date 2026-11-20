@@ -14,19 +14,19 @@ use serde_json::{json, Map, Value};
 use super::layers::{
     layers_from_json, layers_from_values, layers_to_json, validate_serialized_layers,
 };
-use super::plans::{plan, sealed};
+use super::plans::{plan, sealed, with_pack};
 use super::records::{
     authenticated_record, canonical, exact_int, field, private_hash, py_eq, query_row, row_int,
-    row_text, tampered, verify_record, Anchor, Phase, Res, ANCHOR_PURPOSE,
+    row_text, snapshot_pack_binding, tampered, verify_record, Anchor, Phase, Res, ANCHOR_PURPOSE,
     CATALOG_MANIFEST_PURPOSE, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
 };
 use super::Ctx;
 
 /// The owner-only copy of the latest committed snapshot beside `guard.db`.
-const LAST_GOOD_FILE_NAME: &str = "extension-control-last-good.json";
-const LAST_GOOD_SCHEMA: &str = "guard.extension-control-last-good.v1";
-const MAX_EXPORT_BYTES: usize = 1024 * 1024;
-const EXPORT_FIELDS: [&str; 5] = [
+pub(super) const LAST_GOOD_FILE_NAME: &str = "extension-control-last-good.json";
+pub(super) const LAST_GOOD_SCHEMA: &str = "guard.extension-control-last-good.v1";
+pub(super) const MAX_EXPORT_BYTES: usize = 1024 * 1024;
+pub(super) const EXPORT_FIELDS: [&str; 5] = [
     "revision",
     "catalog_digest",
     "layers_json",
@@ -50,32 +50,8 @@ pub(super) fn anchor_json(anchor: &Anchor, key: &[u8]) -> Res<String> {
     canonical(&json!({ "record": record, "digest": digest, "mac": mac }))
 }
 
-/// `seal_anchor`: the anchor the caller writes to the credential store.
-pub(super) fn seal_anchor_op(
-    request: &ExtensionControlAuthorityRequestV1,
-    key: Option<&[u8]>,
-) -> Res<Value> {
-    let key = require_key(key)?;
-    let (Some(revision), Some(snapshot_digest), Some(phase)) = (
-        request.revision.filter(|revision| *revision >= 0),
-        request
-            .snapshot_digest
-            .as_deref()
-            .filter(|digest| digest.chars().count() == 64),
-        request.phase.as_deref().and_then(Phase::parse),
-    ) else {
-        return Err(tampered("invalid authority anchor"));
-    };
-    let anchor = Anchor {
-        revision,
-        snapshot_digest: snapshot_digest.to_owned(),
-        phase,
-    };
-    Ok(json!({ "anchor_json": anchor_json(&anchor, key)? }))
-}
-
-/// `seal_manifest`: the record `_write_catalog_manifest` stores for the
-/// current catalog's trusted target manifest.
+/// The record `write_manifest` stores for the current catalog's trusted
+/// target manifest.
 pub(super) fn seal_manifest_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
@@ -248,30 +224,42 @@ impl Ctx<'_> {
             }
         };
         let revision = migration.previous_revision + 1;
+        let source_row = source
+            .as_ref()
+            .ok_or_else(|| tampered("migration source missing"))?;
+        let pack_digest = self.installed_upgrade_digest(source_row)?;
+        let retained = snapshot_pack_binding(source_row, key)?;
         let reference = format!(
             "catalog-migration:{}:{catalog_digest}:{}",
             migration.previous_catalog_digest, migration.previous_revision
         );
         let hashes = trusted_hashes(MIGRATION_ACTOR, &reference, key);
+        let snapshot_payload = json!({
+            "revision": revision,
+            "catalog_digest": catalog_digest,
+            "layers_json": layers_json,
+            "previous_digest": previous_digest,
+            "committed_at": created_at,
+        });
         let snapshot = sealed(
-            json!({
-                "revision": revision,
-                "catalog_digest": catalog_digest,
-                "layers_json": layers_json,
-                "previous_digest": previous_digest,
-                "committed_at": created_at,
-            }),
+            with_pack(
+                snapshot_payload,
+                pack_digest.as_deref().or(retained.as_deref()),
+            ),
             key,
             SNAPSHOT_PURPOSE,
         )?;
         let transition = sealed(
-            transition_payload(
-                revision,
-                &json!(previous_digest),
-                &snapshot["digest"],
-                catalog_digest,
-                &hashes,
-                created_at,
+            with_pack(
+                transition_payload(
+                    revision,
+                    &json!(previous_digest),
+                    &snapshot["digest"],
+                    catalog_digest,
+                    &hashes,
+                    created_at,
+                ),
+                pack_digest.as_deref(),
             ),
             key,
             TRANSITION_PURPOSE,
@@ -286,6 +274,7 @@ impl Ctx<'_> {
                 ("hashes".to_owned(), hashes),
                 ("snapshot".to_owned(), snapshot),
                 ("transition".to_owned(), transition),
+                ("command_pack_record_digest".to_owned(), json!(pack_digest)),
             ]),
         ))
     }

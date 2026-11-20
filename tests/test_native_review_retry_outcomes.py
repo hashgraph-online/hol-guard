@@ -52,7 +52,7 @@ def test_keep_blocked_does_not_requeue_identical_retry(tmp_path: Path, monkeypat
 
 def test_real_native_omp_hook_honors_keep_blocked(tmp_path: Path, monkeypatch, native_hook_force) -> None:
     from codex_plugin_scanner.guard.config import update_guard_settings
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from codex_plugin_scanner.guard.store import GuardStore
 
     home = tmp_path / "home"

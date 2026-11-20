@@ -128,8 +128,14 @@ pub(super) fn local_python_project_path(
     if let Some(url) = &source_url {
         if url.starts_with("file:") {
             raw_spec = Some(py_partition(url, "file:").2.to_string());
-        } else {
+        } else if url.contains("://") || url.starts_with("git+") {
             return None;
+        } else {
+            // A local distribution file carries its own path as its source, so
+            // the source is the spec. Reading it that way keeps a directory
+            // that merely spells an archive name reaching the on-disk project
+            // inspection below; the remote screens further down still apply.
+            raw_spec = Some(url.clone());
         }
     }
     if raw_spec.is_none() {
@@ -215,3 +221,7 @@ pub(super) fn py_partition<'a>(value: &'a str, sep: &str) -> (&'a str, &'a str, 
         None => (value, "", ""),
     }
 }
+
+#[cfg(test)]
+#[path = "local_projects_tests.rs"]
+mod tests;

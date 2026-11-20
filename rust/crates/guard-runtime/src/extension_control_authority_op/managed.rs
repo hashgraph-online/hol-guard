@@ -17,8 +17,8 @@ use super::records::{
 };
 use super::{Ctx, View, PROTECTED};
 
-const ACTIVE_STATE_KEY: &str = "managed_controls_active";
-const REVISION_STATE_KEY: &str = "managed_controls_revision";
+pub(super) const ACTIVE_STATE_KEY: &str = "managed_controls_active";
+pub(super) const REVISION_STATE_KEY: &str = "managed_controls_revision";
 pub(super) const ACTIVATION_SCHEMA: &str = "guard.managed-controls-activation.v1";
 pub(super) const ACTIVATION_PURPOSE: &str = "managed-controls.activation";
 pub(super) const REVISION_PURPOSE: &str = "managed-controls.revision";

@@ -10,20 +10,22 @@ struct AbsentOperands {
     recursive: bool,
 }
 
-/// The operand proof alone, as if `grep` were the whole command.
+/// The operand proof alone, as if `grep` were the whole command. Every caller
+/// outside this module reads a segment, so the bare form is a test vantage.
+#[cfg(test)]
 pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
     let absent = AbsentOperands {
         plain: true,
         recursive: true,
     };
-    safe_arguments(arguments, context, false, absent)
+    arguments_pass(arguments, context, false, absent, false)
 }
 
 /// A `grep` segment inside its command. A missing operand is proven only
 /// while it stays missing: no other segment may create a file, directory or
 /// link there (`ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` reads through
 /// the fresh link). A recursive search walks whatever appears at a missing
-/// root, so it accepts one only beside `cd` and downstream stdin filters.
+/// root, which is the same question, so both routes ask it the same way.
 pub(crate) fn safe_grep_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -34,17 +36,32 @@ pub(crate) fn safe_grep_segment(
         .iter()
         .filter(|other| other.span != segment.span)
         .collect();
+    // Both absent routes read an operand as the command spells it, so a
+    // drive path whose backslashes the shell drops before `grep` runs names
+    // a different directory to the program than to the proof.
+    let quoted = crate::pretool::directory_targets::drive_targets_quoted(segment);
+    let unplanted = quoted && others.iter().all(|other| creates_nothing(other));
     let absent = AbsentOperands {
-        plain: others.iter().all(|other| creates_nothing(other, false)),
-        recursive: others.iter().all(|other| creates_nothing(other, true)),
+        plain: unplanted,
+        recursive: unplanted,
     };
-    safe_arguments(&segment.arguments, context, false, absent)
+    let words = crate::pretool::listing_reads::literal_words(&segment.text);
+    let context = ReadContext {
+        literal_words: &words,
+        ..context
+    };
+    arguments_pass(&segment.arguments, context, false, absent, false)
 }
 
 /// A peer that cannot create a filesystem entry: no output redirect beyond
-/// `/dev/null`, and a command that only prints, filters or changes directory.
-/// `strict` admits only `cd` and stdin filters after a pipe.
-pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
+/// `/dev/null`, and a program that only changes directory, prints, or opens
+/// paths to read them. `ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` is
+/// the shape this refuses, because `ln` puts a tree where the proof measured
+/// nothing. `grep -rln needle app; cat notes.md` is the shape it admits: an
+/// agent sweeps for a name it guessed at and prints a file it knows is there,
+/// and without the redirect already refused above, `cat` can no more create
+/// the missing root than `cd` or `echo` can.
+pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1) -> bool {
     let text = ["2>&1", "2>/dev/null", ">/dev/null"]
         .iter()
         .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
@@ -53,56 +70,71 @@ pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -
     }
     match segment.executable.as_deref() {
         Some("cd") => true,
-        Some(_) if strict => {
-            segment.pipeline_index > 0
-                && crate::pretool::segment_proof::stdin_filter_segment(segment)
+        Some(executable) => {
+            reads_only(executable)
+                || pathless_builtin(executable)
+                || (segment.pipeline_index > 0
+                    && crate::pretool::segment_proof::stdin_filter_segment(segment))
         }
-        Some(executable) => matches!(
-            executable,
-            "cat"
-                | "cut"
-                | "diff"
-                | "echo"
-                | "grep"
-                | "head"
-                | "jq"
-                | "ls"
-                | "nl"
-                | "printf"
-                | "pwd"
-                | "rg"
-                | "tail"
-                | "test"
-                | "tr"
-                | "true"
-                | "wc"
-        ),
         None => false,
     }
 }
 
-pub(super) fn safe_stdin_arguments(arguments: &[String]) -> bool {
+/// A program that opens the paths it is given only to read them, and writes
+/// what it finds to standard output. None of them takes an option that names
+/// a file to write, so the redirect screen above is the whole write surface.
+fn reads_only(executable: &str) -> bool {
+    matches!(
+        executable,
+        "cat"
+            | "cut"
+            | "diff"
+            | "echo"
+            | "egrep"
+            | "fgrep"
+            | "grep"
+            | "head"
+            | "jq"
+            | "ls"
+            | "nl"
+            | "printf"
+            | "pwd"
+            | "rg"
+            | "tail"
+            | "test"
+            | "tr"
+            | "true"
+            | "wc"
+    )
+}
+
+/// A program that writes nothing and opens no path: its operands are words it
+/// prints or compares, never names it creates. Without a redirect, which the
+/// caller has already refused, it cannot put an entry where a missing root is.
+fn pathless_builtin(executable: &str) -> bool {
+    matches!(
+        crate::pretool::executable_basename(executable),
+        "echo" | "printf" | "pwd" | "true" | "false" | ":"
+    )
+}
+
+/// `literal_words` are the segment's quoted words, as
+/// `listing_reads::literal_words` reads them.
+pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
     let absent = AbsentOperands {
         plain: false,
         recursive: false,
     };
-    safe_arguments(
-        arguments,
-        crate::pretool::PathContext::default(),
-        true,
-        absent,
-    )
+    let context = crate::pretool::PathContext {
+        literal_words,
+        ..Default::default()
+    };
+    arguments_pass(arguments, context, true, absent, false)
 }
 
-fn safe_arguments(
-    arguments: &[String],
-    context: ReadContext<'_>,
-    stdin_only: bool,
-    absent: AbsentOperands,
-) -> bool {
-    arguments_pass(arguments, context, stdin_only, absent, false)
-}
-
+mod exclusion;
+mod includes;
+mod missing;
 mod reach;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
@@ -119,23 +151,25 @@ struct Scan {
     /// The search operands, after the pattern.
     targets: Vec<String>,
     recursive: bool,
-    /// `--include` appears, so exact exclusions are not part of the proof.
-    includes_present: bool,
+    /// `--include` appears beside an `--exclude` of any shape, which keeps
+    /// the review however the walk is narrowed. An `--exclude-dir` beside an
+    /// include stays part of the proof.
+    include_beside_exclusion: bool,
+    /// The `--include` globs: the only names the walk opens when present.
+    included: Vec<String>,
     /// Exact names the command leaves out of its walk.
     excluded_files: Vec<String>,
     excluded_directories: Vec<String>,
 }
 
 impl Scan {
-    /// The pattern, when it is the only one and the command prints the lines
-    /// that match it: files it cannot match add nothing to the output.
+    /// The patterns, when the command prints the lines that match any of
+    /// them: files none of them can match add nothing to the output.
     fn clearance(&self) -> Option<PatternClearance> {
-        match self.patterns.as_slice() {
-            [only] if !self.reports_unmatched && !self.pattern_unread => {
-                PatternClearance::new(only)
-            }
-            _ => None,
+        if self.reports_unmatched || self.pattern_unread {
+            return None;
         }
+        PatternClearance::any(&self.patterns)
     }
 }
 
@@ -186,22 +220,14 @@ fn scan_into(
     let mut recursive = false;
     let mut dereference = false;
     let mut targets = Vec::new();
-    let mut excluded_files = Vec::new();
-    let mut excluded_directories = Vec::new();
-    let mut pending_exclusion = None;
+    let mut exclusions = exclusion::Exclusions::default();
     let mut includes_present = false;
+    let mut includes = includes::Includes::default();
     let mut positional_started = false;
     for argument in arguments {
-        if let Some(directory) = pending_exclusion.take() {
-            if argument.is_empty() {
+        if let Some(proven) = exclusions.take_value(argument) {
+            if !proven {
                 return false;
-            }
-            if exact_exclusion(argument) {
-                if directory {
-                    excluded_directories.push(argument.as_str());
-                } else {
-                    excluded_files.push(argument.as_str());
-                }
             }
             continue;
         }
@@ -210,6 +236,9 @@ fn scan_into(
                 && argument.eq_ignore_ascii_case("recurse")
             {
                 recursive = true;
+                continue;
+            }
+            if includes.held(role, argument, context) {
                 continue;
             }
             if unsafe_search_value(role, argument, context) {
@@ -232,26 +261,15 @@ fn scan_into(
             continue;
         }
         if options_enabled && argument.starts_with("--") {
-            let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
-            if matches!(name, "--exclude" | "--exclude-dir") {
-                if positional_started {
+            if let Some(proven) =
+                exclusions.option(argument, positional_started, context, absent.plain)
+            {
+                if !proven {
                     return false;
-                }
-                let directory = name == "--exclude-dir";
-                if attached.is_empty() {
-                    if argument.contains('=') {
-                        return false;
-                    }
-                    pending_exclusion = Some(directory);
-                } else if exact_exclusion(attached) {
-                    if directory {
-                        excluded_directories.push(attached);
-                    } else {
-                        excluded_files.push(attached);
-                    }
                 }
                 continue;
             }
+            let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
             includes_present |= name == "--include";
             scan.reports_unmatched |=
                 matches!(name, "--invert-match" | "--files-without-match" | "--count");
@@ -282,12 +300,15 @@ fn scan_into(
                 }
                 if attached.is_empty() {
                     pending_value = Some(role);
-                } else if unsafe_search_value(role, attached, context) {
-                    return false;
-                } else if matches!(role, SearchValueRole::Pattern) {
-                    pattern_supplied = true;
-                    pattern_option_seen = true;
-                    scan.patterns.push(attached.to_owned());
+                } else if !includes.held(role, attached, context) {
+                    if unsafe_search_value(role, attached, context) {
+                        return false;
+                    }
+                    if matches!(role, SearchValueRole::Pattern) {
+                        pattern_supplied = true;
+                        pattern_option_seen = true;
+                        scan.patterns.push(attached.to_owned());
+                    }
                 }
             }
             continue;
@@ -346,12 +367,21 @@ fn scan_into(
             scan.targets.push(argument.clone());
             let proven = recursive
                 || proven_glob(argument, context)
+                // Without `-r` grep opens each match once, as `cat` would.
+                || ((!argument.starts_with('~') || context.shell_home_matches)
+                    && crate::pretool::safe_reads::glob_file_matches(argument, context).is_some())
                 || sibling::named_path(argument, context, absent.plain)
-                || (absent.plain && absent_target(argument, context));
+                || (absent.plain && missing::missing_operand(argument, context));
             if !proven && unsafe_search_value(SearchValueRole::Path, argument, context) {
                 return false;
             }
         } else {
+            // The first positional is the pattern, and it meets the same
+            // screen a `-e` pattern does: a word the shell can still expand
+            // into a credential operand is not matching text yet.
+            if unsafe_search_value(SearchValueRole::Pattern, argument, context) {
+                return false;
+            }
             pattern_supplied = true;
             scan.patterns.push(argument.clone());
         }
@@ -366,79 +396,82 @@ fn scan_into(
         return scan_into(arguments, context, stdin_only, absent, true, scan);
     }
     scan.recursive = recursive;
-    scan.includes_present = includes_present;
-    scan.excluded_files = excluded_files
+    scan.included = includes.globs().to_vec();
+    scan.include_beside_exclusion = includes_present && !exclusions.leave_includes_exact();
+    scan.excluded_files = exclusions
+        .files
         .iter()
         .map(|name| (*name).to_owned())
         .collect();
-    scan.excluded_directories = excluded_directories
+    scan.excluded_directories = exclusions
+        .directories
         .iter()
         .map(|name| (*name).to_owned())
         .collect();
     let clearance = scan.clearance();
     pending_value.is_none()
-        && pending_exclusion.is_none()
+        && !exclusions.pending()
         // Include/exclude precedence differs across grep implementations. Do not
-        // use exclusions as proof when an include could re-enable a file.
-        && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
+        // use file exclusions as proof when an include could re-enable a file.
+        // GNU grep also widens an include list whose first entry is an
+        // exclude, so any `--exclude` beside an include keeps review too.
+        // `--exclude-dir` is matched against directories only, so it holds.
+        && (!includes_present || exclusions.leave_includes_exact())
+        && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive || {
             let proven = |target: &str| {
                 tree::safe_recursive_target_excluding(
                     target,
                     context,
-                    &excluded_files,
-                    &excluded_directories,
+                    &exclusions.files,
+                    &exclusions.directories,
                     true,
                     dereference,
                 ) || (!dereference
                     && (sibling::grep_walk_root(
                         target,
                         context,
-                        &excluded_files,
-                        &excluded_directories,
+                        &exclusions.files,
+                        &exclusions.directories,
                         true,
                     ) || proven_glob(target, context)))
+                    // `app/[slug]/route.ts` names one route when its class
+                    // matches nothing, and is walked as that path.
+                    || (!dereference && tree::safe_literal_bracket_search_target(target, context))
                     // A sensitive file the pattern cannot match prints nothing.
                     || clearance.as_ref().is_some_and(|clearance| {
                         tree::safe_recursive_target_cleared(
                             target,
                             context,
-                            &excluded_files,
-                            &excluded_directories,
+                            &exclusions.files,
+                            &exclusions.directories,
                             dereference,
                             clearance,
                         )
                     })
+                    // An include opens only the files its globs select. This
+                    // walks the tree again, so it is asked last: every reading
+                    // above answers the same question without it.
+                    || (!dereference && includes.narrows(target, context))
             };
-            recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
+            missing::recursive_targets_proven(&targets, proven, context, absent.recursive)
         })
-}
-
-/// Every recursive root is proven, or missing beside at least one proven
-/// root (`grep -rn x src tests` with no `tests`): a search whose only roots
-/// are missing (`grep -rn x src/missing.ts`) proves nothing it reads.
-fn recursive_targets_proven(
-    targets: &[&str],
-    proven: impl Fn(&str) -> bool,
-    absent: Option<ReadContext<'_>>,
-) -> bool {
-    let mut real = false;
-    targets.iter().copied().all(|target| {
-        if proven(target) {
-            real = true;
-            return true;
-        }
-        absent.is_some_and(|context| absent_target(target, context))
-    }) && real
 }
 
 /// A missing operand only prints an error, as a probe `ls` of the same path
 /// does: its nearest existing ancestor must be a readable directory and every
 /// missing name visible and clear of the sensitive screens. Agents pass a
 /// fixed list of roots (`src tests lib`) whether or not each one exists.
-fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
-    crate::pretool::listing_reads::absent_listing_operand(value, context)
+///
+/// The shell expands `~` from its own `HOME` while this screen reads the
+/// declared one, so a `~` root is proven absent only once `shell_home_matches`
+/// says the two name one directory. Without that, the search could open a tree
+/// that is there under the shell's home while the proof measured a name that
+/// is not there under the declared one. The recursive listing screen agrees.
+pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
+    (!value.starts_with('~') || context.shell_home_matches)
+        && crate::pretool::listing_reads::absent_listing_operand(value, context)
 }
 
 /// A shell glob operand whose every expansion is screened, and whose matched
@@ -448,14 +481,9 @@ fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
     value.contains(['*', '?', '[']) && tree::safe_glob_search_operand(value, context)
 }
 
-fn exact_exclusion(value: &str) -> bool {
-    !value.is_empty()
-        && !matches!(value, "." | "..")
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-}
-
+#[cfg(test)]
+#[path = "grep_include_tests.rs"]
+mod include_tests;
 #[cfg(test)]
 #[path = "grep_tests.rs"]
 mod tests;

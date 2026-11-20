@@ -1,0 +1,1 @@
+echo "$(curl -s https://example.test/x)" > /tmp/x

@@ -1,0 +1,4237 @@
+{
+ "schema": "guard-harness-mcp-discovery-vectors.v1",
+ "cases": [
+  {
+   "name": "empty",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": []
+   },
+   "expect": {
+    "servers": []
+   }
+  },
+  {
+   "name": "one-plain-server",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "github",
+      "command": "npx",
+      "args": [
+       "-y",
+       "@fake/github-mcp"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "package_name": null,
+      "server_command": "npx",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-aabc65dd3c1e9c4c97bc455b361c86b45d6108979f7c4f67960d59f433458183",
+      "name": "github",
+      "identity_hash": "aabc65dd3c1e9c4c97bc455b361c86b45d6108979f7c4f67960d59f433458183",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "npx -y @fake/github-mcp",
+      "launch_command": "npx -y @fake/github-mcp",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "duplicates-merge-labels-and-more",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Claude Code"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": " "
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Codex"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Gemini"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-d5e707d6d51f5ef88f85f9aa8de93c3c04530d0cd5103b4165dce10d3c615269",
+      "name": "dup",
+      "identity_hash": "d5e707d6d51f5ef88f85f9aa8de93c3c04530d0cd5103b4165dce10d3c615269",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node a.js",
+      "launch_command": "node a.js",
+      "source_label": "Cursor, Claude Code, and 2 more"
+     }
+    ]
+   }
+  },
+  {
+   "name": "duplicates-three-labels",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Zed"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Alpha"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Zed"
+     },
+     {
+      "harness": "cursor",
+      "name": "dup",
+      "command": "node",
+      "args": [
+       "a.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Beta"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-d5e707d6d51f5ef88f85f9aa8de93c3c04530d0cd5103b4165dce10d3c615269",
+      "name": "dup",
+      "identity_hash": "d5e707d6d51f5ef88f85f9aa8de93c3c04530d0cd5103b4165dce10d3c615269",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node a.js",
+      "launch_command": "node a.js",
+      "source_label": "Zed, Alpha, Beta"
+     }
+    ]
+   }
+  },
+  {
+   "name": "duplicates-first-wins",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "codex",
+      "name": "srv",
+      "command": "node",
+      "args": [
+       "first.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.codex/config.toml",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Codex"
+     },
+     {
+      "harness": "codex",
+      "name": "srv",
+      "command": "python3",
+      "args": [
+       "second.py"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.codex/config.toml",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "package_name": null,
+      "server_command": "python3",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Codex"
+     },
+     {
+      "harness": "codex",
+      "name": "srv",
+      "command": "node",
+      "args": [
+       "third.js"
+      ],
+      "source_scope": "project",
+      "config_path": "~/.codex/mcp.json",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Codex"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-cb1c43cc8415d61cbc8bd543bde60449d37395e292753efeef91d775762add89",
+      "name": "srv",
+      "identity_hash": "cb1c43cc8415d61cbc8bd543bde60449d37395e292753efeef91d775762add89",
+      "configuration_hash": "d49eedb37f0af75f813efe6350381965f41c8919b2fd745bea1762825a0f717b",
+      "example_label": "node first.js",
+      "launch_command": "node first.js",
+      "source_label": "Codex"
+     },
+     {
+      "index": 2,
+      "cli_id": "local-cli.mcp-cecc1ef63f8612cff6f45f5ab4c94bad8fd4dea3455a9d284819aa58a30daeaa",
+      "name": "srv",
+      "identity_hash": "cecc1ef63f8612cff6f45f5ab4c94bad8fd4dea3455a9d284819aa58a30daeaa",
+      "configuration_hash": "160dac4ad8b7104607ffa7f19f440eb6f9a6f46680541f279a3b032bbbc44640",
+      "example_label": "node third.js",
+      "launch_command": "node third.js",
+      "source_label": "Codex"
+     }
+    ]
+   }
+  },
+  {
+   "name": "blank-commands-are-skipped",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "blank",
+      "command": "",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "package_name": null,
+      "server_command": "",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "spaces",
+      "command": "   ",
+      "args": [
+       "x"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "package_name": null,
+      "server_command": "   ",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "tab",
+      "command": "\t\u001c",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "package_name": null,
+      "server_command": "\t\u001c",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "kept",
+      "command": "uvx",
+      "args": [
+       "fake-mcp"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "package_name": null,
+      "server_command": "uvx",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 3,
+      "cli_id": "local-cli.mcp-0851c0d6f8426696c776243c137c93d5fa6e92718c815b5e58df3c677a8e8f69",
+      "name": "kept",
+      "identity_hash": "0851c0d6f8426696c776243c137c93d5fa6e92718c815b5e58df3c677a8e8f69",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "uvx fake-mcp",
+      "launch_command": "uvx fake-mcp",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "name-fallbacks",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "  spaced name  ",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "   ",
+      "command": "npx",
+      "args": [
+       "@fake/pkg"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "package_name": "@fake/pkg",
+      "server_command": "npx",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "",
+      "command": "/usr/local/bin/my-server",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "package_name": "",
+      "server_command": "/usr/local/bin/my-server",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "",
+      "command": "./",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "package_name": null,
+      "server_command": "./",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "",
+      "command": "/",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "package_name": null,
+      "server_command": "/",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "",
+      "command": "..",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "package_name": null,
+      "server_command": "..",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "",
+      "command": "tools/./bin/",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "package_name": null,
+      "server_command": "tools/./bin/",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "",
+      "command": "  spaced cmd  ",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "package_name": null,
+      "server_command": "  spaced cmd  ",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "　",
+      "command": "a//b",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "package_name": null,
+      "server_command": "a//b",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 7,
+      "cli_id": "local-cli.mcp-27be115bd366de830507fbc1f0e521e76730674c01a9209965421283cdf33dcc",
+      "name": "  spaced cmd  ",
+      "identity_hash": "27be115bd366de830507fbc1f0e521e76730674c01a9209965421283cdf33dcc",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "'  spaced cmd  '",
+      "launch_command": "'  spaced cmd  '",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 5,
+      "cli_id": "local-cli.mcp-5b041adcb5982b2faa77b2555b835b7e613382eaf0f6f3337231d1d9093a4d60",
+      "name": "..",
+      "identity_hash": "5b041adcb5982b2faa77b2555b835b7e613382eaf0f6f3337231d1d9093a4d60",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "..",
+      "launch_command": "..",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 1,
+      "cli_id": "local-cli.mcp-7876f3db966d38a31618d3a81d3794e2c08d028a02a08347f7b5594281cc391c",
+      "name": "@fake/pkg",
+      "identity_hash": "7876f3db966d38a31618d3a81d3794e2c08d028a02a08347f7b5594281cc391c",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "npx @fake/pkg",
+      "launch_command": "npx @fake/pkg",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 8,
+      "cli_id": "local-cli.mcp-bd02dca8feead9ae1dbfc2eb959b4f958ada4ee357c3e927ab959f5e9a83ccfd",
+      "name": "b",
+      "identity_hash": "bd02dca8feead9ae1dbfc2eb959b4f958ada4ee357c3e927ab959f5e9a83ccfd",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "a//b",
+      "launch_command": "a//b",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 6,
+      "cli_id": "local-cli.mcp-3af86659c493826e571d05bbd4fdf171de414bc99a9348f89c5a60520f1e7502",
+      "name": "bin",
+      "identity_hash": "3af86659c493826e571d05bbd4fdf171de414bc99a9348f89c5a60520f1e7502",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "tools/./bin/",
+      "launch_command": "tools/./bin/",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 3,
+      "cli_id": "local-cli.mcp-95bd315d8bca57f6c96e3fef39915921af1a158ffb6aec949f42ed482cc830c2",
+      "name": "mcp-server",
+      "identity_hash": "95bd315d8bca57f6c96e3fef39915921af1a158ffb6aec949f42ed482cc830c2",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "./",
+      "launch_command": "./",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 4,
+      "cli_id": "local-cli.mcp-9ea34be9aa5cb186f6aa357535c722ba152abb6fdcd4d65c872cb195148773ee",
+      "name": "mcp-server",
+      "identity_hash": "9ea34be9aa5cb186f6aa357535c722ba152abb6fdcd4d65c872cb195148773ee",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "/",
+      "launch_command": "/",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 2,
+      "cli_id": "local-cli.mcp-0057671168d8cf52715b7870417f5ff49c9cb396b07e27068647d63a2919f9fc",
+      "name": "my-server",
+      "identity_hash": "0057671168d8cf52715b7870417f5ff49c9cb396b07e27068647d63a2919f9fc",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "/usr/local/bin/my-server",
+      "launch_command": "/usr/local/bin/my-server",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 9,
+      "cli_id": "local-cli.mcp-d4c50f7e18a10d486587ba3bbace6cfb74d345e4fe3ca7433317d32f8f881425",
+      "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+      "identity_hash": "d4c50f7e18a10d486587ba3bbace6cfb74d345e4fe3ca7433317d32f8f881425",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-769a50e7561d9e88294698b30e401f399c863fe94c678b6b092d2108b023255f",
+      "name": "spaced name",
+      "identity_hash": "769a50e7561d9e88294698b30e401f399c863fe94c678b6b092d2108b023255f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 10,
+      "cli_id": "local-cli.mcp-cc0e2f0338feebe915ffe17d3546058c197de12bec2ced5a91f7183782eae7a8",
+      "name": "üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü",
+      "identity_hash": "cc0e2f0338feebe915ffe17d3546058c197de12bec2ced5a91f7183782eae7a8",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "sort-by-label-name-command-args",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "gemini",
+      "name": "beta",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.gemini/mcp.json",
+      "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Gemini"
+     },
+     {
+      "harness": "claude-code",
+      "name": "Alpha",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.claude-code/mcp.json",
+      "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Claude Code"
+     },
+     {
+      "harness": "claude-code",
+      "name": "alpha",
+      "command": "deno",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.claude-code/mcp.json",
+      "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "package_name": null,
+      "server_command": "deno",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Claude Code"
+     },
+     {
+      "harness": "claude-code",
+      "name": "alpha",
+      "command": "deno",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.claude-code/mcp.json",
+      "identity_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "package_name": null,
+      "server_command": "deno",
+      "args_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "label": "Claude Code"
+     },
+     {
+      "harness": "cursor",
+      "name": "zeta",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "Émile",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "codex",
+      "name": "same",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.codex/mcp.json",
+      "identity_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Codex"
+     },
+     {
+      "harness": "codex",
+      "name": "same",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.codex/mcp.json",
+      "identity_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Codex"
+     },
+     {
+      "harness": "unknown-harness",
+      "name": "x",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/.unknown-harness/mcp.json",
+      "identity_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "unknown-harness"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 3,
+      "cli_id": "local-cli.mcp-2b84576270e9bfe274ca2f28f72cb46d018d4685925de195cdc545ef7e573680",
+      "name": "alpha",
+      "identity_hash": "2b84576270e9bfe274ca2f28f72cb46d018d4685925de195cdc545ef7e573680",
+      "configuration_hash": "04f527e09a0d3585ddd68c4c6bd3b71e071e6820760a3c708e15bc65a78e892b",
+      "example_label": "deno",
+      "launch_command": "deno",
+      "source_label": "Claude Code"
+     },
+     {
+      "index": 2,
+      "cli_id": "local-cli.mcp-8f67cfc69ff8a82efaca1039cb27da85169ff3741fc3de1fb6952ebc29aeff51",
+      "name": "alpha",
+      "identity_hash": "8f67cfc69ff8a82efaca1039cb27da85169ff3741fc3de1fb6952ebc29aeff51",
+      "configuration_hash": "04f527e09a0d3585ddd68c4c6bd3b71e071e6820760a3c708e15bc65a78e892b",
+      "example_label": "deno",
+      "launch_command": "deno",
+      "source_label": "Claude Code"
+     },
+     {
+      "index": 1,
+      "cli_id": "local-cli.mcp-9daab74bc21d628a2b123dcb52e03c55b4678dcde863a3a458001562404376b7",
+      "name": "Alpha",
+      "identity_hash": "9daab74bc21d628a2b123dcb52e03c55b4678dcde863a3a458001562404376b7",
+      "configuration_hash": "04f527e09a0d3585ddd68c4c6bd3b71e071e6820760a3c708e15bc65a78e892b",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Claude Code"
+     },
+     {
+      "index": 6,
+      "cli_id": "local-cli.mcp-11207390f7f54aa696a9f92eec14a3f7b3c2dc4ca1db88691825f240d231fd0b",
+      "name": "same",
+      "identity_hash": "11207390f7f54aa696a9f92eec14a3f7b3c2dc4ca1db88691825f240d231fd0b",
+      "configuration_hash": "160dac4ad8b7104607ffa7f19f440eb6f9a6f46680541f279a3b032bbbc44640",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Codex"
+     },
+     {
+      "index": 7,
+      "cli_id": "local-cli.mcp-da6e4f7d0a550d710faeb011d42b643b05b8e93ac933f2d59db6e56ba63903c0",
+      "name": "same",
+      "identity_hash": "da6e4f7d0a550d710faeb011d42b643b05b8e93ac933f2d59db6e56ba63903c0",
+      "configuration_hash": "160dac4ad8b7104607ffa7f19f440eb6f9a6f46680541f279a3b032bbbc44640",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Codex"
+     },
+     {
+      "index": 4,
+      "cli_id": "local-cli.mcp-d6454efba4a0377b8092b669a6a3f7837d03da7e45281d27b308a423447adb9d",
+      "name": "zeta",
+      "identity_hash": "d6454efba4a0377b8092b669a6a3f7837d03da7e45281d27b308a423447adb9d",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "cursor"
+     },
+     {
+      "index": 5,
+      "cli_id": "local-cli.mcp-0b8a1f9ef41f1d1be2f1f78acb623ae58d2397d350716ec497e9072e6b5b0aff",
+      "name": "Émile",
+      "identity_hash": "0b8a1f9ef41f1d1be2f1f78acb623ae58d2397d350716ec497e9072e6b5b0aff",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-d3b65d1cde9a5a8fc633a51cd80af441bb0ffe4151cb6ee05a98447027448280",
+      "name": "beta",
+      "identity_hash": "d3b65d1cde9a5a8fc633a51cd80af441bb0ffe4151cb6ee05a98447027448280",
+      "configuration_hash": "7ecde6890b4457dd2d4d54cdb50bc45e5882a6e74100136de98d19ef64cd2b20",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Gemini"
+     },
+     {
+      "index": 8,
+      "cli_id": "local-cli.mcp-6599113bd78dea2a322d45bb31271db1d5b932e8b73dffa347e6cb8f3a8ec41b",
+      "name": "x",
+      "identity_hash": "6599113bd78dea2a322d45bb31271db1d5b932e8b73dffa347e6cb8f3a8ec41b",
+      "configuration_hash": "047545f153cb5aefc2e827ae44cdf48f9b071bf2b35a3433aa85ecceab527c3d",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "unknown-harness"
+     }
+    ]
+   }
+  },
+  {
+   "name": "limit-truncates-after-sort",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 4,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "server-000",
+      "command": "node",
+      "args": [
+       "s0.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "server-001",
+      "command": "node",
+      "args": [
+       "s1.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "server-002",
+      "command": "node",
+      "args": [
+       "s2.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "server-003",
+      "command": "node",
+      "args": [
+       "s3.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "server-004",
+      "command": "node",
+      "args": [
+       "s4.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "server-005",
+      "command": "node",
+      "args": [
+       "s5.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "server-006",
+      "command": "node",
+      "args": [
+       "s6.js"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-91d0260ea8de78707957a4f831b585a81bff62b203982d1665df284b32db4c72",
+      "name": "server-000",
+      "identity_hash": "91d0260ea8de78707957a4f831b585a81bff62b203982d1665df284b32db4c72",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node s0.js",
+      "launch_command": "node s0.js",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 1,
+      "cli_id": "local-cli.mcp-3cfa75813c72e5545b362b7224fd3f051595b877e39c12b8498e042defd8d723",
+      "name": "server-001",
+      "identity_hash": "3cfa75813c72e5545b362b7224fd3f051595b877e39c12b8498e042defd8d723",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node s1.js",
+      "launch_command": "node s1.js",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 2,
+      "cli_id": "local-cli.mcp-6e8e1fab82aef0db4d2ceea2798030d91702234603873a03e374eaafaa11d10b",
+      "name": "server-002",
+      "identity_hash": "6e8e1fab82aef0db4d2ceea2798030d91702234603873a03e374eaafaa11d10b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node s2.js",
+      "launch_command": "node s2.js",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 3,
+      "cli_id": "local-cli.mcp-1f53caf90cf832abce36b591d42aa6582517218b179a7122653431379b3a0a24",
+      "name": "server-003",
+      "identity_hash": "1f53caf90cf832abce36b591d42aa6582517218b179a7122653431379b3a0a24",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node s3.js",
+      "launch_command": "node s3.js",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "redaction-and-quoting-posix",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "redact-00",
+      "command": "node",
+      "args": [
+       "--token",
+       "fake-token-value"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-01",
+      "command": "node",
+      "args": [
+       "--api-key=fake-key"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0101010101010101010101010101010101010101010101010101010101010101",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-02",
+      "command": "node",
+      "args": [
+       "--API_KEY",
+       "fake-key"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0202020202020202020202020202020202020202020202020202020202020202",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-03",
+      "command": "node",
+      "args": [
+       "--password",
+       "fake-pass",
+       "--port",
+       "8080"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0303030303030303030303030303030303030303030303030303030303030303",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-04",
+      "command": "node",
+      "args": [
+       "--my-token",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0404040404040404040404040404040404040404040404040404040404040404",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-05",
+      "command": "node",
+      "args": [
+       "--client_secret=fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0505050505050505050505050505050505050505050505050505050505050505",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-06",
+      "command": "node",
+      "args": [
+       "https://mcp.example.test/sse?apikey=fake-key"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0606060606060606060606060606060606060606060606060606060606060606",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-07",
+      "command": "node",
+      "args": [
+       "Authorization=Bearer fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0707070707070707070707070707070707070707070707070707070707070707",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-08",
+      "command": "node",
+      "args": [
+       "--no-token",
+       "next-is-hidden"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0808080808080808080808080808080808080808080808080808080808080808",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-09",
+      "command": "node",
+      "args": [
+       "--token"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0909090909090909090909090909090909090909090909090909090909090909",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-10",
+      "command": "node",
+      "args": [
+       "TOKEN=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-11",
+      "command": "node",
+      "args": [
+       "x=apikey=y"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-12",
+      "command": "node",
+      "args": [
+       "--auth",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-13",
+      "command": "node",
+      "args": [
+       "bearer",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-14",
+      "command": "node",
+      "args": [
+       "secret=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-15",
+      "command": "node",
+      "args": [
+       "--secretive=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-16",
+      "command": "node",
+      "args": [
+       "mysecret=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-17",
+      "command": "node",
+      "args": [
+       "  --token  ",
+       "shown"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-18",
+      "command": "node",
+      "args": [
+       "--api_key",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1212121212121212121212121212121212121212121212121212121212121212",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-19",
+      "command": "node",
+      "args": [
+       "-token",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1313131313131313131313131313131313131313131313131313131313131313",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-20",
+      "command": "node",
+      "args": [
+       "--DB-Password",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1414141414141414141414141414141414141414141414141414141414141414",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-21",
+      "command": "node",
+      "args": [
+       "--x-secret=fake",
+       "--apikey"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1515151515151515151515151515151515151515151515151515151515151515",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-22",
+      "command": "node",
+      "args": [
+       "API-KEY=fake",
+       "--Authorization",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1616161616161616161616161616161616161616161616161616161616161616",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-23",
+      "command": "node",
+      "args": [
+       "--passwd=",
+       "--bearer=fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1717171717171717171717171717171717171717171717171717171717171717",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-24",
+      "command": "node",
+      "args": [
+       "--ΩMEGA-token",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1818181818181818181818181818181818181818181818181818181818181818",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-25",
+      "command": "node",
+      "args": [
+       "it's",
+       "a b",
+       "",
+       "say \"hi\"",
+       "tab\there",
+       "ünïcode",
+       "C:\\Program Files\\x\\"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1919191919191919191919191919191919191919191919191919191919191919",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-26",
+      "command": "node",
+      "args": [
+       "--token",
+       "--token",
+       "visible"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-command",
+      "command": "TOKEN=fake",
+      "args": [
+       "--secret",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "package_name": null,
+      "server_command": "TOKEN=fake",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "long",
+      "command": "node",
+      "args": [
+       "--segment-0=value-0",
+       "--segment-1=value-1",
+       "--segment-2=value-2",
+       "--segment-3=value-3",
+       "--segment-4=value-4",
+       "--segment-5=value-5",
+       "--segment-6=value-6",
+       "--segment-7=value-7",
+       "--segment-8=value-8",
+       "--segment-9=value-9",
+       "--segment-10=value-10",
+       "--segment-11=value-11",
+       "--segment-12=value-12",
+       "--segment-13=value-13",
+       "--segment-14=value-14",
+       "--segment-15=value-15",
+       "--segment-16=value-16",
+       "--segment-17=value-17",
+       "--segment-18=value-18",
+       "--segment-19=value-19",
+       "--segment-20=value-20",
+       "--segment-21=value-21",
+       "--segment-22=value-22",
+       "--segment-23=value-23",
+       "--segment-24=value-24",
+       "--segment-25=value-25",
+       "--segment-26=value-26",
+       "--segment-27=value-27",
+       "--segment-28=value-28",
+       "--segment-29=value-29"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "long-ü",
+      "command": "nödé",
+      "args": [
+       "üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "package_name": null,
+      "server_command": "nödé",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 28,
+      "cli_id": "local-cli.mcp-217b25fa3a39f3f8704c821b647f5078027e4953143e3d38060201d777e8c076",
+      "name": "long",
+      "identity_hash": "217b25fa3a39f3f8704c821b647f5078027e4953143e3d38060201d777e8c076",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --segment-0=value-0 --segment-1=value-1 --segment-2=value-2 --segment-3=value-3 --segment-4=value-4 --segment-5=value-5 --segment-6=value-6 --segment-7=val",
+      "launch_command": "node --segment-0=value-0 --segment-1=value-1 --segment-2=value-2 --segment-3=value-3 --segment-4=value-4 --segment-5=value-5 --segment-6=value-6 --segment-7=value-7 --segment-8=value-8 --segment-9=value-9 --segment-10=value-10 --segment-11=value-11 --segment-12=value-12 --segment-13=value-13 --segment-14=value-14 --segment-15=value-15 --segment-16=value-16 --segment-17=value-17 --segment-18=value-18 --segment-19=value-19 --segment-20=value-20 --segment-21=value-21 --segment-22=value-22 --segment-23=value-23 --segment-24=value-24 --segment-25=value-25 --segment-26=value-26 --segment-27=value-27 --segment-28=value-28 --segment-29=value-29",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 29,
+      "cli_id": "local-cli.mcp-bdfa2609b9700f741f296f3e59b5da13b2eda292ef50ac4fbda1c6220ad72f81",
+      "name": "long-ü",
+      "identity_hash": "bdfa2609b9700f741f296f3e59b5da13b2eda292ef50ac4fbda1c6220ad72f81",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "'nödé' 'üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü",
+      "launch_command": "'nödé' 'üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü'",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-e08e319cf57d20a1e2a20dac30227d52b1d92c49e8b9b385fe252b98a0eb3838",
+      "name": "redact-00",
+      "identity_hash": "e08e319cf57d20a1e2a20dac30227d52b1d92c49e8b9b385fe252b98a0eb3838",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --token '*****'",
+      "launch_command": "node --token fake-token-value",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 1,
+      "cli_id": "local-cli.mcp-c5efb05442883709a2ee493b5c15e4dd7085703aac46558ef820a914ab9f57fa",
+      "name": "redact-01",
+      "identity_hash": "c5efb05442883709a2ee493b5c15e4dd7085703aac46558ef820a914ab9f57fa",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node '--api-key=*****'",
+      "launch_command": "node --api-key=fake-key",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 2,
+      "cli_id": "local-cli.mcp-7ec132e7799d3a6345c873acdcfa558afb5640b20b63e1bd953651b075da2a4b",
+      "name": "redact-02",
+      "identity_hash": "7ec132e7799d3a6345c873acdcfa558afb5640b20b63e1bd953651b075da2a4b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --API_KEY '*****'",
+      "launch_command": "node --API_KEY fake-key",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 3,
+      "cli_id": "local-cli.mcp-5617dc18d63d43a0448dbd1322a9d973d6120ea2bd84109c2e64c0d8842e62f4",
+      "name": "redact-03",
+      "identity_hash": "5617dc18d63d43a0448dbd1322a9d973d6120ea2bd84109c2e64c0d8842e62f4",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --password '*****' --port 8080",
+      "launch_command": "node --password fake-pass --port 8080",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 4,
+      "cli_id": "local-cli.mcp-924006b97d7d1297a12da9c54265fb2423653bd6d7ea1b3f401fa81f7d5e9802",
+      "name": "redact-04",
+      "identity_hash": "924006b97d7d1297a12da9c54265fb2423653bd6d7ea1b3f401fa81f7d5e9802",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --my-token '*****'",
+      "launch_command": "node --my-token fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 5,
+      "cli_id": "local-cli.mcp-6a21e088619c31b1219f25e207abd2fc84fa9d0f3dd4ae2d83833910b01069db",
+      "name": "redact-05",
+      "identity_hash": "6a21e088619c31b1219f25e207abd2fc84fa9d0f3dd4ae2d83833910b01069db",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node '--client_secret=*****'",
+      "launch_command": "node --client_secret=fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 6,
+      "cli_id": "local-cli.mcp-743a34760ed4cb4489cf487b58577b74824d1c03ff9e0a629b54a5c02167439b",
+      "name": "redact-06",
+      "identity_hash": "743a34760ed4cb4489cf487b58577b74824d1c03ff9e0a629b54a5c02167439b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'https://mcp.example.test/sse?apikey=*****'",
+      "launch_command": "node 'https://mcp.example.test/sse?apikey=fake-key'",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 7,
+      "cli_id": "local-cli.mcp-0f1816ecbea6e30a255ee86cf3276659c178de0c20be302a102f04411aad9817",
+      "name": "redact-07",
+      "identity_hash": "0f1816ecbea6e30a255ee86cf3276659c178de0c20be302a102f04411aad9817",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'Authorization=*****'",
+      "launch_command": "node 'Authorization=Bearer fake'",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 8,
+      "cli_id": "local-cli.mcp-db155449922878ee3885acb9f01ac06885df34df6087a49ec1586c6f8d022721",
+      "name": "redact-08",
+      "identity_hash": "db155449922878ee3885acb9f01ac06885df34df6087a49ec1586c6f8d022721",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --no-token '*****'",
+      "launch_command": "node --no-token next-is-hidden",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 9,
+      "cli_id": "local-cli.mcp-38a87155d8747fe69c884ea06b850c424abf6fe0c28059370acd1080adaf0eef",
+      "name": "redact-09",
+      "identity_hash": "38a87155d8747fe69c884ea06b850c424abf6fe0c28059370acd1080adaf0eef",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --token",
+      "launch_command": "node --token",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 10,
+      "cli_id": "local-cli.mcp-5dfb0da24c9df659215bc90120e4664e50b07677eabe7f40cfbf266b4fc9ce23",
+      "name": "redact-10",
+      "identity_hash": "5dfb0da24c9df659215bc90120e4664e50b07677eabe7f40cfbf266b4fc9ce23",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'TOKEN=*****'",
+      "launch_command": "node TOKEN=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 11,
+      "cli_id": "local-cli.mcp-278b41e1782c42ae8f5656aad8d817e41fb48e789d7c1a01e9f5ee19fe2834b4",
+      "name": "redact-11",
+      "identity_hash": "278b41e1782c42ae8f5656aad8d817e41fb48e789d7c1a01e9f5ee19fe2834b4",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'x=*****'",
+      "launch_command": "node x=apikey=y",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 12,
+      "cli_id": "local-cli.mcp-4bd39b320858cf575d7e62aee2d391aab4a4f2ff30218957528d0ec0e28e9e8f",
+      "name": "redact-12",
+      "identity_hash": "4bd39b320858cf575d7e62aee2d391aab4a4f2ff30218957528d0ec0e28e9e8f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --auth '*****'",
+      "launch_command": "node --auth fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 13,
+      "cli_id": "local-cli.mcp-af239951681810c87fbf826d05a95f026e613b6a3ca55f3c1a116eb21b2c56eb",
+      "name": "redact-13",
+      "identity_hash": "af239951681810c87fbf826d05a95f026e613b6a3ca55f3c1a116eb21b2c56eb",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node bearer fake",
+      "launch_command": "node bearer fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 14,
+      "cli_id": "local-cli.mcp-0dba5f60551ede6f1dd187889136960dc27d300ab43c7928a53d21ea9b2cc499",
+      "name": "redact-14",
+      "identity_hash": "0dba5f60551ede6f1dd187889136960dc27d300ab43c7928a53d21ea9b2cc499",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'secret=*****'",
+      "launch_command": "node secret=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 15,
+      "cli_id": "local-cli.mcp-9c4709e4cdd94a0cd8694d4dc9aa544c7d182a64e28338d9bcd6f4753d0b572e",
+      "name": "redact-15",
+      "identity_hash": "9c4709e4cdd94a0cd8694d4dc9aa544c7d182a64e28338d9bcd6f4753d0b572e",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --secretive=1",
+      "launch_command": "node --secretive=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 16,
+      "cli_id": "local-cli.mcp-c4f90535ef1e4095610cb374ba1304b975c80797077437d975ab6e70a3fbf072",
+      "name": "redact-16",
+      "identity_hash": "c4f90535ef1e4095610cb374ba1304b975c80797077437d975ab6e70a3fbf072",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'mysecret=*****'",
+      "launch_command": "node mysecret=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 17,
+      "cli_id": "local-cli.mcp-d2b0166cf5f13b405a9e5beedf3a4f9c68d7d7530d2a09b53f94eec8e3ffd19e",
+      "name": "redact-17",
+      "identity_hash": "d2b0166cf5f13b405a9e5beedf3a4f9c68d7d7530d2a09b53f94eec8e3ffd19e",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node '  --token  ' shown",
+      "launch_command": "node '  --token  ' shown",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 18,
+      "cli_id": "local-cli.mcp-3f7fb56582dc9703725eecf8a67cd0d33d83262e13abdd25355c174854c50c6f",
+      "name": "redact-18",
+      "identity_hash": "3f7fb56582dc9703725eecf8a67cd0d33d83262e13abdd25355c174854c50c6f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --api_key '*****'",
+      "launch_command": "node --api_key fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 19,
+      "cli_id": "local-cli.mcp-1957c13410041ec8e85bdf0f20e759be9f5a08dfc4791697dc1e279929f8ea7f",
+      "name": "redact-19",
+      "identity_hash": "1957c13410041ec8e85bdf0f20e759be9f5a08dfc4791697dc1e279929f8ea7f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node -token '*****'",
+      "launch_command": "node -token fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 20,
+      "cli_id": "local-cli.mcp-dc4c965de894cf2152f261d748f16e82aca7f62b029e4d1ff77bf0c4b86400d3",
+      "name": "redact-20",
+      "identity_hash": "dc4c965de894cf2152f261d748f16e82aca7f62b029e4d1ff77bf0c4b86400d3",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --DB-Password '*****'",
+      "launch_command": "node --DB-Password fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 21,
+      "cli_id": "local-cli.mcp-4e415d30800f9b17ac6d57f5f006d2938d1456e06d590784083578b4587aa68b",
+      "name": "redact-21",
+      "identity_hash": "4e415d30800f9b17ac6d57f5f006d2938d1456e06d590784083578b4587aa68b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node '--x-secret=*****' --apikey",
+      "launch_command": "node --x-secret=fake --apikey",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 22,
+      "cli_id": "local-cli.mcp-532ef6e6db6f4bf13ad8c3dc2f4cec9ab2141aa019a588571a05ffa5be8c06f6",
+      "name": "redact-22",
+      "identity_hash": "532ef6e6db6f4bf13ad8c3dc2f4cec9ab2141aa019a588571a05ffa5be8c06f6",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'API-KEY=*****' --Authorization '*****'",
+      "launch_command": "node API-KEY=fake --Authorization fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 23,
+      "cli_id": "local-cli.mcp-a442264e9b29b3772c0b0fd80ec9023c3673b2677d1fd023b107b14b0b5a351c",
+      "name": "redact-23",
+      "identity_hash": "a442264e9b29b3772c0b0fd80ec9023c3673b2677d1fd023b107b14b0b5a351c",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node '--passwd=*****' '--bearer=*****'",
+      "launch_command": "node --passwd= --bearer=fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 24,
+      "cli_id": "local-cli.mcp-40e554f3c650424528654881f37015aceee25f8256b16855f7d6898c0a58c28c",
+      "name": "redact-24",
+      "identity_hash": "40e554f3c650424528654881f37015aceee25f8256b16855f7d6898c0a58c28c",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node '--ΩMEGA-token' '*****'",
+      "launch_command": "node '--ΩMEGA-token' fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 25,
+      "cli_id": "local-cli.mcp-1aa16e0946d48d8101fcb8aa9604f8e795ebe6843fa09dd5e027b8edb9c21568",
+      "name": "redact-25",
+      "identity_hash": "1aa16e0946d48d8101fcb8aa9604f8e795ebe6843fa09dd5e027b8edb9c21568",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node 'it'\"'\"'s' 'a b' '' 'say \"hi\"' 'tab\there' 'ünïcode' 'C:\\Program Files\\x\\'",
+      "launch_command": "node 'it'\"'\"'s' 'a b' '' 'say \"hi\"' 'tab\there' 'ünïcode' 'C:\\Program Files\\x\\'",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 26,
+      "cli_id": "local-cli.mcp-9d0e8d2b6d7307dcbbee1b65400823958be219d27986859b83c2ecd5db2f98fe",
+      "name": "redact-26",
+      "identity_hash": "9d0e8d2b6d7307dcbbee1b65400823958be219d27986859b83c2ecd5db2f98fe",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --token '*****' visible",
+      "launch_command": "node --token --token visible",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 27,
+      "cli_id": "local-cli.mcp-8921f2876d4900694be93d031555c4c8a13e9d93bff3bf3a47c3aaeea3220b3f",
+      "name": "redact-command",
+      "identity_hash": "8921f2876d4900694be93d031555c4c8a13e9d93bff3bf3a47c3aaeea3220b3f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "'TOKEN=*****' --secret '*****'",
+      "launch_command": "TOKEN=fake --secret fake",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "redaction-and-quoting-windows",
+   "request": {
+    "op": "group",
+    "windows": true,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "redact-00",
+      "command": "node",
+      "args": [
+       "--token",
+       "fake-token-value"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-01",
+      "command": "node",
+      "args": [
+       "--api-key=fake-key"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0101010101010101010101010101010101010101010101010101010101010101",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-02",
+      "command": "node",
+      "args": [
+       "--API_KEY",
+       "fake-key"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0202020202020202020202020202020202020202020202020202020202020202",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-03",
+      "command": "node",
+      "args": [
+       "--password",
+       "fake-pass",
+       "--port",
+       "8080"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0303030303030303030303030303030303030303030303030303030303030303",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-04",
+      "command": "node",
+      "args": [
+       "--my-token",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0404040404040404040404040404040404040404040404040404040404040404",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-05",
+      "command": "node",
+      "args": [
+       "--client_secret=fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0505050505050505050505050505050505050505050505050505050505050505",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-06",
+      "command": "node",
+      "args": [
+       "https://mcp.example.test/sse?apikey=fake-key"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0606060606060606060606060606060606060606060606060606060606060606",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-07",
+      "command": "node",
+      "args": [
+       "Authorization=Bearer fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0707070707070707070707070707070707070707070707070707070707070707",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-08",
+      "command": "node",
+      "args": [
+       "--no-token",
+       "next-is-hidden"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0808080808080808080808080808080808080808080808080808080808080808",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-09",
+      "command": "node",
+      "args": [
+       "--token"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0909090909090909090909090909090909090909090909090909090909090909",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-10",
+      "command": "node",
+      "args": [
+       "TOKEN=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-11",
+      "command": "node",
+      "args": [
+       "x=apikey=y"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-12",
+      "command": "node",
+      "args": [
+       "--auth",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-13",
+      "command": "node",
+      "args": [
+       "bearer",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-14",
+      "command": "node",
+      "args": [
+       "secret=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-15",
+      "command": "node",
+      "args": [
+       "--secretive=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-16",
+      "command": "node",
+      "args": [
+       "mysecret=1"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1010101010101010101010101010101010101010101010101010101010101010",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-17",
+      "command": "node",
+      "args": [
+       "  --token  ",
+       "shown"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-18",
+      "command": "node",
+      "args": [
+       "--api_key",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1212121212121212121212121212121212121212121212121212121212121212",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-19",
+      "command": "node",
+      "args": [
+       "-token",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1313131313131313131313131313131313131313131313131313131313131313",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-20",
+      "command": "node",
+      "args": [
+       "--DB-Password",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1414141414141414141414141414141414141414141414141414141414141414",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-21",
+      "command": "node",
+      "args": [
+       "--x-secret=fake",
+       "--apikey"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1515151515151515151515151515151515151515151515151515151515151515",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-22",
+      "command": "node",
+      "args": [
+       "API-KEY=fake",
+       "--Authorization",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1616161616161616161616161616161616161616161616161616161616161616",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-23",
+      "command": "node",
+      "args": [
+       "--passwd=",
+       "--bearer=fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1717171717171717171717171717171717171717171717171717171717171717",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-24",
+      "command": "node",
+      "args": [
+       "--ΩMEGA-token",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1818181818181818181818181818181818181818181818181818181818181818",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-25",
+      "command": "node",
+      "args": [
+       "it's",
+       "a b",
+       "",
+       "say \"hi\"",
+       "tab\there",
+       "ünïcode",
+       "C:\\Program Files\\x\\"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1919191919191919191919191919191919191919191919191919191919191919",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-26",
+      "command": "node",
+      "args": [
+       "--token",
+       "--token",
+       "visible"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "redact-command",
+      "command": "TOKEN=fake",
+      "args": [
+       "--secret",
+       "fake"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "package_name": null,
+      "server_command": "TOKEN=fake",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "long",
+      "command": "node",
+      "args": [
+       "--segment-0=value-0",
+       "--segment-1=value-1",
+       "--segment-2=value-2",
+       "--segment-3=value-3",
+       "--segment-4=value-4",
+       "--segment-5=value-5",
+       "--segment-6=value-6",
+       "--segment-7=value-7",
+       "--segment-8=value-8",
+       "--segment-9=value-9",
+       "--segment-10=value-10",
+       "--segment-11=value-11",
+       "--segment-12=value-12",
+       "--segment-13=value-13",
+       "--segment-14=value-14",
+       "--segment-15=value-15",
+       "--segment-16=value-16",
+       "--segment-17=value-17",
+       "--segment-18=value-18",
+       "--segment-19=value-19",
+       "--segment-20=value-20",
+       "--segment-21=value-21",
+       "--segment-22=value-22",
+       "--segment-23=value-23",
+       "--segment-24=value-24",
+       "--segment-25=value-25",
+       "--segment-26=value-26",
+       "--segment-27=value-27",
+       "--segment-28=value-28",
+       "--segment-29=value-29"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "long-ü",
+      "command": "nödé",
+      "args": [
+       "üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü"
+      ],
+      "source_scope": "user",
+      "config_path": "~/.cursor/mcp.json",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "package_name": null,
+      "server_command": "nödé",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 28,
+      "cli_id": "local-cli.mcp-217b25fa3a39f3f8704c821b647f5078027e4953143e3d38060201d777e8c076",
+      "name": "long",
+      "identity_hash": "217b25fa3a39f3f8704c821b647f5078027e4953143e3d38060201d777e8c076",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --segment-0=value-0 --segment-1=value-1 --segment-2=value-2 --segment-3=value-3 --segment-4=value-4 --segment-5=value-5 --segment-6=value-6 --segment-7=val",
+      "launch_command": "node --segment-0=value-0 --segment-1=value-1 --segment-2=value-2 --segment-3=value-3 --segment-4=value-4 --segment-5=value-5 --segment-6=value-6 --segment-7=value-7 --segment-8=value-8 --segment-9=value-9 --segment-10=value-10 --segment-11=value-11 --segment-12=value-12 --segment-13=value-13 --segment-14=value-14 --segment-15=value-15 --segment-16=value-16 --segment-17=value-17 --segment-18=value-18 --segment-19=value-19 --segment-20=value-20 --segment-21=value-21 --segment-22=value-22 --segment-23=value-23 --segment-24=value-24 --segment-25=value-25 --segment-26=value-26 --segment-27=value-27 --segment-28=value-28 --segment-29=value-29",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 29,
+      "cli_id": "local-cli.mcp-bdfa2609b9700f741f296f3e59b5da13b2eda292ef50ac4fbda1c6220ad72f81",
+      "name": "long-ü",
+      "identity_hash": "bdfa2609b9700f741f296f3e59b5da13b2eda292ef50ac4fbda1c6220ad72f81",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "nödé üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü",
+      "launch_command": "nödé üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-e08e319cf57d20a1e2a20dac30227d52b1d92c49e8b9b385fe252b98a0eb3838",
+      "name": "redact-00",
+      "identity_hash": "e08e319cf57d20a1e2a20dac30227d52b1d92c49e8b9b385fe252b98a0eb3838",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --token *****",
+      "launch_command": "node --token fake-token-value",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 1,
+      "cli_id": "local-cli.mcp-c5efb05442883709a2ee493b5c15e4dd7085703aac46558ef820a914ab9f57fa",
+      "name": "redact-01",
+      "identity_hash": "c5efb05442883709a2ee493b5c15e4dd7085703aac46558ef820a914ab9f57fa",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --api-key=*****",
+      "launch_command": "node --api-key=fake-key",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 2,
+      "cli_id": "local-cli.mcp-7ec132e7799d3a6345c873acdcfa558afb5640b20b63e1bd953651b075da2a4b",
+      "name": "redact-02",
+      "identity_hash": "7ec132e7799d3a6345c873acdcfa558afb5640b20b63e1bd953651b075da2a4b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --API_KEY *****",
+      "launch_command": "node --API_KEY fake-key",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 3,
+      "cli_id": "local-cli.mcp-5617dc18d63d43a0448dbd1322a9d973d6120ea2bd84109c2e64c0d8842e62f4",
+      "name": "redact-03",
+      "identity_hash": "5617dc18d63d43a0448dbd1322a9d973d6120ea2bd84109c2e64c0d8842e62f4",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --password ***** --port 8080",
+      "launch_command": "node --password fake-pass --port 8080",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 4,
+      "cli_id": "local-cli.mcp-924006b97d7d1297a12da9c54265fb2423653bd6d7ea1b3f401fa81f7d5e9802",
+      "name": "redact-04",
+      "identity_hash": "924006b97d7d1297a12da9c54265fb2423653bd6d7ea1b3f401fa81f7d5e9802",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --my-token *****",
+      "launch_command": "node --my-token fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 5,
+      "cli_id": "local-cli.mcp-6a21e088619c31b1219f25e207abd2fc84fa9d0f3dd4ae2d83833910b01069db",
+      "name": "redact-05",
+      "identity_hash": "6a21e088619c31b1219f25e207abd2fc84fa9d0f3dd4ae2d83833910b01069db",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --client_secret=*****",
+      "launch_command": "node --client_secret=fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 6,
+      "cli_id": "local-cli.mcp-743a34760ed4cb4489cf487b58577b74824d1c03ff9e0a629b54a5c02167439b",
+      "name": "redact-06",
+      "identity_hash": "743a34760ed4cb4489cf487b58577b74824d1c03ff9e0a629b54a5c02167439b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node https://mcp.example.test/sse?apikey=*****",
+      "launch_command": "node https://mcp.example.test/sse?apikey=fake-key",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 7,
+      "cli_id": "local-cli.mcp-0f1816ecbea6e30a255ee86cf3276659c178de0c20be302a102f04411aad9817",
+      "name": "redact-07",
+      "identity_hash": "0f1816ecbea6e30a255ee86cf3276659c178de0c20be302a102f04411aad9817",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node Authorization=*****",
+      "launch_command": "node \"Authorization=Bearer fake\"",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 8,
+      "cli_id": "local-cli.mcp-db155449922878ee3885acb9f01ac06885df34df6087a49ec1586c6f8d022721",
+      "name": "redact-08",
+      "identity_hash": "db155449922878ee3885acb9f01ac06885df34df6087a49ec1586c6f8d022721",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --no-token *****",
+      "launch_command": "node --no-token next-is-hidden",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 9,
+      "cli_id": "local-cli.mcp-38a87155d8747fe69c884ea06b850c424abf6fe0c28059370acd1080adaf0eef",
+      "name": "redact-09",
+      "identity_hash": "38a87155d8747fe69c884ea06b850c424abf6fe0c28059370acd1080adaf0eef",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --token",
+      "launch_command": "node --token",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 10,
+      "cli_id": "local-cli.mcp-5dfb0da24c9df659215bc90120e4664e50b07677eabe7f40cfbf266b4fc9ce23",
+      "name": "redact-10",
+      "identity_hash": "5dfb0da24c9df659215bc90120e4664e50b07677eabe7f40cfbf266b4fc9ce23",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node TOKEN=*****",
+      "launch_command": "node TOKEN=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 11,
+      "cli_id": "local-cli.mcp-278b41e1782c42ae8f5656aad8d817e41fb48e789d7c1a01e9f5ee19fe2834b4",
+      "name": "redact-11",
+      "identity_hash": "278b41e1782c42ae8f5656aad8d817e41fb48e789d7c1a01e9f5ee19fe2834b4",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node x=*****",
+      "launch_command": "node x=apikey=y",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 12,
+      "cli_id": "local-cli.mcp-4bd39b320858cf575d7e62aee2d391aab4a4f2ff30218957528d0ec0e28e9e8f",
+      "name": "redact-12",
+      "identity_hash": "4bd39b320858cf575d7e62aee2d391aab4a4f2ff30218957528d0ec0e28e9e8f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --auth *****",
+      "launch_command": "node --auth fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 13,
+      "cli_id": "local-cli.mcp-af239951681810c87fbf826d05a95f026e613b6a3ca55f3c1a116eb21b2c56eb",
+      "name": "redact-13",
+      "identity_hash": "af239951681810c87fbf826d05a95f026e613b6a3ca55f3c1a116eb21b2c56eb",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node bearer fake",
+      "launch_command": "node bearer fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 14,
+      "cli_id": "local-cli.mcp-0dba5f60551ede6f1dd187889136960dc27d300ab43c7928a53d21ea9b2cc499",
+      "name": "redact-14",
+      "identity_hash": "0dba5f60551ede6f1dd187889136960dc27d300ab43c7928a53d21ea9b2cc499",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node secret=*****",
+      "launch_command": "node secret=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 15,
+      "cli_id": "local-cli.mcp-9c4709e4cdd94a0cd8694d4dc9aa544c7d182a64e28338d9bcd6f4753d0b572e",
+      "name": "redact-15",
+      "identity_hash": "9c4709e4cdd94a0cd8694d4dc9aa544c7d182a64e28338d9bcd6f4753d0b572e",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --secretive=1",
+      "launch_command": "node --secretive=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 16,
+      "cli_id": "local-cli.mcp-c4f90535ef1e4095610cb374ba1304b975c80797077437d975ab6e70a3fbf072",
+      "name": "redact-16",
+      "identity_hash": "c4f90535ef1e4095610cb374ba1304b975c80797077437d975ab6e70a3fbf072",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node mysecret=*****",
+      "launch_command": "node mysecret=1",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 17,
+      "cli_id": "local-cli.mcp-d2b0166cf5f13b405a9e5beedf3a4f9c68d7d7530d2a09b53f94eec8e3ffd19e",
+      "name": "redact-17",
+      "identity_hash": "d2b0166cf5f13b405a9e5beedf3a4f9c68d7d7530d2a09b53f94eec8e3ffd19e",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node \"  --token  \" shown",
+      "launch_command": "node \"  --token  \" shown",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 18,
+      "cli_id": "local-cli.mcp-3f7fb56582dc9703725eecf8a67cd0d33d83262e13abdd25355c174854c50c6f",
+      "name": "redact-18",
+      "identity_hash": "3f7fb56582dc9703725eecf8a67cd0d33d83262e13abdd25355c174854c50c6f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --api_key *****",
+      "launch_command": "node --api_key fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 19,
+      "cli_id": "local-cli.mcp-1957c13410041ec8e85bdf0f20e759be9f5a08dfc4791697dc1e279929f8ea7f",
+      "name": "redact-19",
+      "identity_hash": "1957c13410041ec8e85bdf0f20e759be9f5a08dfc4791697dc1e279929f8ea7f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node -token *****",
+      "launch_command": "node -token fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 20,
+      "cli_id": "local-cli.mcp-dc4c965de894cf2152f261d748f16e82aca7f62b029e4d1ff77bf0c4b86400d3",
+      "name": "redact-20",
+      "identity_hash": "dc4c965de894cf2152f261d748f16e82aca7f62b029e4d1ff77bf0c4b86400d3",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --DB-Password *****",
+      "launch_command": "node --DB-Password fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 21,
+      "cli_id": "local-cli.mcp-4e415d30800f9b17ac6d57f5f006d2938d1456e06d590784083578b4587aa68b",
+      "name": "redact-21",
+      "identity_hash": "4e415d30800f9b17ac6d57f5f006d2938d1456e06d590784083578b4587aa68b",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --x-secret=***** --apikey",
+      "launch_command": "node --x-secret=fake --apikey",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 22,
+      "cli_id": "local-cli.mcp-532ef6e6db6f4bf13ad8c3dc2f4cec9ab2141aa019a588571a05ffa5be8c06f6",
+      "name": "redact-22",
+      "identity_hash": "532ef6e6db6f4bf13ad8c3dc2f4cec9ab2141aa019a588571a05ffa5be8c06f6",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node API-KEY=***** --Authorization *****",
+      "launch_command": "node API-KEY=fake --Authorization fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 23,
+      "cli_id": "local-cli.mcp-a442264e9b29b3772c0b0fd80ec9023c3673b2677d1fd023b107b14b0b5a351c",
+      "name": "redact-23",
+      "identity_hash": "a442264e9b29b3772c0b0fd80ec9023c3673b2677d1fd023b107b14b0b5a351c",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --passwd=***** --bearer=*****",
+      "launch_command": "node --passwd= --bearer=fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 24,
+      "cli_id": "local-cli.mcp-40e554f3c650424528654881f37015aceee25f8256b16855f7d6898c0a58c28c",
+      "name": "redact-24",
+      "identity_hash": "40e554f3c650424528654881f37015aceee25f8256b16855f7d6898c0a58c28c",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --ΩMEGA-token *****",
+      "launch_command": "node --ΩMEGA-token fake",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 25,
+      "cli_id": "local-cli.mcp-1aa16e0946d48d8101fcb8aa9604f8e795ebe6843fa09dd5e027b8edb9c21568",
+      "name": "redact-25",
+      "identity_hash": "1aa16e0946d48d8101fcb8aa9604f8e795ebe6843fa09dd5e027b8edb9c21568",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node it's \"a b\" \"\" \"say \\\"hi\\\"\" \"tab\there\" ünïcode \"C:\\Program Files\\x\\\\\"",
+      "launch_command": "node it's \"a b\" \"\" \"say \\\"hi\\\"\" \"tab\there\" ünïcode \"C:\\Program Files\\x\\\\\"",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 26,
+      "cli_id": "local-cli.mcp-9d0e8d2b6d7307dcbbee1b65400823958be219d27986859b83c2ecd5db2f98fe",
+      "name": "redact-26",
+      "identity_hash": "9d0e8d2b6d7307dcbbee1b65400823958be219d27986859b83c2ecd5db2f98fe",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "node --token ***** visible",
+      "launch_command": "node --token --token visible",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 27,
+      "cli_id": "local-cli.mcp-8921f2876d4900694be93d031555c4c8a13e9d93bff3bf3a47c3aaeea3220b3f",
+      "name": "redact-command",
+      "identity_hash": "8921f2876d4900694be93d031555c4c8a13e9d93bff3bf3a47c3aaeea3220b3f",
+      "configuration_hash": "8b24434de0e233be08a31ac69c2661b99c39899b91bf7353faa6d0136083c547",
+      "example_label": "TOKEN=***** --secret *****",
+      "launch_command": "TOKEN=fake --secret fake",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "connection-hash-escapes-non-ascii",
+   "request": {
+    "op": "group",
+    "windows": false,
+    "limit": 100,
+    "servers": [
+     {
+      "harness": "cursor",
+      "name": "sérvér ✓",
+      "command": "node",
+      "args": [],
+      "source_scope": "workspace",
+      "config_path": "~/.cursör/mcp ✓.json",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     },
+     {
+      "harness": "cursor",
+      "name": "quote \" back \\ slash",
+      "command": "node",
+      "args": [],
+      "source_scope": "user",
+      "config_path": "~/x\ny.json",
+      "identity_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "package_name": null,
+      "server_command": "node",
+      "args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Cursor"
+     }
+    ]
+   },
+   "expect": {
+    "servers": [
+     {
+      "index": 1,
+      "cli_id": "local-cli.mcp-eb463ee7e08dfb496e449911989321a4d54d07a0d85595a30719c9ec4061624c",
+      "name": "quote \" back \\ slash",
+      "identity_hash": "eb463ee7e08dfb496e449911989321a4d54d07a0d85595a30719c9ec4061624c",
+      "configuration_hash": "c2ee616c0a1d74d30e018c06a1c59d379be3067f16d742ae5c550517c56ed763",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Cursor"
+     },
+     {
+      "index": 0,
+      "cli_id": "local-cli.mcp-7f9c8f0801d3474d6131940cefce7bec36a28fa0e539672e6a654605edd479b2",
+      "name": "sérvér ✓",
+      "identity_hash": "7f9c8f0801d3474d6131940cefce7bec36a28fa0e539672e6a654605edd479b2",
+      "configuration_hash": "aa966f867f9e67652c9ba8ae83a208c7085ad951896693a39a956fbbd4b9d3f5",
+      "example_label": "node",
+      "launch_command": "node",
+      "source_label": "Cursor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "match-cli-id-unique",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-one",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": 0
+   }
+  },
+  {
+   "name": "match-cli-id-with-matching-hash",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-one",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": 0
+   }
+  },
+  {
+   "name": "match-cli-id-with-other-hash",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-one",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-cli-id-ambiguous",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-two",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-cli-id-ambiguous-narrowed-by-hash",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-two",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": 2
+   }
+  },
+  {
+   "name": "match-cli-id-unknown",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-none",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-legacy-id-falls-back-to-launch",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-aaaaaaaa",
+     "server_command": "node",
+     "args_hash": "h1",
+     "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_label": "Cursor"
+    }
+   },
+   "expect": {
+    "index": 0
+   }
+  },
+  {
+   "name": "match-legacy-id-without-label",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-aaaaaaaa",
+     "server_command": "node",
+     "args_hash": "h1",
+     "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-legacy-id-other-label",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-aaaaaaaa",
+     "server_command": "node",
+     "args_hash": "h1",
+     "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_label": "Codex"
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-non-legacy-id-does-not-fall-back",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-x",
+     "server_command": "node",
+     "args_hash": "h1",
+     "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_label": "Cursor"
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-legacy-id-ambiguous-launch",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-dddddddd",
+     "server_command": "uvx",
+     "args_hash": "h4",
+     "server_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+     "source_label": "Gemini"
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-legacy-id-unicode-prefix",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-éééééééé",
+     "server_command": "nödé",
+     "args_hash": "hé",
+     "server_identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+     "source_label": "Ünïcode"
+    }
+   },
+   "expect": {
+    "index": 6
+   }
+  },
+  {
+   "name": "match-legacy-id-short-hash",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "local-cli.mcp-ab",
+     "server_command": "node",
+     "args_hash": "h1",
+     "server_identity_hash": "ab",
+     "source_label": "Cursor"
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-hash-only-unique",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": 1
+   }
+  },
+  {
+   "name": "match-hash-only-ambiguous",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-empty-cli-id-is-absent",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": "",
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": 2
+   }
+  },
+  {
+   "name": "match-launch-unique",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": "npx",
+     "args_hash": "h3",
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": 2
+   }
+  },
+  {
+   "name": "match-launch-ambiguous",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": "node",
+     "args_hash": "h1",
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-launch-without-args-hash",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": "npx",
+     "args_hash": null,
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-launch-empty-command",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": "",
+     "args_hash": "h3",
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-nothing",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": null,
+     "source_label": null
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  },
+  {
+   "name": "match-label-alone-is-nothing",
+   "request": {
+    "op": "match",
+    "servers": [
+     {
+      "cli_id": "local-cli.mcp-one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Cursor"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "command": "npx",
+      "args_hash": "h2",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-two",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "command": "npx",
+      "args_hash": "h3",
+      "source_label": "Codex"
+     },
+     {
+      "cli_id": "local-cli.mcp-three",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "command": "node",
+      "args_hash": "h1",
+      "source_label": "Claude Code"
+     },
+     {
+      "cli_id": "local-cli.mcp-four",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-five",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "command": "uvx",
+      "args_hash": "h4",
+      "source_label": "Gemini"
+     },
+     {
+      "cli_id": "local-cli.mcp-ü",
+      "identity_hash": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "command": "nödé",
+      "args_hash": "hé",
+      "source_label": "Ünïcode"
+     }
+    ],
+    "query": {
+     "cli_id": null,
+     "server_command": null,
+     "args_hash": null,
+     "server_identity_hash": null,
+     "source_label": "Cursor"
+    }
+   },
+   "expect": {
+    "index": null
+   }
+  }
+ ]
+}

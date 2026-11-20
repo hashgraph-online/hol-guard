@@ -11,13 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import guard_cli_attestation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
-    NATIVE_BOUNDED_HOOK_COMMAND,
-    NATIVE_BOUNDED_HOOK_FEATURE,
-)
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, install_cline_plugin
+from codex_plugin_scanner.guard.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, NATIVE_BOUNDED_HOOK_FEATURE
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.cline_test_support import install_plugin
+from tests.cline_test_support import plugin_source as _plugin_source
+from tests.native_runtime_stamp import stamp_native_runtime
 
 _BEFORE_TOOL = 'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"run_commands"},input:{commands:["ls"]}})'
 
@@ -36,30 +34,10 @@ def _activate_plugin(context: HarnessContext) -> None:
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-    from codex_plugin_scanner.guard.native_runtime import (
-        NativeRuntimeCapabilities,
-        NativeRuntimeIdentity,
-        NativeRuntimeStatus,
-    )
-
-    status = NativeRuntimeStatus(
-        mode="auto",
-        available=True,
-        compatible=True,
-        reason="ok",
-        identity=NativeRuntimeIdentity(path=runtime, size=1, mtime_ns=1, sha256="0" * 64),
-        capabilities=NativeRuntimeCapabilities(
-            protocol_version=1,
-            runtime_version="0",
-            rule_digest="0" * 64,
-            build_sha="0" * 40,
-            target="test",
-            features=(NATIVE_BOUNDED_HOOK_FEATURE,),
-        ),
-    )
-    monkeypatch.delenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", raising=False)
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda *, deadline_monotonic=None: status)
+    # Stamp only the runtime the caller names: a faked runtime status would also
+    # reach the native runner authority that renders the plugin.
+    runtime.write_bytes(b"native runtime")
+    stamp_native_runtime(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
 
 
 def _hook_argv(source: str) -> list[str]:
@@ -98,12 +76,12 @@ def test_plugin_reviews_through_the_native_bridge(tmp_path: Path, monkeypatch: p
     _offer_native(monkeypatch, runtime)
     context = _context(tmp_path)
 
-    manifest = install_cline_plugin(context)
+    manifest = install_plugin(context)
 
     argv = _hook_argv(Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8"))
     assert argv[:2] == [str(runtime), NATIVE_BOUNDED_HOOK_COMMAND]
-    assert argv[3:5] == ["-I", "-c"]
-    config = json.loads(argv[6])
+    assert len(argv) == 3
+    config = json.loads(argv[2])
     assert config["harness"] == "cline"
     assert config["guard_home"] == str(context.guard_home)
     assert config["timeout_seconds"] == 8
@@ -117,10 +95,10 @@ def test_frozen_plugin_keeps_the_guard_cli(tmp_path: Path, monkeypatch: pytest.M
     executable = tmp_path / "HOL Guard"
     executable.write_bytes(b"signed-frozen-core")
     executable.chmod(0o755)
-    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
 
-    manifest = install_cline_plugin(_context(tmp_path))
+    manifest = install_plugin(_context(tmp_path))
 
     argv = _hook_argv(Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8"))
     assert argv == [str(executable), "hook", "--harness", "cline", "--json"]

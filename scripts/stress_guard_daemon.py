@@ -22,16 +22,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state  # noqa: E402
-from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events  # noqa: E402
-from codex_plugin_scanner.guard.daemon.manager import (  # noqa: E402
+from codex_plugin_scanner.guard.native_daemon_manage import (  # noqa: E402
     ensure_guard_daemon,
     guard_daemon_retirement_is_complete,
+    load_authenticated_daemon_state,
+    load_daemon_lifecycle_events,
     load_guard_daemon_auth_token,
     retire_all_guard_daemons_for_home,
 )
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # noqa: E402
 from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS  # noqa: E402
 from scripts.native_slo_contract import clear_proof_environment, proof_environment_violations  # noqa: E402
 from scripts.stress_guard_daemon_runtime import StressExecution as _StressExecution  # noqa: E402
 from scripts.stress_guard_daemon_runtime import finalize_stress_runtime as _finalize_stress_runtime  # noqa: E402
@@ -156,7 +157,7 @@ def _stop_native_runtime(guard_home: Path) -> None:
             ),
             check=False,
             capture_output=True,
-            timeout=2,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired):
         # The stress result is still evaluated from the daemon's observed
@@ -344,7 +345,10 @@ def run_stress(
     if max_hook_latency_ms <= 0:
         raise ValueError("max_hook_latency_ms must be positive")
 
-    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-") as temporary:
+    # A worker the cleanup just stopped can still land one last file in the
+    # home while the directory is removed. That is a cleanup diagnostic, and
+    # like the others it must not replace the measured result.
+    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-", ignore_cleanup_errors=True) as temporary:
         root = Path(temporary)
         store, execution, guard_home = _prepare_stress_execution(root, receipt_count)
         try:

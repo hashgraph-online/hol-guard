@@ -43,7 +43,7 @@ def test_extended_soak_is_scheduled_while_routine_recovery_still_runs() -> None:
     ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     events = ci.get("on", ci.get(True))
     assert "schedule" in events and "workflow_dispatch" in events
-    assert "scheduling-sensitive" in ci["jobs"]["ci-python-312"]["needs"]
+    assert "scheduling-sensitive" in ci["jobs"]["required"]["needs"]
     assert SOAK in ci["jobs"]["coverage"]["steps"][-1].get("run", "") or any(
         SOAK in step.get("run", "") for step in ci["jobs"]["coverage"]["steps"]
     )

@@ -7,6 +7,7 @@
 //! itself lives beside this module, which only shapes what it writes.
 
 use guard_command::effect_decision::GuardAction;
+use guard_command::package_intent_common::GuardArtifact;
 use guard_contracts::{
     BrowserMcpArtifactV1, McpCallProjectionQueryV1, McpToolCallArtifactV1, McpToolRiskInputV1,
 };
@@ -24,36 +25,10 @@ const QUEUE_METADATA_KEYS: [&str; 4] = [
     "command_rule_matches",
     "extension_allow_hint",
 ];
-/// `TEMPORARY_MCP_GRANT_TARGETS`.
-const GRANT_TARGETS: [&str; 3] = ["exact", "category", "server"];
-/// `["once", *TEMPORARY_MCP_GRANT_DURATIONS]`.
-const GRANT_DURATIONS: [&str; 4] = ["once", "15m", "1h", "5h"];
-/// `_HARD_RISK_EXCLUSIONS`.
-const HARD_RISK_EXCLUSIONS: [&str; 10] = [
-    "browser_transfer",
-    "browser_privileged",
-    "browser_sensitive_surface",
-    "browser_shared_profile",
-    "secret_access",
-    "filesystem_access",
-    "command_execution",
-    "destructive_mutation",
-    "privileged_system_mutation",
-    "tool_schema_mismatch",
-];
-/// `_INTENT_CATEGORIES`.
-const INTENT_CATEGORIES: [(&str, &str); 3] = [
-    ("browser.navigation", "browser_navigation"),
-    ("browser.inspect", "browser_inspection"),
-    ("browser.interact", "browser_interaction"),
-];
-/// The one `_INFORMATIONAL_CATEGORIES` entry.
-const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
-
 const ASK_PROJECTION: &str = "mcp_relay_ask_projection";
 
 /// The `McpCallProjection` fields the queued item reads.
-pub(super) struct Projection {
+pub(crate) struct Projection {
     /// `display_launch_target`.
     pub(super) launch_target: String,
     pub(super) risk_summary: String,
@@ -83,6 +58,12 @@ pub(super) fn project(
         }),
     })
     .map_err(|_| ASK_PROJECTION)?;
+    projection(&projected).ok_or(ASK_PROJECTION)
+}
+
+/// The `McpCallProjection` fields the queued item reads, from a call
+/// projected with its artifact.
+pub(crate) fn projection(projected: &Value) -> Option<Projection> {
     let browser = projected.get("browser").filter(|value| !value.is_null());
     // `display_launch_target`: the browser label for a browser navigation,
     // else the plain target.
@@ -100,9 +81,9 @@ pub(super) fn project(
         .unwrap_or_default()
         .to_owned();
     if launch_target.is_empty() || risk_summary.is_empty() {
-        return Err(ASK_PROJECTION);
+        return None;
     }
-    Ok(Projection {
+    Some(Projection {
         launch_target,
         risk_summary,
         browser_intent: browser.and_then(|browser| browser.get("intent")).cloned(),
@@ -119,6 +100,56 @@ pub(super) fn review_item(
     policy_action: &str,
     decision: &Decision,
 ) -> Map<String, Value> {
+    item(
+        &Named::tool(artifact),
+        artifact_hash,
+        signals,
+        projection,
+        policy_action,
+        scanner_evidence(decision),
+    )
+}
+
+/// The artifact fields `review_artifact_payload` names an item with.
+struct Named<'a> {
+    artifact_id: &'a str,
+    name: &'a str,
+    artifact_type: &'a str,
+    source_scope: &'a str,
+    config_path: &'a str,
+}
+
+impl<'a> Named<'a> {
+    fn tool(artifact: &'a McpToolCallArtifactV1) -> Self {
+        Self {
+            artifact_id: &artifact.artifact_id,
+            name: &artifact.name,
+            artifact_type: ARTIFACT_TYPE,
+            source_scope: &artifact.source_scope,
+            config_path: &artifact.config_path,
+        }
+    }
+
+    fn package(artifact: &'a GuardArtifact) -> Self {
+        Self {
+            artifact_id: &artifact.artifact_id,
+            name: &artifact.name,
+            artifact_type: &artifact.artifact_type,
+            source_scope: &artifact.source_scope,
+            config_path: &artifact.config_path,
+        }
+    }
+}
+
+/// The same item with its scanner evidence already drawn.
+fn item(
+    artifact: &Named<'_>,
+    artifact_hash: &str,
+    signals: &[String],
+    projection: &Projection,
+    policy_action: &str,
+    evidence: Vec<Value>,
+) -> Map<String, Value> {
     let mut changed_fields = vec![json!("runtime_tool_call")];
     if projection.browser_intent.is_some() {
         changed_fields.push(json!("runtime_browser_tool_call"));
@@ -127,7 +158,7 @@ pub(super) fn review_item(
     item.insert("artifact_id".to_owned(), json!(artifact.artifact_id));
     item.insert("artifact_name".to_owned(), json!(artifact.name));
     item.insert("artifact_hash".to_owned(), json!(artifact_hash));
-    item.insert("artifact_type".to_owned(), json!(ARTIFACT_TYPE));
+    item.insert("artifact_type".to_owned(), json!(artifact.artifact_type));
     item.insert("source_scope".to_owned(), json!(artifact.source_scope));
     item.insert("config_path".to_owned(), json!(artifact.config_path));
     item.insert("changed_fields".to_owned(), Value::Array(changed_fields));
@@ -141,7 +172,6 @@ pub(super) fn review_item(
     if let Some(intent) = &projection.browser_intent {
         item.insert("browser_intent".to_owned(), intent.clone());
     }
-    let evidence = scanner_evidence(decision);
     if !evidence.is_empty() {
         item.insert("scanner_evidence".to_owned(), Value::Array(evidence));
     }
@@ -208,33 +238,118 @@ pub(super) fn queue_args(
     now: &str,
     redaction_level: &str,
 ) -> Map<String, Value> {
-    let mut artifacts = Map::new();
-    artifacts.insert(artifact_id.to_owned(), Value::Object(queued));
-    let mut args = Map::new();
-    args.insert("harness".to_owned(), json!(request.build.harness));
-    args.insert("items".to_owned(), json!([Value::Object(item)]));
-    args.insert("artifacts".to_owned(), Value::Object(artifacts));
-    args.insert("approval_center_url".to_owned(), json!(center));
-    args.insert("now".to_owned(), json!(now));
-    args.insert("prompt_shown".to_owned(), json!(true));
-    args.insert("redaction_level".to_owned(), json!(redaction_level));
-    args.insert("guard_version".to_owned(), json!(crate::PACKAGE_VERSION));
-    args.insert("cwd".to_owned(), json!(request.cwd));
-    // `continuation_offer_facts` for an operation the proxy offers no
-    // continuation for: every fact is its default and the metadata is empty.
-    args.insert(
-        "continuation".to_owned(),
-        json!({
-            "harness": request.build.harness,
-            "original_hook_attached": false,
-            "wait_deadline": Value::Null,
-            "opaque_target_id": Value::Null,
-            "session_target_verified": false,
-            "now": now,
-            "correlation_candidates": [Value::Null, Value::Null],
-        }),
+    let queue = Queue {
+        harness: &request.build.harness,
+        cwd: json!(request.cwd),
+        prompt_shown: true,
+        center,
+        now,
+        redaction_level,
+    };
+    queue.args(item, artifact_id, queued)
+}
+
+/// The silent inbox row `record_unprompted_review` writes for a
+/// safe-alternative block: `review_artifact_payload` with no connector setup,
+/// queued with no prompt shown.
+pub(crate) fn silent_review_args(
+    queue: &Queue<'_>,
+    artifact: &McpToolCallArtifactV1,
+    artifact_hash: &str,
+    signals: &[String],
+    projection: &Projection,
+    policy_action: &str,
+    evidence: Vec<Value>,
+) -> Map<String, Value> {
+    let item = item(
+        &Named::tool(artifact),
+        artifact_hash,
+        signals,
+        projection,
+        policy_action,
+        evidence,
     );
-    args
+    queue.args(item, &artifact.artifact_id, queue_artifact(artifact))
+}
+
+/// The same silent inbox row for a package request, whose item names the
+/// package artifact and whose queued artifact is that artifact's own
+/// (`package_ask::queue_artifact`).
+pub(crate) fn package_silent_review_args(
+    queue: &Queue<'_>,
+    artifact: &GuardArtifact,
+    artifact_hash: &str,
+    signals: &[String],
+    projection: &Projection,
+    policy_action: &str,
+    evidence: Vec<Value>,
+) -> Option<Map<String, Value>> {
+    let queued = super::package_ask::queue_artifact(artifact).ok()?;
+    let item = item(
+        &Named::package(artifact),
+        artifact_hash,
+        signals,
+        projection,
+        policy_action,
+        evidence,
+    );
+    Some(queue.args(item, &artifact.artifact_id, queued))
+}
+
+/// The `queue_blocked_approvals` arguments shared by every item of one call.
+pub(crate) struct Queue<'a> {
+    pub(crate) harness: &'a str,
+    /// The writing process's working directory, or null.
+    pub(crate) cwd: Value,
+    pub(crate) prompt_shown: bool,
+    pub(crate) center: &'a str,
+    pub(crate) now: &'a str,
+    pub(crate) redaction_level: &'a str,
+}
+
+impl Queue<'_> {
+    fn args(
+        &self,
+        item: Map<String, Value>,
+        artifact_id: &str,
+        queued: Map<String, Value>,
+    ) -> Map<String, Value> {
+        let Self {
+            harness,
+            cwd,
+            prompt_shown,
+            center,
+            now,
+            redaction_level,
+        } = self;
+        let mut artifacts = Map::new();
+        artifacts.insert(artifact_id.to_owned(), Value::Object(queued));
+        let mut args = Map::new();
+        args.insert("harness".to_owned(), json!(harness));
+        args.insert("items".to_owned(), json!([Value::Object(item)]));
+        args.insert("artifacts".to_owned(), Value::Object(artifacts));
+        args.insert("approval_center_url".to_owned(), json!(center));
+        args.insert("now".to_owned(), json!(now));
+        args.insert("prompt_shown".to_owned(), json!(prompt_shown));
+        args.insert("redaction_level".to_owned(), json!(redaction_level));
+        args.insert("guard_version".to_owned(), json!(crate::PACKAGE_VERSION));
+        args.insert("cwd".to_owned(), cwd.clone());
+        // `continuation_offer_facts` for an operation the proxy offers no
+        // continuation for: every fact is its default and the metadata is empty.
+        args.insert(
+            "continuation".to_owned(),
+            json!({
+                "harness": harness,
+                "original_hook_attached": false,
+                "wait_deadline": Value::Null,
+                "opaque_target_id": Value::Null,
+                "session_target_verified": false,
+                "now": now,
+                "correlation_candidates": [Value::Null, Value::Null],
+            }),
+        );
+        args
+    }
 }
 
 /// `_queue_artifact`: the artifact facts the decision owner reads beside the
@@ -273,43 +388,7 @@ fn wire_artifact(artifact: &McpToolCallArtifactV1) -> Value {
 /// `temporary_mcp_approval_payload`: the bounded-grant choices a routine
 /// browser capability offers in the approval center.
 pub(super) fn temporary_mcp_approval(row: &Map<String, Value>) -> Option<Value> {
-    let intent = row.get("browser_intent")?.as_object()?;
-    let identity_hash = nonempty(intent.get("mcp_server_identity_hash"))?;
-    let server_name = nonempty(intent.get("mcp_server_name"))?;
-    let named = nonempty(intent.get("intent"))?;
-    let category = INTENT_CATEGORIES
-        .iter()
-        .find(|(name, _)| *name == named)
-        .map(|(_, category)| *category)?;
-    let risk_categories: Vec<&str> = intent
-        .get("risk_categories")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    if !risk_categories.contains(&category) {
-        return None;
-    }
-    if !risk_categories
-        .iter()
-        .all(|item| *item == category || *item == INFORMATIONAL_CATEGORY)
-    {
-        return None;
-    }
-    let target_label =
-        nonempty(intent.get("target_domain")).or_else(|| nonempty(intent.get("target_origin")));
-    Some(json!({
-        "version": 1,
-        "eligible": true,
-        "server_name": server_name,
-        "server_identity_hash": identity_hash,
-        "category": category,
-        "target_label": target_label,
-        "allowed_targets": GRANT_TARGETS,
-        "allowed_durations": GRANT_DURATIONS,
-        "hard_risk_exclusions": HARD_RISK_EXCLUSIONS,
-    }))
+    crate::temporary_mcp_grant::approval(row.get("browser_intent"))
 }
 
 /// `_nonempty_string`.

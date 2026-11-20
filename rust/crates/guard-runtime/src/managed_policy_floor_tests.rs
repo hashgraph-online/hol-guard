@@ -62,9 +62,17 @@ fn the_floor_locks_every_setting_it_names() {
     assert_eq!(floor.settings["mode"], Value::from("enforce"));
     assert_eq!(floor.settings["security_level"], Value::from("paranoid"));
     assert_eq!(floor.settings["sync"], Value::Bool(false));
+    assert_eq!(
+        floor.settings["approval_surface_policy"],
+        Value::from("native-only")
+    );
     for (name, value) in &floor.settings {
         assert!(floor.locked_settings.contains(name), "{name} is not locked");
-        if name != "mode" && name != "security_level" && name != "sync" {
+        if name != "mode"
+            && name != "security_level"
+            && name != "sync"
+            && name != "approval_surface_policy"
+        {
             assert_eq!(value, &Value::from("block"), "{name}");
         }
     }

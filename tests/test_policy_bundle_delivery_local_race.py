@@ -149,7 +149,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_local_commit(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _mutation: None,
+        lambda _guard_home, _mutation: None,
     )
     proof = issue_extension_control_proof(
         guard_home,

@@ -16,6 +16,12 @@ pub const SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA: &str =
 pub const SKILL_DIRECTORY_IDENTITY_RESULT_SCHEMA: &str = "guard-skill-directory-identity-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const SKILL_DIRECTORY_IDENTITY_FEATURE: &str = "skill-directory-identity-v1";
+/// Capability advertised once the resident also reads a primary skill
+/// document's bounded evidence. A resident that predates the command answers
+/// the feature check instead of failing to parse an unknown command kind.
+pub const SKILL_DOCUMENT_EVIDENCE_FEATURE: &str = "skill-document-evidence-v1";
+/// Schema tag carried by a readable document's evidence.
+pub const SKILL_DOCUMENT_EVIDENCE_SCHEMA: &str = "guard.skill.content-evidence.v1";
 /// Schema tag bound into every identity digest and incomplete-state hash.
 pub const SKILL_DIRECTORY_IDENTITY_SCHEMA: &str = "guard.skill-directory-identity.v1";
 
@@ -113,6 +119,19 @@ pub enum SkillDirectoryCommandV1 {
         path_encoding: String,
         limits: SkillDirectoryLimitsV1,
     },
+    /// Read one primary skill document's bounded evidence.
+    ///
+    /// `skill_document_hex` is the caller's path exactly as it holds it, so
+    /// the name and `skills` ancestor are read from the same components the
+    /// caller sees. `process_directory_hex` is the caller's working directory,
+    /// which a relative path is anchored to before any filesystem call.
+    DocumentEvidence {
+        skill_document_hex: String,
+        process_directory_hex: String,
+        /// Roots the document's `skills` root must sit within, in order.
+        safe_roots_hex: Vec<String>,
+        path_encoding: String,
+    },
     Incomplete {
         reason: SkillDirectoryFailureV1,
     },
@@ -141,6 +160,66 @@ pub struct SkillDirectoryIdentityV1 {
     pub total_bytes: u64,
     pub failure_reason: Option<SkillDirectoryFailureV1>,
     pub incomplete_state_hash: Option<String>,
+}
+
+/// How far the resident got when reading a primary skill document.
+///
+/// The ladder is ordered by how early the read stopped: the first four states
+/// mean nothing was opened, and only `Readable` carries evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillDocumentReadabilityV1 {
+    /// The path is not a `SKILL.md` two or more levels below a `skills` root.
+    NotPrimarySkillDocument,
+    /// The path, or a component between it and its `skills` root, is a symlink.
+    SymlinkRejected,
+    /// The path could not be resolved or opened.
+    Unreadable,
+    /// The `skills` root sits outside the home and workspace roots.
+    OutsideSafeRoots,
+    /// The opened descriptor is a directory, device or other special file.
+    NotRegularFile,
+    /// The file is larger than the analysis ceiling.
+    TooLarge,
+    /// The bytes are not UTF-8.
+    InvalidUtf8,
+    Readable,
+}
+
+impl SkillDocumentReadabilityV1 {
+    /// Wire spelling, which is also the metadata spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotPrimarySkillDocument => "not_primary_skill_document",
+            Self::SymlinkRejected => "symlink_rejected",
+            Self::Unreadable => "unreadable",
+            Self::OutsideSafeRoots => "outside_safe_roots",
+            Self::NotRegularFile => "not_regular_file",
+            Self::TooLarge => "too_large",
+            Self::InvalidUtf8 => "invalid_utf8",
+            Self::Readable => "readable",
+        }
+    }
+}
+
+/// Bounded, non-content evidence about one primary skill document.
+///
+/// Every field other than `readability_status` is present exactly when the
+/// document was read far enough to produce it, so a caller renders what is
+/// here and never derives a missing field itself.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SkillDocumentEvidenceV1 {
+    pub readability_status: SkillDocumentReadabilityV1,
+    /// Size reported by the open descriptor, present once the file was opened.
+    pub byte_length: Option<u64>,
+    /// `sha256:` digest of the exact bytes read.
+    pub content_hash: Option<String>,
+    pub line_count: Option<u64>,
+    pub heading_count: Option<u64>,
+    pub frontmatter_present: Option<bool>,
+    /// Evidence code of the first documented network capability, if any.
+    pub documented_network_capability: Option<String>,
 }
 
 /// One omitted-scope gap found during discovery.

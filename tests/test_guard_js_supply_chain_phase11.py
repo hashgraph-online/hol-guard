@@ -528,6 +528,86 @@ def test_evaluate_package_request_artifact_matches_transitive_js_lockfile_names_
     assert any(package["name"] == "left_pad" for package in result.packages)
 
 
+def test_an_older_yarn_lock_copy_of_a_direct_dependency_is_audited(tmp_path: Path) -> None:
+    # Another package pins lodash 3, so yarn.lock resolves it twice. Requesting
+    # lodash 4 does not make the installed lodash 3 copy a direct target.
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"lodash":"^4.17.21"}}\n')
+    _write_text(
+        workspace_dir / "yarn.lock",
+        """
+# yarn lockfile v1
+
+lodash@^3.10.0:
+  version "3.10.1"
+
+lodash@^4.17.21:
+  version "4.17.21"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(name="lodash", version="3.10.1", default_action="block", recommended_fix_version="4.17.21")
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("yarn add lodash@4.17.21", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    blocked = [package for package in result.packages if package["decision"] == "block"]
+    assert [(package["name"], package["resolvedVersion"]) for package in blocked] == [("lodash", "3.10.1")]
+
+
+def test_an_older_yarn_lock_copy_listed_after_the_direct_one_is_audited(tmp_path: Path) -> None:
+    # The direct selector comes first in yarn.lock, so the lockfile's order
+    # does not say which lodash copy the request resolves to.
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"lodash":"^4.17.21"}}\n')
+    _write_text(
+        workspace_dir / "yarn.lock",
+        """
+# yarn lockfile v1
+
+lodash@^4.17.21:
+  version "4.17.21"
+
+lodash@~3.10.0:
+  version "3.10.1"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(name="lodash", version="3.10.1", default_action="block", recommended_fix_version="4.17.21")
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("yarn add lodash@^4.17.21", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    blocked = [package for package in result.packages if package["decision"] == "block"]
+    assert [(package["name"], package["resolvedVersion"]) for package in blocked] == [("lodash", "3.10.1")]
+
+
 def test_evaluate_package_request_artifact_blocks_local_package_with_install_scripts(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

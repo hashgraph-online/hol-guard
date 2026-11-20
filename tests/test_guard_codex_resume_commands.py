@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_app_server_fake import codex_app_server
@@ -135,92 +133,6 @@ def test_guard_approvals_resume_uses_codex_home_default_socket(
     assert output["status"] == "sent"
     [continuation] = server.continuations()
     assert continuation["params"]["responsesapiClientMetadata"]["hol_guard_request_id"] == "req-cli-home"
-
-
-def test_default_codex_app_server_socket_probe_uses_codex_home(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with tempfile.TemporaryDirectory(prefix="hg-", dir="/tmp") as root:
-        codex_home = Path(root)
-        socket_path = codex_home / "app-server-control" / "app-server-control.sock"
-        socket_path.parent.mkdir(parents=True)
-        with codex_app_server_module.socket.socket(
-            codex_app_server_module.socket.AF_UNIX,
-            codex_app_server_module.socket.SOCK_STREAM,
-        ) as listener:
-            listener.bind(str(socket_path))
-        connect_paths: list[str] = []
-
-        class _FakeSocket:
-            def __enter__(self) -> _FakeSocket:
-                return self
-
-            def __exit__(self, *_args: object) -> None:
-                return None
-
-            def settimeout(self, _timeout: float) -> None:
-                return None
-
-            def connect(self, path: str) -> None:
-                connect_paths.append(path)
-
-        monkeypatch.setattr(codex_app_server_module.socket, "socket", lambda *_args, **_kwargs: _FakeSocket())
-
-        assert (
-            codex_app_server_module.default_codex_app_server_socket_path(environ={"CODEX_HOME": str(codex_home)})
-            == socket_path
-        )
-        assert codex_app_server_module.default_codex_app_server_socket_available(
-            environ={"CODEX_HOME": str(codex_home)}
-        )
-        assert connect_paths == [str(socket_path)]
-
-
-def test_codex_resume_metadata_extracts_workspace_and_nested_command() -> None:
-    metadata = codex_app_server_module.codex_resume_metadata_from_hook_payload(
-        {
-            "session_id": "thread-123",
-            "turn_id": "turn-123",
-            "cwd": "/tmp/project",
-            "model": "gpt-5.3",
-            "tool_name": "Bash",
-            "tool_input": {"command": "npm install is-even"},
-        },
-        environ={"CODEX_HOME": "/tmp/codex-home"},
-    )
-
-    assert metadata == {
-        "codex_thread_id": "thread-123",
-        "codex_turn_id": "turn-123",
-        "codex_home": "/tmp/codex-home",
-        "codex_model": "gpt-5.3",
-        "workspace": "/tmp/project",
-        "command_text": "npm install is-even",
-    }
-
-
-def test_codex_resume_metadata_ignores_hook_controlled_socket_and_home() -> None:
-    metadata = codex_app_server_module.codex_resume_metadata_from_hook_payload(
-        {
-            "session_id": "thread-123",
-            "codex_app_server_socket": "/opt/guard-test/attacker.sock",
-            "codex_home": "/opt/guard-test/attacker-home",
-        },
-        environ={
-            "CODEX_APP_SERVER_SOCKET": "/trusted/app-server.sock",
-            "CODEX_HOME": "/trusted/codex-home",
-        },
-    )
-
-    assert metadata["codex_app_server_socket"] == "/trusted/app-server.sock"
-    assert metadata["codex_home"] == "/trusted/codex-home"
-
-
-def test_codex_app_server_rejects_regular_file_as_control_socket(tmp_path: Path) -> None:
-    fake_socket = tmp_path / "app-server.sock"
-    fake_socket.write_text("not a socket", encoding="utf-8")
-
-    assert codex_app_server_module._is_trusted_local_socket(fake_socket) is False
 
 
 def test_guard_doctor_codex_reports_resume_diagnostics(

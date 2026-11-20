@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
     ResolverFailureCode,
 )
+from tests.native_extension_control_support import resolve_extension_controls
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ def _resolve(
     surface: ControlSurface = ControlSurface.COMMAND_EVALUATION,
     authority_failure: ResolverFailureCode | None = None,
 ) -> bridge.ControlAnswer:
-    return bridge.resolve_extension_controls(
+    return resolve_extension_controls(
         layers,
         registry,
         extension_ids=extension_ids,
@@ -124,8 +125,9 @@ def test_composition_is_permutation_independent_and_disable_dominates_enable(hom
     composed = compositions.pop()
     assert composed.global_lockdown is False
     assert composed.failures == ()
-    assert composed.state_for(ControlTargetKind.EXTENSION, extension_id) is ControlState.DISABLED
-    assert composed.state_for(ControlTargetKind.PERMISSION, permission_id) is ControlState.DISABLED
+    states = {control.target: control.state for control in composed.controls}
+    assert states[ControlTarget(ControlTargetKind.EXTENSION, extension_id)] is ControlState.DISABLED
+    assert states[ControlTarget(ControlTargetKind.PERMISSION, permission_id)] is ControlState.DISABLED
 
 
 def test_composition_reports_duplicates_instead_of_choosing_one(home: Path) -> None:

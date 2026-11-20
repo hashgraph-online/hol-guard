@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.synced_policy import (
     validated_synced_policy_bundle,
 )
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _WORKSPACE_ID = "workspace-1"
 _INACTIVE_ARTIFACT_ID = "codex:project:inactive-signed-allow"
@@ -103,10 +103,7 @@ def _activate_bundle(store: GuardStore, bundle: dict[str, object], now: str) -> 
     )
 
 
-def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     prior_now = "2026-07-17T00:00:00Z"
     prior_state: dict[str, dict[str, object] | list[object]] = {
@@ -129,7 +126,8 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
     for state_key, payload in prior_state.items():
         store.set_sync_payload(state_key, payload, prior_now)
 
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -155,20 +153,14 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
     rows_before = _sorted_policy_rows(store)
     state_before = {state_key: store.get_sync_payload(state_key) for state_key in prior_state}
 
-    original_replace = store._replace_remote_policy_rows_locked  # pyright: ignore[reportPrivateUsage]
-
-    def replace_rows_and_arm_failure(
-        connection: sqlite3.Connection,
-        rows: Sequence[tuple[object, ...]],
-    ) -> None:
-        original_replace(connection, rows)
-        # Fail only after apply_policy_bundle_authority has updated every
-        # authority-bearing state key above. The last-good write is deliberately
-        # ordered last when update_last_good=True, making this a mid-transaction
-        # failure instead of a pre-write validation failure.
+    # Fail after the activation has replaced the rows and written every other
+    # authority-bearing state key: the payloads land in key order, and the
+    # last-good bundle sorts after them, so this is a mid-transaction failure
+    # instead of a pre-write validation failure.
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         _ = connection.execute(
             """
-            create temp trigger inject_policy_bundle_activation_failure
+            create trigger inject_policy_bundle_activation_failure
             before insert on sync_state
             when new.state_key = 'policy_bundle_last_good'
             begin
@@ -177,9 +169,7 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
             """
         )
 
-    monkeypatch.setattr(store, "_replace_remote_policy_rows_locked", replace_rows_and_arm_failure)
-
-    with pytest.raises(sqlite3.IntegrityError, match="injected policy bundle activation failure"):
+    with pytest.raises(RuntimeError):
         store.apply_policy_bundle_authority(
             [
                 PolicyDecision(
@@ -292,7 +282,8 @@ def test_upgrade_era_unsigned_remote_allow_cannot_resolve_or_be_claimed(
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = f"codex:project:legacy-{source}-allow"
     artifact_hash = f"hash-{source}"
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -317,7 +308,8 @@ def test_upgrade_era_unsigned_remote_allow_cannot_resolve_or_be_claimed(
     )
     assert lookup["decision"] is None
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             artifact_hash,
@@ -366,7 +358,8 @@ def test_signed_inactive_cached_bundle_cannot_enforce_defaults_or_rows(
     assert len(decisions) == 1
     assert decisions[0].artifact_id == _INACTIVE_ARTIFACT_ID
     assert decisions[0].action == "allow"
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         decisions,
         "2026-07-18T00:00:00Z",
         remote_write_authorized=True,
@@ -384,7 +377,8 @@ def test_signed_inactive_cached_bundle_cannot_enforce_defaults_or_rows(
     )
     assert lookup["decision"] is None
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             _INACTIVE_ARTIFACT_ID,
             now="2026-07-18T00:01:00Z",

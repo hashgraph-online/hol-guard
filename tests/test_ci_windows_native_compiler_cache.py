@@ -24,8 +24,7 @@ def test_windows_runtime_cache_miss_still_builds_the_exact_release_binary() -> N
     assert cache["with"]["version"] == "v0.18.0"
     assert not any(step.get("continue-on-error", False) for step in (cache, build, upload))
     assert (
-        "cargo build --manifest-path rust/Cargo.toml --locked --release "
-        "-p hol-guard-runtime --bin hol-guard-runtime"
+        "cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime"
     ) in build["run"]
     assert upload["with"]["path"] == "rust/target/release/hol-guard-runtime.exe"
     assert upload["with"]["if-no-files-found"] == "error"
@@ -49,6 +48,7 @@ def test_only_trusted_main_pushes_write_windows_compiler_cache() -> None:
         "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     )
     restore = next(step for step in steps if step.get("id") == "runtime-cache")
-    assert "hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**'" in restore["with"]["key"]
-    assert "env.CARGO_PROFILE_RELEASE_LTO" in restore["with"]["key"]
-    assert "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS" in restore["with"]["key"]
+    key = restore["with"]["key"]
+    assert "hashFiles('rust/**', 'integrations/cigar/**', 'contributions/**', 'contracts/**', 'spec/**'" in key
+    assert "env.CARGO_PROFILE_RELEASE_LTO" in key
+    assert "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS" in key

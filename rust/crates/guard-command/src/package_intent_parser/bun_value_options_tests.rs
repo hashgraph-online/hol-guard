@@ -242,7 +242,60 @@ fn held(
         serde_json::Value::String(decision.into()),
     );
     evaluation.packages.push(package);
-    crate::supply_chain_package_eval::hold_unresolved_package_cwd(artifact, evaluation)
+    crate::supply_chain_package_eval::hold_unresolved_package_cwd(
+        &UnnamedEcosystem,
+        artifact,
+        evaluation,
+    )
+}
+
+/// The hold rebuilds each package's evidence id, which needs the identity
+/// seam. These cases are about the decision it leaves behind, so the seam
+/// names nothing and every package falls back to its opaque digest.
+struct UnnamedEcosystem;
+
+impl crate::supply_chain_package_eval::PackageIdentityApi for UnnamedEcosystem {
+    fn canonical_package_identity(
+        &self,
+        ecosystem: &str,
+        _namespace: Option<&str>,
+        _name: &str,
+        _version: &str,
+    ) -> crate::supply_chain_package_eval::EvalResult<
+        crate::supply_chain_package_eval::CanonicalPackageIdentity,
+    > {
+        Err(crate::supply_chain_package_eval::EvalError::Validation(
+            format!("no canonical identity for {ecosystem}"),
+        ))
+    }
+
+    fn parse_package_identity(
+        &self,
+        ecosystem: &str,
+        _package_name: &str,
+        _version: &str,
+    ) -> crate::supply_chain_package_eval::EvalResult<
+        crate::supply_chain_package_eval::CanonicalPackageIdentity,
+    > {
+        Err(crate::supply_chain_package_eval::EvalError::Validation(
+            format!("no canonical identity for {ecosystem}"),
+        ))
+    }
+
+    fn normalize_ecosystem(
+        &self,
+        ecosystem: &str,
+    ) -> crate::supply_chain_package_eval::EvalResult<String> {
+        Ok(ecosystem.to_string())
+    }
+
+    fn normalize_qualified_package_name(
+        &self,
+        _ecosystem: &str,
+        package_name: &str,
+    ) -> crate::supply_chain_package_eval::EvalResult<String> {
+        Ok(package_name.to_string())
+    }
 }
 
 #[test]
@@ -295,6 +348,39 @@ fn bun_add_outside_the_workspace_keeps_the_package_and_stays_in_review() {
     let blocked = held(&artifact, "block");
     assert_eq!(blocked.decision, "block");
     assert_eq!(blocked.packages[0]["decision"], "block");
+}
+
+/// Finalization derives an evidence id for every package worth recording, and
+/// an allowed package is not one. The hold raises it to `ask`, so the id the
+/// recorder writes has to be derived again once the hold has run.
+#[test]
+fn a_package_the_unresolved_cwd_raises_gains_its_evidence_id() {
+    let tree = TempTree::new();
+    let workspace = tree.0.join("workspace");
+    let outside = tree.0.join("outside");
+    write_project(&workspace, "{}\n", "bun.lock", "caller-lock\n");
+    write_project(
+        &outside,
+        "{\"name\":\"outside\"}\n",
+        "bun.lock",
+        "tampered\n",
+    );
+    let outside = outside.canonicalize().expect("outside");
+    let command = format!("bun add --cwd {} left-pad", outside.display());
+    let intent =
+        parse_package_intent(&command, Some(&workspace), None, None, None).expect("bun add intent");
+    let artifact = build_package_request_artifact("codex", &intent, "hol-guard.toml", "project");
+
+    let raised = held(&artifact, "allow");
+    assert_eq!(raised.packages[0]["decision"], "ask");
+    assert_eq!(raised.evidence_ids.len(), 1);
+    assert!(raised.evidence_ids[0].starts_with("evidence-"));
+
+    // The id carries the package's decision, so the one an already-blocked
+    // package keeps is not the one a raised package is given.
+    let blocked = held(&artifact, "block");
+    assert_eq!(blocked.evidence_ids.len(), 1);
+    assert_ne!(blocked.evidence_ids[0], raised.evidence_ids[0]);
 }
 
 #[test]

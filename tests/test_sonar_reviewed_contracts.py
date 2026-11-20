@@ -5,19 +5,19 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from typing import get_args
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
 from codex_plugin_scanner.ecosystems.kimi import _path_values
 from codex_plugin_scanner.guard import action_lattice
-from codex_plugin_scanner.guard.adapters.claude_hook_config import handler_identity
+from codex_plugin_scanner.guard import native_daemon_client as client
 from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
-from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
-from codex_plugin_scanner.guard.daemon import client
-from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
-from codex_plugin_scanner.guard.package_execution_context import PackageExecutionContext
-from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact
+from codex_plugin_scanner.guard.package_execution_context import (
+    PackageExecutionContext,
+    build_package_execution_context,
+)
 from codex_plugin_scanner.guard.store_workflow_capability_secret_control import (
     StoreWorkflowCapabilitySecretControlMixin,
 )
@@ -28,35 +28,6 @@ from codex_plugin_scanner.guard.store_workflow_capability_secret_control import 
 )
 def test_manifest_paths_are_a_variadic_collection(value, expected) -> None:
     assert _path_values(value) == expected
-
-
-def test_handler_identity_is_a_hashable_tagged_key_not_an_unpacking_record() -> None:
-    identities = {
-        handler_identity({"type": "http", "url": "http://localhost/hook"}),
-        handler_identity({"type": "command", "command": "guard", "args": []}),
-        handler_identity({"type": "command", "command": "guard", "args": ["hook", "--json"]}),
-        handler_identity({"type": "command", "command": "guard hook", "shell": "bash"}),
-    }
-    assert len(identities) == 4
-    assert {len(identity) for identity in identities} == {2, 3, 5}
-
-
-@pytest.mark.parametrize("matches", [False, True])
-def test_browser_wait_identity_branch_is_reachable(monkeypatch: pytest.MonkeyPatch, matches: bool) -> None:
-    identity = {"pid": 42, "startToken": "fixture"}
-    check = Mock(return_value=matches)
-    monkeypatch.setattr(interaction, "process_identity_matches", check)
-    result = interaction._codex_bridge_wait_process({interaction.CODEX_BROWSER_WAIT_PROCESS_KEY: identity})
-    assert result is (identity if matches else None)
-    check.assert_called_once_with(identity)
-
-
-@pytest.mark.parametrize("payload", [None, {}, {interaction.CODEX_BROWSER_WAIT_PROCESS_KEY: "not-an-identity"}])
-def test_browser_wait_rejects_missing_or_non_dict_identity(monkeypatch: pytest.MonkeyPatch, payload) -> None:
-    check = Mock(side_effect=AssertionError("malformed identity reached matcher"))
-    monkeypatch.setattr(interaction, "process_identity_matches", check)
-    assert interaction._codex_bridge_wait_process(payload) is None
-    check.assert_not_called()
 
 
 class _SecretControl(StoreWorkflowCapabilitySecretControlMixin):
@@ -97,13 +68,58 @@ def test_action_lattice_import_guard_is_false_for_consistent_declarations() -> N
     assert declared != frozenset((*GUARD_ACTION_VALUES, "unrecognized_future_action"))
 
 
+def _portable_package_context(tmp_path: Path) -> PackageExecutionContext:
+    """A context the resident accepts.
+
+    The resident rebuilds the context digest from the components it is handed
+    and drops any evidence that does not reproduce it, so a hand-written
+    ``PackageExecutionContext`` never survives the trip.  This builds a real
+    one the same way the package request path does.
+    """
+
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / ".git").mkdir()
+    (workspace_dir / ".git" / "config").write_text('[remote "origin"]\nurl = https://example.test/app.git\n')
+    (workspace_dir / "package.json").write_text('{"name":"sonar-contract"}\n')
+    executable = tmp_path / "bin" / "npm"
+    executable.parent.mkdir(parents=True, exist_ok=True)
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    (tmp_path / "home").mkdir()
+    context = build_package_execution_context(
+        workspace_dir=workspace_dir,
+        artifact=GuardArtifact(
+            artifact_id="guard-cli:project:package-request:fixture",
+            name="npm install left-pad",
+            harness="guard-cli",
+            artifact_type="package_request",
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            metadata={
+                "package_manager": "npm",
+                "package_executable": "npm",
+                "manifest_paths": ["package.json"],
+                "lockfile_paths": [],
+            },
+        ),
+        environment={"HOME": str(tmp_path / "home"), "PATH": str(executable.parent)},
+    )
+    assert context.portable is True
+    return context
+
+
 @pytest.mark.parametrize("artifact_hash", [None, "", "  ", "unknown", "a" * 64])
-def test_optional_package_hash_guard_rejects_only_invalid_hashes(artifact_hash: str | None) -> None:
+def test_optional_package_hash_guard_rejects_only_invalid_hashes(
+    artifact_hash: str | None,
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
     scope = package_request_portable_workspace_scope(
         artifact_id="guard-cli:project:package-request:fixture",
         artifact_type="package_request",
         artifact_hash=artifact_hash,
-        execution_context=PackageExecutionContext("b" * 64, True, ()),
+        execution_context=_portable_package_context(tmp_path),
     )
     if artifact_hash == "a" * 64:
         assert scope is not None and scope.startswith("package-request-workspace:v2:")
@@ -125,14 +141,3 @@ def test_identity_timeout_default_is_exact_not_approximate(
         loader.assert_called_once_with(tmp_path)
     else:
         loader.assert_called_once_with(tmp_path, health_timeout=timeout)
-
-
-def test_route_probe_does_not_transmit_application_data(monkeypatch: pytest.MonkeyPatch) -> None:
-    socket = MagicMock()
-    socket.__enter__.return_value = socket
-    socket.getsockname.return_value = ("10.0.0.2", 12345)
-    monkeypatch.setattr(runner.socket, "socket", Mock(return_value=socket))
-    assert runner._safe_private_ip() == "10.0.0.2"
-    socket.send.assert_not_called()
-    socket.sendto.assert_not_called()
-    socket.sendall.assert_not_called()

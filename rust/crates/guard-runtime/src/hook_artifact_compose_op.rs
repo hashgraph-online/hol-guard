@@ -17,6 +17,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Map, Value};
 
+use crate::hook_artifact_compose_codex_live_allow as codex_live_allow;
 use crate::hook_artifact_compose_package_firewall as package_firewall;
 use crate::hook_artifact_compose_package_firewall_entitlement as package_firewall_entitlement;
 use crate::hook_artifact_compose_policy_lookup as lookup;
@@ -110,6 +111,12 @@ pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Result<Value, Strin
         HookArtifactComposeQueryV1::PolicyComposition(query) => {
             policy_tail::policy_composition(query)
         }
+        HookArtifactComposeQueryV1::CodexLiveAllowPrecheck(query) => {
+            codex_live_allow::codex_live_allow_precheck(query)
+        }
+        HookArtifactComposeQueryV1::CodexLiveAllowSettle(query) => {
+            codex_live_allow::codex_live_allow_settle(query)
+        }
     })
 }
 
@@ -172,10 +179,17 @@ fn native_edge_floor(
     let event = edge.event_name.as_deref();
     if event == Some("PreToolUse")
         && edge.package_request
-        && edge.reason_code.as_str() == Some("native_command_extension_evaluation_failed")
+        && matches!(
+            edge.reason_code.as_str(),
+            Some(
+                "native_command_extension_evaluation_failed"
+                    | "native_command_extension_evaluation_timed_out"
+            )
+        )
     {
         // Package requests have their own fail-closed evaluator. A generic
-        // command-control failure is not a second package verdict.
+        // command-control failure, or a check that ran out of time, is not a
+        // second package verdict.
         return None;
     }
     match event {

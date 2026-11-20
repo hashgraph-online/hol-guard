@@ -87,6 +87,18 @@
   {
    "expected": "local_private",
    "value": "http://[fe80::1%25eth0]/zone"
+  },
+  {
+   "expected": "remote_public",
+   "value": "https://user:pass@example.com/mcp?token=value"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://172.20.4.5:8080/mcp"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://[not-an-ip]/mcp"
   }
  ],
  "python_version": "3.12.12",
@@ -211,6 +223,22 @@
     "X-Credentıal",
     "X-Tıken"
    ]
+  },
+  {
+   "expected": [
+    [
+     "authorization",
+     "present_redacted"
+    ],
+    [
+     "x-trace",
+     "present"
+    ]
+   ],
+   "names": [
+    "Authorization",
+    "X-Trace"
+   ]
   }
  ],
  "redact_url": [
@@ -329,6 +357,50 @@
   {
    "expected": "",
    "url": ""
+  },
+  {
+   "expected": "http://",
+   "url": "http://user:private-value@"
+  },
+  {
+   "expected": "https:///api?token=redacted&mode=fast",
+   "url": "https://user:private-value@/api?token=private-value&mode=fast"
+  },
+  {
+   "expected": "https://example.test:8443/api",
+   "url": "https://user:private-value@example.test:8443/api"
+  },
+  {
+   "expected": "http://[::1]:8080/api",
+   "url": "http://user:private-value@[::1]:8080/api"
+  },
+  {
+   "expected": "http://[::1]:8080/api?token=redacted&mode=fast",
+   "url": "http://[::1]:8080/api?token=private-value&mode=fast"
+  },
+  {
+   "expected": "https://example.com/mcp?token=redacted&mode=safe",
+   "url": "https://user:pass@example.com/mcp?token=value&mode=safe"
+  },
+  {
+   "expected": "https://example.com/mcp?auth=redacted&mode=safe",
+   "url": "https://example.com/mcp?auth=value&mode=safe"
+  },
+  {
+   "expected": "https://example.com/mcp?mode=safe&token=redacted",
+   "url": "https://example.com/mcp?mode=safe;token=value"
+  },
+  {
+   "expected": "http://localhost/mcp?auth=redacted",
+   "url": "http://localhost:${PORT}/mcp?auth=value"
+  },
+  {
+   "expected": "http://[2001:db8::1]:8080/mcp?token=redacted",
+   "url": "http://[2001:db8::1]:8080/mcp?token=value"
+  },
+  {
+   "expected": "malformed_url_redacted",
+   "url": "http://[not-an-ip]/mcp?token=value"
   }
  ],
  "urlsplit": [

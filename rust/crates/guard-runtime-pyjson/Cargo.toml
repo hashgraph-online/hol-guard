@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 # Order-preserving JSON with CPython `json.loads` semantics for the native
 # runtime. Extracted from hol-guard-runtime so the Python-compatibility layer

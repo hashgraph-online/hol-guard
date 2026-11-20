@@ -74,3 +74,9 @@ def test_schema_rejects_unknown_top_level_fields() -> None:
     payload = _fixture("solo-macos")
     payload["extra"] = True
     assert not Draft202012Validator(_schema()).is_valid(payload)
+
+
+def test_schema_harness_enum_covers_every_sender_harness_id() -> None:
+    from codex_plugin_scanner.guard.runtime.fleet_posture_common import HARNESS_IDS
+
+    assert set(_schema()["$defs"]["harness"]["enum"]) == set(HARNESS_IDS)

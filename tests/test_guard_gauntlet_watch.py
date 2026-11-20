@@ -1,6 +1,8 @@
 """Judge and fixture contracts; only live-agent evidence proves product behavior."""
 
+import json
 from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -133,3 +135,12 @@ def test_watch_cannot_pass_from_an_ordinary_allow_or_incomplete_proof(change):
     else:
         pre["probe_request_id"] = "transition-hook-" + "d" * 32
     assert assess_case(scenario(), case)["outcome"] == "harness-error"
+
+
+def test_watch_command_is_pinned_as_a_stopped_gate_case():
+    """Watch only proves something when enforcement would have stopped its command."""
+    gate = json.loads((Path(__file__).resolve().parent / "fixtures" / "benign_false_positive_gate.json").read_text())
+    pinned = [case for case in gate["cases"] if case["tool_input"].get("command") == WATCH_COMMAND]
+    assert [case["expect"] for case in pinned] == ["not_allow"]
+    assert "omp" in pinned[0]["harnesses"]
+    assert WATCH_OUTPUT in WATCH_COMMAND

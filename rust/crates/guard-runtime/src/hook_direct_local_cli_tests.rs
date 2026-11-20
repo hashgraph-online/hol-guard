@@ -1,11 +1,12 @@
 use super::block::{Launch, ReviewVerdict};
 use super::{
-    custom_rule_response, launch_cwd, launch_for, pre_tool_command, review_grant, Launched,
-    RuleCheck,
+    custom_rule_response, launch_cwd, launch_for, pre_tool_command, review_grant, LaunchEnv,
+    Launched, RuleCheck,
 };
 use crate::context_digest_package_scripts::package_json_scripts;
 use guard_contracts::LocalCliIdentitySourceV1;
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -79,6 +80,15 @@ fn the_launch_directory_must_exist_and_be_absolute() {
 struct Case {
     workspace: String,
     guard_home: String,
+    env: BTreeMap<String, String>,
+}
+
+/// The environment the daemon publishes with its binding, reduced to the
+/// test process's `PATH`. The resident's own environment has none.
+fn daemon_env() -> BTreeMap<String, String> {
+    std::env::var("PATH")
+        .map(|path| BTreeMap::from([("PATH".to_owned(), path)]))
+        .unwrap_or_default()
 }
 
 impl Case {
@@ -104,7 +114,15 @@ impl Case {
         Self {
             workspace,
             guard_home,
+            env: daemon_env(),
         }
+    }
+
+    fn launch_env(&self) -> Option<LaunchEnv<'_>> {
+        Some(LaunchEnv {
+            user_home: &self.workspace,
+            env: &self.env,
+        })
     }
 
     fn check(&self, command: &str, recording_only: bool) -> Result<Option<Value>, ()> {
@@ -128,6 +146,7 @@ impl Case {
                 home_dir: &self.workspace,
                 guard_home: &self.guard_home,
                 recording_only,
+                launch_env: self.launch_env(),
             },
         )
     }
@@ -142,6 +161,7 @@ impl Case {
             home_dir: &self.workspace,
             guard_home: &self.guard_home,
             recording_only: false,
+            launch_env: self.launch_env(),
         })
     }
 }
@@ -194,7 +214,8 @@ fn an_invocation_without_package_tokens_reads_the_daemon_shell_model() {
             command,
             cwd: workspace.clone(),
         }
-        .invocation_tokens(&workspace)
+        .invocation(&workspace)
+        .0
     };
     assert_eq!(
         launched("./bin/demo db migrate", "demo", "executable", None),
@@ -215,8 +236,13 @@ fn an_invocation_without_package_tokens_reads_the_daemon_shell_model() {
 fn only_a_command_that_launches_a_local_cli_reads_a_grant() {
     let case = Case::new("launches", "");
     let launches = |payload: Value| {
-        launch_for(&object(payload), &case.workspace, &case.workspace)
-            .map(|launch| launch.is_some())
+        launch_for(
+            &object(payload),
+            &case.workspace,
+            &case.workspace,
+            case.launch_env(),
+        )
+        .map(|launch| launch.is_some())
     };
     assert_eq!(
         launches(json!({ "tool_input": { "command": "npm run build" } })),
@@ -311,8 +337,36 @@ fn gated(
             home_dir: &case.workspace,
             guard_home: &case.guard_home,
             recording_only,
+            launch_env: case.launch_env(),
         },
     )
+}
+
+#[test]
+fn a_launch_the_daemon_published_no_environment_for_defers() {
+    let case = Case::new("unpublished", "");
+    let answered = json!({ "result": { "decision": "allow", "minimum_action": "allow" } });
+    let unpublished = |command: &str| {
+        let payload = object(json!({ "tool_input": { "command": command } }));
+        custom_rule_response(
+            &answered,
+            &RuleCheck {
+                payload: Some(&payload),
+                harness: "codex",
+                workspace: &case.workspace,
+                home_dir: &case.workspace,
+                guard_home: &case.guard_home,
+                recording_only: false,
+                launch_env: None,
+            },
+        )
+    };
+    // A package script names its identity from `package.json`, so it needs
+    // no environment.
+    assert_eq!(unpublished("npm run build"), Ok(None));
+    // Any other launch resolves against the daemon's `PATH`. The resident
+    // never substitutes its own, so without the daemon's the daemon checks.
+    assert_eq!(unpublished("pwd"), Err(()));
 }
 
 #[test]

@@ -16,15 +16,8 @@ from codex_plugin_scanner.guard.action_lattice import (
     normalize_guard_action,
     normalize_guard_action_result,
 )
-from codex_plugin_scanner.guard.config import (
-    GuardConfig,
-    _coerce_risk_action_map,
-    load_guard_config,
-)
-from codex_plugin_scanner.guard.mdm.policy import _merge_strongest_actions, _strongest_security_value
+from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
-from codex_plugin_scanner.guard.policy.engine import decide_action
-from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation
 
 EXPECTED_LATTICE: tuple[GuardAction, ...] = (
     "allow",
@@ -35,7 +28,7 @@ EXPECTED_LATTICE: tuple[GuardAction, ...] = (
     "block",
 )
 ACTION_LATTICE_PAIR_CASES = tuple(product(EXPECTED_LATTICE, repeat=2))
-ACTION_LATTICE_COMPOSERS = (most_restrictive_guard_action, _merge_strongest_actions, _strongest_security_value)
+ACTION_LATTICE_COMPOSERS = (most_restrictive_guard_action,)
 
 
 def test_lattice_is_exhaustive_ordered_and_contiguous() -> None:
@@ -65,12 +58,6 @@ def test_most_restrictive_composition_is_idempotent_and_associative() -> None:
         )
 
 
-@pytest.mark.parametrize("weaker", ("allow", "warn", "review", "require-reapproval"))
-def test_sandbox_required_cannot_be_downgraded_by_package_or_managed_composition(weaker: GuardAction) -> None:
-    assert _merge_strongest_actions("sandbox-required", weaker) == "sandbox-required"
-    assert _strongest_security_value(weaker, "sandbox-required") == "sandbox-required"
-
-
 @pytest.mark.parametrize("value", ("future-action", "", None, 7, False, {"action": "allow"}))
 def test_unknown_inputs_fail_closed_with_stable_diagnostics(value: object) -> None:
     result = normalize_guard_action_result(value)
@@ -96,49 +83,11 @@ def test_legacy_product_ask_alias_normalizes_to_exact_review_without_contract_er
 def test_unknown_action_never_loses_to_allow_or_warn() -> None:
     assert most_restrictive_guard_action("future-action", "allow") == "review"
     assert most_restrictive_guard_action("warn", "future-action") == "review"
-    assert _merge_strongest_actions("sandbox-required", "future-action") == "block"
-    assert _merge_strongest_actions(None, "future-action") == "block"
-
-
-def test_policy_engine_present_unknown_actions_do_not_fall_through_to_allow(tmp_path) -> None:
-    config = GuardConfig(guard_home=tmp_path / "guard", workspace=None, default_action="allow")
-
-    assert decide_action("future-action", "allow", config, changed=False) == "require-reapproval"
-    assert decide_action(None, "future-action", config, changed=False) == "require-reapproval"
 
 
 def test_unknown_fallback_must_itself_be_a_known_action() -> None:
     with pytest.raises(ValueError, match="unknown_action is not a GuardAction"):
         normalize_guard_action("future-action", unknown_action="future-fallback")  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize("cached_action", (None, "", "future-action", 7))
-def test_cached_package_actions_fail_closed_and_keep_diagnostics(cached_action: object) -> None:
-    payload: dict[str, object] = {
-        "decision": "monitor",
-        "policy_action": cached_action,
-        "reasons": [],
-        "packages": [],
-        "risk_summary": "cached evaluation",
-        "user_copy": {
-            "title": "Cached package",
-            "summary": "Cached package evaluation.",
-            "harness_message": "Cached package evaluation.",
-        },
-    }
-
-    evaluation = PackageRequestEvaluation.from_cache_dict(
-        payload,
-        package_intent_hash="sha256:intent",
-        policy_version="policy-v1",
-        bundle_version=None,
-        workspace_fingerprint=None,
-    )
-
-    assert evaluation.policy_action == "require-reapproval"
-    assert evaluation.reasons[-1]["code"] == UNKNOWN_GUARD_ACTION_REASON
-    assert evaluation.reasons[-1]["original_action"] == (cached_action if isinstance(cached_action, str) else None)
-    assert "Review this request in HOL Guard" in evaluation.user_copy.harness_message
 
 
 def test_present_invalid_local_config_actions_do_not_fall_back_to_warn(tmp_path) -> None:
@@ -153,8 +102,3 @@ def test_present_invalid_local_config_actions_do_not_fall_back_to_warn(tmp_path)
 
     assert config.default_action == "require-reapproval"
     assert config.subprocess_action == "require-reapproval"
-
-
-@pytest.mark.parametrize("invalid_value", (None, 7, False, {}, {"action": None}, {"default_action": 7}))
-def test_present_invalid_action_map_values_do_not_disappear(invalid_value: object) -> None:
-    assert _coerce_risk_action_map({"network_egress": invalid_value}) == {"network_egress": "require-reapproval"}

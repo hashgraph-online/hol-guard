@@ -26,6 +26,13 @@ def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> N
         "Upload native command evaluators"
     )
     assert "Upload matching native command projections" in names
+    identity = next(step for step in producer if step.get("id") == "identity")
+    build = next(
+        step for step in producer if step.get("name") == "Build native command evaluators once for pytest shards"
+    )
+    assert "sync_repo_version.py --check" in identity["run"]
+    assert build["env"]["HOL_GUARD_PACKAGE_VERSION"] == "${{ steps.identity.outputs.version }}"
+    assert build["env"]["HOL_GUARD_BUILD_SHA"] == "${{ steps.identity.outputs.source_sha }}"
 
     # Public catalogs must be regenerated from the staged trust bindings before
     # they are uploaded. All consumers must receive the same verified artifacts.
@@ -35,7 +42,10 @@ def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> N
     assert names.index("Verify generated native command catalogs before pytest fan-out") < generation < uploaded
     generated = producer[generation]["run"]
     assert "prepare_extension_directory.py" in generated
-    assert "--compiler rust/target/release/guard-command-source --check" in generated
+    assert generated.splitlines() == [
+        "uv run --no-sync python scripts/prepare_extension_directory.py "
+        "--compiler rust/target/release/guard-command-source --write-and-check"
+    ]
 
     # Native contract checks and replay cases do not delay the artifact producer.
     assert not any("uv run --no-sync pytest" in step.get("run", "") for step in producer)
@@ -47,8 +57,9 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     job = jobs["native-gates"]
     assert job["needs"] == "native-command-evaluators"
     assert job["strategy"]["fail-fast"] is False
-    assert job["strategy"]["matrix"]["shard-index"] == list(range(8))
-    assert job["timeout-minutes"] == 5
+    shards = job["strategy"]["matrix"]["shard-index"]
+    assert shards == list(range(24))
+    assert job["timeout-minutes"] == 10
     steps = job["steps"]
     assert any(step.get("uses") == "./.github/actions/setup-ci-python" for step in steps)
 
@@ -73,7 +84,9 @@ def test_native_replay_shards_are_complete_and_required() -> None:
         for step in steps
         if step.get("name") == "Benign false-positive and Gauntlet replay gates (model-free, native path)"
     )
-    assert replay["env"]["SHARD_COUNT"] == 8
+    # A SHARD_COUNT that disagrees with the matrix silently drops gate cases
+    # or runs them twice, and the gate reports green either way.
+    assert replay["env"]["SHARD_COUNT"] == len(shards)
     assert "set -o pipefail" in replay["run"]
     assert "pytest --collect-only -q" in replay["run"]
     assert "sort gate-nodes.txt | awk" in replay["run"]
@@ -90,3 +103,26 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     required = jobs["required"]
     assert "native-gates" in required["needs"]
     assert '"native-gates"' in required["steps"][0]["run"]
+
+
+def test_dashboard_wheel_consumes_verified_linux_evaluator_artifacts() -> None:
+    jobs = _jobs()
+    job = jobs["dashboard-integration-wheel"]
+    assert "native-command-evaluators" in job["needs"]
+    assert "needs.native-command-evaluators.result == 'success'" in job["if"]
+    downloads = [
+        step.get("with", {}).get("name")
+        for step in job["steps"]
+        if step.get("uses", "").startswith("actions/download-artifact@")
+    ]
+    assert "pytest-native-command-evaluators" in downloads
+    assert not any("cargo build" in step.get("run", "") for step in job["steps"])
+
+
+def test_dashboard_wheel_names_the_cached_runtime_build_sha() -> None:
+    job = _jobs()["dashboard-integration-wheel"]
+    identity = next(step["run"] for step in job["steps"] if step.get("name") == "Resolve wheel identity")
+    assert "capabilities --json | jq -r '.build_sha'" in identity
+    assert "git rev-parse HEAD" not in identity
+    seal = next(step["run"] for step in job["steps"] if step.get("name") == "Seal the native wheel")
+    assert 'HOL_GUARD_BUNDLE_SOURCE_SHA="$SOURCE_SHA" uv build --wheel' in seal

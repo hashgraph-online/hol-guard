@@ -3,9 +3,10 @@
 //!
 //! The parser used to mark every `xargs` and `find -exec` command uncertain,
 //! which stopped ordinary agent reads such as `find src -name '*.ts' -exec cat
-//! {} +`. This module only recognizes the shape: a flat `find` expression of
-//! name, type and depth tests whose result is handed to one child from a short
-//! read-only list. It decides nothing about safety. The pre-tool proof
+//! {} +`. This module only recognizes the shape: a `find` expression of name,
+//! type and depth tests, optionally skipping a vendored tree with the
+//! `-name DIR -prune -o` idiom, whose result is handed to one child from a
+//! short read-only list. It decides nothing about safety. The pre-tool proof
 //! (`pretool::fanout_reads`) still requires verified workspace-contained
 //! roots, regular files only (`-type f`, so a workspace symlink is never
 //! followed), and the existing read-only proof of the child. Everything else,
@@ -20,6 +21,13 @@
 use crate::parser_executables::executable_basename;
 use crate::CommandSegmentV1;
 
+#[path = "read_only_fanout_fd.rs"]
+pub(crate) mod fd;
+#[path = "read_only_fanout_group.rs"]
+mod group;
+#[path = "read_only_fanout_listing.rs"]
+pub(crate) mod listing;
+
 /// Placeholder operand the child proof stands in for the unknown file names.
 pub(crate) const PLACEHOLDER: &str = "guard-fanout-result";
 
@@ -28,12 +36,14 @@ pub(crate) const OBJECT_NAME_PLACEHOLDER: &str = "0123456789abcdef0123456789abcd
 
 /// Children worth proving at all. Each still has to pass its own read-only
 /// proof with the file operand appended; this list adds no admission.
-const CHILDREN: [&str; 9] = [
-    "cat", "head", "tail", "wc", "grep", "rg", "ls", "stat", "od",
+const CHILDREN: [&str; 10] = [
+    "cat", "head", "tail", "wc", "grep", "rg", "ls", "stat", "od", "echo",
 ];
 
-/// Children that print counts or metadata, never file contents.
-const METADATA_CHILDREN: [&str; 3] = ["wc", "ls", "stat"];
+/// Children that print counts, metadata or their own arguments, never file
+/// contents. `echo` opens nothing at all: `find src -exec echo {} +` prints
+/// the paths the walk found, which is what `ls` already prints.
+const METADATA_CHILDREN: [&str; 4] = ["wc", "ls", "stat", "echo"];
 
 const MAX_ROOTS: usize = 8;
 const MAX_PATTERN_BYTES: usize = 256;
@@ -43,6 +53,8 @@ pub(crate) struct FindShape<'a> {
     pub roots: &'a [String],
     pub regular_files_only: bool,
     pub patterns: Vec<&'a str>,
+    /// Parenthesized `-o` choices of names; a file matches one of each.
+    pub name_groups: Vec<Vec<&'a str>>,
     pub print0: bool,
 }
 
@@ -64,6 +76,23 @@ fn without_stderr_merge(arguments: &[String]) -> &[String] {
         end -= 1;
     }
     &arguments[..end]
+}
+
+/// Source and documentation extensions a content reader may fan out over.
+///
+/// A glob's `*` also matches a leading dot, so a denylist of secret
+/// extensions would still reach `.env.local` through `*.local`; configuration
+/// formats such as JSON and YAML are left out because they often hold keys.
+pub(crate) const SOURCE_EXTENSIONS: [&str; 46] = [
+    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "pyi", "rs", "go", "java", "kt",
+    "kts", "scala", "c", "h", "cc", "cpp", "hpp", "cs", "rb", "php", "swift", "m", "dart", "lua",
+    "ex", "exs", "hs", "md", "mdx", "rst", "txt", "html", "htm", "css", "scss", "sass", "less",
+    "vue", "svelte", "sql", "graphql", "proto",
+];
+
+/// Whether an extension, written without its dot, names such a file.
+pub(crate) fn source_extension(extension: &str) -> bool {
+    SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 /// Whether the child reads file contents (and so needs a bounded name test).
@@ -102,9 +131,11 @@ pub(crate) fn bounded_without_operands(child: &[String]) -> bool {
     }
 }
 
-/// Flat `find` operands: roots, then a conjunction of name, type and depth
-/// tests. Operators (`-o`, `!`, parentheses), `-prune`, `-L`, `-H`, `-follow`
-/// and every action other than `-print`/`-print0` are not part of the shape.
+/// Flat `find` operands: roots, an optional `-prune` prefix, then a
+/// conjunction of name, type and depth tests and parenthesized choices of
+/// names (`group`). Any other operator in the printing branch, `-L`, `-H`,
+/// `-follow` and every action other than `-print`/`-print0` are not part of
+/// the shape.
 pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
     let end = arguments
         .iter()
@@ -118,40 +149,57 @@ pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
         roots,
         regular_files_only: false,
         patterns: Vec::new(),
+        name_groups: Vec::new(),
         print0: false,
     };
     let mut index = 0;
+    // `find src -name node_modules -prune -o REST` is how an agent skips a
+    // vendored tree. A pruned branch only takes directories out of the walk,
+    // so it never widens what REST hands the child, and its own patterns are
+    // not part of the bound REST has to carry.
+    while let Some(after) = pruned_branch(expression, index) {
+        index = after;
+    }
     while index < expression.len() {
         if shape.print0 {
             return None;
         }
-        let token = expression[index].as_str();
+        let mut token = expression[index].as_str();
         index += 1;
+        let negated = matches!(token, "!" | "-not");
+        if negated {
+            token = expression.get(index)?.as_str();
+            index += 1;
+        }
         match token {
-            "-print" => {}
-            "-print0" => shape.print0 = true,
+            "-print" | "-a" | "-and" if !negated => {}
+            "-print0" if !negated => shape.print0 = true,
+            "(" if !negated => {
+                let (names, after) = group::name_group(expression, index)?;
+                shape.name_groups.push(names);
+                index = after;
+            }
             "-name" | "-iname" | "-path" | "-ipath" => {
                 let pattern = expression.get(index)?;
-                if pattern.len() > MAX_PATTERN_BYTES || pattern.contains(['\n', '\r', '\0']) {
+                if !bounded_test_pattern(pattern) {
                     return None;
                 }
-                if matches!(token, "-name" | "-iname") {
+                // A negated test only takes names away, so it is never the
+                // bound a content-reading child is admitted under.
+                if !negated && matches!(token, "-name" | "-iname") {
                     shape.patterns.push(pattern);
                 }
                 index += 1;
             }
-            "-type" => {
+            "-type" if !negated => {
                 if expression.get(index).map(String::as_str) != Some("f") {
                     return None;
                 }
                 shape.regular_files_only = true;
                 index += 1;
             }
-            "-maxdepth" | "-mindepth" => {
-                let value = expression.get(index)?;
-                if !value.bytes().all(|byte| byte.is_ascii_digit())
-                    || value.parse::<u8>().map_or(true, |count| count > MAX_DEPTH)
-                {
+            "-maxdepth" | "-mindepth" if !negated => {
+                if !bounded_depth(expression.get(index)?) {
                     return None;
                 }
                 index += 1;
@@ -160,6 +208,75 @@ pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
         }
     }
     Some(shape)
+}
+
+fn bounded_test_pattern(pattern: &str) -> bool {
+    pattern.len() <= MAX_PATTERN_BYTES && !pattern.contains(['\n', '\r', '\0'])
+}
+
+fn bounded_depth(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+        && value.parse::<u8>().is_ok_and(|count| count <= MAX_DEPTH)
+}
+
+/// A `TESTS -prune -o` branch at `index`, answering where the expression after
+/// it resumes. `find` evaluates `-prune` to true and `-o` short-circuits on
+/// it, so an entry the branch matches is dropped from the walk rather than
+/// handed to the child.
+fn pruned_branch(expression: &[String], index: usize) -> Option<usize> {
+    let index = branch_tests(expression, index)?;
+    if expression.get(index).map(String::as_str) != Some("-prune") {
+        return None;
+    }
+    if !matches!(
+        expression.get(index + 1).map(String::as_str),
+        Some("-o" | "-or")
+    ) {
+        return None;
+    }
+    Some(index + 2)
+}
+
+/// The tests a pruned branch names directories with: name and path tests and
+/// `-type d`. `-o` joins them only inside parentheses, where it cannot reach
+/// past the branch; an unparenthesized `-o` would make the whole expression a
+/// disjunction and is left to the uncertain model.
+fn branch_tests(expression: &[String], index: usize) -> Option<usize> {
+    let parenthesized = expression.get(index).map(String::as_str) == Some("(");
+    let mut index = index + usize::from(parenthesized);
+    let mut tests = 0_usize;
+    loop {
+        match expression.get(index).map(String::as_str) {
+            Some("-a" | "-and") if tests > 0 => index += 1,
+            Some("-o" | "-or") if parenthesized && tests > 0 => index += 1,
+            Some("-name" | "-iname" | "-path" | "-ipath") => {
+                if !bounded_test_pattern(expression.get(index + 1)?) {
+                    return None;
+                }
+                index += 2;
+                tests += 1;
+            }
+            Some("-type") => {
+                if expression.get(index + 1).map(String::as_str) != Some("d") {
+                    return None;
+                }
+                index += 2;
+                tests += 1;
+            }
+            _ => break,
+        }
+    }
+    if tests == 0 {
+        return None;
+    }
+    if parenthesized {
+        if expression.get(index).map(String::as_str) != Some(")") {
+            return None;
+        }
+        index += 1;
+    }
+    Some(index)
 }
 
 /// `find SHAPE -exec CHILD {} +` or `... {} \;`, with the file operand last.
@@ -298,101 +415,5 @@ pub(crate) fn xargs_follows_find(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_owned()).collect()
-    }
-
-    #[test]
-    fn find_exec_accepts_flat_read_only_shape() {
-        let a = args(&[
-            "src", "-type", "f", "-name", "*.ts", "-exec", "cat", "{}", "+",
-        ]);
-        let parsed = find_exec(&a).unwrap();
-        assert!(parsed.shape.regular_files_only);
-        assert_eq!(parsed.child, &a[6..7]);
-        assert!(find_exec(&args(&["src", "-exec", "grep", "-n", "x", "{}", ";"])).is_some());
-    }
-
-    #[test]
-    fn find_exec_rejects_actions_children_and_operators() {
-        for case in [
-            &["src", "-exec", "rm", "{}", "+"][..],
-            &["src", "-exec", "sh", "-c", "cat {}", "+"],
-            &["src", "-exec", "cat", "{}", "+", "-delete"],
-            &["src", "-execdir", "cat", "{}", "+"],
-            &["src", "-ok", "cat", "{}", ";"],
-            &[
-                "src", "-name", "a", "-o", "-name", "b", "-exec", "cat", "{}", "+",
-            ],
-            &["src", "-fprint", "out", "-exec", "cat", "{}", "+"],
-            &["src", "-exec", "/bin/cat", "{}", "+"],
-            &["src", "-exec", "cat", "x{}", "+"],
-            &[
-                "src", "-exec", "grep", "-e", ";", "-o", "-delete", "-fprintf", "{}", ";",
-            ],
-            &["-L", "src", "-exec", "cat", "{}", "+"],
-            &["-exec", "cat", "{}", "+"],
-        ] {
-            assert!(find_exec(&args(case)).is_none(), "{case:?}");
-        }
-    }
-
-    #[test]
-    fn xargs_accepts_safe_options_only() {
-        assert!(xargs(&args(&["-0", "-r", "-n", "5", "-P4", "cat"])).is_some());
-        assert!(
-            xargs(&args(&["-0", "grep", "-n", "x"]))
-                .unwrap()
-                .null_separated
-        );
-        for case in [
-            &["-I{}", "cat", "{}"][..],
-            &["-I", "{}", "cat"],
-            &["-i", "cat"],
-            &["--replace", "cat"],
-            &["-0", "sh", "-c", "cat"],
-            &["-0", "rm"],
-            &["-0"],
-            &["-a", "list", "cat"],
-            &["-n", "x", "cat"],
-        ] {
-            assert!(xargs(&args(case)).is_none(), "{case:?}");
-        }
-    }
-
-    fn confidence(command: &str) -> String {
-        crate::parse_command(&crate::CommandModelRequestV1 {
-            command: command.to_owned(),
-            dialect: "posix".to_owned(),
-            transport: "shell_string".to_owned(),
-            extraction_provenance: "guard-shell".to_owned(),
-        })
-        .unwrap()
-        .confidence
-    }
-
-    #[test]
-    fn parser_models_only_the_read_only_shapes() {
-        for command in [
-            "find src -type f -exec cat {} +",
-            "find src -type f -print0 | xargs -0 cat",
-            "find src -type f | xargs grep -n x",
-        ] {
-            assert_eq!(confidence(command), "exact", "{command}");
-        }
-        for command in [
-            "find src -type f | xargs -I{} sh -c 'cat {}'",
-            "find src -type f -print0 | xargs -0 rm",
-            "find src -type f -exec rm {} +",
-            "find src -type f -delete -exec cat {} +",
-            "echo a | xargs cat",
-            "xargs cat",
-            "find src -type f | sort | xargs cat",
-        ] {
-            assert_eq!(confidence(command), "uncertain", "{command}");
-        }
-    }
-}
+#[path = "read_only_fanout_tests.rs"]
+mod tests;

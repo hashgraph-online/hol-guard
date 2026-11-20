@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     installed.add_argument(
         "--harness",
         nargs="+",
-        default=["claude-code", "codex", "omp"],
+        default=["claude-code", "codex", "muse", "omp", "zcode"],
         help="Harnesses to install and check",
     )
     installed.add_argument(
@@ -155,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
         dest="aged_store",
         action="store_false",
         help="Skip the pass that installs over a home with upgrade history",
+    )
+    installed.add_argument(
+        "--uninstall-restore",
+        action="store_true",
+        help="Also seed user settings, install and uninstall every harness, and require the bytes back unchanged",
     )
     installed.add_argument("--output", type=Path, required=True)
     installed.add_argument("--keep-work", action="store_true", help="Keep the lane's homes even when it passes")
@@ -273,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
                 repeat=args.repeat,
                 require_frozen=args.require_frozen,
                 aged_store=args.aged_store,
+                uninstall_restore=args.uninstall_restore,
                 output=args.output,
                 work_root=(args.output / "work") if args.keep_work else None,
             )

@@ -202,7 +202,6 @@ def _old_composition(
             memory_command=artifact.command,
             memory_artifact_type=artifact.artifact_type,
             memory_artifact_name=artifact.name,
-            consume_one_shot=False,
         )
 
     def stored(probe: dict[str, Any], artifact: GuardArtifact, decision_lookup: Any) -> Any:

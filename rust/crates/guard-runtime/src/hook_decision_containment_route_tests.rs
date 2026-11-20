@@ -111,8 +111,9 @@ fn with(mut inputs: Value, field: &str, value: Value) -> Value {
 #[test]
 fn a_review_keeps_allow_once_and_always_allow() {
     // An ordinary review is not routed: it keeps its card with Allow once and
-    // Always allow. Only an outside-roots review a grant may lift asks the
-    // grant, and the sink never takes a review receipt itself.
+    // Always allow, an outside-roots review included: an allowed CLI lifts
+    // that one in the edge's custom rule. The sink never takes a review
+    // receipt itself.
     assert_eq!(
         route(&route_inputs(
             "review",
@@ -131,7 +132,7 @@ fn a_review_keeps_allow_once_and_always_allow() {
     );
     assert_eq!(
         route(&route_inputs("review", "review", OUTSIDE_ROOTS)),
-        "grant"
+        "none"
     );
     let review = with(
         pytest_inputs("macos", "claude-code"),
@@ -187,36 +188,6 @@ fn watch_and_other_events_are_never_routed() {
 }
 
 #[test]
-fn guard_control_and_package_reviews_never_reach_the_grant() {
-    for action_type in [
-        json!("guard_control"),
-        json!("guard-control"),
-        json!("guard_control_operation"),
-        json!("guard-control-operation"),
-        json!("package"),
-        json!(["shell"]),
-        json!({"kind": "shell"}),
-    ] {
-        let inputs = with(
-            route_inputs("review", "review", OUTSIDE_ROOTS),
-            "action_type",
-            action_type,
-        );
-        assert_eq!(route(&inputs), "none", "{inputs}");
-    }
-    for action_type in [Value::Null, json!(7), json!("shell")] {
-        let inputs = with(
-            route_inputs("review", "review", OUTSIDE_ROOTS),
-            "action_type",
-            action_type,
-        );
-        assert_eq!(route(&inputs), "grant", "{inputs}");
-    }
-    let partial = route_inputs("review", "block", OUTSIDE_ROOTS);
-    assert_eq!(route(&partial), "none");
-}
-
-#[test]
 fn macos_runs_every_profile() {
     assert_eq!(
         sink(&pytest_inputs("macos", "claude-code")).0.as_deref(),
@@ -236,15 +207,56 @@ fn macos_runs_every_profile() {
 }
 
 #[test]
-fn linux_runs_only_the_workspace_sandbox() {
+fn linux_runs_the_workspace_sandbox_and_every_read_only_profile() {
     assert_eq!(
         sink(&workspace_inputs("linux", "claude-code")).0.as_deref(),
         Some("workspace-contained-v1")
     );
     assert_eq!(
-        kept(&pytest_inputs("linux", "claude-code")),
-        "platform_has_no_sink"
+        sink(&pytest_inputs("linux", "claude-code")).0.as_deref(),
+        Some("pytest-readonly-v2")
     );
+    for (reason, profile) in [
+        (
+            "native_python_eval_readonly_containment_required",
+            "python-eval-readonly-v1",
+        ),
+        (
+            "native_node_eval_readonly_containment_required",
+            "node-eval-readonly-v1",
+        ),
+        (
+            "native_bun_eval_readonly_containment_required",
+            "node-eval-readonly-v1",
+        ),
+        (
+            "native_package_test_readonly_containment_required",
+            "package-test-readonly-v1",
+        ),
+        (
+            "native_node_build_output_containment_required",
+            "node-build-output-v1",
+        ),
+        (
+            "native_node_tool_readonly_containment_required",
+            "node-tool-readonly-v1",
+        ),
+        (
+            "native_git_readonly_containment_required",
+            "git-readonly-v1",
+        ),
+        (
+            "native_vitest_readonly_containment_required",
+            "vitest-readonly-v1",
+        ),
+        (
+            "native_node_test_readonly_containment_required",
+            "node-test-readonly-v1",
+        ),
+    ] {
+        let inputs = sink_inputs("linux", "zcode", reason, profile);
+        assert_eq!(sink(&inputs).0.as_deref(), Some(profile), "{reason}");
+    }
 }
 
 #[test]
@@ -323,6 +335,50 @@ fn codex_is_routed_only_by_its_bridge() {
         let inputs = pytest_inputs("macos", harness);
         assert_eq!(kept(&inputs), "harness_not_routed", "{inputs}");
     }
+}
+
+#[test]
+fn grok_is_routed_by_its_own_hook_and_never_on_windows() {
+    // Grok applies a `PreToolUse` `updatedInput`, so its hook rewrites the
+    // call to the sink command the same way Claude Code and Z Code do. It
+    // sends shell work as `run_terminal_command`.
+    let grok = with(
+        workspace_inputs("macos", "grok"),
+        "tool_name",
+        json!("run_terminal_command"),
+    );
+    assert_eq!(sink(&grok).0.as_deref(), Some("workspace-contained-v1"));
+    let linux = with(grok.clone(), "platform", json!("linux"));
+    assert_eq!(sink(&linux).0.as_deref(), Some("workspace-contained-v1"));
+    // Windows has no sink for Grok, so the requirement stays an approvable
+    // review there rather than becoming a deny nothing can lift.
+    let windows = with(grok, "platform", json!("windows"));
+    assert_eq!(kept(&windows), "platform_has_no_sink");
+    // Muse is deliberately absent: it applies `updatedInput` only from an
+    // `onFailure` correction, so a routed requirement would record a contained
+    // run it ran uncontained.
+    assert_eq!(
+        kept(&workspace_inputs("macos", "muse")),
+        "harness_not_routed"
+    );
+}
+
+#[test]
+fn cursor_is_routed_only_by_its_shell_probe_and_never_on_windows() {
+    let probe = with(
+        with(pytest_inputs("macos", "cursor"), "bridge", json!(true)),
+        "tool_name",
+        json!("Shell"),
+    );
+    assert_eq!(sink(&probe).0.as_deref(), Some("pytest-readonly-v2"));
+    let linux = with(
+        with(workspace_inputs("linux", "cursor"), "bridge", json!(true)),
+        "tool_name",
+        json!("Shell"),
+    );
+    assert_eq!(sink(&linux).0.as_deref(), Some("workspace-contained-v1"));
+    let windows = with(probe, "platform", json!("windows"));
+    assert_eq!(kept(&windows), "platform_has_no_sink");
 }
 
 #[test]

@@ -27,12 +27,68 @@ fn a_missing_root_beside_real_ones_is_proven_but_not_a_sensitive_one() {
         (format!("-rln x {r}/src {r}/missing/.env"), false),
         (format!("-rln x {r}/src {r}/missing/id_rsa"), false),
         (format!("-n x {h}/.ssh/missing"), false),
+        // A root that is not there opens nothing, on its own as much as
+        // beside a real one. With no operand `-r` walks the cwd instead.
+        (format!("-rln x {r}/missing"), true),
+        ("-rln x lib".to_owned(), true),
+        ("-rln x".to_owned(), false),
+        (format!("-rln x {h}/.ssh/missing"), false),
     ] {
         let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
         assert_eq!(
             super::safe_grep_arguments(&arguments, context),
             allowed,
             "{command}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn glob_operands_refuse_parent_traversal_but_allow_capped_expansion() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/grep-glob-operand-scope")
+        .join(std::process::id().to_string());
+    let home = root.join("home");
+    let repo = home.join("work/app");
+    std::fs::create_dir_all(repo.join("src/sub")).unwrap();
+    std::fs::create_dir_all(repo.join("private")).unwrap();
+    std::fs::create_dir_all(repo.join("many")).unwrap();
+    std::fs::write(repo.join("src/safe.ts"), "SAFE_CONTENT\n").unwrap();
+    std::fs::write(
+        repo.join("private/synthetic-credential.txt"),
+        "SYNTHETIC_CANARY_A81X_DO_NOT_USE\n",
+    )
+    .unwrap();
+    for index in 0..257 {
+        std::fs::write(
+            repo.join(format!("many/file-{index:03}.ts")),
+            "ordinary content\n",
+        )
+        .unwrap();
+    }
+    let (home, repo) = (
+        crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+        crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+    );
+    let context = crate::pretool::PathContext {
+        home_dir: home.to_str(),
+        cwd: repo.to_str(),
+        ..Default::default()
+    };
+    for (pattern, target, allowed) in [
+        ("SYNTHETIC_CANARY", "src/*/../../private/*.txt", false),
+        ("ordinary", "many/*.ts", true),
+    ] {
+        let arguments = vec!["-n", pattern, target]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            super::safe_grep_arguments(&arguments, context),
+            allowed,
+            "grep operand {target}"
         );
     }
     std::fs::remove_dir_all(root).unwrap();
@@ -65,6 +121,10 @@ fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
             format!("cat {r}/src/index.ts && grep -n x {r}/cfg/app.json"),
             true,
         ),
+        // The recursive walk asks the same question of the same peer, so it
+        // takes the same answer. It read `cat` as a step that might put the
+        // missing root there while the search beside it did not.
+        (format!("cat {r}/src/index.ts && grep -rn x {r}/cfg"), true),
         (
             format!("ln -s {r}/src {r}/cfg && grep -rn . {r}/cfg/"),
             false,
@@ -76,7 +136,15 @@ fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
         (format!("mkdir -p {r}/cfg && grep -rn x {r}/cfg"), false),
         (format!("touch {r}/cfg && grep -n x {r}/cfg"), false),
         (format!("echo x > {r}/cfg; grep -n x {r}/cfg"), false),
-        (format!("cat {r}/src/index.ts && grep -rn x {r}/cfg"), false),
+        (format!("grep -rln x {r}/cfg"), true),
+        (format!("mkdir -p {r}/cfg; grep -rln x {r}/cfg"), false),
+        (format!("grep -rln x {r}/cfg; mkdir -p {r}/cfg"), false),
+        // A branch that only prints puts nothing at the missing root, so the
+        // probe shape agents write keeps the proof.
+        (format!("grep -rln x {r}/cfg || echo none"), true),
+        (format!("grep -rln x {r}/cfg || printf 'none\\n'"), true),
+        (format!("grep -rln x {r}/cfg || touch {r}/cfg"), false),
+        (format!("grep -rln x {r}/cfg || echo none > {r}/cfg"), false),
     ] {
         let model = crate::parse_command(&crate::CommandModelRequestV1 {
             command: command.clone(),
@@ -122,7 +190,7 @@ fn stdin_proof_cannot_open_files_or_recurse() {
     ] {
         let arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
         assert_eq!(
-            super::safe_stdin_arguments(&arguments),
+            super::safe_stdin_arguments(&arguments, &[]),
             allowed,
             "{arguments:?}"
         );
@@ -171,7 +239,11 @@ fn a_plain_pattern_clears_the_sensitive_files_it_cannot_match() {
         (&repo, "-rn ha.*er .", false),
         (&repo, "-rn ^handler .", false),
         (&repo, "-rn -ehandler .", false),
-        (&repo, "-rn -e handler -e other .", false),
+        (&repo, "-rn -e handler -e other .", true),
+        (&repo, "-rn -e handler -e cookie_name .", false),
+        (&repo, r"-rn foo\|handler .", true),
+        (&repo, r"-rn foo\|cookie_name .", false),
+        (&repo, r"-rn cookie\.name .", false),
         (&repo, "-rnv handler .", false),
         (&repo, "-rnL handler .", false),
         (&repo, "-rn --invert-match handler .", false),
@@ -199,3 +271,37 @@ fn a_plain_pattern_clears_the_sensitive_files_it_cannot_match() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A stdin filter's pattern is the text it matches, not a path, but the shell
+/// expands the word before the filter ever sees it. `grep -v .env{,.local}`
+/// leaves `.env` as the pattern and `.env.local` as an operand `grep` then
+/// opens, so the word is not matching text and the stdin proof refuses it.
+#[test]
+fn an_expandable_pattern_is_not_proven_stdin_text() {
+    for (command, proven) in [
+        ("-v .env", true),
+        ("-v .git", true),
+        ("-i secret", true),
+        ("-E ^[a-z]+[0-9]{2}$", true),
+        ("-i auth.*provider", true),
+        ("token.*expired", true),
+        ("-i credentials.*", false),
+        ("secrets.*", false),
+        ("-i token.?", false),
+        ("-v .env{,.local}", false),
+        ("-v .env*", false),
+        ("-v .en{v..v}", false),
+        ("-e .env{,.local}", false),
+        (".ssh/*", false),
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert_eq!(
+            super::safe_stdin_arguments(&arguments, &[]),
+            proven,
+            "grep {command}"
+        );
+    }
+}
+
+#[path = "grep_quoted_pattern_tests.rs"]
+mod quoted_pattern_tests;

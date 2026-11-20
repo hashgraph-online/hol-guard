@@ -54,6 +54,7 @@ pub(crate) fn assess(
                 Some(deadline),
                 PathContext {
                     home_dir: Some(&request.home_dir),
+                    guard_home: Some(&request.guard_home),
                     cwd: Some(&request.cwd),
                     shell_home_matches: true,
                     ..PathContext::default()

@@ -13,8 +13,13 @@ use targets::{
 
 #[path = "redirect_git_chain.rs"]
 pub(super) mod git_chain;
+#[path = "redirect_input.rs"]
+mod input;
 #[path = "redirect_leading_chain.rs"]
 mod leading_chain;
+#[path = "redirect_stdin.rs"]
+mod stdin;
+pub(super) use stdin::{heredoc_records_commit_message, heredoc_segment, skip_bodies};
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -37,6 +42,11 @@ pub(super) struct RedirectProjection {
     init_chain: bool,
     /// The literal targets the removed redirects write.
     written: Vec<String>,
+    /// Every redirect removed was an inert sink: a descriptor copy (`2>&1`)
+    /// or a write to `/dev/null`. No file is opened and no standard input is
+    /// supplied, so the projected text runs exactly the programs the raw text
+    /// runs.
+    pub(super) inert_sinks: bool,
 }
 
 impl RedirectProjection {
@@ -56,6 +66,11 @@ enum Quote {
 
 const MAX_HEREDOC_DELIMITER: usize = 64;
 
+/// The shell's successful no-op. It stands in for a command the projection
+/// has nothing left to parse for, so the redirect it carries is still read
+/// as the write it is.
+const NO_OP: &str = "true";
+
 pub(super) fn project(
     raw: &str,
     context: super::super::PathContext<'_>,
@@ -65,7 +80,14 @@ pub(super) fn project(
     let mut quote = Quote::None;
     let mut escaped = false;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
-    let mut saw_heredoc = false;
+    let mut saw_stdin_data = false;
+    // Whether a separator came after the literal standard input, so which
+    // command the shell hands those bytes to is no longer in the text.
+    let mut stdin_separated = false;
+    // The single file a plain `< path` redirect reads, and where the command
+    // it feeds starts in `out`.
+    let mut input_source: Option<(String, usize)> = None;
+    let mut input_site = input::InputSite::new();
     let mut removed = false;
     let mut targets: Vec<String> = Vec::new();
     let mut bounded_writes = true;
@@ -75,6 +97,8 @@ pub(super) fn project(
     // so another step could run before the shell opens the file.
     let mut separated = false;
     let mut late_write = false;
+    // Set once the text is not one pipeline whose last command alone writes.
+    let mut beyond_pipeline = false;
     let mut index = 0usize;
     while index < chars.len() {
         let current = chars[index];
@@ -99,17 +123,33 @@ pub(super) fn project(
                 } else if current == '\\' {
                     escaped = true;
                 }
-                separated |= substitution(&chars, index);
+                let opens = substitution(&chars, index);
+                separated |= opens;
+                if opens {
+                    input_site.opaque();
+                }
+                beyond_pipeline |= opens;
                 out.push(current);
                 index += 1;
                 continue;
             }
             Quote::None => {}
         }
-        // `&>` is a redirect, not a separator.
-        separated |= matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
-            || (current == '&' && chars.get(index + 1) != Some(&'>'))
-            || substitution(&chars, index);
+        // The newline that opens a heredoc body ends a command the operator
+        // already belongs to, so it separates nothing the operator has not
+        // already reached. `&>` is a redirect rather than a separator.
+        let opens_a_heredoc_body = current == '\n' && !heredocs.is_empty();
+        let separates = !opens_a_heredoc_body
+            && (matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
+                || (current == '&' && chars.get(index + 1) != Some(&'>'))
+                || substitution(&chars, index));
+        separated |= separates;
+        if separates {
+            input_site.separator(&chars, index, &out);
+        }
+        stdin_separated |= saw_stdin_data && separates;
+        beyond_pipeline |= separates
+            && (!targets.is_empty() || !super::super::chain_temporary::plain_pipe(&chars, index));
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -117,6 +157,16 @@ pub(super) fn project(
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
                 index = skip_heredoc_bodies(&chars, index + 1, &mut heredocs)?;
+                // The newline closing the last body is consumed with it, and
+                // it ends the command the shell handed those bytes to. Text
+                // after it is another command, so which segment reads standard
+                // input is no longer in the projected text, and a redirect
+                // further on is no longer the leading write of the chain.
+                if chars[index..].iter().any(|value| !value.is_whitespace()) {
+                    separated = true;
+                    stdin_separated = true;
+                    beyond_pipeline = true;
+                }
                 continue;
             }
             '>' => {
@@ -134,9 +184,22 @@ pub(super) fn project(
                 removed = true;
                 continue;
             }
-            '<' => {
+            '<' if chars.get(index + 1) == Some(&'<') && chars.get(index + 2) == Some(&'<') => {
+                index = stdin::remove_here_string(&chars, index, &mut out)?;
+                saw_stdin_data = true;
+                removed = true;
+                continue;
+            }
+            '<' if chars.get(index + 1) == Some(&'<') => {
+                heredoc_segment(&out)?;
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
-                saw_heredoc = true;
+                saw_stdin_data = true;
+                removed = true;
+                continue;
+            }
+            '<' => {
+                let site = (&input_site, separated, saw_stdin_data);
+                index = input::remove(&chars, index, &out, site, &mut input_source)?;
                 removed = true;
                 continue;
             }
@@ -160,14 +223,23 @@ pub(super) fn project(
     if same_command_aside_from_descriptor_spacing(raw, &command) {
         return None;
     }
+    // A redirect with no command word runs no program: the shell opens the
+    // file it names and stops, which is the create or truncate `: > log`
+    // spells with a no-op in front. Removing the redirect leaves nothing to
+    // parse, so stand that no-op in its place and let the target check and
+    // the sandbox decide the write exactly as they decide the spelled form.
+    let command = if command.is_empty() {
+        NO_OP.to_owned()
+    } else {
+        command
+    };
+    // `cmd < file` is `cat file | cmd`; see [`input`].
+    let command = match &input_source {
+        Some((source, at)) => input::splice(&out, command, source, *at)?,
+        None => command,
+    };
     let command = relative_saved_reads(command, &targets, context.cwd);
-    let model = crate::parse_command(&CommandModelRequestV1 {
-        command: command.clone(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "pre-tool-generic".to_owned(),
-    })
-    .ok()?;
+    let model = projected_model(&command)?;
     // An earlier segment could cd or create a symlink before the shell opens
     // a target, so a chain may only write absolute temp files beside peers.
     let temporary_chain =
@@ -178,6 +250,13 @@ pub(super) fn project(
     // so a write that follows one still opens the file the target check
     // proved: `cp /tmp/a.ts /tmp/b.ts && cat /tmp/a.ts > src/c.ts`.
     let peer_write = chain && bounded_writes && super::super::chain_temporary::peers_only(&model);
+    // `gh api ... | base64 -d > /tmp/a.json` saves a pipeline's output the
+    // way the same redirect on one command does. See `final_pipeline_write`.
+    let pipe_write = chain
+        && bounded_writes
+        && temporary_writes
+        && !beyond_pipeline
+        && super::super::chain_temporary::final_pipeline_write(&model);
     scratch_writes &= targets.iter().all(|target| {
         crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
     });
@@ -188,37 +267,39 @@ pub(super) fn project(
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write && !init_chain && !peer_write)
+        || (chain
+            && git_chain.is_none()
+            && !leading_write
+            && !init_chain
+            && !peer_write
+            && !pipe_write)
     {
         return None;
     }
-    // A heredoc body is stdin. Only `cat` is known to treat it as data.
-    if saw_heredoc
-        && !(model.segments.len() == 1
-            && model.segments[0].wrapper_chain.is_empty()
-            && model.segments[0].environment_names.is_empty()
-            && model.segments[0].executable.as_deref() == Some("cat")
-            && model.segments[0].arguments.is_empty())
-    {
+    // A heredoc body and a here-string word are both stdin, so the command
+    // has to be one that reads them as data rather than running them.
+    if saw_stdin_data && !stdin::reads_data(&model, stdin_separated) {
         return None;
     }
-    // A quoted heredoc is literal data, but the bare `cat` that remains reads
+    // Literal standard input leaves a bare `cat` that still reads
     // standard input, which only the workspace sandbox bounds. A plan note in
     // the harness home and a repository beside the session's directory lie
     // outside that sandbox, so the write checked above is all that is left to
     // prove, and a no-op stands in for the command.
-    let command = if saw_heredoc
+    let command = if saw_stdin_data
+        && stdin::is_bare_cat(&model)
         && bounded_writes
         && writes_file
         && targets.iter().all(|target| {
             plan_note_output_target(target, context) || sibling_heredoc_target(target, context)
         }) {
-        "true".to_owned()
+        NO_OP.to_owned()
     } else {
         command
     };
     Some(RedirectProjection {
         command,
+        inert_sinks: !writes_file && !saw_stdin_data && input_source.is_none(),
         writes_file,
         bounded_writes,
         git_chain,
@@ -226,6 +307,39 @@ pub(super) fn project(
         init_chain,
         written: targets,
     })
+}
+
+/// The command model of the projected text, reading the shell control flow
+/// the parser does not model on its own.
+///
+/// `if cmd >/dev/null; then ...; fi` projects to an `if` the parser calls
+/// compound shell, so the structural checks below would lose the command
+/// they are meant to read and the projection would fail closed on a command
+/// the flattened list allows. The envelope runs the same rewrite when it
+/// evaluates the projected text, so flattening here only decides what those
+/// checks see; the text this projection returns is still the one the shell
+/// runs.
+fn projected_model(command: &str) -> Option<crate::CanonicalCommandV1> {
+    let parse = |text: &str| {
+        crate::parse_command(&CommandModelRequestV1 {
+            command: text.to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "pre-tool-generic".to_owned(),
+        })
+        .ok()
+    };
+    let mut text = command.to_owned();
+    let mut model = parse(&text)?;
+    let mut rounds = 0usize;
+    while (model.confidence != "exact" || model.uncertainty_reason.is_some())
+        && rounds < super::super::MAX_REWRITE_ROUNDS
+    {
+        text = super::super::rewritten_command_list(&text)?;
+        model = parse(&text)?;
+        rounds += 1;
+    }
+    Some(model)
 }
 
 /// `$(` or a backquote: a command substitution runs before the redirect
@@ -274,6 +388,16 @@ pub(super) fn package_profile(reason: &str) -> bool {
     )
 }
 
+/// The read-only profiles a plain output redirect disqualifies and the
+/// workspace sandbox may take in their place. The package and Node tool
+/// profiles run a project's own tool; the pytest profile runs the suite the
+/// same workspace holds, and a chain as short as `pytest -q && echo done`
+/// already reaches the sandbox, because two segments earn no profile of their
+/// own. The single command belongs there for the same reason.
+pub(super) fn redirected_profile(reason: &str) -> bool {
+    package_profile(reason) || reason == "native_pytest_readonly_containment_required"
+}
+
 pub(super) fn join(
     mut projected: PreToolResultV1,
     raw: PreToolResultV1,
@@ -308,9 +432,16 @@ pub(super) fn join(
     // discharges that route the same way it discharges the generic review.
     let contained_fallback =
         bounded_writes && raw.reason_code == "native_workspace_containment_required";
+    // Removing an inert sink -- `2>&1`, `2>/dev/null`, `>/dev/null` -- leaves
+    // the same programs with the same arguments and opens no file, so the
+    // projection is the whole command. The raw pass beside it is evaluated
+    // without the caller's command extensions and fails closed on the redirect
+    // text the parser leaves in place, so letting it outrank the projection
+    // cost a Git step the Allow it keeps when the quiet redirect is absent.
     if raw.reason_code != "native_command_review_required"
         && raw.reason_code != "native_command_extension_evaluation_failed"
         && !contained_fallback
+        && !projection.inert_sinks
         && rank(&raw.minimum_action) > rank(&projected.minimum_action)
     {
         projected.minimum_action = raw.minimum_action;

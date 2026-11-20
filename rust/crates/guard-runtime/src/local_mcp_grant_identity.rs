@@ -64,8 +64,14 @@ fn is_token(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
 }
 
-/// `is_local_cli_command_id`.
+/// `is_local_cli_command_id`: a command path, or one option a help text named.
 pub(crate) fn is_command_id(value: &str) -> bool {
+    is_command_path(value) || crate::local_cli_help::is_option_name(value)
+}
+
+/// A dotted command path. Slugs stay on this form so an MCP tool name never
+/// becomes an option id.
+fn is_command_path(value: &str) -> bool {
     if value == ROOT_COMMAND_ID || value == OTHER_COMMAND_ID {
         return true;
     }
@@ -84,7 +90,7 @@ pub(crate) fn is_command_id(value: &str) -> bool {
 /// `slug_local_cli_command_id`: turn an MCP tool name into a catalog command id.
 pub(crate) fn slug_command_id(name: &str) -> String {
     let stripped = name.trim();
-    if stripped != ROOT_COMMAND_ID && stripped != OTHER_COMMAND_ID && is_command_id(stripped) {
+    if stripped != ROOT_COMMAND_ID && stripped != OTHER_COMMAND_ID && is_command_path(stripped) {
         return stripped.to_owned();
     }
     let spaced: String = stripped
@@ -109,7 +115,7 @@ pub(crate) fn slug_command_id(name: &str) -> String {
         compact.chars().take(31).collect()
     };
     let candidate = format!("{base}-{digest}");
-    if is_command_id(&candidate) {
+    if is_command_path(&candidate) {
         candidate
     } else {
         OTHER_COMMAND_ID.to_owned()

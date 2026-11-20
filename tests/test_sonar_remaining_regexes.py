@@ -8,7 +8,6 @@ import re
 import pytest
 
 from codex_plugin_scanner.checks.skill_security import _RISKY_SKILL_PATTERNS
-from codex_plugin_scanner.guard.inventory_contract import _MCP_SECRET_RE
 
 
 @pytest.mark.parametrize("index,command", [(1, "curl"), (2, "wget")])
@@ -41,39 +40,3 @@ def test_command_url_matcher_preserves_multiline_and_unicode_spans(index: int, c
         sample = f"https://before.test/{command} {command}{whitespace}{body}https://after.test/{command}\n"
         sample += f"{command} https://second.test"
         assert [m.span() for m in pattern.finditer(sample)] == [m.span() for m in reference.finditer(sample)]
-
-
-@pytest.mark.parametrize(
-    "current,reference,words",
-    [
-        (
-            _MCP_SECRET_RE,
-            r"(?<![a-z0-9])(secret|secrets|token|tokens|password|passwords|credential|credentials|api[_\-\s]?key|apiKey)(?![a-z0-9])",
-            (
-                "secret",
-                "secrets",
-                "token",
-                "tokens",
-                "password",
-                "passwords",
-                "credential",
-                "credentials",
-                "api_key",
-                "api-key",
-                "apiKey",
-                "api key",
-                "api\nkey",
-            ),
-        ),
-    ],
-)
-def test_retained_service_regex_alternatives_keep_match_spans_and_groups(
-    current, reference: str, words: tuple[str, ...]
-) -> None:
-    original = re.compile(reference, re.IGNORECASE)
-    for word, left, right in itertools.product(words, ("", "a", "0", "_", " ", "-"), ("", "s", "a", "0", "_", ".")):
-        for value in (word, word.upper(), word.swapcase()):
-            sample = f"{left}{value}{right} {value}"
-            assert [(m.span(), m.groups()) for m in current.finditer(sample)] == [
-                (m.span(), m.groups()) for m in original.finditer(sample)
-            ]

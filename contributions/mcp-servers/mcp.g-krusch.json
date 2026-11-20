@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.g-krusch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "G-Krusch (Google Workspace Hub & Drive RAG)",
   "description": "Reviews Google Drive writes/deletes, RAG index syncs, Calendar event creation, and Gmail draft/send actions on a local-first Google Workspace MCP server. Workspace reads, hybrid Drive RAG search, and status checks follow your normal Guard policy. Off until you turn it on.",
   "trustClass": "external",
@@ -86,7 +86,8 @@
     "https://github.com/kruschdev/G-krusch",
     "https://github.com/kruschdev/G-krusch/blob/main/CONTEXT.md",
     "https://github.com/kruschdev/G-krusch/blob/main/src/mcp/tools.js",
-    "https://krusch.dev/articles/introducing-g-krusch.html"
+    "https://krusch.dev/articles/introducing-g-krusch.html",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/g-krusch"
   ],
   "saferAlternatives": [
     "Use search_drive_rag, read_drive_file, list_drive_workspace, and get_agent_steering to inspect workspace documents without modifying Google Drive.",

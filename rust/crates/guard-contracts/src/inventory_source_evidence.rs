@@ -7,6 +7,12 @@
 //! write and both must stay inside the roots the caller names, so the resident
 //! does the walking and hands back fingerprints rather than raw local paths.
 //!
+//! The answer also names the instruction role an overlay's configured path
+//! stands for - the `AGENTS.md` of a workspace, a `.cursor/rules` file, a
+//! document under `docs/security` - because that reading is the same grammar
+//! the discovery walk already applies, and a second copy of it would let the
+//! role a scan records drift from the role discovery assigned.
+//!
 //! A snapshot asks once for the whole detection: the entries ride together so
 //! an inventory of a few hundred artifacts costs one round trip rather than
 //! one per artifact.
@@ -21,7 +27,20 @@ pub const INVENTORY_SOURCE_EVIDENCE_REQUEST_SCHEMA: &str =
 pub const INVENTORY_SOURCE_EVIDENCE_RESULT_SCHEMA: &str =
     "guard-inventory-source-evidence-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const INVENTORY_SOURCE_EVIDENCE_FEATURE: &str = "inventory-source-evidence-v1";
+///
+/// The version marks what the answer carries, not the schema. A v2 resident
+/// derives an artifact's item kind and answers with it, so a v2 client sends
+/// no kind of its own; a v1 resident refuses an entry without that field, and
+/// a client that cannot spell it must not be routed to one. A v3 resident also
+/// reads the instruction role an overlay's configured path names, which a v2
+/// answer leaves out entirely.
+pub const INVENTORY_SOURCE_EVIDENCE_FEATURE: &str = "inventory-source-evidence-v3";
+/// Same wire schema, before the resident answered the instruction role. Still
+/// advertised so a client built against it keeps its inventory.
+pub const INVENTORY_SOURCE_EVIDENCE_PREVIOUS_FEATURE: &str = "inventory-source-evidence-v2";
+/// Same wire schema, before the resident owned the item-kind mapping. Still
+/// advertised for the same reason.
+pub const INVENTORY_SOURCE_EVIDENCE_FIRST_FEATURE: &str = "inventory-source-evidence-v1";
 /// Largest canonical request serialization the op will accept.
 pub const INVENTORY_SOURCE_EVIDENCE_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Most entries one request may carry. A detection covering more than this
@@ -34,8 +53,20 @@ pub const INVENTORY_SOURCE_EVIDENCE_MAX_ENTRIES: usize = 512;
 pub struct InventorySourceEvidenceEntryV1 {
     /// The harness the artifact belongs to, used to spell the source link id.
     pub harness: String,
-    /// The snapshot's own kind for the artifact, used the same way.
-    pub item_kind: String,
+    /// The snapshot's own kind for the artifact, as a client built before the
+    /// op derived it spells the field.
+    ///
+    /// The op now maps the kind from `artifact_type` and answers with it, so a
+    /// current caller leaves the field out. The field stays accepted because
+    /// an older client still sends it and `deny_unknown_fields` would cost
+    /// that pairing its whole inventory. Nothing reads it.
+    ///
+    /// It is optional rather than defaulted so that an absent field stays
+    /// absent when the request is re-serialized: the reply binds the caller by
+    /// the digest of that serialization, and an empty string written where the
+    /// caller sent no key at all would leave every answer unbound.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_kind: Option<String>,
     /// The artifact type, which decides whether a primary document hash is
     /// defined at all: only `skill` and `instruction` carry one.
     pub artifact_type: String,
@@ -43,6 +74,19 @@ pub struct InventorySourceEvidenceEntryV1 {
     /// answer, with both readings absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_path: Option<String>,
+    /// The same path as the harness wrote it, when the caller had to anchor a
+    /// relative one to reach the filesystem.
+    ///
+    /// Only the instruction role reads it. A role is a reading of the path a
+    /// harness configured, so a relative `notes.md` names no role wherever the
+    /// scan happens to run; classifying the anchored path instead would let
+    /// the working directory's own components - a scan started inside
+    /// `docs/security`, or `.cursor/rules` - hand that role to a document
+    /// whose configured path never named it. The two readings that walk the
+    /// filesystem keep using `config_path`, which is the only one that
+    /// resolves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configured_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -78,9 +122,10 @@ pub struct InventorySourceEvidenceResultV1 {
     pub status: String,
     /// `ok`, or one of the `native_inventory_source_evidence_*` codes.
     pub code: String,
-    /// `{"evidence": [{"source_of_truth": {...}|null,
-    /// "primary_content_hash": "sha256:..."|null}, ...]}`, one entry per
-    /// requested artifact, in the order the request listed them.
+    /// `{"evidence": [{"item_kind": "overlay", "source_of_truth": {...}|null,
+    /// "primary_content_hash": "sha256:..."|null,
+    /// "instruction_role": "agents_md"|null}, ...]}`, one entry per requested
+    /// artifact, in the order the request listed them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }

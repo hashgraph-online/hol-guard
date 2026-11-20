@@ -136,7 +136,7 @@ pub(crate) fn launch(digest: &str) -> i32 {
         Err("Unsupported Linux boundary.")
     };
     if result.is_err() {
-        eprintln!("HOL Guard could not enforce the validated Linux execution boundary. Execution was not started.");
+        crate::runtime_output::stderr_line(format_args!("HOL Guard could not enforce the validated Linux execution boundary. Execution was not started."));
     }
     126
 }

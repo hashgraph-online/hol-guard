@@ -12,6 +12,7 @@
 //! is a fixed allowlisted origin; OAuth-specific validation lives in
 //! `validate_guard_sync_endpoint`).
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 #[cfg(test)]
 use std::time::Duration;
@@ -64,6 +65,12 @@ const SYNC_GATEWAY_MAX_WAIT_SECONDS: u64 = 8;
 /// default body limit, so the cap is unchanged from the direct transport.
 const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
+#[path = "guard_sync_transport_detailed.rs"]
+mod detailed;
+pub use detailed::{
+    urlopen_detailed, urlopen_json_detailed, urlopen_raw_detailed, SyncFetchError, SyncHttpFailure,
+};
+
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
 }
@@ -99,7 +106,16 @@ fn issuer_origin(issuer: &str) -> Result<String, String> {
 fn origin_host(origin: &str) -> String {
     url::Url::parse(origin)
         .ok()
-        .and_then(|u| u.host_str().map(str::to_owned))
+        .and_then(|u| {
+            u.host_str()
+                // An IPv6 host keeps its brackets in `host_str`; Python's
+                // `hostname` drops them, so `[::1]` compares as `::1`.
+                .map(|host| {
+                    host.trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .to_owned()
+                })
+        })
         .unwrap_or_default()
         .to_lowercase()
 }
@@ -718,6 +734,39 @@ fn retry_after_seconds(headers: &BTreeMap<String, String>, default: f64) -> f64 
         .unwrap_or(default)
 }
 
+/// Least time worth giving one more attempt.
+const SYNC_BUDGET_MIN_ATTEMPT_SECONDS: f64 = 1.0;
+
+/// Seconds a run of Guard Cloud exchanges may take, retries and their pauses
+/// included. Each attempt is charged its whole timeout and each pause its whole
+/// wait: a brokered evaluation is replayed every round, so it cannot read the
+/// clock, but counting this way gives every replay the same answer.
+#[derive(Debug)]
+pub struct SyncBudget(Cell<f64>);
+
+impl SyncBudget {
+    pub fn new(seconds: f64) -> Self {
+        Self(Cell::new(seconds.max(0.0)))
+    }
+
+    pub fn remaining(&self) -> f64 {
+        self.0.get()
+    }
+
+    fn spend(&self, seconds: f64) {
+        self.0.set((self.0.get() - seconds).max(0.0));
+    }
+
+    /// Spends `wait` when an attempt can still follow it.
+    fn take_pause(&self, wait: f64) -> bool {
+        let affordable = self.remaining() - wait >= SYNC_BUDGET_MIN_ATTEMPT_SECONDS;
+        if affordable {
+            self.spend(wait);
+        }
+        affordable
+    }
+}
+
 /// `runner.py:_urlopen_with_sync_retries` (:5009) — the bounded retry state
 /// machine. Order: nonce fast-path → bounded 429 waits → bounded gateway
 /// retries → generic nonce-challenge retry → one timeout retry at the longer
@@ -729,27 +778,79 @@ pub fn urlopen_with_sync_retries(
     parse_json_response: bool,
     nonce_fast_path: bool,
 ) -> Result<Option<Value>, EvalError> {
+    sync_retries(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        parse_json_response,
+        nonce_fast_path,
+        None,
+    )
+    .map_err(SyncFetchError::into_eval_error)
+}
+
+/// The retry machine, optionally held to a [`SyncBudget`]: each attempt gets at
+/// most the time left, and a retry or pause the budget cannot cover is not
+/// started, so the last response stands (or the run ends as a timeout).
+fn sync_retries(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    parse_json_response: bool,
+    nonce_fast_path: bool,
+    budget: Option<&SyncBudget>,
+) -> Result<Option<Value>, SyncFetchError> {
+    let response = sync_exchange(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        nonce_fast_path,
+        budget,
+    )?;
+    if !parse_json_response {
+        return Ok(None);
+    }
+    serde_json::from_slice::<Value>(&response.body_bytes)
+        .map(Some)
+        .map_err(|_| {
+            EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
+                .into()
+        })
+}
+
+/// The retry loop behind [`sync_retries`]: the successful response as it came
+/// back, status and body unread.
+fn sync_exchange(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    nonce_fast_path: bool,
+    budget: Option<&SyncBudget>,
+) -> Result<SyncResponse, SyncFetchError> {
     let mut current_request = request.clone();
     let mut current_timeout = timeout_seconds;
     let mut retried_timeout = false;
     let mut nonce_retry_count: u32 = 0;
     let mut rate_limit_retry_count: u32 = 0;
     let mut gateway_retry_count: u32 = 0;
+    let can_pause = |wait: f64| budget.is_none_or(|budget| budget.take_pause(wait));
     loop {
-        match execute_request(EgressClass::Cloud, &current_request, current_timeout) {
-            Ok(resp) => {
-                if parse_json_response {
-                    let body = resp.body_bytes;
-                    return serde_json::from_slice::<Value>(&body)
-                        .map(Some)
-                        .map_err(|_| {
-                            EvalError::Internal(
-                                "Guard Cloud sync returned an invalid response payload.".to_owned(),
-                            )
-                        });
+        let attempt_timeout = match budget {
+            None => current_timeout,
+            Some(budget) => {
+                if budget.remaining() < SYNC_BUDGET_MIN_ATTEMPT_SECONDS {
+                    return Err(EvalError::Internal(
+                        "timeout: Guard Cloud ran out of time.".to_owned(),
+                    )
+                    .into());
                 }
-                return Ok(None);
+                let attempt = current_timeout.min(budget.remaining());
+                budget.spend(attempt);
+                attempt
             }
+        };
+        match execute_request(EgressClass::Cloud, &current_request, attempt_timeout) {
+            Ok(resp) => return Ok(resp),
             Err(SyncHttpError::Http {
                 status,
                 headers,
@@ -768,11 +869,15 @@ pub fn urlopen_with_sync_retries(
                         }
                     }
                 }
-                if status == 429 && rate_limit_retry_count < SYNC_RATE_LIMIT_RETRY_LIMIT {
+                let rate_limit_wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS)
+                    .min(SYNC_429_MAX_WAIT_SECONDS as f64)
+                    .max(sync_retry_poll_interval_seconds());
+                if status == 429
+                    && rate_limit_retry_count < SYNC_RATE_LIMIT_RETRY_LIMIT
+                    && can_pause(rate_limit_wait)
+                {
                     rate_limit_retry_count += 1;
-                    let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS)
-                        .min(SYNC_429_MAX_WAIT_SECONDS as f64);
-                    egress_broker::pause(wait.max(sync_retry_poll_interval_seconds()));
+                    egress_broker::pause(rate_limit_wait);
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -780,13 +885,14 @@ pub fn urlopen_with_sync_retries(
                     retried_timeout = false;
                     continue;
                 }
+                let gateway_wait =
+                    sync_retry_poll_interval_seconds().min(SYNC_GATEWAY_MAX_WAIT_SECONDS as f64);
                 if status_is_retryable_gateway(status)
                     && gateway_retry_count < SYNC_GATEWAY_RETRY_LIMIT
+                    && can_pause(gateway_wait)
                 {
                     gateway_retry_count += 1;
-                    let wait = sync_retry_poll_interval_seconds()
-                        .min(SYNC_GATEWAY_MAX_WAIT_SECONDS as f64);
-                    egress_broker::pause(wait);
+                    egress_broker::pause(gateway_wait);
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -806,7 +912,11 @@ pub fn urlopen_with_sync_retries(
                 }
                 // `raise` (:5079) — the HTTPError propagates; the caller reads
                 // `error.code` for the 401/4xx fail-closed branch.
-                return Err(sync_http_eval_error(status, &headers, &body));
+                return Err(SyncFetchError::Http(SyncHttpFailure {
+                    status,
+                    headers,
+                    body,
+                }));
             }
             Err(SyncHttpError::Timeout(msg)) => {
                 if !retried_timeout {
@@ -817,9 +927,9 @@ pub fn urlopen_with_sync_retries(
                     }
                     continue;
                 }
-                return Err(EvalError::Internal(format!("timeout: {msg}")));
+                return Err(EvalError::Internal(format!("timeout: {msg}")).into());
             }
-            Err(SyncHttpError::Other(msg)) => return Err(EvalError::Internal(msg)),
+            Err(SyncHttpError::Other(msg)) => return Err(EvalError::Internal(msg).into()),
         }
     }
 }
@@ -837,6 +947,28 @@ pub fn urlopen_json_with_timeout_retry(
         })
 }
 
+/// [`urlopen_json_with_timeout_retry`] held to `budget`, which the caller can
+/// share across several requests.
+pub fn urlopen_json_within_budget(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    budget: &SyncBudget,
+) -> Result<Value, EvalError> {
+    sync_retries(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        true,
+        false,
+        Some(budget),
+    )
+    .map_err(SyncFetchError::into_eval_error)?
+    .ok_or_else(|| {
+        EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
+    })
+}
+
 /// `urllib.error.HTTPError` → `EvalError::HttpStatus` — carry the code so the
 /// `_evaluate_with_cloud` 401-refresh branch can read `http_status()`.
 fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &[u8]) -> EvalError {
@@ -847,6 +979,9 @@ fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &
 /// Start of the reason reported when Cloudflare in front of Guard Cloud blocked
 /// or challenged a request. Callers match it so an edge block is not reported as
 /// an expired sign-in.
+/// Starts the reason of a sign-in refresh that could not reach Guard Cloud.
+pub const OAUTH_REFRESH_UNREACHABLE: &str =
+    "Guard Cloud could not be reached to refresh the sign-in.";
 pub const CLOUD_EDGE_BLOCK_REASON_PREFIX: &str = "Guard Cloud is unreachable from this network";
 
 /// The edge-block text inside `reason`, which a caller may have prefixed with
@@ -945,6 +1080,7 @@ fn http_error_reason_message(
 
 #[derive(Debug)]
 pub(crate) struct SyncResponse {
+    pub(crate) status: u16,
     pub(crate) body_bytes: Vec<u8>,
 }
 
@@ -1018,7 +1154,10 @@ pub(crate) fn execute_request_following(
         .read_to_vec()
         .map_err(|e| SyncHttpError::Other(format!("read body: {e}")))?;
     if (200..300).contains(&status) {
-        return Ok(SyncResponse { body_bytes: body });
+        return Ok(SyncResponse {
+            status,
+            body_bytes: body,
+        });
     }
     Err(SyncHttpError::Http {
         status,
@@ -1051,16 +1190,63 @@ pub enum OAuthRefreshOutcome {
         access_token: String,
         rotation_refresh_token: Option<String>,
         access_token_expires_at: Option<String>,
+        /// The whole token response, for a caller that reads its entitlement
+        /// and profile fields.
+        payload: Value,
     },
     /// The endpoint issued a `DPoP-Nonce`; retry with it (bounded by caller).
     NonceChallenge(String),
-    /// 429 — carry the bounded Retry-After hint; the caller owns the sleep.
-    RateLimited(f64),
+    /// 429 — the bounded numeric Retry-After hint, and the header as sent
+    /// (an HTTP date or a wait longer than the bound) for a caller that keeps
+    /// its own limit. The caller owns the sleep.
+    RateLimited {
+        wait_seconds: f64,
+        retry_after: Option<String>,
+    },
     /// `invalid_grant` / consumed-or-revoked — the grant is dead; caller must
     /// record the dead-grant breaker and demand reauthorization.
     DeadGrant,
-    /// Any other transport or payload failure — reauthorizable.
+    /// Guard Cloud could not be reached (a connection failure, a timeout or a
+    /// 502/503/504): an outage that clears up on its own, not a sign-in that
+    /// needs reconnecting.
+    Unreachable(String),
+    /// A 400, 401 or 403 that is not `invalid_grant`: the endpoint refused
+    /// this grant without revoking it.
+    Rejected(String),
+    /// The proof could not be signed, or the endpoint answered without a
+    /// usable access token: the stored sign-in cannot be refreshed as it is.
+    Unusable(String),
+    /// Any other transport or HTTP failure.
     Failed(String),
+}
+
+/// I/O failures that clear up on their own (`_is_network_outage_error`). TLS
+/// failures are not among them.
+const OUTAGE_IO_KINDS: [std::io::ErrorKind; 8] = [
+    std::io::ErrorKind::ConnectionRefused,
+    std::io::ErrorKind::ConnectionReset,
+    std::io::ErrorKind::ConnectionAborted,
+    std::io::ErrorKind::HostUnreachable,
+    std::io::ErrorKind::NetworkUnreachable,
+    std::io::ErrorKind::NetworkDown,
+    std::io::ErrorKind::TimedOut,
+    std::io::ErrorKind::NotConnected,
+];
+
+/// Whether a transport failure reason names a network outage rather than a
+/// failure that will not clear up on its own. The egress broker reports an
+/// I/O failure as `io: ` and the kind's display text (`connection refused`);
+/// the variant name (`ConnectionRefused`) is accepted as well.
+pub fn is_network_outage_reason(reason: &str) -> bool {
+    if reason.starts_with("timeout:") || reason == "host not found" {
+        return true;
+    }
+    let Some(kind) = reason.strip_prefix("io: ").map(str::trim) else {
+        return false;
+    };
+    OUTAGE_IO_KINDS
+        .iter()
+        .any(|known| kind == known.to_string() || kind == format!("{known:?}"))
 }
 
 /// `urllib.parse.urlencode` parity — percent-encode every byte outside the
@@ -1083,34 +1269,67 @@ fn form_urlencode_field(name: &str, value: &str) -> String {
     out
 }
 
-/// `runner.py:_oauth_access_token_expires_at` (:4411) — prefer the JWT `exp`
-/// claim; otherwise `now + expires_in`; `None` when neither is usable. Returns
-/// the `datetime.isoformat()` (`+00:00`) string the store round-trips.
+/// The access token's expiry, read the way the runtime's `oauth_token_claims`
+/// `expires_at` op reads it: a positive JWT `exp` (fractions kept to the
+/// microsecond), else `now + expires_in` with `expires_in` taken as Python
+/// `int()` would, else `None`. Returns the `datetime.isoformat()` (`+00:00`)
+/// string the store round-trips.
 fn oauth_access_token_expires_at(
     access_token: &str,
     payload: &Value,
     now_unix: i64,
 ) -> Option<String> {
-    if let Some(exp) = jwt_exp_claim(access_token) {
+    if let Some(exp_micros) = jwt_exp_claim(access_token) {
         return Some(
-            crate::local_supply_chain::Timestamp::from_unix_micros(exp * 1_000_000).isoformat(),
+            crate::local_supply_chain::Timestamp::from_unix_micros(exp_micros).isoformat(),
         );
     }
-    let expires_in = match payload.get("expires_in") {
-        Some(Value::Number(n)) => n
-            .as_f64()
-            .filter(|v| *v > 0.0 && !v.is_nan())
-            .map(|v| v as i64),
-        Some(Value::String(s)) => s.parse::<i64>().ok().filter(|v| *v > 0),
-        _ => None,
-    }?;
-    Some(
-        crate::local_supply_chain::Timestamp::from_unix_micros((now_unix + expires_in) * 1_000_000)
-            .isoformat(),
-    )
+    let expires_in = payload
+        .get("expires_in")
+        .and_then(whole_seconds)
+        .filter(|seconds| *seconds > 0)?;
+    let micros = now_unix.checked_add(expires_in)?.checked_mul(1_000_000)?;
+    Some(crate::local_supply_chain::Timestamp::from_unix_micros(micros).isoformat())
 }
 
-/// Decode the JWT payload segment and read a positive numeric `exp`.
+/// Python `int(value)` for a JSON number or a decimal string.
+fn whole_seconds(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(number) => number.as_i64().or_else(|| {
+            number
+                .as_f64()
+                .filter(|seconds| seconds.is_finite() && seconds.abs() < 9.0e18)
+                .map(|seconds| seconds.trunc() as i64)
+        }),
+        Value::String(raw) => python_decimal(raw.trim_matches(|c: char| c.is_whitespace())),
+        _ => None,
+    }
+}
+
+/// `int(text)` for base-10 text: an optional sign, then digits with single
+/// underscores between them.
+fn python_decimal(text: &str) -> Option<i64> {
+    let (negative, digits) = match text.as_bytes().first()? {
+        b'-' => (true, &text[1..]),
+        b'+' => (false, &text[1..]),
+        _ => (false, text),
+    };
+    if digits.is_empty()
+        || digits.starts_with('_')
+        || digits.ends_with('_')
+        || digits.contains("__")
+        || !digits
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'_')
+    {
+        return None;
+    }
+    let magnitude: i64 = digits.replace('_', "").parse().ok()?;
+    Some(if negative { -magnitude } else { magnitude })
+}
+
+/// Decode the JWT payload segment and read a positive numeric `exp`, in
+/// microseconds since the epoch.
 fn jwt_exp_claim(access_token: &str) -> Option<i64> {
     let payload_seg = access_token.split('.').nth(1)?;
     let padded = match payload_seg.len() % 4 {
@@ -1121,11 +1340,18 @@ fn jwt_exp_claim(access_token: &str) -> Option<i64> {
         .decode(padded)
         .ok()?;
     let claims: Value = serde_json::from_slice(&bytes).ok()?;
-    claims
-        .get("exp")
-        .and_then(Value::as_f64)
-        .filter(|v| *v > 0.0)
-        .map(|v| v as i64)
+    let exp = claims.get("exp").filter(|value| value.is_number())?;
+    if !exp.as_f64().is_some_and(|seconds| seconds > 0.0) {
+        return None;
+    }
+    match exp.as_i64() {
+        Some(seconds) => seconds.checked_mul(1_000_000),
+        None => exp
+            .as_f64()
+            .map(|seconds| seconds * 1_000_000.0)
+            .filter(|micros| micros.is_finite() && micros.abs() < 9.0e18)
+            .map(|micros| micros.round_ties_even() as i64),
+    }
 }
 
 /// `runner.py:_invalid_grant_oauth_payload` (:3911) — the grant is dead on a
@@ -1183,7 +1409,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
         req.now_unix,
     ) {
         Ok(proof) => proof,
-        Err(reason) => return OAuthRefreshOutcome::Failed(reason),
+        Err(reason) => return OAuthRefreshOutcome::Unusable(reason),
     };
     let mut headers = BTreeMap::new();
     headers.insert(
@@ -1206,7 +1432,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             let Some(payload) =
                 parse_json_body(&resp.body_bytes).and_then(|v| v.as_object().cloned())
             else {
-                return OAuthRefreshOutcome::Failed(
+                return OAuthRefreshOutcome::Unusable(
                     "Guard Cloud token refresh returned a non-JSON response.".to_owned(),
                 );
             };
@@ -1221,7 +1447,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 _ => (String::new(), false),
             };
             if !token_type_ok {
-                return OAuthRefreshOutcome::Failed(
+                return OAuthRefreshOutcome::Unusable(
                     "Guard Cloud token refresh returned an unusable token.".to_owned(),
                 );
             }
@@ -1236,6 +1462,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 access_token,
                 rotation_refresh_token,
                 access_token_expires_at,
+                payload,
             }
         }
         Err(SyncHttpError::Http {
@@ -1255,22 +1482,145 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             }
             if status == 429 {
                 let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS).min(120.0);
-                return OAuthRefreshOutcome::RateLimited(wait);
+                return OAuthRefreshOutcome::RateLimited {
+                    wait_seconds: wait,
+                    retry_after: http_header_value(&headers, "Retry-After").map(str::to_owned),
+                };
             }
             if matches!(status, 400 | 401 | 403) {
                 if invalid_grant_oauth_payload(&body) {
                     return OAuthRefreshOutcome::DeadGrant;
                 }
-                return OAuthRefreshOutcome::Failed(http_error_reason_message(
+                return OAuthRefreshOutcome::Rejected(http_error_reason_message(
                     status, &headers, &body,
                 ));
             }
-            OAuthRefreshOutcome::Failed(http_error_reason_message(status, &headers, &body))
+            let message = http_error_reason_message(status, &headers, &body);
+            if matches!(status, 502..=504) {
+                return OAuthRefreshOutcome::Unreachable(message);
+            }
+            OAuthRefreshOutcome::Failed(message)
         }
         Err(SyncHttpError::Timeout(_)) => {
-            OAuthRefreshOutcome::Failed("Guard Cloud token refresh timed out.".to_owned())
+            OAuthRefreshOutcome::Unreachable("Guard Cloud token refresh timed out.".to_owned())
+        }
+        Err(SyncHttpError::Other(reason)) if is_network_outage_reason(&reason) => {
+            OAuthRefreshOutcome::Unreachable(reason)
         }
         Err(SyncHttpError::Other(reason)) => OAuthRefreshOutcome::Failed(reason),
+    }
+}
+
+#[cfg(test)]
+mod sync_budget_tests {
+    use guard_contracts::{EgressOutcomeV1, EgressSuppliedV1};
+
+    use super::*;
+    use crate::egress_broker::EgressScope;
+
+    const EVALUATE_URL: &str = "https://hol.org/api/guard/supply-chain/evaluate";
+
+    fn evaluate_request() -> GuardSyncRequest {
+        GuardSyncRequest {
+            url: EVALUATE_URL.to_owned(),
+            method: "POST".to_owned(),
+            headers: BTreeMap::new(),
+            body: Some(b"{}".to_vec()),
+            dpop_nonce: None,
+            retry_context: None,
+        }
+    }
+
+    fn answer(occurrence: u32, outcome: EgressOutcomeV1) -> EgressSuppliedV1 {
+        EgressSuppliedV1 {
+            class: "cloud".to_owned(),
+            method: "POST".to_owned(),
+            url: EVALUATE_URL.to_owned(),
+            body_sha256: hex::encode(Sha256::digest(b"{}")),
+            occurrence,
+            outcome,
+        }
+    }
+
+    fn status(code: u16, retry_after: Option<&str>) -> EgressOutcomeV1 {
+        EgressOutcomeV1::Response {
+            status: code,
+            headers: retry_after
+                .map(|value| BTreeMap::from([("Retry-After".to_owned(), value.to_owned())]))
+                .unwrap_or_default(),
+            body: None,
+            body_file: None,
+        }
+    }
+
+    #[test]
+    fn a_rate_limit_pause_the_budget_cannot_cover_is_not_started() {
+        let rate_limited = [answer(1, status(429, Some("60")))];
+
+        let scope = EgressScope::enter(&rate_limited, None).unwrap();
+        let unbounded = urlopen_json_with_timeout_retry(&evaluate_request(), 5.0, 5.0);
+        let needs = scope.finish();
+        assert!(unbounded.is_err());
+        assert_eq!(
+            needs.len(),
+            1,
+            "without a budget the 60-second pause is taken"
+        );
+        assert!((needs[0].delay_seconds - 60.0).abs() < f64::EPSILON);
+
+        let scope = EgressScope::enter(&rate_limited, None).unwrap();
+        let budget = SyncBudget::new(20.0);
+        let bounded = urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget);
+        assert!(scope.finish().is_empty(), "no retry is asked for");
+        assert!(matches!(bounded, Err(EvalError::HttpStatus(429, _))));
+        assert!((budget.remaining() - 15.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn an_attempt_after_a_rate_limit_only_gets_the_time_left() {
+        // The timeout retry ends in a 429, which would reset the retry; the
+        // attempt after its pause is cut to what the budget still holds.
+        let answers = [
+            answer(1, EgressOutcomeV1::Timeout),
+            answer(2, status(429, Some("1"))),
+        ];
+        let scope = EgressScope::enter(&answers, None).unwrap();
+        let budget = SyncBudget::new(12.5);
+        assert!(urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).is_err());
+        let needs = scope.finish();
+        assert_eq!(needs.len(), 1);
+        assert_eq!(needs[0].occurrence, 3);
+        assert!((needs[0].delay_seconds - 1.0).abs() < f64::EPSILON);
+        assert!((needs[0].timeout_seconds - 1.5).abs() < f64::EPSILON);
+        assert!(budget.remaining().abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_spent_budget_sends_nothing_and_reads_as_a_timeout() {
+        let scope = EgressScope::enter(&[], None).unwrap();
+        let budget = SyncBudget::new(0.5);
+        let error = urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).unwrap_err();
+        assert!(scope.finish().is_empty());
+        assert!(matches!(error, EvalError::Internal(message) if message.starts_with("timeout:")));
+    }
+
+    #[test]
+    fn one_budget_is_shared_by_the_requests_given_it() {
+        let scope = EgressScope::enter(
+            &[
+                answer(1, EgressOutcomeV1::Timeout),
+                answer(2, EgressOutcomeV1::Timeout),
+            ],
+            None,
+        )
+        .unwrap();
+        let budget = SyncBudget::new(12.0);
+        let first = urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).unwrap_err();
+        assert!(matches!(first, EvalError::Internal(message) if message.starts_with("timeout:")));
+        assert!(urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).is_err());
+        let needs = scope.finish();
+        assert_eq!(needs.len(), 1);
+        assert!((needs[0].timeout_seconds - 2.0).abs() < f64::EPSILON);
     }
 }
 
@@ -1352,7 +1702,7 @@ mod sync_retry_parity_tests {
         assert!(!invalid_grant_oauth_payload(br#"{"error":42}"#));
     }
 
-    /// `_oauth_access_token_expires_at` — prefer JWT `exp`, else now+expires_in.
+    /// Expiry prefers the JWT `exp`, else now+expires_in.
     #[test]
     fn access_token_expires_at_prefers_jwt_exp_then_expires_in() {
         // unsigned-style payload segment {"exp":1893456000} base64url
@@ -1370,6 +1720,31 @@ mod sync_retry_parity_tests {
             oauth_access_token_expires_at("x", &serde_json::json!({}), 0),
             None
         );
+
+        let fractional =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(br#"{"exp":1893456000.5}"#);
+        assert_eq!(
+            oauth_access_token_expires_at(
+                &format!("aaa.{fractional}.ccc"),
+                &serde_json::json!({}),
+                0
+            )
+            .as_deref(),
+            Some("2030-01-01T00:00:00.500000+00:00")
+        );
+        let python_int =
+            oauth_access_token_expires_at("x", &serde_json::json!({"expires_in": " 1_0 "}), 0);
+        assert_eq!(python_int.as_deref(), Some("1970-01-01T00:00:10+00:00"));
+        for unusable in [
+            serde_json::json!(0.5),
+            serde_json::json!("1__0"),
+            serde_json::json!(true),
+        ] {
+            assert_eq!(
+                oauth_access_token_expires_at("x", &serde_json::json!({"expires_in": unusable}), 0),
+                None
+            );
+        }
     }
 
     /// Refresh success requires `access_token` + `token_type` in {bearer,dpop}

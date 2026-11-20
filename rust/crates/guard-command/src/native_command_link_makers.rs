@@ -46,7 +46,6 @@ pub(super) fn creates_links(literal: &str) -> bool {
                 | "apply"
                 | "am"
                 | "read-tree"
-                | "sparse-checkout"
                 | "submodule"
                 | "mv"
                 | "bisect"
@@ -95,6 +94,9 @@ fn group_writes_tree(word: &str, operation: Option<&str>) -> bool {
     let reports = match word {
         "worktree" => ["list", "prune", "remove", "lock", "unlock"].as_slice(),
         "stash" => ["list", "show", "drop", "clear"].as_slice(),
+        // Listing the patterns prints them; every other spelling of
+        // `sparse-checkout` narrows or widens the working tree.
+        "sparse-checkout" => ["list"].as_slice(),
         _ => return false,
     };
     operation.is_none_or(|operation| !reports.contains(&operation))

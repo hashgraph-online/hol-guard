@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.store_storage_maintenance import (
     STORAGE_MAINTENANCE_BUSY_TIMEOUT_MS,
     StorageMaintenanceResult,
 )
+from tests.native_store_shims import reconcile_receipt_events
 from tests.test_native_decision_receipt import _receipt as native_test_receipt
 
 
@@ -153,7 +154,7 @@ def test_storage_maintenance_bounds_detail_and_preserves_rollups(tmp_path: Path)
             """
         )
         connection.execute("delete from receipt_rollup_actions where receipt_id = 'receipt-4'")
-    store.reconcile_receipt_events()
+    reconcile_receipt_events(store)
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         assert connection.execute("select count(*) from receipt_rollup_actions").fetchone()[0] == 3
         totals = connection.execute(
@@ -166,7 +167,7 @@ def test_storage_maintenance_bounds_detail_and_preserves_rollups(tmp_path: Path)
         assert tuple(totals) == (6, 6, 0, 0)
 
         connection.execute("delete from receipt_aggregate_totals where totals_key = 'global'")
-    store.reconcile_receipt_events()
+    reconcile_receipt_events(store)
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         assert (
             connection.execute("select total from receipt_aggregate_totals where totals_key = 'global'").fetchone()[0]

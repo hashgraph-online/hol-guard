@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
-from codex_plugin_scanner.guard.runtime.contained_command_prefix import _split_command_prefix
 from codex_plugin_scanner.guard.runtime.contained_wrapper import anchored_sibling_root, peel_contained_wrapper
 
 
@@ -22,6 +21,11 @@ def sibling_home(tmp_path: Path) -> tuple[Path, Path, Path]:
     for script in (sibling / "scripts" / "report.py", home / "loose" / "probe.py", workspace / "notes.txt"):
         script.write_text("")
     return home, workspace, sibling
+
+
+@pytest.fixture(autouse=True)
+def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
+    """Every peel here is the classifier's answer, asked of the session resident."""
 
 
 def test_quiet_or_sequenced_cd_into_a_sibling_repository_is_peeled(tmp_path: Path) -> None:
@@ -134,24 +138,3 @@ def test_sink_runs_an_anchored_script_from_the_sibling_root(monkeypatch: pytest.
         == 0
     )
     assert runs == [(sibling.resolve(), sibling.resolve())]
-
-
-def test_plain_data_settings_are_dropped_and_others_stay() -> None:
-    assert _split_command_prefix(["REPORT_DIR=/tmp/report", "CI=1", "vitest", "run"], drop_data=True) == (
-        ["vitest", "run"],
-        {"CI": "1"},
-    )
-    for command in (
-        ["PYTHONPATH=.", "pytest"],
-        ["REPORT_DIR=$HOME/x", "pytest"],
-        ["REPORT_DIR=-r", "pytest"],
-        ["TMPDIR=/tmp/x", "pytest"],
-    ):
-        assert _split_command_prefix(command, drop_data=True) == (command, {})
-
-
-def test_without_posix_owners_no_sibling_root_is_proven(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home, workspace, sibling = sibling_home(tmp_path)
-    monkeypatch.delattr("os.getuid", raising=False)
-    for command in ("pytest -q", f"python3 {sibling / 'scripts' / 'report.py'}"):
-        assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) is None

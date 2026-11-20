@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.duckdb-vectors",
+  "version": "1.0.0",
+  "name": "DuckDB Vectors MCP server",
+  "description": "Serves hybrid semantic + exact-token search over a local DuckDB index as two tools: search returns ranked chunks (text and metadata), report introspects the index. Opening the store connects writable and ensures its schema, so a call can create the database file and its indexes. Embedding is local by default; a configured backend (for example Bedrock) sends the query text to that provider. External, opt-in, off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.bernardpaques",
+    "displayName": "Bernard Paques",
+    "url": "https://github.com/bernard357"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/bernard357/duckdb-vectors",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "duckdb-vectors"
+  },
+  "riskClasses": [
+    "local-file-read",
+    "local-file-write",
+    "external-network-read"
+  ],
+  "tools": [
+    {
+      "name": "search",
+      "state": "review"
+    },
+    {
+      "name": "report",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/bernard357/duckdb-vectors",
+    "https://github.com/bernard357/duckdb-vectors/blob/main/src/duckdb_vectors/mcp_server.py",
+    "https://github.com/bernard357/duckdb-vectors/blob/main/src/duckdb_vectors/store.py",
+    "https://pypi.org/project/duckdb-vectors/"
+  ],
+  "saferAlternatives": [
+    "Both tools open the store writable and ensure its schema, so a call can create the database file (search and report are not guaranteed read-only); point the server at a pre-built index whose path is safe to create or touch.",
+    "search returns the indexed chunk text and metadata (not just match IDs) and report returns the database path and the indexed source paths, so enable only over a corpus whose contents and file layout are safe to disclose to the agent and model.",
+    "Embedding runs locally by default, but the default model downloads on first use if uncached (pre-cache for offline); the opt-in Bedrock backend instead sends each search query's text to AWS."
+  ]
+}

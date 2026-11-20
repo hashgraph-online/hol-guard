@@ -24,8 +24,7 @@ Each vector holds the resident's inputs (``facts``) and the ``plan`` the
 oracle exhibits: ``claim`` (the store claim, with the plan to follow when it
 succeeds and when it fails), ``revalidate`` (the post-claim pass) or ``settled``
 (the settlement of the ladder). The Rust ``hook_decision_artifact_reuse_step``
-tests replay the plan; ``tests/test_artifact_reuse_step_parity.py`` runs the
-new executor over every path of each recorded plan with the store stubbed.
+tests replay the plan.
 
 Deliberate differences from the old ladder, all of them in the failure paths
 the vectors do not cover: a resident that cannot answer no longer recomputes

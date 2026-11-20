@@ -6,7 +6,10 @@
 //! means: the capability snapshot and its delta against the previous snapshot,
 //! the artifact diff, the local history and provenance context, the incident
 //! copy shown for a decision, the receipt fields and the per-artifact result
-//! projection, and the approval-context components. Every query is pure: no
+//! projection, and the approval-context components. The outcome queries also
+//! decide what the composed runtime decision means for the evaluation: the
+//! policy action, whether it blocks, whether the snapshot may advance, the
+//! receipt and the change event. Every query is pure: no
 //! IO, no SQLite. Python sends every field explicitly (nulls included) so the
 //! request digest it binds matches the resident's.
 
@@ -20,7 +23,7 @@ pub const CONSUMER_ARTIFACT_PROJECT_REQUEST_SCHEMA: &str =
 pub const CONSUMER_ARTIFACT_PROJECT_RESULT_SCHEMA: &str =
     "guard-consumer-artifact-project-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const CONSUMER_ARTIFACT_PROJECT_FEATURE: &str = "consumer-artifact-project-v1";
+pub const CONSUMER_ARTIFACT_PROJECT_FEATURE: &str = "consumer-artifact-project-v2";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -35,10 +38,18 @@ pub struct ConsumerArtifactProjectRequestV1 {
 pub enum ConsumerArtifactProjectQueryV1 {
     /// Capability snapshot and delta, diff, history and provenance.
     ArtifactEvidence(Box<ConsumerArtifactEvidenceQueryV1>),
-    /// Result row of a detected artifact.
+    /// Result row of a detected artifact from an already projected decision.
+    /// Kept so the recorded parity vectors replay; the evaluation asks for
+    /// `ArtifactOutcome`.
     ArtifactResult(Box<ConsumerArtifactResultQueryV1>),
-    /// Receipt strings and result row of a removed artifact.
+    /// Receipt strings and result row of a removed artifact from an already
+    /// projected decision. Kept for the recorded parity vectors; the
+    /// evaluation asks for `RemovedOutcome`.
     RemovedResult(Box<ConsumerRemovedResultQueryV1>),
+    /// Decision outcome, result row, receipt and event of a detected artifact.
+    ArtifactOutcome(Box<ConsumerArtifactOutcomeQueryV1>),
+    /// Decision outcome, result row, receipt and event of a removed artifact.
+    RemovedOutcome(Box<ConsumerRemovedOutcomeQueryV1>),
     /// Incident copy for one artifact decision.
     IncidentContext(Box<ConsumerIncidentQueryV1>),
 }
@@ -100,6 +111,55 @@ pub struct ConsumerRemovedResultQueryV1 {
     pub approval_context_hash: String,
     pub effective_workspace: Value,
     pub policy_action: String,
+}
+
+/// What the evaluation of one detected artifact concluded. Either `runtime`
+/// (the `runtime_authoritative` compose answer) or `compose_error` (why no
+/// answer exists) is set; without an answer the artifact blocks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ConsumerArtifactOutcomeQueryV1 {
+    pub harness: String,
+    pub artifact: Value,
+    /// The evidence payload this artifact's evidence query returned.
+    pub evidence: Value,
+    /// The scoring verdict, or `null` when the current-action query failed.
+    pub verdict: Value,
+    pub scanner_action: Value,
+    pub configured_action: Value,
+    pub runtime: Value,
+    pub compose_error: Value,
+    /// The artifact's typed scanner signals.
+    pub signals: Vec<Value>,
+    /// The risk signals the decision was composed from.
+    pub decision_signals: Vec<Value>,
+    /// Summary shown when the runtime detector did not decide.
+    pub static_risk_summary: String,
+    /// Whether the runtime detector contributed signals to this evaluation.
+    pub runtime_signals_present: bool,
+    /// Override label recorded when a trusted request override applied.
+    pub user_override: Value,
+    pub approval_context_hash: String,
+    pub effective_workspace: Value,
+}
+
+/// What the evaluation of one removed artifact concluded; `runtime` and
+/// `compose_error` as for a detected artifact.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ConsumerRemovedOutcomeQueryV1 {
+    pub harness: String,
+    pub artifact_id: String,
+    pub previous: Value,
+    pub previous_hash: String,
+    pub configured_action: Value,
+    pub runtime: Value,
+    pub compose_error: Value,
+    /// The runtime detector's risk signals.
+    pub decision_signals: Vec<Value>,
+    pub user_override: Value,
+    pub approval_context_hash: String,
+    pub effective_workspace: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

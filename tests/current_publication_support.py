@@ -195,7 +195,7 @@ def setup(tmp_path, monkeypatch):
                     status="ahead",
                     base_commit=dict(sha=SOURCE),
                     merge_base_commit=dict(sha=SOURCE),
-                    head_commit=dict(sha=PUBLISHED_SOURCE),
+                    url=url.split("?", 1)[0],
                     ahead_by=1,
                     behind_by=0,
                 )

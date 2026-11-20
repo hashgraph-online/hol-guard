@@ -56,18 +56,17 @@ def capability_contract(compatibility_modes: Iterable[str]) -> list[dict[str, ob
         },
         {
             "id": "managed_structured_output_destination_mediation",
-            "authority": "python_adapter_restrictive_layer",
-            "python_files": [
-                "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
-                "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
-                "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
+            "authority": "rust",
+            "rust_symbols": [
+                "guard_runtime::edge_structured::attach",
+                "guard_runtime::hook_direct_pi::mediate",
+                "guard_command::content_sensitivity::evaluate",
             ],
-            "python_operations": [
-                "bounded_in_memory_json_decode_and_canonicalization",
-                "secret_rule_version_fingerprint",
-                "structured_content_sha256_binding",
-            ],
-            "rust_decision_and_receipt_remain_authoritative": True,
+            "python_semantic_fallback": False,
+            # The daemon reads the managed-policy view from Guard config,
+            # which only it can, before the edge call and again to confirm an
+            # allowed answer. Rust decides the disposition from that view.
+            "python_decision_time_disk_io": True,
             "failure": "fail_closed",
         },
     ]

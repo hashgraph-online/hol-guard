@@ -86,6 +86,8 @@ fn base_request(store_path: &std::path::Path) -> PolicyDecisionLookupRequestV1 {
         local_once_integrity_key_b64: None,
         local_once_integrity_key_id: None,
         policy_bundle_decision_identities: None,
+        exception_workspace: None,
+        cloud_exception_bundle: Default::default(),
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,
@@ -406,12 +408,76 @@ fn family_scoped_row_is_eligible_for_concrete_lookup() {
     assert!(runtime_policy_row_is_eligible(
         &row,
         &[],
+        false,
         Some("codex:project:mcp:safe-read"),
         None,
         None,
         None,
         None
     ));
+}
+
+/// An approved Cloud exception lifts a bundle's v1 and canonical blocks and
+/// reviews for the lookup it covers; its allows and every other source still
+/// apply.
+#[test]
+fn lifted_bundle_drops_only_canonical_restrictions() {
+    let row = |action: &str, source: &str| {
+        json!({
+            "decision_id": 1, "harness": "codex", "scope": "harness",
+            "artifact_id": "family:mcp", "artifact_hash": Value::Null,
+            "action": action, "source": source,
+        })
+    };
+    let eligible = |row: &Value, lifted: bool| {
+        runtime_policy_row_is_eligible(
+            row,
+            &[],
+            lifted,
+            Some("codex:project:mcp:safe-read"),
+            None,
+            None,
+            None,
+            None,
+        )
+    };
+    for action in ["block", "review", "require-reapproval", "sandbox-required"] {
+        let canonical = row(action, "policy-bundle-canonical");
+        assert!(
+            eligible(&canonical, false),
+            "{action} applies without an exception"
+        );
+        assert!(
+            !eligible(&canonical, true),
+            "{action} is lifted by the exception"
+        );
+    }
+    let signed = row("block", "policy-bundle");
+    let identity = materialized_policy_bundle_row_identity(&signed);
+    let identities = [identity.as_array().unwrap().clone()];
+    let listed = |lifted: bool| {
+        runtime_policy_row_is_eligible(
+            &signed,
+            &identities,
+            lifted,
+            Some("codex:project:mcp:safe-read"),
+            None,
+            None,
+            None,
+            None,
+        )
+    };
+    assert!(
+        listed(false),
+        "a listed v1 block applies without an exception"
+    );
+    assert!(
+        !listed(true),
+        "a listed v1 block is lifted by the exception"
+    );
+    assert!(eligible(&row("allow", "policy-bundle-canonical"), true));
+    assert!(eligible(&row("block", "policy-yaml-import"), true));
+    assert!(eligible(&row("block", "cloud-signed-memory"), true));
 }
 
 /// Vectors recorded from the retired Python
@@ -487,4 +553,167 @@ fn local_once_only_ignores_runtime_exact_fallback_hash() {
     let peek = evaluate(&request).unwrap();
     assert!(peek["decision"].is_null());
     assert!(peek["ignored_local_integrity"].is_null());
+}
+
+/// Two canonical bundle blocks, for `npm:lodash` and `npm:left-pad`, while
+/// the stored bundle excepts only `npm:lodash`.
+fn excepted_lodash_store(tag: &str) -> PathBuf {
+    let store = tmp_store(tag);
+    seed_store(&store);
+    let conn = Connection::open(&store).unwrap();
+    for artifact in ["npm:lodash", "npm:left-pad"] {
+        conn.execute(
+            "insert into policy_decisions (harness, scope, artifact_id, action, source,
+               created_at, updated_at)
+             values ('codex', 'artifact', ?1, 'block', 'policy-bundle-canonical',
+               '2029-01-01T00:00:00+00:00', '2029-01-01T00:00:00+00:00')",
+            [artifact],
+        )
+        .unwrap();
+    }
+    let bundle = json!({
+        "workspaceId": "workspace-1",
+        "cloudExceptions": [{
+            "exceptionId": "artifact:npm:lodash",
+            "scope": "artifact",
+            "harness": "codex",
+            "owner": "owner@example.test",
+            "expiresAt": "2099-01-01T00:00:00+00:00",
+        }],
+    });
+    crate::cloud_exception_lift::VALIDATED_BUNDLE
+        .with(|cell| *cell.borrow_mut() = Some((Vec::new(), bundle.as_object().cloned())));
+    store
+}
+
+fn lookup_action(request: &PolicyDecisionLookupRequestV1) -> Value {
+    let bytes = evaluate_policy_decision_lookup_request(request).unwrap();
+    let result: PolicyDecisionLookupResultV1 = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(result.status, "ok", "{}", result.code);
+    result.payload.unwrap()["decision"]["action"].clone()
+}
+
+/// The lookup asks the stored bundle about each probe's own artifact: the
+/// excepted artifact reads no Cloud block, the other keeps its block.
+#[test]
+fn a_cloud_exception_lifts_only_the_artifact_it_names() {
+    let store = excepted_lodash_store("exception-per-probe");
+    let mut request = base_request(&store);
+    request.consume_one_shot = false;
+    request.artifact_hash = None;
+    assert_eq!(lookup_action(&request), Value::Null);
+    request.artifact_id = Some("npm:left-pad".to_owned());
+    assert_eq!(lookup_action(&request), json!("block"));
+    crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
+}
+
+/// A grouped lookup named for the excepted artifact still reads the block on
+/// another candidate it probes.
+#[test]
+fn a_grouped_lookup_lifts_each_candidate_on_its_own() {
+    let store = excepted_lodash_store("exception-grouped");
+    let mut request = base_request(&store);
+    request.consume_one_shot = false;
+    request.probe_groups = Some(
+        serde_json::from_value(json!({
+            "groups": [{
+                "artifact_hash": "sha256:abc",
+                "candidate_artifact_ids": ["npm:lodash", "npm:left-pad"],
+            }],
+        }))
+        .unwrap(),
+    );
+    assert_eq!(lookup_action(&request), json!("block"));
+    // Every candidate probe shares the request's bundle cache, so the signed
+    // bundle is validated once for the whole group.
+    assert!(request.cloud_exception_bundle.get().is_some());
+    request.probe_groups = Some(
+        serde_json::from_value(json!({
+            "groups": [{
+                "artifact_hash": "sha256:abc",
+                "candidate_artifact_ids": ["npm:lodash"],
+            }],
+        }))
+        .unwrap(),
+    );
+    assert_eq!(lookup_action(&request), Value::Null);
+    crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
+}
+
+/// Seed a cached bundle the resident cannot read, and optionally one row the
+/// bundle saved.
+fn unreadable_bundle_store(tag: &str, bundle_row: bool) -> PathBuf {
+    let store = tmp_store(tag);
+    seed_store(&store);
+    let conn = Connection::open(&store).unwrap();
+    conn.execute_batch(
+        "create table sync_state (state_key text primary key, payload_json text not null,
+           updated_at text not null);
+         insert into sync_state values ('policy_bundle', 'not json', '2030-01-01T00:00:00+00:00');",
+    )
+    .unwrap();
+    if bundle_row {
+        conn.execute(
+            "insert into policy_decisions values
+             (1,'codex','artifact','npm:lodash','block','sha256:abc',NULL,NULL,
+              'policy-bundle','bundle block',NULL,'2029-01-01T00:00:00+00:00',
+              '2030-01-01T00:00:00+00:00',NULL,1,NULL,'h','m','k','s')",
+            [],
+        )
+        .unwrap();
+    }
+    store
+}
+
+fn lookup_code(request: &PolicyDecisionLookupRequestV1) -> String {
+    let bytes = evaluate_policy_decision_lookup_request(request).unwrap();
+    let result: PolicyDecisionLookupResultV1 = serde_json::from_slice(&bytes).unwrap();
+    result.code
+}
+
+/// A request without bundle identities has them derived from its own store:
+/// only when a bundle row could need them, and a bundle the resident cannot
+/// read fails the lookup rather than dropping the bundle's rules.
+#[test]
+fn a_lookup_without_bundle_identities_derives_them_from_its_store() {
+    let without_row = unreadable_bundle_store("bundle-ids-none", false);
+    assert_eq!(lookup_code(&base_request(&without_row)), "ok");
+
+    let with_row = unreadable_bundle_store("bundle-ids-row", true);
+    let mut request = base_request(&with_row);
+    assert_eq!(
+        lookup_code(&request),
+        "native_policy_decision_lookup_bundle_unavailable"
+    );
+    request.policy_bundle_decision_identities = Some(Vec::new());
+    assert_eq!(lookup_code(&request), "ok");
+}
+
+/// A lookup that never reads policy rows never derives bundle identities, so a
+/// bundle the resident cannot read does not fail it: the local-once peek and a
+/// trusted-tool grant probe for an action no review asked for.
+#[test]
+fn a_lookup_that_reads_no_policy_rows_skips_bundle_derivation() {
+    let store = unreadable_bundle_store("bundle-ids-skip", true);
+    let mut once = base_request(&store);
+    once.local_once_only = true;
+    once.consume_one_shot = false;
+    assert_eq!(lookup_code(&once), "ok");
+
+    let mut grant = base_request(&store);
+    grant.artifact_id = None;
+    grant.artifact_hash = None;
+    grant.consume_one_shot = false;
+    grant.probe_groups = Some(
+        serde_json::from_value(json!({
+            "groups": [],
+            "local_tool_grant": {
+                "tool_identity_hash": "a1".repeat(32),
+                "capability": "read-only-inspect",
+                "current_action": "block",
+            },
+        }))
+        .unwrap(),
+    );
+    assert_eq!(lookup_code(&grant), "ok");
 }

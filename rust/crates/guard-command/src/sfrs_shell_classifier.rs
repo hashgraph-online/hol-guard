@@ -188,9 +188,18 @@ fn native_verdict(
     if allows && (explicitly_benign || allow_floor_only) && !enabled {
         return Ok(NativeVerdict::Benign);
     }
+    // A rule left at its disabled default contributes only an allow floor, so
+    // a review floor beside it comes from non-extension factors such as a
+    // verified-read proof requirement. The legacy checks below classify those
+    // exactly as on a device without an enrolled authority; naming the rule's
+    // action class would turn every default-disabled match into an approval.
+    let disabled_rules_review =
+        allow_floor_only && !enabled && native.minimum_action != CommandDecisionFloor::Block;
     let interaction = match (&native.controlling_action_class, &native.controlling_reason) {
         (Some(action_class), Some(reason))
-            if !native.match_default_modes.is_empty() && (!allows || enabled) =>
+            if !native.match_default_modes.is_empty()
+                && (!allows || enabled)
+                && !disabled_rules_review =>
         {
             Some(InteractionMatch {
                 action_class: action_class.clone(),
@@ -237,8 +246,8 @@ fn proposal_control_block(controls: Option<&ToolActionControls>) -> bool {
     resolve_extension_controls(
         &controls.layers,
         Some(&*catalog),
-        &[permission.extension_id.clone()],
-        &[permission.permission_id.clone()],
+        std::slice::from_ref(&permission.extension_id),
+        std::slice::from_ref(&permission.permission_id),
         ControlSurface::CommandEvaluation,
         &[],
         controls.authority_failure,

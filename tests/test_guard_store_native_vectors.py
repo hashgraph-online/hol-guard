@@ -19,6 +19,7 @@ import pytest
 
 from codex_plugin_scanner.guard import store_review_event_outbox
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import native_store_shims
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
@@ -51,6 +52,10 @@ def _invoke(store: GuardStore, method: str, kwargs: dict[str, Any]) -> object:
         call["request_ids"] = set(call["request_ids"])
     if method == "recover_review_snapshot_sequences":
         call["collisions"] = {int(sequence): event_id for sequence, event_id in call["collisions"].items()}
+    # Ops only tests reach have no store wrapper; their shim takes the store first.
+    shim = getattr(native_store_shims, method, None)
+    if shim is not None:
+        return shim(store, **call)
     return getattr(store, method)(**call)
 
 

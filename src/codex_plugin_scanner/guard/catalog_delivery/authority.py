@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import ssl
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 REPOSITORY = "hashgraph-online/hol-guard"
@@ -23,6 +27,7 @@ MAX_PROVENANCE_BYTES = 1024 * 1024
 MAX_ROOT_BYTES = 64 * 1024
 SHA = re.compile(r"[0-9a-f]{40}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
+_TRUST_ENVIRONMENT_LOCK = threading.Lock()
 
 
 def decode(data):
@@ -142,7 +147,8 @@ def _verify_attested_digest(digest, provenance, subject_name, expected_source_sh
 
     from . import lifecycle
 
-    verifier = Verifier.production(offline=offline)
+    with _trust_refresh_ca():
+        verifier = Verifier.production(offline=offline)
     binding = policy.AllOf(
         [
             policy.Identity(identity=WORKFLOW_ID, issuer=ISSUER),
@@ -173,6 +179,43 @@ def _verify_attested_digest(digest, provenance, subject_name, expected_source_sh
             matched = matched or attested["attested"] is True
     if not matched:
         raise ValueError("release root digest is not attested")
+
+
+@contextmanager
+def _trust_refresh_ca():
+    """Give Sigstore's trust-root refresh a CA bundle when OpenSSL has none.
+
+    Sigstore refreshes its TUF trust root through urllib3, which trusts only
+    OpenSSL's default verify paths. The packaged runtime's OpenSSL names the
+    build machine's directory, which is absent on a user's Mac, so every
+    refresh failed TLS and the catalog never updated. Lend OpenSSL the bundled
+    public roots for this call only, and only when nothing names a trust source.
+    """
+
+    # Hold the lock for the decision as well as the change: another call's
+    # temporary SSL_CERT_FILE must not read as a standing trust source.
+    with _TRUST_ENVIRONMENT_LOCK:
+        defaults = ssl.get_default_verify_paths()
+        if (
+            defaults.cafile is not None
+            or defaults.capath is not None
+            or os.environ.get("SSL_CERT_FILE")
+            or os.environ.get("SSL_CERT_DIR")
+        ):
+            yield
+            return
+        import requests.certs as requests_certs
+
+        where = getattr(requests_certs, "where", None)
+        bundle = where() if callable(where) else None
+        if not isinstance(bundle, str) or not bundle:
+            yield
+            return
+        os.environ["SSL_CERT_FILE"] = bundle
+        try:
+            yield
+        finally:
+            os.environ.pop("SSL_CERT_FILE", None)
 
 
 @dataclass(frozen=True, slots=True, init=False)

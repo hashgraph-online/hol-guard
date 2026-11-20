@@ -16,6 +16,7 @@ use serde_json::Value;
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::mcp_proxy_inline_approval as inline_approval;
+use crate::mcp_proxy_package_answer as package_answer;
 use crate::mcp_proxy_projection as projection;
 use crate::{mcp_proxy_archive as archive, mcp_proxy_signals as signals};
 use crate::{mcp_proxy_catalog as catalog, mcp_proxy_package as package};
@@ -57,6 +58,10 @@ pub(crate) fn decide(query: &McpProxyQueryV1) -> Value {
             Ok(payload) => payload,
             Err(code) => serde_json::json!({"error": code}),
         },
+        McpProxyQueryV1::PackageAnswer(query) => match package_answer::package_answer(query) {
+            Ok(payload) => payload,
+            Err(code) => serde_json::json!({"error": code}),
+        },
     }
 }
 
@@ -65,6 +70,7 @@ pub(crate) fn decide(query: &McpProxyQueryV1) -> Value {
 pub(crate) fn evaluate_query(query: &McpProxyQueryV1) -> Result<Value, &'static str> {
     match query {
         McpProxyQueryV1::CallProjection(query) => projection::call_projection(query),
+        McpProxyQueryV1::PackageAnswer(query) => package_answer::package_answer(query),
         query => Ok(decide(query)),
     }
 }

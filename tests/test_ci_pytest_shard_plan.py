@@ -33,6 +33,65 @@ def test_dedicated_offline_upgrade_is_excluded_from_ordinary_shards() -> None:
     assert loads == [1.0]
 
 
+@pytest.mark.parametrize("known_durations", [False, True])
+def test_offline_cache_keeps_all_eighteen_cases_in_two_fixture_groups(known_durations: bool) -> None:
+    module = "tests/test_native_offline_cache.py"
+    cases = [
+        "test_export_adapter_leaves_exclusive_destination_creation_to_native",
+        "test_complete_export_import_and_cached_vs_uncached_enable",
+        "test_import_rejects_corruption_missing_wrong_release_and_traversal[corrupt-object]",
+        "test_import_rejects_corruption_missing_wrong_release_and_traversal[missing-object]",
+        "test_import_rejects_corruption_missing_wrong_release_and_traversal[wrong-root]",
+        "test_import_rejects_corruption_missing_wrong_release_and_traversal[symlink]",
+        "test_native_archive_admissibility_rejects_malicious_zip[traversal]",
+        "test_native_archive_admissibility_rejects_malicious_zip[duplicate]",
+        "test_native_archive_admissibility_rejects_malicious_zip[symlink]",
+        "test_native_archive_admissibility_rejects_malicious_zip[compressed]",
+        "test_native_archive_admissibility_rejects_malicious_zip[digest]",
+        "test_active_pending_and_inflight_pins_and_inactive_eviction",
+        "test_prefetch_rejects_unsigned_authority",
+        "test_native_remote_prefetch_rejects_expiry_freeze_and_engine_substitution[expired]",
+        "test_native_remote_prefetch_rejects_expiry_freeze_and_engine_substitution[future]",
+        "test_native_remote_prefetch_rejects_expiry_freeze_and_engine_substitution[engine]",
+        "test_production_cli_prefetch_and_import",
+        "test_production_cleanup_captures_sql_pins_and_rejects_sql_loss",
+    ]
+    offline_nodes = [f"{module}::{case}" for case in cases]
+    filler = [f"tests/test_filler_{index}.py::test_control" for index in range(128)]
+    durations = _durations(offline_nodes, seconds=60.0) if known_durations else {}
+
+    shards, _loads = build_affinity_node_shards(offline_nodes + filler, 128, durations)
+
+    assert len(offline_nodes) == 18
+    assert len(shards) == 128
+    assert sorted(node for shard in shards for node in shard) == sorted(offline_nodes + filler)
+    actual_groups = {
+        frozenset(node for node in shard if node_file(node) == module)
+        for shard in shards
+        if any(node_file(node) == module for node in shard)
+    }
+    export_validation = frozenset(offline_nodes[1:6])
+    remaining = frozenset(offline_nodes) - export_validation
+    assert sorted(map(len, actual_groups)) == [5, 13]
+    assert actual_groups == {export_validation, remaining}
+
+
+@pytest.mark.parametrize("known_durations", [False, True])
+def test_decision_corpus_retains_single_process_affinity(known_durations: bool) -> None:
+    module = "tests/test_guard_command_decision_diff.py"
+    corpus_nodes = [f"{module}::test_report[{index}]" for index in range(16)]
+    filler = [f"tests/test_filler_{index}.py::test_control" for index in range(128)]
+    durations = _durations(corpus_nodes, seconds=60.0) if known_durations else {}
+
+    shards, _loads = build_affinity_node_shards(corpus_nodes + filler, 128, durations)
+
+    assert len(shards) == 128
+    assert sorted(node for shard in shards for node in shard) == sorted(corpus_nodes + filler)
+    owners = [shard for shard in shards if any(node_file(node) == module for node in shard)]
+    assert len(owners) == 1
+    assert sorted(node for node in owners[0] if node_file(node) == module) == sorted(corpus_nodes)
+
+
 def test_isolated_function_excludes_all_parameters_without_matching_other_tests(monkeypatch) -> None:
     from scripts.ci import build_pytest_shard_plan as planner
 
@@ -137,7 +196,7 @@ def test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_s
     assert "if" not in timing_step
     selected = shlex.split(timing_step["run"])
     assert module in selected or timing_node in selected
-    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
+    assert "scheduling-sensitive" in jobs["required"]["needs"]
 
 
 def test_full_corpus_process_timing_runs_serially_without_losing_other_report_checks() -> None:
@@ -150,8 +209,11 @@ def test_full_corpus_process_timing_runs_serially_without_losing_other_report_ch
     assert shards == [[ordinary_node]]
     root = Path(__file__).resolve().parents[1]
     jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
-    timing_step = next(step for step in jobs["scheduling-sensitive"]["steps"]
-                       if step.get("name") == "Run scheduling-sensitive tests untraced")
+    timing_step = next(
+        step
+        for step in jobs["scheduling-sensitive"]["steps"]
+        if step.get("name") == "Run scheduling-sensitive tests untraced"
+    )
     assert "if" not in timing_step
     match = re.search(r"nodes=\((.*?)\n\s*\)", timing_step["run"], re.S)
     assert match is not None
@@ -160,7 +222,7 @@ def test_full_corpus_process_timing_runs_serially_without_losing_other_report_ch
     # Use the existing short slice without shifting the other timing workloads.
     assert nodes.index(timing_node) % 4 == 1
     assert "-n" not in shlex.split(timing_step["run"])
-    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
+    assert "scheduling-sensitive" in jobs["required"]["needs"]
 
 
 @pytest.mark.parametrize("condition", ["false", "github.event_name == 'schedule'"])
@@ -343,7 +405,8 @@ def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path
         "jobs"
     ]
     planner = next(
-        step for step in jobs["native-command-evaluators"]["steps"]
+        step
+        for step in jobs["native-command-evaluators"]["steps"]
         if step.get("uses") == "./.github/actions/plan-pytest"
     )
     # shard-count is a `${{ env.NAME }}` expression referencing the workflow-level

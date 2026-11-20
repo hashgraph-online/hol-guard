@@ -11,13 +11,18 @@ import {
   groupChangesByKind,
   hasNextPage,
   hasPreviousPage,
-  installedNote,
+  changeCountLabel,
   installedRelease,
+  installedStanding,
+  holReleaseUrl,
   isRetryable,
+  readsOnHol,
+  trimmedNote,
   isWhatsNewDismissed,
   openingSlug,
   normalizeVersionLabel,
   pageRangeLabel,
+  standingCopy,
   verificationLabel,
   whatsNewStorageKey,
   contributorMonogram,
@@ -128,14 +133,131 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   assert.doesNotThrow(() => dismissWhatsNew("3.53.0"));
 }
 
-// A device can be many releases behind, and the archive is paged. Saying the
-// installed version is not on this page beats a page that marks nothing.
+// Where this device stands is the fact the screen leads with, so it is the
+// fact with the most ways to be wrong. A device can be many releases behind,
+// the archive is paged, and only the first page knows which release is newest.
 {
-  const releases = [summary(), summary({ slug: "v3-52-0", versionLabel: "3.52.0" })];
-  assert.equal(installedNote(releases, "v3.53.0"), " This device is running 3.53.0.");
-  assert.match(installedNote(releases, "3.0.57"), /not on this page of the archive/);
-  assert.equal(installedNote(releases, null), "");
-  assert.equal(installedNote(releases, "  "), "");
+  const releases = [
+    summary(),
+    summary({ slug: "v3-52-0", versionLabel: "3.52.0" }),
+    summary({ slug: "v3-51-0", versionLabel: "3.51.0" }),
+  ];
+  const page1: ReleaseIndex = {
+    kind: "index",
+    page: 1,
+    pageSize: 20,
+    total: 23,
+    totalPages: 2,
+    generatedAt: "2026-10-21T00:00:00Z",
+    releases,
+  };
+
+  assert.deepEqual(installedStanding(page1, null), { kind: "unknown" });
+  assert.deepEqual(installedStanding(page1, "  "), { kind: "unknown" });
+  assert.deepEqual(installedStanding(page1, "3.0.57"), { kind: "off-page", label: "3.0.57" });
+
+  // The newest row on the first page is the newest release there is.
+  const current = installedStanding(page1, "v3.53.0");
+  assert.equal(current.kind, "current");
+
+  const behind = installedStanding(page1, "3.51.0");
+  assert.equal(behind.kind, "behind");
+  assert.equal(behind.kind === "behind" ? behind.behind : -1, 2);
+  assert.equal(
+    behind.kind === "behind" ? behind.newest?.versionLabel : null,
+    "3.53.0",
+    "the first page knows which release is newest",
+  );
+
+  // On a later page the count carries every page before it, and no row on
+  // that page may be passed off as the newest release.
+  const page2: ReleaseIndex = { ...page1, page: 2 };
+  const deep = installedStanding(page2, "3.52.0");
+  assert.equal(deep.kind === "behind" ? deep.behind : -1, 21);
+  assert.equal(deep.kind === "behind" ? deep.newest : "unset", null);
+
+  assert.match(standingCopy({ kind: "unknown" }).title, /published releases/);
+  assert.match(standingCopy(installedStanding(page1, "3.0.57")).body, /not on this page/);
+  assert.match(standingCopy(current).body, /newest published release/);
+  assert.match(standingCopy(behind).body, /2 newer releases have been published since\./);
+  assert.match(standingCopy(behind).body, /The newest stable release is 3\.53\.0\./);
+  assert.match(
+    standingCopy(installedStanding(page1, "3.52.0")).body,
+    /One newer release has been published since\./,
+    "one is not said as 1",
+  );
+  assert.equal(standingCopy(deep).body.includes("The newest"), false);
+}
+
+// The call to read the notes names a release this device is offered. A stable
+// install is not sent to a preview's notes; a device already on previews takes
+// whichever channel published next.
+{
+  const mixed: ReleaseIndex = {
+    kind: "index",
+    page: 1,
+    pageSize: 20,
+    total: 3,
+    totalPages: 1,
+    generatedAt: "2026-10-21T00:00:00Z",
+    releases: [
+      summary({ slug: "v3-54-0rc1", versionLabel: "3.54.0rc1", channel: "preview" }),
+      summary({ slug: "v3-53-0", versionLabel: "3.53.0" }),
+      summary({ slug: "v3-52-0", versionLabel: "3.52.0" }),
+    ],
+  };
+
+  const stable = installedStanding(mixed, "3.52.0");
+  assert.equal(
+    stable.kind === "behind" ? stable.newest?.versionLabel : null,
+    "3.53.0",
+    "a stable install skips the preview above it",
+  );
+  assert.equal(
+    stable.kind === "behind" ? stable.behind : -1,
+    2,
+    "the count still covers every release published since",
+  );
+  assert.match(standingCopy(stable).body, /The newest stable release is 3\.53\.0\./);
+
+  const onPreviews: ReleaseIndex = {
+    ...mixed,
+    releases: [
+      summary({ slug: "v3-54-0", versionLabel: "3.54.0" }),
+      summary({ slug: "v3-53-0rc1", versionLabel: "3.53.0rc1", channel: "preview" }),
+    ],
+  };
+  const preview = installedStanding(onPreviews, "3.53.0rc1");
+  assert.equal(
+    preview.kind === "behind" ? preview.newest?.versionLabel : null,
+    "3.54.0",
+    "a device on previews is offered the stable release above it",
+  );
+
+  // Nothing above a stable install but previews: the band states the gap and
+  // offers no release to open.
+  const previewsOnly: ReleaseIndex = {
+    ...mixed,
+    releases: [
+      summary({ slug: "v3-54-0rc1", versionLabel: "3.54.0rc1", channel: "preview" }),
+      summary({ slug: "v3-53-0", versionLabel: "3.53.0" }),
+    ],
+  };
+  const stranded = installedStanding(previewsOnly, "3.53.0");
+  assert.equal(stranded.kind === "behind" ? stranded.newest : "unset", null);
+  assert.match(standingCopy(stranded).body, /One newer release has been published since\.$/);
+}
+
+// The tally names what is in a release before a word of it is read, in the
+// same order the sections run.
+{
+  const changes: ReleaseChange[] = [
+    { id: "a", kind: "fixed", summary: "One", evidenceUrl: null },
+    { id: "b", kind: "security", summary: "Two", evidenceUrl: null },
+    { id: "c", kind: "fixed", summary: "Three", evidenceUrl: null },
+  ];
+  assert.equal(changeCountLabel(groupChangesByKind(changes)), "1 security \u00b7 2 fixed");
+  assert.equal(changeCountLabel([]), "");
 }
 
 // Coverage is published, not implied.
@@ -190,6 +312,20 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   // hol.org for an archive Guard was told not to read.
   assert.match(failureCopy("disabled").title, /turned off on this device/);
   assert.match(failureCopy("disabled").body, /Nothing on hol.org is affected/);
+  // A release Guard declined to display is still published: say where to read
+  // it, and do not tell the reader hol.org failed to serve it.
+  assert.match(failureCopy("unreadable").body, /Read it on hol.org/);
+  assert.doesNotMatch(failureCopy("unreadable").body, /could not serve/);
+  assert.match(failureCopy("session").title, /session has ended/);
+}
+
+// A trimmed list says how much is shown; a complete one says nothing.
+{
+  assert.equal(trimmedNote(1000, 1250, "changes"), "Showing the first 1,000 of 1,250 changes.");
+  assert.equal(trimmedNote(980, 980, "changes"), null);
+  assert.equal(holReleaseUrl("v3.59.0"), "https://hol.org/guard/releases/v3.59.0");
+  assert.equal(holReleaseUrl("../x"), "https://hol.org/guard/releases");
+  assert.equal(holReleaseUrl(null), "https://hol.org/guard/releases");
 }
 
 // A retry button is only offered where pressing it could change the answer.
@@ -199,6 +335,10 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   assert.equal(isRetryable("disabled"), false, "the switch stays off however often it is pressed");
   assert.equal(isRetryable("unsupported"), false);
   assert.equal(isRetryable("not-found"), false);
+  assert.equal(isRetryable("unreadable"), false, "the same document comes back on every retry");
+  assert.equal(isRetryable("session"), false, "the same token is refused again; the dashboard must be reopened");
+  assert.equal(readsOnHol("unreadable"), true);
+  assert.equal(readsOnHol("unavailable"), false);
 }
 
 // The archive and the installed version are separate reads. When the installed

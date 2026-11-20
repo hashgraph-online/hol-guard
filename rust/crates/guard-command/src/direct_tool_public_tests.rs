@@ -137,3 +137,104 @@ fn direct_tool_recorded_python_public_parity() {
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
     assert!(positives >= 10);
 }
+
+/// The workspace's own compiler reaches the same route spelled as a path.
+///
+/// `npx tsc` and `./node_modules/.bin/tsc` run the one binary the binding
+/// check pins to the workspace's `typescript` package, so a project that
+/// writes the path out rather than letting npx resolve it asks for the same
+/// no-emit run. The reporting options tsc reads an optional `true` or `false`
+/// after travel with it, because none of them turns emit on.
+#[test]
+fn a_local_typescript_compiler_runs_under_every_spelling_of_its_own_binary() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/direct-tool-python.v1.json"
+    ))
+    .unwrap();
+    const ADMITTED: &[&str] = &[
+        "cd {workspace} && ./node_modules/.bin/tsc --noEmit src/index.ts 2>&1 | grep -v \"npm warn\" | head -8 ; echo TSC_DONE",
+        "cd {workspace} && node_modules/.bin/tsc --noEmit 2>&1",
+        "cd {workspace} && ./node_modules/.bin/tsc --noEmit --project tsconfig.json --pretty=false 2>&1",
+        "cd {workspace} && ./node_modules/.bin/tsc --noEmit 2>&1 | grep -E \"src/index\\.ts\" || echo NO_ERRORS_IN_TOUCHED_FILES",
+        "cd {workspace} && npx tsc --noEmit --pretty false 2>&1",
+        "cd {workspace} && npx tsc --noEmit --listFilesOnly --noErrorTruncation 2>&1",
+    ];
+    const REFUSED: &[&str] = &[
+        // A compiler option's own value still turns the run around.
+        "cd {workspace} && ./node_modules/.bin/tsc --noEmit false 2>&1",
+        "cd {workspace} && ./node_modules/.bin/tsc --emitDeclarationOnly --noEmit 2>&1",
+        // The word after a reporting option is its boolean or a file the
+        // workspace holds, and `maybe` is neither.
+        "cd {workspace} && ./node_modules/.bin/tsc --noEmit --pretty maybe 2>&1",
+        "cd {workspace} && npx tsc --noEmit --pretty=yes 2>&1",
+        // The package's entrypoint is not the link the binding check pins.
+        "cd {workspace} && ./node_modules/typescript/bin/tsc --noEmit 2>&1",
+    ];
+    for (command, expected) in ADMITTED
+        .iter()
+        .map(|command| (command, true))
+        .chain(REFUSED.iter().map(|command| (command, false)))
+    {
+        let root = Fixture::new();
+        prepare(&root.0, &fixture["public_fixture"]);
+        let home = root.0.join("home");
+        let cwd = home.join("caller");
+        let workspace = home.join("subject");
+        let command = command.replace("{workspace}", &workspace.to_string_lossy());
+        let authority = Authority {
+            environment: BTreeMap::new(),
+            trusted: ["grep", "head", "node", "npx", "tail"]
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect(),
+            digest: "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8".to_owned(),
+            expired: false,
+        };
+        assert_eq!(
+            direct_local_typescript_execution_context(&command, Some(&cwd), &home, &authority)
+                .is_some(),
+            expected,
+            "{command}"
+        );
+    }
+}
+
+/// A path to the workspace's own compiler needs no trusted `npx`.
+///
+/// npx is on the line only in the spelling that asks it to resolve the
+/// compiler, so a host whose `npx` is not a trusted program still runs the
+/// link the binding check pins, and the npx spelling on that same host does
+/// not.
+#[test]
+fn a_path_spelled_typescript_run_does_not_rest_on_npx() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/direct-tool-python.v1.json"
+    ))
+    .unwrap();
+    for (command, expected) in [
+        (
+            "cd {workspace} && ./node_modules/.bin/tsc --noEmit 2>&1",
+            true,
+        ),
+        ("cd {workspace} && npx tsc --noEmit 2>&1", false),
+    ] {
+        let root = Fixture::new();
+        prepare(&root.0, &fixture["public_fixture"]);
+        let home = root.0.join("home");
+        let cwd = home.join("caller");
+        let workspace = home.join("subject");
+        let command = command.replace("{workspace}", &workspace.to_string_lossy());
+        let authority = Authority {
+            environment: BTreeMap::new(),
+            trusted: vec!["node".to_owned()],
+            digest: "c3b1504344b1a42e5d174df8a2ae16c7892d03668db6570ef6afe4248b96e0b8".to_owned(),
+            expired: false,
+        };
+        assert_eq!(
+            direct_local_typescript_execution_context(&command, Some(&cwd), &home, &authority)
+                .is_some(),
+            expected,
+            "{command}"
+        );
+    }
+}

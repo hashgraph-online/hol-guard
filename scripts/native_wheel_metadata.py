@@ -35,7 +35,7 @@ def binding(entries, *, source_sha, engine):
         raise ValueError("installed policy data exceeds package budgets")
     for name in members:
         if name != ROOT:
-            asset_path(name[len(PREFIX) :], source_sha=source_sha)
+            asset_path(name[len(PREFIX) :])
             if not 0 < len(entries[name]) <= 32 * 1024 * 1024:
                 raise ValueError("installed policy asset exceeds byte budget")
     return result

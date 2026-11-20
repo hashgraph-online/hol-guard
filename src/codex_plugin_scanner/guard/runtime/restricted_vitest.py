@@ -12,7 +12,7 @@ from itertools import pairwise
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from ..native_restricted_pytest import native_launch_plan, restricted_native
+from ..native_restricted_pytest import native_launch_plan
 from .restricted_node_capabilities import linux_node_environment
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
@@ -42,32 +42,6 @@ def _tsx_package_dir(command: Sequence[str]) -> Path | None:
     return None
 
 
-def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str, ...]] | None:
-    result = restricted_native("bun_vitest_invocation", {"command": list(command)}, (list, type(None)))
-    if result is None:
-        return None
-    if (
-        len(result) != 2
-        or (result[0] is not None and not isinstance(result[0], str))
-        or not isinstance(result[1], list)
-    ):
-        raise ValueError("Invalid native Bun invocation")
-    return result[0], tuple(result[1])
-
-
-def tsx_test_invocation(command: Sequence[str]) -> tuple[str, tuple[str, ...]] | None:
-    result = restricted_native("tsx_test_invocation", {"command": list(command)}, (list, type(None)))
-    if result is None:
-        return None
-    if len(result) != 2 or not isinstance(result[0], str) or not isinstance(result[1], list):
-        raise ValueError("Invalid native tsx invocation")
-    return result[0], tuple(result[1])
-
-
-def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
-    return tuple(restricted_native("vitest_arguments", {"command": list(command)}, list))
-
-
 def prepare_restricted_vitest(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
@@ -81,10 +55,6 @@ def prepare_restricted_vitest(
         backend_executable=None,
         profile=VITEST_READ_ONLY_PROFILE_VERSION,
     )
-
-
-def _readonly_config_arguments(args: tuple[str, ...], manifest: Path) -> tuple[str, ...]:
-    return tuple(restricted_native("readonly_config_arguments", {"command": args, "path": manifest}, list))
 
 
 def run_restricted_vitest(

@@ -211,12 +211,52 @@ pub(crate) struct EvaluatedCommand {
     pub(crate) authority_failure: bool,
 }
 
+/// Which authority health an evaluation judges the command under.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AuthorityView {
+    /// The health the control snapshot reports.
+    Reported,
+    /// The health a device that never enrolled reaches once it does: an
+    /// unenrolled authority is judged as protected. Every other health stays
+    /// as reported, so a degraded or tampered authority is still a failure.
+    OnceEnrolled,
+}
+
 /// Evaluate one request into its typed composition. The wire op serializes it;
 /// the allow-hint op reads the matches and re-runs it under a counterfactual
 /// overlay, so both judge a command by exactly the same rules.
 pub(crate) fn evaluate_composite(
     request: &CommandEffectRequestV1,
     controls: Option<&CompiledNativeCommandControls>,
+) -> Result<EvaluatedCommand, String> {
+    evaluate_composite_under(request, controls, AuthorityView::Reported)
+}
+
+/// Whether `binding` is the first-install binding enforcement recognises.
+///
+/// The authority is the admitted snapshot's, already checked to be the
+/// snapshot the review is bound to: a review binding built outside the
+/// runtime names none. With no admitted snapshot the resident evaluates
+/// core-only, so only an authority the binding names can show it was lost.
+fn first_install(
+    binding: &guard_contracts::NativeCommandControlBindingV1,
+    controls: Option<&CompiledNativeCommandControls>,
+) -> bool {
+    let authority = match controls {
+        Some(controls) => controls.control_binding().authority.as_ref(),
+        None => binding.authority.as_ref(),
+    };
+    binding.has_first_install_shape()
+        && authority.map_or(controls.is_none(), |authority| authority.is_initial())
+}
+
+/// [`evaluate_composite`] under an explicit [`AuthorityView`]. Only the
+/// advisory allow-hint op asks for [`AuthorityView::OnceEnrolled`]; nothing
+/// that decides a command does.
+pub(crate) fn evaluate_composite_under(
+    request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+    view: AuthorityView,
 ) -> Result<EvaluatedCommand, String> {
     use std::path::Path;
 
@@ -255,6 +295,15 @@ pub(crate) fn evaluate_composite(
         {
             return Err("native_command_extension_evidence_binding_mismatch".to_owned());
         }
+    }
+    // Judged once enrolled, an authority that was never enrolled counts as
+    // protected. Only the first-install binding enforcement also recognises
+    // qualifies: an unenrolled authority with saved history, layers, a later
+    // epoch, a real key or a pending recovery was lost, and stays a failure.
+    // It is set after the binding check, so the evidence stays bound to the
+    // snapshot the command was actually reviewed under.
+    if view == AuthorityView::OnceEnrolled && first_install(&binding, controls) {
+        "protected".clone_into(&mut binding.health);
     }
     apply_counterfactual_permissions(&mut binding, &request.counterfactual_enabled_permission_ids)?;
     let workflow_authorization: Option<GitHubWorkflowAuthorizationV1> = request

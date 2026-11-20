@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     )
 
 
+from ..cloud_sync_busy import GUARD_SYNC_IN_PROGRESS_MESSAGE, GuardCloudSyncBusyError
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..mdm.user_health import (
     configure_user_health_leases,
@@ -35,7 +36,6 @@ from ..mdm.user_health import (
     user_health_status,
 )
 from ..runtime.command_capability import (
-    READ_ONLY_COMMAND_OPERATIONS,
     CommandCapabilityError,
     approve_pending_command,
     issue_command_capability,
@@ -197,6 +197,8 @@ def _run_guard_connect_command(
         machine_label=machine_label if headless else None,
         home_dir=context.home_dir if context is not None else None,
         workspace_dir=context.workspace_dir if context is not None else workspace,
+        cloud_workspace_id=getattr(args, "cloud_workspace", None),
+        cloud_actions_declined=bool(getattr(args, "no_cloud_actions", False)),
     )
     if payload is None:
         return exit_code
@@ -331,6 +333,14 @@ def _run_guard_sync_command(
             _emit("sync", {"synced": False, "error": message}, True)
         else:
             print(message, file=sys.stderr)
+        return 1
+    except GuardCloudSyncBusyError:
+        # The background service holds the sync lock while it syncs, so a busy
+        # lock is a sync already under way rather than a failure.
+        if getattr(args, "json", False):
+            _emit("sync", {"synced": False, "in_progress": True, "error": GUARD_SYNC_IN_PROGRESS_MESSAGE}, True)
+        else:
+            print(GUARD_SYNC_IN_PROGRESS_MESSAGE, file=sys.stderr)
         return 1
     except RuntimeError as error:
         if getattr(args, "json", False):
@@ -624,6 +634,7 @@ def _run_guard_daemon_command(
     config: GuardConfig | None = None,
     input_text: str | None = None,
     output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
 ) -> int:
     return _dispatch_guard_daemon_command(
         args,
@@ -631,6 +642,8 @@ def _run_guard_daemon_command(
         workspace=workspace,
         context=context,
         store=store,
+        output_stream=output_stream,
+        error_stream=error_stream,
     )
 
 
@@ -651,18 +664,13 @@ def _run_guard_commands_command(
         _emit("commands", command_queue_status(store), getattr(args, "json", False))
         return 0
     if commands_command == "enable":
-        operations: list[str] = []
-        for value in getattr(args, "operations", []):
-            for operation in str(value).split(","):
-                normalized = operation.strip()
-                if normalized == "read-only":
-                    operations.extend(READ_ONLY_COMMAND_OPERATIONS)
-                elif normalized:
-                    operations.append(normalized)
+        # The words as typed, unexpanded: the runtime reads the group name and
+        # the comma-joined lists, so only one side decides what a grant carries.
+        operations = tuple(str(value) for value in getattr(args, "operations", []))
         try:
             capability = issue_command_capability(
                 store,
-                operations=tuple(operations),
+                operations=operations,
                 supported_operations=SUPPORTED_COMMAND_OPERATIONS,
                 ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
             )

@@ -67,7 +67,7 @@ pub(crate) fn decide(request: &DaemonLifecycleDecisionRequestV1) -> Value {
             claims::start_progress_live(&ctx, query)
         }
         DaemonLifecycleQueryV1::EphemeralInactive(query) => claims::ephemeral_inactive(&ctx, query),
-        DaemonLifecycleQueryV1::StartTimeouts(query) => ports::start_timeouts(query),
+        DaemonLifecycleQueryV1::StartTimeouts(query) => ports::start_timeouts(&ctx, query),
     };
     ctx.finish(result)
 }

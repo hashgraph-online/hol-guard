@@ -1,0 +1,174 @@
+{
+ "repo": "ufo",
+ "mutations": [
+  {
+   "path": "src/punycode.ts",
+   "line": 49,
+   "qual": "toASCII",
+   "orig": "              for (; o < e; ) {\n",
+   "new": "              for (; o <= e; ) {\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > http://\u0645\u062b\u0627\u0644.\u0625\u062e\u062a\u0628\u0627\u0631",
+    "test/normalize.test.ts > normalizeURL > http://\u0909\u0926\u093e\u0939\u0930\u0923.\u092a\u0930\u0940\u0915\u094d\u0937\u093e",
+    "test/normalize.test.ts > normalizeURL > http://\u2318.ws",
+    "test/normalize.test.ts > normalizeURL > http://\u2318.ws/",
+    "test/normalize.test.ts > normalizeURL > http://\u263a.damowmow.com/",
+    "test/normalize.test.ts > normalizeURL > http://\u272adf.ws/123"
+   ]
+  },
+  {
+   "path": "src/parse.ts",
+   "line": 105,
+   "qual": "parsePath",
+   "orig": "    input.match(/([^#?]*)(\\?[^#]*)?(#.*)?/) || []\n",
+   "new": "    input.match(/([^#?]*)(\\?[^#]*)?(#.*)?/) && []\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > .",
+    "test/normalize.test.ts > normalizeURL > .#hash",
+    "test/normalize.test.ts > normalizeURL > ./",
+    "test/normalize.test.ts > normalizeURL > ./?foo=123#hash",
+    "test/normalize.test.ts > normalizeURL > ./foo",
+    "test/normalize.test.ts > normalizeURL > .?foo=123"
+   ]
+  },
+  {
+   "path": "src/parse.ts",
+   "line": 142,
+   "qual": "parseHost",
+   "orig": "  const [hostname, port] = (input.match(/([^/:]*):?(\\d+)?/) || []).splice(1);\n",
+   "new": "  const [hostname, port] = (input.match(/([^/:]*):?(\\d+)?/) && []).splice(1);\n",
+   "failing": [
+    "test/parse.test.ts > parseHost > google.com",
+    "test/parse.test.ts > parseHost > localhost:3000",
+    "test/url.test.ts > $URL > getters"
+   ]
+  },
+  {
+   "path": "src/punycode.ts",
+   "line": 83,
+   "qual": "toASCII",
+   "orig": "                    const s = o <= l ? 1 : o >= l + 26 ? 26 : o - l;\n",
+   "new": "                    const s = o < l ? 1 : o >= l + 26 ? 26 : o - l;\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > http://\u0645\u062b\u0627\u0644.\u0625\u062e\u062a\u0628\u0627\u0631",
+    "test/normalize.test.ts > normalizeURL > http://\u0909\u0926\u093e\u0939\u0930\u0923.\u092a\u0930\u0940\u0915\u094d\u0937\u093e",
+    "test/normalize.test.ts > normalizeURL > http://\u2318.ws",
+    "test/normalize.test.ts > normalizeURL > http://\u2318.ws/",
+    "test/normalize.test.ts > normalizeURL > http://\u263a.damowmow.com/",
+    "test/normalize.test.ts > normalizeURL > http://\u272adf.ws/123"
+   ]
+  },
+  {
+   "path": "src/utils.ts",
+   "line": 413,
+   "qual": "joinRelativeURL",
+   "orig": "  if (segmentsDepth >= 0) {\n",
+   "new": "  if (segmentsDepth > 0) {\n",
+   "failing": [
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"/a\", \"../../d\") === \"/d\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"/a\", \".././../d\") === \"/d\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"/a/b\", \"../../../d\") === \"/d\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(, \"./\") === \"./\""
+   ]
+  },
+  {
+   "path": "src/utils.ts",
+   "line": 227,
+   "qual": "withBase",
+   "orig": "  if (isEmptyURL(base) || hasProtocol(input)) {\n",
+   "new": "  if (isEmptyURL(base) && hasProtocol(input)) {\n",
+   "failing": [
+    "test/base.test.ts > withBase > \"/base/\" + \"https://test.com\""
+   ]
+  },
+  {
+   "path": "src/punycode.ts",
+   "line": 17,
+   "qual": "c",
+   "orig": "  return n + 22 + 75 * (n < 26) - ((t != 0) << 5);\n",
+   "new": "  return n + 22 + 75 * (n < 26) - ((t == 0) << 5);\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > http://\u0645\u062b\u0627\u0644.\u0625\u062e\u062a\u0628\u0627\u0631",
+    "test/normalize.test.ts > normalizeURL > http://\u0909\u0926\u093e\u0939\u0930\u0923.\u092a\u0930\u0940\u0915\u094d\u0937\u093e",
+    "test/normalize.test.ts > normalizeURL > http://\u2318.ws",
+    "test/normalize.test.ts > normalizeURL > http://\u2318.ws/",
+    "test/normalize.test.ts > normalizeURL > http://\u263a.damowmow.com/",
+    "test/normalize.test.ts > normalizeURL > http://\u272adf.ws/123"
+   ]
+  },
+  {
+   "path": "src/parse.ts",
+   "line": 73,
+   "qual": "parseURL",
+   "orig": "      .match(/^[\\s\\0]*([\\w+.-]{2,}:)?\\/\\/([^/@]+@)?(.*)/) || [];\n",
+   "new": "      .match(/^[\\s\\0]*([\\w+.-]{2,}:)?\\/\\/([^/@]+@)?(.*)/) && [];\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > \u0000http://google.com",
+    "test/normalize.test.ts > normalizeURL > ftp://foo.bar/baz",
+    "test/normalize.test.ts > normalizeURL > http://1337.net",
+    "test/normalize.test.ts > normalizeURL > http://142.42.1.1/",
+    "test/normalize.test.ts > normalizeURL > http://142.42.1.1:8080/",
+    "test/normalize.test.ts > normalizeURL > http://223.255.255.254"
+   ]
+  },
+  {
+   "path": "src/utils.ts",
+   "line": 394,
+   "qual": "joinRelativeURL",
+   "orig": "        if (segments.length === 1 && hasProtocol(segments[0])) {\n",
+   "new": "        if (segments.length === 1 || hasProtocol(segments[0])) {\n",
+   "failing": [
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"../a\", \"../../../../b\") === \"../../../b\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"../a\", \"../../../b\") === \"../../b\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"../a\", \"../b\") === \"b\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"../a\", \"./../../b\") === \"../b\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"../a\", \"./../b\") === \"b\"",
+    "test/join.test.ts > joinRelativeURL > joinRelativeURL(\"../a/\", \"../b\") === \"b\""
+   ]
+  },
+  {
+   "path": "src/punycode.ts",
+   "line": 17,
+   "qual": "c",
+   "orig": "  return n + 22 + 75 * (n < 26) - ((t != 0) << 5);\n",
+   "new": "  return n + 22 + 75 * (n <= 26) - ((t != 0) << 5);\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > http://\u0645\u062b\u0627\u0644.\u0625\u062e\u062a\u0628\u0627\u0631",
+    "test/normalize.test.ts > normalizeURL > http://\u4f8b\u5b50.\u6d4b\u8bd5",
+    "test/punycode.test.ts > punycode (toASCII) > a\u2020--",
+    "test/punycode.test.ts > punycode (toASCII) > \u0646\u0627\u0645\u0647\u200c\u0627\u06cc",
+    "test/punycode.test.ts > punycode (toASCII) > \u0dc1\u0dca\u200d\u0dbb\u0dd3: processing_option is Nontransitional_Processing"
+   ]
+  },
+  {
+   "path": "src/query.ts",
+   "line": 47,
+   "qual": "parseQuery",
+   "orig": "    const s = parameter.match(/([^=]+)=?(.*)/) || [];\n",
+   "new": "    const s = parameter.match(/([^=]+)=?(.*)/) && [];\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > ",
+    "test/normalize.test.ts > normalizeURL > \u0000http://google.com",
+    "test/normalize.test.ts > normalizeURL > .",
+    "test/normalize.test.ts > normalizeURL > .#hash",
+    "test/normalize.test.ts > normalizeURL > ./",
+    "test/normalize.test.ts > normalizeURL > ./?foo=123#hash"
+   ]
+  },
+  {
+   "path": "src/parse.ts",
+   "line": 175,
+   "qual": "stringifyParsedURL",
+   "orig": "    parsed.protocol || parsed[protocolRelative]\n",
+   "new": "    parsed.protocol && parsed[protocolRelative]\n",
+   "failing": [
+    "test/normalize.test.ts > normalizeURL > \u0000http://google.com",
+    "test/normalize.test.ts > normalizeURL > ftp://foo.bar/baz",
+    "test/normalize.test.ts > normalizeURL > http://1337.net",
+    "test/normalize.test.ts > normalizeURL > http://142.42.1.1/",
+    "test/normalize.test.ts > normalizeURL > http://142.42.1.1:8080/",
+    "test/normalize.test.ts > normalizeURL > http://223.255.255.254"
+   ]
+  }
+ ]
+}

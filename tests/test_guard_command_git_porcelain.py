@@ -33,7 +33,7 @@ def test_git_porcelain_mutating_commands_are_reviewed(tmp_path: Path) -> None:
         tuple(case for case in GIT_PORCELAIN_REVIEW_CASES if case[0] not in wrapper_cases), tmp_path
     )
     for command in wrapper_cases:
-        assert real_native_command_evaluation(command, cwd=tmp_path).native_minimum_action == "block"
+        assert real_native_command_evaluation(command, cwd=tmp_path).payload["minimum_action"] == "block"
 
 
 GIT_PORCELAIN_SAFE_COMMANDS: tuple[str, ...] = (

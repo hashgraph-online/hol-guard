@@ -100,20 +100,7 @@ fn precedence_prefers_floor_then_severity_then_noncompat() {
 }
 
 #[test]
-fn risk_table_matches_python_entries() {
-    assert_eq!(
-        risk_classes_for_command_action("destructive shell command"),
-        &["destructive_shell"]
-    );
-    assert_eq!(
-        risk_classes_for_command_action("credential exfiltration shell command"),
-        &[
-            "data_flow_exfiltration",
-            "credential_exfiltration",
-            "network_egress"
-        ]
-    );
-    // Normalization: strip + lowercase.
+fn the_risk_table_normalizes_its_label_and_misses_cleanly() {
     assert_eq!(
         risk_classes_for_command_action("  Git Destructive Command "),
         &["destructive_shell"]

@@ -36,6 +36,11 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
     if basename == ".env" || basename.starts_with(".env.") {
         return Some(("local .env file", "critical"));
     }
+    // Cloudflare Wrangler reads a worker's local secrets from `.dev.vars`
+    // beside its sources, and `.dev.vars.<environment>` per environment.
+    if basename == ".dev.vars" || basename.starts_with(".dev.vars.") {
+        return Some(("Wrangler local secrets file", "high"));
+    }
     if basename.ends_with(".key") {
         return Some(("private-key file", "critical"));
     }
@@ -49,6 +54,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
         (".pypirc", "Python package credentials", "high"),
         (".netrc", "netrc credentials", "high"),
         (".git-credentials", "Git credential store", "high"),
+        (".terraform.tfvars", "Terraform variable secrets", "high"),
         ("terraform.tfvars", "Terraform variable secrets", "high"),
         ("private-key.pem", "wallet/private-key file", "critical"),
         ("private.key", "wallet/private-key file", "critical"),
@@ -98,3 +104,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
     }
     None
 }
+
+#[cfg(test)]
+#[path = "sensitive_path_family_tests.rs"]
+mod tests;

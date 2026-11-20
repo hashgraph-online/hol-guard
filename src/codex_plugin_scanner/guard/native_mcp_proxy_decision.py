@@ -30,13 +30,16 @@ from .native_runtime_resilience import native_record_resident_failure, native_re
 MCP_PROXY_DECISION_FEATURE = "mcp-proxy-decision-v1"
 MCP_PROXY_ARCHIVE_VERIFY_FEATURE = "mcp-proxy-archive-verify-v1"
 MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE = "mcp-proxy-archive-binding-required-v1"
-# The resident also classifies the answer to an inline approval prompt. An older
-# resident rejects that query as an unknown check, so a caller asks for it by name.
+# The resident also classifies the answer to an inline approval prompt.
 MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE = "mcp-proxy-inline-approval-reply-v1"
 # The resident spells the sensitive read's artifact content hash itself, from
 # the artifact fields the context query carries. An older resident rejects
 # those fields as unknown, so a caller asks for it by name.
 MCP_SENSITIVE_READ_ARTIFACT_FEATURE = "mcp-sensitive-read-artifact-v1"
+# The resident also writes the text and payload a stopped package-lane call
+# answers with. An older resident rejects that query as an unknown check, so a
+# caller asks for it by name.
+MCP_PROXY_PACKAGE_ANSWER_FEATURE = "mcp-proxy-package-answer-v1"
 _REQUEST_SCHEMA = "guard-mcp-proxy-decision-request.v1"
 _RESULT_SCHEMA = "guard-mcp-proxy-decision-result.v1"
 _OPERATION = "mcp_proxy_decide"
@@ -257,17 +260,46 @@ def native_external_archive_binding_required(evaluation: object, *, guard_home: 
     return required if isinstance(required, bool) else True
 
 
-def native_package_reason_signals(reasons: Sequence[object], *, guard_home: Path) -> tuple[dict[str, Any], ...]:
-    """The risk signals the resident projects from a package evaluation's reasons."""
+def native_package_answer(
+    kind: str,
+    *,
+    tool_name: str,
+    server_name: str,
+    guard_home: Path,
+    policy_action: str | None = None,
+    package_request: bool = False,
+    signals: Sequence[str] = (),
+    evaluation: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """What a stopped package-lane call answers with, as the resident writes it.
 
+    ``kind`` names the stop the precheck, compose or postclaim decided. A block
+    answers with its message, payload, event label and receipt signals; a
+    queued package request answers with its decision and the restatement its
+    safe-alternative block carries. Anything else raises so the caller fails
+    closed before it records a receipt.
+    """
+
+    query: dict[str, object] = {
+        "check": "package_answer",
+        "kind": kind,
+        "tool_name": tool_name,
+        "server_name": server_name,
+        "package_request": package_request,
+        "signals": list(signals),
+    }
+    if policy_action is not None:
+        query["policy_action"] = policy_action
+    if evaluation is not None:
+        query["evaluation"] = dict(evaluation)
     payload = native_mcp_proxy_decide(
-        {"check": "package_reason_signals", "reasons": list(reasons)},
+        query,
         guard_home=guard_home,
+        required_feature=MCP_PROXY_PACKAGE_ANSWER_FEATURE,
     )
-    signals = payload.get("signals")
-    if not isinstance(signals, list):
+    if payload.get("kind") not in {"block", "queue"}:
         raise _fail("native_mcp_proxy_decision_payload_invalid")
-    return tuple(signals)
+    return payload
 
 
 def native_inline_approval_reply(
@@ -345,22 +377,4 @@ def _block_matches(classified: str, block: object) -> bool:
         return block is None
     return isinstance(block, dict) and all(
         isinstance(block.get(field), str) for field in ("decision_source", "event_decision", "reason")
-    )
-
-
-def native_inline_approval_reply_available() -> bool:
-    """Whether this resident classifies the answer to an inline prompt.
-
-    An older resident rejects the query as an unknown check, which fails closed
-    -- correct, but only after the prompt was raised and answered. A caller asks
-    this before it prompts so an answer it cannot use is never collected.
-    """
-
-    status = native_runtime_status()
-    capabilities = status.capabilities
-    return bool(
-        status.available
-        and status.compatible
-        and capabilities is not None
-        and MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE in capabilities.features
     )

@@ -89,28 +89,18 @@ def test_daemon_serve_cli_treats_home_as_guard_home_override(
     explicit_home = tmp_path / "explicit-home"
     explicit_home.mkdir()
 
-    class FakeStore:
-        def __init__(self, guard_home: Path, **kwargs: object) -> None:
-            captured["guard_home"] = Path(guard_home)
-            captured["prime"] = kwargs.get("prime_policy_integrity")
+    def fake_exec(guard_home: Path, port: int, *, user_home: Path | None = None) -> None:
+        captured.update(guard_home=guard_home, port=port, user_home=user_home)
 
-    class FakeDaemon:
-        def __init__(self, store: object, **kwargs: object) -> None:
-            captured["home_dir"] = kwargs.get("home_dir")
-
-        def serve(self) -> None:
-            captured["served"] = True
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.store.GuardStore", FakeStore)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.GuardDaemonServer", FakeDaemon)
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.daemon_serve.exec_native_daemon", fake_exec)
 
     code = daemon_serve.run_daemon_serve_cli(["daemon", "--serve", "--home", str(explicit_home)])
 
-    assert code == 0
-    assert captured["served"] is True
-    assert captured["prime"] is False
+    # Returning from the hand-off means no native runtime: there is no Python server to fall back to.
+    assert code == 1
     assert captured["guard_home"] == explicit_home.resolve()
-    assert captured["home_dir"] == explicit_home.resolve()
+    assert captured["port"] == 0
+    assert captured["user_home"] == explicit_home.resolve()
 
 
 def test_hol_guard_desktop_bootstrap_json_skips_command_surface(
@@ -230,7 +220,7 @@ _HELP_PATH_FORBIDDEN_MODULES = (
     "codex_plugin_scanner.guard.cli._commands_shared",
     "codex_plugin_scanner.guard.store",
     "codex_plugin_scanner.guard.native_context",
-    "codex_plugin_scanner.guard.daemon",
+    "codex_plugin_scanner.guard.hook_review.hook_worker",
     "codex_plugin_scanner.guard.proxy",
     "codex_plugin_scanner.guard.runtime.command_extensions",
 )
@@ -268,8 +258,31 @@ def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
     assert [name for name in _HELP_PATH_FORBIDDEN_MODULES if name in loaded] == []
 
 
+def test_worker_host_import_leaves_the_cryptography_backend_unloaded() -> None:
+    """The worker host imports the store; neither needs the cryptography backend to start."""
+
+    import json
+    import subprocess
+
+    probe = (
+        "import json, sys\n"
+        "import codex_plugin_scanner.guard.workers.host\n"
+        "print(json.dumps(sorted(name for name in sys.modules if name.split('.')[0] == 'cryptography')))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", probe],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == []
+
+
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -283,7 +296,7 @@ def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
 
 
 def test_resolve_targets_keeps_single_harness_contract(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",

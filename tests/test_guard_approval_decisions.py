@@ -2,8 +2,8 @@
 
 Covers:
 - Unchanged artifact → stored allow policy → no reapproval triggered
-- Changed artifact hash → require-reapproval via decide_action
-- Changed capability → require-reapproval via decide_action
+- Changed artifact hash → require-reapproval via the resident composition
+- Changed capability → require-reapproval via the resident composition
 - Scope persistence for artifact/workspace/publisher/harness/global scopes
 - Receipt field completeness from build_receipt
 """
@@ -25,12 +25,12 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.native_memory_pattern import MemoryPattern, memory_pattern_verdict
-from codex_plugin_scanner.guard.policy.engine import decide_action
 from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import resolve_policy
 
 
 def _native_fingerprint(
@@ -178,7 +178,7 @@ def test_resolve_policy_without_matching_rules_skips_policy_integrity_refresh(
 
     monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
 
-    assert store.resolve_policy("codex", "codex:project:none", "hash-none") is None
+    assert resolve_policy(store, "codex", "codex:project:none", "hash-none") is None
 
 
 def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
@@ -200,7 +200,7 @@ def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
 
     monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
 
-    assert store.resolve_policy("codex", artifact_id, artifact_hash) == "allow"
+    assert resolve_policy(store, "codex", artifact_id, artifact_hash) == "allow"
 
 
 @pytest.mark.parametrize("policy_action", ["allow", "block"])
@@ -231,7 +231,8 @@ def test_remote_suggested_memory_policy_matches_runtime_command_pattern(
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:runtime:shell:request-two",
             memory_command="npm i lodash@latest",
@@ -241,7 +242,8 @@ def test_remote_suggested_memory_policy_matches_runtime_command_pattern(
         == policy_action
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:runtime:shell:request-three",
             memory_command="npm install react",
@@ -268,7 +270,8 @@ def test_remote_exact_command_policy_rejects_command_suffix(
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:runtime:shell:request-two",
             memory_command="printf 'suggested-memory'",
@@ -278,7 +281,8 @@ def test_remote_exact_command_policy_rejects_command_suffix(
         == policy_action
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:runtime:shell:request-three",
             memory_command="printf 'suggested-memory' extra",
@@ -292,7 +296,8 @@ def test_remote_exact_command_policy_rejects_command_suffix(
         "printf 'suggested-memory' ",
     ):
         assert (
-            store.resolve_policy(
+            resolve_policy(
+                store,
                 "codex",
                 "codex:runtime:shell:request-whitespace",
                 memory_command=whitespace_variant,
@@ -316,7 +321,8 @@ def test_signed_exact_shell_command_policy_does_not_cross_tool_domains(tmp_path:
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:runtime:shell:request",
             memory_command=command,
@@ -330,7 +336,8 @@ def test_signed_exact_shell_command_policy_does_not_cross_tool_domains(tmp_path:
         ("tool_action_request", "read_file"),
     ):
         assert (
-            store.resolve_policy(
+            resolve_policy(
+                store,
                 "codex",
                 "codex:runtime:mcp:filesystem:read_file",
                 memory_command=command,
@@ -397,7 +404,8 @@ def test_direct_artifact_policy_precedes_suggested_memory_policy(tmp_path: Path)
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             memory_command="npm install lodash",
@@ -406,94 +414,6 @@ def test_direct_artifact_policy_precedes_suggested_memory_policy(tmp_path: Path)
         )
         == "block"
     )
-
-
-class TestDecideAction:
-    def test_allow_policy_passes_through_unchanged(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)
-        result = decide_action(
-            configured_action="allow",
-            default_action="require-reapproval",
-            config=config,
-            changed=False,
-        )
-        assert result == "allow"
-
-    def test_changed_triggers_changed_hash_action_when_no_configured_policy(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            changed_hash_action="require-reapproval",
-        )
-        result = decide_action(
-            configured_action=None,
-            default_action="allow",
-            config=config,
-            changed=True,
-        )
-        assert result == "require-reapproval"
-
-    def test_configured_allow_beats_changed_flag(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            changed_hash_action="require-reapproval",
-        )
-        result = decide_action(
-            configured_action="allow",
-            default_action="allow",
-            config=config,
-            changed=True,
-        )
-        assert result == "allow"
-
-    def test_changed_falls_back_to_safe_when_no_changed_hash_action(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)
-        result = decide_action(
-            configured_action=None,
-            default_action=None,
-            config=config,
-            changed=True,
-        )
-        assert result == "require-reapproval"
-
-    def test_block_policy_blocks_regardless_of_changed_flag(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)
-        result = decide_action(
-            configured_action="block",
-            default_action="allow",
-            config=config,
-            changed=False,
-        )
-        assert result == "block"
-
-    def test_no_policy_uses_config_default(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            default_action="warn",
-        )
-        result = decide_action(
-            configured_action=None,
-            default_action=None,
-            config=config,
-            changed=False,
-        )
-        assert result == "warn"
-
-    def test_explicit_default_action_overrides_config(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            default_action="warn",
-        )
-        result = decide_action(
-            configured_action=None,
-            default_action="allow",
-            config=config,
-            changed=False,
-        )
-        assert result == "allow"
 
 
 class TestPolicyScopePersistence:
@@ -509,7 +429,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:my_tool", "abc123")
+        result = resolve_policy(store, "codex", "codex:project:my_tool", "abc123")
         assert result == "allow"
 
     def test_artifact_scope_allow_resolves_without_hash_when_policy_has_no_hash(self, tmp_path: Path) -> None:
@@ -524,7 +444,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:my_tool", "any-hash")
+        result = resolve_policy(store, "codex", "codex:project:my_tool", "any-hash")
         assert result == "allow"
 
     def test_publisher_scope_resolves_for_any_artifact_by_publisher(self, tmp_path: Path) -> None:
@@ -538,7 +458,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:any_tool", "hash-x", publisher="verified-org")
+        result = resolve_policy(store, "codex", "codex:project:any_tool", "hash-x", publisher="verified-org")
         assert result == "allow"
 
     def test_publisher_scope_does_not_match_different_publisher(self, tmp_path: Path) -> None:
@@ -552,7 +472,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:any_tool", "hash-x", publisher="unknown-org")
+        result = resolve_policy(store, "codex", "codex:project:any_tool", "hash-x", publisher="unknown-org")
         assert result is None
 
     def test_harness_scope_resolves_for_all_artifacts_in_harness(self, tmp_path: Path) -> None:
@@ -565,7 +485,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:any_tool", "hash-y")
+        result = resolve_policy(store, "codex", "codex:project:any_tool", "hash-y")
         assert result == "allow"
 
     def test_harness_unsupported_family_is_rejected_without_policy_row(self, tmp_path: Path) -> None:
@@ -586,7 +506,7 @@ class TestPolicyScopePersistence:
             "codex:project:tool-action:run-shell",
             "codex:project:file-read:.npmrc",
         ):
-            assert store.resolve_policy("codex", artifact_id, "hash") is None
+            assert resolve_policy(store, "codex", artifact_id, "hash") is None
 
     def test_global_scope_resolves_for_any_harness(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -598,7 +518,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:anything", "hash-z")
+        result = resolve_policy(store, "codex", "codex:project:anything", "hash-z")
         assert result == "block"
 
     def test_artifact_scope_takes_precedence_over_global_scope(self, tmp_path: Path) -> None:
@@ -621,7 +541,7 @@ class TestPolicyScopePersistence:
             ),
             "2026-01-01T00:00:00+00:00",
         )
-        result = store.resolve_policy("codex", "codex:project:trusted_tool", "any-hash")
+        result = resolve_policy(store, "codex", "codex:project:trusted_tool", "any-hash")
         assert result == "allow"
 
     def test_expired_policy_is_not_matched(self, tmp_path: Path) -> None:
@@ -637,7 +557,8 @@ class TestPolicyScopePersistence:
             ),
             "2024-12-01T00:00:00+00:00",
         )
-        result = store.resolve_policy(
+        result = resolve_policy(
+            store,
             "codex",
             "codex:project:my_tool",
             "hash-abc",
@@ -839,15 +760,15 @@ class TestBuildReceipt:
         assert len(ids) == 5, "Each receipt must have a unique receipt_id"
 
 
-def test_recorded_artifact_hash_parity_corpus_matches_the_python_hash() -> None:
-    # The Rust port replays this corpus, so a Python hash change that skips
-    # regenerating it would leave the Rust parity test green on stale digests.
+def test_artifact_hash_matches_the_frozen_python_corpus() -> None:
+    # The corpus was recorded from the retired Python hash. Saved approvals are
+    # keyed by these digests, so the native hash must keep spelling them.
     fixture = Path(__file__).parent / "fixtures" / "artifact-hash-parity.v1.json"
     corpus = json.loads(fixture.read_text(encoding="utf-8"))
-    stale = []
+    drifted = []
     for case in corpus["cases"]:
         fields = dict(case["artifact"])
         fields["args"] = tuple(fields.get("args", ()))
         if compute_artifact_hash(GuardArtifact(**fields)) != case["expected_sha256"]:
-            stale.append(case["case"])
-    assert stale == [], "regenerate with scripts/ci/generate_artifact_hash_parity.py"
+            drifted.append(case["case"])
+    assert drifted == [], "the native artifact hash no longer matches saved approvals"

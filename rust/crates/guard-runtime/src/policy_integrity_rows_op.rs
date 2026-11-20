@@ -14,7 +14,9 @@
 //!
 //! A `generation` section reads the store's local rows read-only and decides
 //! startup's trusted control state; it needs the key and fails the request
-//! when the store or the given state is unusable.
+//! when the store or the given state is unusable. A `reconcile` section
+//! decides a pending generation over rows the caller ships instead, for
+//! callers holding a transaction the resident could not read around.
 //!
 //! The reply's `request_sha256` binds every request field except
 //! `integrity_key_b64`: the digest never covers key bytes, so a reply, log or
@@ -22,9 +24,10 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_contracts::{
-    PolicyIntegrityGenerationRequestV1, PolicyIntegrityRowsPayloadV1, PolicyIntegrityRowsRequestV1,
-    PolicyIntegrityRowsResultV1, PolicyIntegritySignItemV1, PolicyIntegritySignatureV1,
-    PolicyIntegrityVerifyItemV1, PolicyIntegrityVerifyOutcomeV1, POLICY_INTEGRITY_ROWS_MAX_BYTES,
+    PolicyIntegrityGenerationRequestV1, PolicyIntegrityReconcileRequestV1,
+    PolicyIntegrityRowsPayloadV1, PolicyIntegrityRowsRequestV1, PolicyIntegrityRowsResultV1,
+    PolicyIntegritySignItemV1, PolicyIntegritySignatureV1, PolicyIntegrityVerifyItemV1,
+    PolicyIntegrityVerifyOutcomeV1, POLICY_INTEGRITY_ROWS_MAX_BYTES,
     POLICY_INTEGRITY_ROWS_MAX_ITEMS, POLICY_INTEGRITY_ROWS_REQUEST_SCHEMA,
     POLICY_INTEGRITY_ROWS_RESULT_SCHEMA,
 };
@@ -69,6 +72,8 @@ pub(crate) struct KeyRedactedRequest<'a> {
     sign: &'a [PolicyIntegritySignItemV1],
     #[serde(skip_serializing_if = "Option::is_none")]
     generation: Option<&'a PolicyIntegrityGenerationRequestV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reconcile: Option<&'a PolicyIntegrityReconcileRequestV1>,
 }
 
 impl<'a> From<&'a PolicyIntegrityRowsRequestV1> for KeyRedactedRequest<'a> {
@@ -80,6 +85,7 @@ impl<'a> From<&'a PolicyIntegrityRowsRequestV1> for KeyRedactedRequest<'a> {
             verify: &request.verify,
             sign: &request.sign,
             generation: request.generation.as_ref(),
+            reconcile: request.reconcile.as_ref(),
         }
     }
 }
@@ -127,10 +133,22 @@ pub(crate) fn evaluate(
             )?)
         }
     };
+    let reconcile = match &request.reconcile {
+        None => None,
+        Some(reconcile) => {
+            let (Some(key), Some(key_id)) = (key_bytes, key_id) else {
+                return Err("native_policy_integrity_key_unavailable");
+            };
+            Some(crate::policy_integrity_generation::reconcile(
+                reconcile, key, key_id,
+            )?)
+        }
+    };
     Ok(PolicyIntegrityRowsPayloadV1 {
         verify,
         sign,
         generation,
+        reconcile,
     })
 }
 

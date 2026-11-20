@@ -28,7 +28,7 @@ def test_production_hook_callgraph_has_no_python_semantic_reachability() -> None
 
 def test_callgraph_rejects_semantic_import_in_worker(tmp_path: Path) -> None:
     _copy_sources(tmp_path)
-    worker = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+    worker = tmp_path / "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
     source = worker.read_text(encoding="utf-8")
     marker = "from ..native_hook_edge import review_raw_hook_native\n"
     assert marker in source
@@ -44,7 +44,7 @@ def test_callgraph_rejects_semantic_import_in_worker(tmp_path: Path) -> None:
 
 def test_callgraph_rejects_semantic_call_in_worker_entrypoint(tmp_path: Path) -> None:
     _copy_sources(tmp_path)
-    worker = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+    worker = tmp_path / "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
     source = worker.read_text(encoding="utf-8")
     marker = "            return self._review_native_edge(\n"
     assert marker in source

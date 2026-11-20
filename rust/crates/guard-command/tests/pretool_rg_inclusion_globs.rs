@@ -97,6 +97,10 @@ fn inclusion_globs_that_select_no_secret_are_allowed() {
         "rg -n TODO -g '*.md'",
         "rg -n TODO -g '*.{md,html}' -g '!docs'",
         "rg -n TODO -g '*.md' README.md",
+        // A glob that names a path selects inside that directory only.
+        "rg -n TODO -g 'docs/*.md'",
+        "rg --files -g 'docs/**'",
+        "rg --files -g 'src/**' -g 'AGENTS.md'",
     ] {
         check(&f, "game", command, true);
     }
@@ -110,17 +114,22 @@ fn inclusion_globs_that_reach_a_secret_stay_reviewed() {
         "rg --files -g '*.md'",
         "rg -n TODO -g '*.md'",
         "rg -n TODO -g '*.md' secrets",
+        // A path-shaped glob is held to what it selects, like any other.
+        "rg --files -g 'secrets/*.md'",
+        "rg -n TODO -g 'secrets/**'",
     ] {
         check(&f, "notes", command, false);
     }
     for command in [
         // The secret file itself, a case-blind glob, and globs that could
-        // select `.git` or depend on ripgrep's match base.
+        // select `.git`.
         "rg --files -g '.env*'",
         "rg --files --iglob '*.md'",
         "rg -n TODO -g '*'",
         "rg -n TODO -g '.g*'",
-        "rg -n TODO -g 'docs/*.md'",
+        // A bare `*` beside a path-shaped glob matches `.git` itself, which
+        // is what lets ripgrep descend into it.
+        "rg -n TODO -g 'src/**' -g '*'",
         "rg -n TODO --hidden -g '*.md'",
         "rg -n TODO --no-ignore -g '*.md'",
     ] {

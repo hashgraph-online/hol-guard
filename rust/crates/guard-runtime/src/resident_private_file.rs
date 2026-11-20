@@ -16,7 +16,11 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-pub(super) fn write_private(path: &Path, bytes: &[u8], private_root: &Path) -> Result<(), String> {
+/// The most any file this module owns may hold. The lifecycle journal is the
+/// largest: a full day with every counter at its ceiling encodes to about 6 KiB.
+pub(crate) const PRIVATE_FILE_MAX_BYTES: u64 = 16 * 1024;
+
+pub(crate) fn write_private(path: &Path, bytes: &[u8], private_root: &Path) -> Result<(), String> {
     let temporary = temporary_path(path)?;
     if existing_private_file(&temporary, private_root)? {
         #[cfg(windows)]
@@ -82,9 +86,14 @@ pub(super) fn existing_private_file(path: &Path, private_root: &Path) -> Result<
         // not use pathname metadata here: a same-name replacement between a
         // stat and the subsequent open must never be treated as our budget
         // file, and foreign-owner/reparse objects must fail closed.
-        crate::resident_state::open_private_read(path, 4096, "restart_budget", private_root)
-            .map(|file| file.is_some())
-            .map_err(|_| "native_resident_restart_budget_invalid".to_owned())
+        crate::resident_state::open_private_read(
+            path,
+            PRIVATE_FILE_MAX_BYTES,
+            "restart_budget",
+            private_root,
+        )
+        .map(|file| file.is_some())
+        .map_err(|_| "native_resident_restart_budget_invalid".to_owned())
     }
 
     #[cfg(not(windows))]
@@ -94,7 +103,10 @@ pub(super) fn existing_private_file(path: &Path, private_root: &Path) -> Result<
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(_) => return Err("native_resident_restart_budget_stat_failed".to_owned()),
         };
-        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > PRIVATE_FILE_MAX_BYTES
+        {
             return Err("native_resident_restart_budget_invalid".to_owned());
         }
         #[cfg(unix)]
@@ -161,7 +173,7 @@ fn temporary_path(path: &Path) -> Result<PathBuf, String> {
 /// Read one small private file this module owns. The budget and the
 /// requested-stop note sit in the same directory and are validated the same
 /// way, so a foreign or swapped file fails closed whichever one is read.
-pub(super) fn read_private_bytes(
+pub(crate) fn read_private_bytes(
     path: &Path,
     private_root: &Path,
     label: &'static str,
@@ -173,8 +185,13 @@ pub(super) fn read_private_bytes(
     let file = {
         #[cfg(windows)]
         {
-            crate::resident_state::open_private_read(path, 4096, label, private_root)?
-                .ok_or_else(|| "native_resident_restart_budget_read_failed".to_owned())?
+            crate::resident_state::open_private_read(
+                path,
+                PRIVATE_FILE_MAX_BYTES,
+                label,
+                private_root,
+            )?
+            .ok_or_else(|| "native_resident_restart_budget_read_failed".to_owned())?
         }
         #[cfg(not(windows))]
         {
@@ -194,7 +211,10 @@ pub(super) fn read_private_bytes(
     let metadata = file
         .metadata()
         .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > PRIVATE_FILE_MAX_BYTES
+    {
         return Err("native_resident_restart_budget_invalid".to_owned());
     }
     #[cfg(unix)]
@@ -217,9 +237,12 @@ pub(super) fn read_private_bytes(
             return Err("native_resident_restart_budget_invalid".to_owned());
         }
     }
-    file.take(4097)
+    file.take(PRIVATE_FILE_MAX_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "native_resident_restart_budget_read_failed".to_owned())?;
+    if bytes.len() as u64 > PRIVATE_FILE_MAX_BYTES {
+        return Err("native_resident_restart_budget_invalid".to_owned());
+    }
     Ok(Some(bytes))
 }
 

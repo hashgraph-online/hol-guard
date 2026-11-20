@@ -40,6 +40,7 @@ class HarnessName(str, Enum):
     PI = "pi"
     OMP = "omp"
     DEVIN = "devin"
+    MUSE = "muse"
 
 
 VALID_HARNESSES = frozenset(h.value for h in HarnessName)

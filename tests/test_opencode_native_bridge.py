@@ -10,9 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_FEATURE
-from codex_plugin_scanner.guard.adapters.opencode_pretool import pretool_plugin_source
+from codex_plugin_scanner.guard.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_FEATURE
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests.native_runtime_stamp import stamp_native_runtime
+from tests.opencode_test_support import pretool_plugin_source
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native bounded bridge is POSIX-only")
 
@@ -28,30 +29,8 @@ def _bun() -> str:
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-    from codex_plugin_scanner.guard.native_runtime import (
-        NativeRuntimeCapabilities,
-        NativeRuntimeIdentity,
-        NativeRuntimeStatus,
-    )
-
-    status = NativeRuntimeStatus(
-        mode="auto",
-        available=True,
-        compatible=True,
-        reason="ok",
-        identity=NativeRuntimeIdentity(path=runtime, size=1, mtime_ns=1, sha256="0" * 64),
-        capabilities=NativeRuntimeCapabilities(
-            protocol_version=1,
-            runtime_version="0",
-            rule_digest="0" * 64,
-            build_sha="0" * 40,
-            target="test",
-            features=(NATIVE_BOUNDED_HOOK_FEATURE,),
-        ),
-    )
-    monkeypatch.delenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", raising=False)
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda *, deadline_monotonic=None: status)
+    # The native kind that renders the plugin names the runtime from the caller stamp.
+    stamp_native_runtime(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -177,12 +156,3 @@ def test_unrunnable_native_runtime_falls_back_to_python(tmp_path: Path, monkeypa
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == {"exitCode": 0, "stdout": "python-fallback"}
     assert "nodeSpawn(command, args, spawnOptions)" in source
-
-
-def test_python_bridge_pin_installs_no_native_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _offer_native(monkeypatch, _fake_runtime(tmp_path))
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
-
-    source = pretool_plugin_source(_context(tmp_path))
-
-    assert "} | null = null;" in source

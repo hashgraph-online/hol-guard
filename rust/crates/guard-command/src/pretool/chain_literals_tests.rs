@@ -408,16 +408,16 @@ mod envelope {
         let ws = workspace("launcher", true);
         let raw = "export F=a.txt && touch $F && cat $F";
         let literal = "export F=a.txt && touch a.txt && cat a.txt";
-        let shape = crate::restricted_pytest::workspace_exact_shape(raw, &ws);
+        let shape = crate::pretool::workspace_exact_shape(raw, &ws);
         assert_eq!(
             shape.is_some(),
-            crate::restricted_pytest::workspace_exact_shape(literal, &ws).is_some()
+            crate::pretool::workspace_exact_shape(literal, &ws).is_some()
         );
         assert!(shape.is_none_or(|shape| shape.remainder.is_none() && shape.bootstrap.is_none()));
         // A bootstrapped `git init` would run a rewritten remainder, not the
         // raw text, so a substituted chain never gets that shape.
         let fresh = workspace("launcher-fresh", false);
-        assert!(crate::restricted_pytest::workspace_exact_shape(
+        assert!(crate::pretool::workspace_exact_shape(
             "git init && export F=a.txt && touch $F",
             &fresh
         )

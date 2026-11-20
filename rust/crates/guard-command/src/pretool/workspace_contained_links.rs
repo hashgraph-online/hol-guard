@@ -3,8 +3,7 @@
 use crate::CanonicalCommandV1;
 use std::path::Path;
 
-#[path = "workspace_contained_cwd.rs"]
-mod cwd;
+use super::cwd;
 #[path = "workspace_contained_glob.rs"]
 mod glob;
 

@@ -5,7 +5,6 @@ import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.native_request_context import NativeRequestContextFailure
-from codex_plugin_scanner.guard.runtime import restricted_pytest_validation as validation
 from codex_plugin_scanner.guard.runtime.restricted_pytest import prepare_restricted_pytest
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
@@ -126,20 +125,6 @@ def test_real_native_unsupported_backend_fails_closed(native_context_digest):
     with pytest.raises(RestrictedPytestError) as caught:
         transport.restricted_native("select_backend", {"platform": "win32", "backend_executable": None}, list)
     assert caught.value.reason_code == "pytest_restricted_sandbox_unavailable"
-
-
-@pytest.mark.parametrize("wrapper", [validation._locate_executable, validation._resolve_executable])
-@pytest.mark.parametrize("value", ["./node", "./git", "bin/python", "../bin/python"])
-def test_executable_transport_preserves_explicit_relative_prefix(monkeypatch, tmp_path, wrapper, value):
-    observed = {}
-
-    def native(operation, fields, expected):
-        observed.update(fields)
-        return str(tmp_path / "tool")
-
-    monkeypatch.setattr(validation, "restricted_native", native)
-    assert wrapper(value, cwd=tmp_path) == tmp_path / "tool"
-    assert observed["value"] == value
 
 
 def test_prepare_expands_tilde_against_current_caller_home(monkeypatch, tmp_path):

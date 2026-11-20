@@ -99,3 +99,44 @@ fn runs_something_else(word: &str) -> bool {
                 || matches!(name.as_str(), "nohup" | "command" | "builtin" | "time")
         })
 }
+
+/// The text with each `-exec` body's arguments removed, keeping the action and
+/// the program it names.
+///
+/// `find` starts no shell: it runs the program the action names and hands it
+/// the paths it found, so the remaining body words are that program's argv.
+/// `find src -exec echo sh {} \;` prints the word `sh`, and reading it as a
+/// command position refused ordinary work over a literal nothing runs. Callers
+/// use this only once `find_exec_programs` has proven every action names a
+/// program that is not itself a launcher.
+pub(super) fn text_outside_exec_arguments(shell: &str) -> String {
+    let mut pieces: Vec<String> = Vec::new();
+    for piece in shell.split(['\n', ';', '&', '|', '(', ')', '`']) {
+        let words: Vec<&str> = piece.split_whitespace().collect();
+        let mut kept: Vec<&str> = Vec::new();
+        let mut index = 0;
+        while index < words.len() {
+            let word = words[index];
+            kept.push(word);
+            index += 1;
+            if !EXEC_ACTIONS.contains(&word) {
+                continue;
+            }
+            // The operand names the program, and it stays: it is what the
+            // action runs.
+            if index < words.len() {
+                kept.push(words[index]);
+                index += 1;
+            }
+            // find ends a body at `+` or at an unquoted `;`, and the split
+            // above already ended the piece at that `;`.
+            while index < words.len() && words[index] != "+" {
+                index += 1;
+            }
+            // The terminator itself names nothing.
+            index += 1;
+        }
+        pieces.push(kept.join(" "));
+    }
+    pieces.join("\n")
+}

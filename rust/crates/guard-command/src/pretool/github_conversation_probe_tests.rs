@@ -52,7 +52,7 @@ fn environment(home: &Path, names: &[&str]) -> guard_contracts::GuardExecutionEn
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 

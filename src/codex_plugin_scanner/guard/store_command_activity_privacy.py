@@ -14,9 +14,9 @@ from typing import Any, Final, Protocol, cast
 
 from .runtime.command_activity_api_contract import COMMAND_ACTIVITY_API_SCHEMA_VERSION
 from .runtime.command_activity_contract import (
-    COMMAND_ACTIVITY_HARNESSES,
     COMMAND_ACTIVITY_SCHEMA_VERSION,
     CommandProofLevel,
+    command_activity_harnesses,
 )
 from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .runtime.command_shadow_evaluation import COMMAND_SHADOW_SCHEMA_VERSION
@@ -40,7 +40,7 @@ class _NativeOwner(Protocol):
 def _allowlists() -> dict[str, object]:
     extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
     return {
-        "harnesses": sorted(COMMAND_ACTIVITY_HARNESSES),
+        "harnesses": sorted(command_activity_harnesses()),
         "extension_ids": sorted({extension.extension_id for extension in extensions}),
         "rule_ids": sorted({rule.rule_id for extension in extensions for rule in extension.rules}),
         "proof_levels": [level.value for level in CommandProofLevel],

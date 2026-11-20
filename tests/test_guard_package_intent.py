@@ -46,18 +46,18 @@ def test_extract_uses_selected_guard_home_over_ambient_home(
     assert selected.targets[0].requested_specifier == "1.3.0"
 
 
-def test_extract_resolves_every_command_in_the_environment_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_resolves_the_call_in_the_environment_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller parsing another process's call binds that process's `PATH`."""
 
-    from codex_plugin_scanner.guard.runtime import package_intent_parser
+    from codex_plugin_scanner.guard import native_package_authority
 
-    seen: list[tuple[str, object]] = []
+    seen: list[dict[str, object]] = []
 
-    def parse(command_text: str, **kwargs: object) -> None:
-        seen.append((command_text, kwargs["environment"]))
+    def extract(tool_name: object, arguments: object, **kwargs: object) -> None:
+        seen.append({"tool_name": tool_name, "arguments": arguments, **kwargs})
         return None
 
-    monkeypatch.setattr(package_intent_parser, "parse_package_intent", parse)
+    monkeypatch.setattr(native_package_authority, "package_intent_extract_native", extract)
     environment = {"PATH": "/usr/bin:/bin"}
 
     assert (
@@ -66,12 +66,18 @@ def test_extract_resolves_every_command_in_the_environment_it_is_given(monkeypat
             {"command": "npm install left-pad"},
             action_envelope_command="pip install requests",
             environment=environment,
+            guard_home=Path("/guard-home"),
         )
         is None
     )
 
-    # Every command the call carries, the envelope's included.
-    assert seen == [("npm install left-pad", environment), ("pip install requests", environment)]
+    # The whole call, the envelope's command included, is one request.
+    assert len(seen) == 1
+    assert seen[0]["tool_name"] == "shell"
+    assert seen[0]["arguments"] == {"command": "npm install left-pad"}
+    assert seen[0]["action_envelope_command"] == "pip install requests"
+    assert seen[0]["environment"] == environment
+    assert seen[0]["guard_home"] == Path("/guard-home")
 
 
 def test_parse_package_intent_npm_install_supports_aliases_tags_versions_and_flags(tmp_path: Path) -> None:
@@ -154,6 +160,39 @@ def test_package_sync_does_not_treat_fd_merge_as_a_package_target(tmp_path: Path
     assert pnpm is not None
     assert pnpm.intent_kind == "install"
     assert pnpm.targets == ()
+
+
+def test_a_missing_environment_puts_the_caller_home_on_the_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The home binding runs while the parse request is built."""
+
+    from codex_plugin_scanner.guard import native_package_authority
+
+    sent: list[dict[str, object]] = []
+
+    def request(**kwargs: object) -> None:
+        payload = kwargs["request"]
+        assert isinstance(payload, dict)
+        sent.append(payload)
+        return None
+
+    monkeypatch.setattr(native_package_authority, "_resident_request", request)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    assert native_package_authority.package_intent_parse_native("npx create-vite@latest", guard_home=tmp_path) is None
+    assert (
+        native_package_authority.package_intent_parse_native(
+            "npx create-vite@latest",
+            environment={"PATH": "/bin"},
+            guard_home=tmp_path,
+        )
+        is None
+    )
+    assert sent[0]["environment"] == {"PATH": "/usr/bin", "HOME": str(home)}
+    assert sent[1]["environment"] == {"PATH": "/bin"}
 
 
 def test_parse_package_intent_exec_commands_are_classified_as_execute_requests() -> None:
@@ -348,9 +387,7 @@ def _package_request_artifact_for_source(source: str) -> GuardArtifact:
     ],
 )
 def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(source: str) -> None:
-    first = _package_request_artifact_for_source(
-        f"github:Hashgraph-Online/hol-guard.git#{_GIT_COMMIT}"
-    )
+    first = _package_request_artifact_for_source(f"github:Hashgraph-Online/hol-guard.git#{_GIT_COMMIT}")
     equivalent = _package_request_artifact_for_source(source)
     different_commit = _package_request_artifact_for_source(
         "git+https://github.com/hashgraph-online/hol-guard.git#ffffffffffffffffffffffffffffffffffffffff"

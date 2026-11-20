@@ -7,6 +7,7 @@ use serde_json::{json, Map, Value};
 
 use super::cloud_request_payload::{cloud_safe_local_request_payload, local_request_command_text};
 use super::cloud_request_text::{py_isspace, py_strip, py_truthy};
+use super::cloud_review_event::review_event;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -219,12 +220,17 @@ pub(crate) fn cloud_review_event_display(args: &Value) -> KindResult {
     let (command, summary, raw, redacted) = display_command(item, level)?;
     let payload = cloud_safe_local_request_payload(item, level, None)?;
     let has_command = payload.get("command_text").is_some_and(py_truthy);
-    Ok(json!({
-        "display_command": command,
-        "display_summary": summary,
-        "raw_command": raw,
-        "redacted_command": redacted,
-        "display_provenance": display_provenance(has_command, level),
-        "payload": payload,
-    }))
+    let mut display = Map::new();
+    display.insert("display_command".into(), command.into());
+    display.insert("display_summary".into(), summary.into());
+    display.insert("raw_command".into(), raw.into());
+    display.insert("redacted_command".into(), redacted.into());
+    let provenance = display_provenance(has_command, level);
+    display.insert("display_provenance".into(), provenance.into());
+    display.insert("payload".into(), Value::Object(payload));
+    // With the `event` facts the answer is the whole Cloud review event.
+    match args.get("event") {
+        Some(event) => Ok(json!({"event": review_event(item, event, display)?})),
+        None => Ok(Value::Object(display)),
+    }
 }

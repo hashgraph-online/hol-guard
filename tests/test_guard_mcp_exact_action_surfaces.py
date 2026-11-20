@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     ToolCallDecision,
     block_tool_call,
     resolve_tool_call_policy_action,
 )
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
-from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -148,90 +145,3 @@ def test_block_tool_call_rejects_executing_actions_without_persistence(
 
     assert store.list_receipts(limit=10) == []
     assert store.list_events(limit=10) == []
-
-
-def _marker_child_command(marker: Path) -> list[str]:
-    return [
-        sys.executable,
-        "-u",
-        "-c",
-        "\n".join(
-            (
-                "import json, pathlib, sys",
-                "for line in sys.stdin:",
-                "    message = json.loads(line)",
-                f"    pathlib.Path({str(marker)!r}).write_text(json.dumps(message), encoding='utf-8')",
-                "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                "    sys.stdout.flush()",
-            )
-        ),
-    ]
-
-
-@pytest.mark.parametrize(
-    ("policy_action", "message_fragment", "queues_approval"),
-    [
-        ("review", "pending review", True),
-        ("require-reapproval", "fresh approval", True),
-        ("sandbox-required", "enforceable sandbox", False),
-        ("block", "blocked sensitive local file access", False),
-    ],
-)
-def test_stdio_sensitive_read_preserves_exact_action_separate_from_transport_outcome(
-    tmp_path: Path,
-    policy_action: GuardAction,
-    message_fragment: str,
-    queues_approval: bool,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        security_level="custom",
-        risk_actions={"local_secret_read": policy_action},
-    )
-    marker = tmp_path / "unexpected-forward.json"
-    proxy = StdioGuardProxy(
-        command=_marker_child_command(marker),
-        cwd=workspace,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-
-    result = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert marker.exists() is False
-    response = result["responses"][0]
-    assert response["error"]["code"] == -32001
-    assert message_fragment in response["error"]["message"].lower()
-    assert response["error"]["data"]["guardPolicyAction"] == policy_action
-    assert response["error"]["data"]["transportOutcome"] == "not-forwarded"
-    event = result["events"][0]
-    assert event["decision"] == policy_action
-    assert event["policy_action"] == policy_action
-    assert event["transport_outcome"] == "not-forwarded"
-    assert store.list_receipts(limit=1)[0]["policy_decision"] == policy_action
-
-    approval_requests = store.list_approval_requests(limit=None)
-    if queues_approval:
-        assert len(approval_requests) == 1
-        assert approval_requests[0]["policy_action"] == policy_action
-        assert len(event["approval_requests"]) == 1
-        assert "blocked request" not in event["review_hint"].lower()
-    else:
-        assert approval_requests == []
-        assert "approval_requests" not in event
-        assert "approvalRequests" not in response["error"]["data"]

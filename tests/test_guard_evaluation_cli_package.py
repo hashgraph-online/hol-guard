@@ -313,6 +313,7 @@ def test_package_evidence_reports_unpaired_surrogate_without_traceback(tmp_path:
 
     payload = _payload(capsys)
     assert status == 2
-    assert payload["error"]["code"] == "evidence_package_invalid"  # type: ignore[index]
+    # The profile check rejects the text before any package is written.
+    assert payload["error"]["code"] == "profile_invalid"  # type: ignore[index]
     assert "\ud800" not in json.dumps(payload)
     assert not list(tmp_path.glob("hol-guard-eval-evidence-*.zip"))

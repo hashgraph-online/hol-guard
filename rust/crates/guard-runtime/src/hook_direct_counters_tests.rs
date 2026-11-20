@@ -83,13 +83,13 @@ fn a_drain_page_carries_the_counters_beside_the_records() {
         ack_through: None,
         ack_epoch: None,
     };
-    let page: Value = serde_json::from_slice(&drain(&request, &queue).unwrap()).unwrap();
+    let page: Value = serde_json::from_slice(&drain(&request, &queue, None).unwrap()).unwrap();
     assert_eq!(page["counters"], json!({ "by_harness": {} }));
     assert_eq!(page["records"], json!([]));
     queue
         .counters()
         .record(HarnessSlot::of("cursor"), Some(HookDirectDefer::NotAllow));
-    let page: Value = serde_json::from_slice(&drain(&request, &queue).unwrap()).unwrap();
+    let page: Value = serde_json::from_slice(&drain(&request, &queue, None).unwrap()).unwrap();
     assert_eq!(
         page["counters"],
         json!({ "by_harness": { "cursor": { "direct_hook_not_allow": 1 } } })

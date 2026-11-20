@@ -1,7 +1,9 @@
 //! Bounded acquisition on existing resident workers, separate from inspection.
 
+use guard_archive::content_coding::parse_content_codings;
 use guard_command::restricted_archive::{
-    canonical_destination, download_restricted_archive, RestrictedArchiveDownloadResult,
+    canonical_destination, download_restricted_archive, download_restricted_content,
+    RestrictedArchiveDownloadResult, RestrictedDownloadError,
 };
 use guard_command::restricted_archive_transport::{
     validate_managed_destination, ManagedUreqPinnedTransport, SystemDnsResolver,
@@ -76,8 +78,13 @@ fn evaluate(request: &ArchiveAcquisitionRequestV1) -> Result<Value, &'static str
         return Ok(json!({"kind": "destination", "canonical_url": canonical,
             "is_external": guard_command::restricted_archive::is_external_https_archive_source(&query.source_url)}));
     }
+    let max_bytes = if query.action == ArchiveAcquisitionActionV1::Content {
+        CONTENT_CAP_INPUT_BYTES
+    } else {
+        ARCHIVE_ACQUISITION_MAX_BYTES
+    };
     if query.max_bytes <= 0
-        || query.max_bytes > ARCHIVE_ACQUISITION_MAX_BYTES as i64
+        || query.max_bytes > max_bytes as i64
         || !(0..=4).contains(&query.max_redirects)
         || query.timeout_ms <= 0
         || query.timeout_ms > ARCHIVE_ACQUISITION_MAX_TIMEOUT_MS as i64
@@ -140,17 +147,40 @@ fn evaluate(request: &ArchiveAcquisitionRequestV1) -> Result<Value, &'static str
             "External archive operation capacity is unavailable.",
         ));
     };
+    let transport = ManagedUreqPinnedTransport {
+        roots,
+        allow_public_registries: query.allow_public_registries,
+    };
+    let temp_dir = query.temp_dir.as_deref().map(Path::new);
+    let timeout_seconds = timeout_ms as f64 / 1000.0;
+    if query.action == ArchiveAcquisitionActionV1::Content {
+        let (result, codings) = download_restricted_content(
+            &query.source_url,
+            query.max_bytes as u64,
+            query.max_redirects as u32,
+            timeout_seconds,
+            temp_dir,
+            &SystemDnsResolver,
+            &transport,
+            &supported_content_codings,
+        );
+        return Ok(match result {
+            RestrictedArchiveDownloadResult::Failure(error) => failure(&error.code, &error.message),
+            RestrictedArchiveDownloadResult::Success(download) => json!({
+                "kind": "content", "path": download.path, "sha256": download.sha256,
+                "size": download.size, "source_url": download.source_url,
+                "final_url": download.final_url, "content_encoding": codings,
+            }),
+        });
+    }
     let result = download_restricted_archive(
         &query.source_url,
         query.max_bytes as u64,
         query.max_redirects as u32,
-        timeout_ms as f64 / 1000.0,
-        query.temp_dir.as_deref().map(Path::new),
+        timeout_seconds,
+        temp_dir,
         &SystemDnsResolver,
-        &ManagedUreqPinnedTransport {
-            roots,
-            allow_public_registries: query.allow_public_registries,
-        },
+        &transport,
     );
     Ok(match result {
         RestrictedArchiveDownloadResult::Failure(error) => failure(&error.code, &error.message),
@@ -159,6 +189,28 @@ fn evaluate(request: &ArchiveAcquisitionRequestV1) -> Result<Value, &'static str
             "size": download.size, "source_url": download.source_url, "final_url": download.final_url,
         }),
     })
+}
+
+/// Every hop of a managed content fetch must carry only codings the
+/// contained decoder accepts, in a stack no deeper than its ceiling, and no
+/// more header lines than it will take. This is the same parser the worker
+/// runs, so the fetch never spools a body no worker policy could accept. A
+/// caller's tighter layer cap is applied by the worker, before any decoder.
+fn supported_content_codings(values: &[String]) -> Result<(), RestrictedDownloadError> {
+    let refused = |code: &str, message: &str| RestrictedDownloadError {
+        code: code.to_owned(),
+        message: message.to_owned(),
+    };
+    if values.len() > CONTENT_CAP_HEADER_VALUES {
+        return Err(refused(
+            "content_coding_unsupported",
+            "The response uses a content coding Guard does not decode.",
+        ));
+    }
+    let values: Vec<&str> = values.iter().map(String::as_str).collect();
+    parse_content_codings(&values, CONTENT_CAP_LAYERS as usize)
+        .map(|_| ())
+        .map_err(|error| refused(error.code, error.message))
 }
 
 fn failure(code: &str, message: &str) -> Value {
@@ -243,6 +295,50 @@ mod tests {
                 "external_archive_download_policy_invalid"
             );
         }
+    }
+
+    #[test]
+    fn managed_content_codings_are_refused_with_the_decoder_parser() {
+        let owned = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        for allowed in [&[][..], &["br"][..], &["gzip, br"][..], &["identity"][..]] {
+            assert!(
+                supported_content_codings(&owned(allowed)).is_ok(),
+                "{allowed:?}"
+            );
+        }
+        for (values, code) in [
+            (&["zstd"][..], "content_coding_unsupported"),
+            (&["br;q=1"][..], "content_coding_unsupported"),
+            (
+                &["gzip, gzip, gzip, gzip, br"][..],
+                "content_coding_too_deep",
+            ),
+            (
+                &["identity"; CONTENT_CAP_HEADER_VALUES + 1][..],
+                "content_coding_unsupported",
+            ),
+        ] {
+            assert_eq!(
+                supported_content_codings(&owned(values)).unwrap_err().code,
+                code
+            );
+        }
+    }
+
+    #[test]
+    fn managed_content_body_cap_is_the_decoder_input_cap() {
+        let mut request = request();
+        request.query.action = ArchiveAcquisitionActionV1::Content;
+        request.query.max_bytes = CONTENT_CAP_INPUT_BYTES as i64 + 1;
+        assert_eq!(
+            evaluate(&request).unwrap()["code"],
+            "external_archive_download_policy_invalid"
+        );
+        request.query.max_bytes = CONTENT_CAP_INPUT_BYTES as i64;
+        assert_eq!(
+            evaluate(&request).unwrap()["code"],
+            "external_archive_tls_error"
+        );
     }
 
     #[test]

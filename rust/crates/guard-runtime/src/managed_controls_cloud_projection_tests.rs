@@ -227,6 +227,26 @@ fn native_complete_view_last_page_proof_growth_and_metadata_binding() {
         let mut stale = request.clone();
         stale["cloud_view"]["now"] = json!("2099-10-18T00:15:01Z");
         assert_eq!(run(&stale)["error"]["code"], "policy_observation_stale");
+        // A device clock a little behind the server still reads the receipt as
+        // fresh; one further behind than the accepted skew does not.
+        let observed = crate::policy_bundle_time::strict_utc_micros(
+            request["cloud_view"]["observed_at"].as_str().unwrap(),
+        )
+        .unwrap();
+        let mut behind = request.clone();
+        behind["cloud_view"]["now"] = json!(crate::policy_bundle_time::micros_to_utc_isoformat(
+            observed - 2_000_000,
+            "Z"
+        )
+        .unwrap());
+        let result = run(&behind);
+        assert!(result.get("error").is_none(), "{result}");
+        behind["cloud_view"]["now"] = json!(crate::policy_bundle_time::micros_to_utc_isoformat(
+            observed - 301_000_000,
+            "Z"
+        )
+        .unwrap());
+        assert_eq!(run(&behind)["error"]["code"], "policy_observation_stale");
         let mut changed = request.clone();
         changed["cloud_view"] = prepared(home.path(), count, "Changed selected protection");
         assert_ne!(

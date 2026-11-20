@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
+from tests.local_cli_store_support import upsert_local_cli_command_states
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_extension_driver import matching_local_mcp_grant
@@ -144,7 +145,7 @@ def test_explicit_empty_public_hash_cannot_use_private_catalog_authority(tmp_pat
         identity_hash=identity.identity_hash,
         seen_at=utc_now(),
     )
-    store.upsert_local_cli_command_states(f"local-cli.mcp-{identity.identity_hash[:8]}", {"read_file": "allow"})
+    upsert_local_cli_command_states(store, f"local-cli.mcp-{identity.identity_hash[:8]}", {"read_file": "allow"})
     artifact = _artifact(identity, "read_file")
     private_hash = tool_definition_authority_hash(definition)
     private_artifact = replace(artifact, runtime_private_metadata={"mcp_tool_authority_hash": private_hash})
@@ -171,7 +172,7 @@ def test_mcp_targeted_grant_reads_only_called_tool_and_other(tmp_path: Path) -> 
 
 def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-    from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
+    from tests.python_oracles.observed_mcp_tools import observed_command_id, observed_mcp_tool
 
     tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__COMPOSIO_SEARCH_TOOLS")
     assert tool is not None
@@ -193,14 +194,14 @@ def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) ->
     )
     store.replace_local_cli_commands(
         identity.cli_id,
-        (LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Observed tool"),),
+        (LocalCliCommand(observed_command_id(tool), tool.name, tool.qualified_name, "Observed tool"),),
     )
     store.upsert_local_cli_grant(
         identity=identity,
         state="allowed",
         expected_revision=0,
         updated_at=utc_now(),
-        command_states={tool.command_id: "block"},
+        command_states={observed_command_id(tool): "block"},
     )
     artifact = _artifact(tool.server_identity, tool.qualified_name)
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "blocked"
@@ -640,7 +641,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     identity = _identity()
@@ -664,7 +665,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
         )
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         _probe,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -683,11 +684,11 @@ def test_recognize_failed_package_mcp_stays_built_in(tmp_path: Path, monkeypatch
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         lambda *args, **kwargs: None,
     )
     service = LocalCliApiService(store=GuardStore(home))

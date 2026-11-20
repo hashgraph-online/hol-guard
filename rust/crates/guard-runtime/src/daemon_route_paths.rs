@@ -39,10 +39,31 @@ const HEADLESS_APP_ACTIONS: &[&str] = &["connect", "repair", "disconnect", "stat
 const HARNESS_ACTIONS: &[&str] = &["install", "verify", "repair", "uninstall"];
 
 const TOKEN_REQUIRED_PATHS: &[&str] = &[
+    "/v1/swarm",
+    "/v1/swarm/launch",
+    "/v1/swarm/action",
+    "/v1/swarm/events",
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance/folders",
+    "/v1/context-assistance",
+    "/v1/context-assistance/installations",
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/jobs",
+    "/v1/context-assistance/interpreters",
+    "/v1/context-assistance/catalog",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
+    "/v1/context-assistance/codex-lean",
+    "/v1/context-assistance/codex-short-replies",
+    "/v1/context-assistance/usage",
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
     "/v1/harness-versions/clear-acknowledgement",
     "/v1/cloud-review",
+    "/v1/cloud-actions/status",
     "/v1/clients/attach",
     "/v1/clients/heartbeat",
     "/v1/sessions/start",
@@ -65,6 +86,11 @@ const TOKEN_REQUIRED_PATHS: &[&str] = &[
     "/v1/approval-gate/totp/enroll",
     "/v1/approval-gate/totp/verify",
     "/v1/approval-gate/totp/disable",
+    "/v1/approval-gate/pulse/enroll",
+    "/v1/approval-gate/pulse/confirm",
+    "/v1/approval-gate/pulse/poll",
+    "/v1/approval-gate/pulse/disable",
+    "/v1/approval-gate/pulse/recover",
     "/v1/daemon/repair",
     "/v1/protection/repair",
     "/v1/repair",
@@ -77,9 +103,27 @@ const TOKEN_REQUIRED_PATHS: &[&str] = &[
     "/v1/update/channel",
     "/v1/update/reconnect/prepare",
     "/v1/command-activity/feedback",
+    "/v1/plugins/updates",
+    "/v1/plugins/updates/dismiss",
 ];
 
 const HOSTED_API_PATHS: &[&str] = &[
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance/folders",
+    "/v1/context-assistance",
+    "/v1/context-assistance/installations",
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/jobs",
+    "/v1/context-assistance/interpreters",
+    "/v1/context-assistance/catalog",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
+    "/v1/context-assistance/codex-lean",
+    "/v1/context-assistance/codex-short-replies",
+    "/v1/context-assistance/usage",
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
     "/v1/harness-versions/clear-acknowledgement",
@@ -129,10 +173,27 @@ const HOSTED_API_PATHS: &[&str] = &[
 ];
 
 const LOCAL_SURFACE_PATHS: &[&str] = &[
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance/folders",
+    "/v1/context-assistance",
+    "/v1/context-assistance/installations",
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/jobs",
+    "/v1/context-assistance/interpreters",
+    "/v1/context-assistance/catalog",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
+    "/v1/context-assistance/codex-lean",
+    "/v1/context-assistance/codex-short-replies",
+    "/v1/context-assistance/usage",
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
     "/v1/harness-versions/clear-acknowledgement",
     "/v1/cloud-review",
+    "/v1/cloud-actions/status",
     "/v1/capabilities",
     "/v1/sessions",
     "/v1/runtime",
@@ -173,6 +234,11 @@ const LOCAL_SURFACE_PATHS: &[&str] = &[
     "/v1/approval-gate/totp/enroll",
     "/v1/approval-gate/totp/verify",
     "/v1/approval-gate/totp/disable",
+    "/v1/approval-gate/pulse/enroll",
+    "/v1/approval-gate/pulse/confirm",
+    "/v1/approval-gate/pulse/poll",
+    "/v1/approval-gate/pulse/disable",
+    "/v1/approval-gate/pulse/recover",
     "/v1/daemon/repair",
     "/v1/protection/repair",
     "/v1/repair",
@@ -260,6 +326,15 @@ pub(crate) fn hosted_dashboard_api_path(path: &str) -> bool {
 }
 
 pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
+    if path == "/v1/swarm" {
+        return method == "GET";
+    }
+    if matches!(
+        path,
+        "/v1/swarm/launch" | "/v1/swarm/action" | "/v1/swarm/events"
+    ) {
+        return method == "POST";
+    }
     if LOCAL_SURFACE_PATHS.contains(&path) || REMOTE_REVIEW_POST_ROUTES.contains(&path) {
         return true;
     }
@@ -276,6 +351,9 @@ pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
             // session token, never the daemon auth token, so these two reads
             // must be session paths or the tab 401s on every load.
             matches!(path, "/v1/releases/index" | "/v1/releases/release")
+                // Plugin update prompts: the dashboard asks the daemon to
+                // compare installed plugins with HOL's public release index.
+                || path == "/v1/plugins/updates"
                 || (n == 4
                     && starts_with(&parts, &["v1", "requests"])
                     && parts[3] == "business-summary")
@@ -291,6 +369,7 @@ pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
                 && starts_with(&parts, &["v1", "mcp-policy", "requests"])
                 && parts[4] == "decision")
                 || path == "/v1/update"
+                || path == "/v1/plugins/updates/dismiss"
                 || (n == 4
                     && starts_with(&parts, &["v1", "requests"])
                     && matches!(parts[3], "approve" | "block" | "resume"))

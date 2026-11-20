@@ -9,6 +9,7 @@ pub(crate) mod flows;
 pub(crate) mod health;
 mod input_snapshot;
 pub(crate) mod node_evidence;
+mod package_launch;
 pub(crate) mod pkg_json;
 mod process;
 pub(crate) mod runner_options;
@@ -43,6 +44,8 @@ use std::path::Path;
 
 use serde_json::Value;
 
+pub use package_launch::{execute_node_command, execute_typescript_command, NodeCommandOutcome};
+
 /// Resident-facing launch request shared by the three contained runners.
 pub struct RunnerLaunch<'a> {
     pub workspace: &'a Path,
@@ -67,16 +70,6 @@ impl RunnerLaunch<'_> {
                 .unwrap_or(flows::DEFAULT_TIMEOUT_SECONDS),
         }
     }
-}
-
-/// Contained local Node runner (`npx`/`bunx` test, lint or diagnostic tool).
-pub fn execute_node(launch: &RunnerLaunch, execution: &Value) -> Result<Value, String> {
-    flows::run_node(&launch.launch(), execution)?.to_value()
-}
-
-/// Contained local TypeScript compiler check (`npx tsc`).
-pub fn execute_typescript(launch: &RunnerLaunch, execution: &Value) -> Result<Value, String> {
-    flows::run_typescript(&launch.launch(), execution)?.to_value()
 }
 
 /// Contained local Bun package script.

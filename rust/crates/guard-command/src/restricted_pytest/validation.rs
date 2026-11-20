@@ -65,68 +65,6 @@ pub(super) fn workspace_is_broad_or_sensitive(workspace: &Path) -> bool {
     workspace_is_broad_or_sensitive_for_home(workspace, None)
 }
 
-pub(super) fn workspace_is_broad_or_sensitive_for_home(
-    workspace: &Path,
-    home: Option<&Path>,
-) -> bool {
-    let broad_roots: HashSet<PathBuf> = [
-        "/",
-        "/Users",
-        "/etc",
-        "/home",
-        "/private",
-        "/private/tmp",
-        "/private/var",
-        "/tmp",
-        "/var",
-        "/var/tmp",
-    ]
-    .iter()
-    .map(PathBuf::from)
-    .collect();
-    if broad_roots.contains(workspace) {
-        return true;
-    }
-    // The caller home is an extra root. It must not replace the account home
-    // from the password database, or a different `$HOME` would hide that root.
-    let mut homes = Vec::new();
-    if let Some(host) = host_home_directory() {
-        homes.push(host);
-    }
-    if let Some(path) = home {
-        let caller = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        if !homes.iter().any(|existing| existing == &caller) {
-            homes.push(caller);
-        }
-    }
-    if homes.is_empty() {
-        return true;
-    }
-    homes
-        .iter()
-        .any(|home| sensitive_under_home(workspace, home))
-}
-
-fn sensitive_under_home(workspace: &Path, home: &Path) -> bool {
-    if workspace == home
-        || home
-            .ancestors()
-            .skip(1)
-            .any(|ancestor| ancestor == workspace)
-    {
-        return true;
-    }
-    let Ok(relative) = workspace.strip_prefix(home) else {
-        return false;
-    };
-    match relative.components().next() {
-        Some(component) => {
-            SENSITIVE_HOME_ROOT_NAMES.contains(component.as_os_str().to_string_lossy().as_ref())
-        }
-        None => false,
-    }
-}
-
 /// `_resolve_cwd` (:105-121).
 #[allow(dead_code)]
 pub(super) fn resolve_cwd(cwd: &Path, workspace: &Path) -> Result<PathBuf, RestrictedPytestError> {

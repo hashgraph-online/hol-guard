@@ -211,6 +211,7 @@ fn view_binds_one_harness_with_layers() {
     let bound = harness_view(Some(&view), "codex").unwrap();
     assert_eq!(bound.mode, "enforce");
     assert!(bound.layers.is_empty());
+    assert!(!bound.layers_unavailable);
     assert_eq!(harness_view(None, "codex"), Err("mcp_relay_view_missing"));
     assert_eq!(
         harness_view(Some(&view), "cursor"),
@@ -218,10 +219,9 @@ fn view_binds_one_harness_with_layers() {
     );
     let mut unlayered = view.clone();
     unlayered["extension_layers"] = Value::Null;
-    assert_eq!(
-        harness_view(Some(&unlayered), "codex"),
-        Err("mcp_relay_layers_unavailable")
-    );
+    let unlayered = harness_view(Some(&unlayered), "codex").unwrap();
+    assert!(unlayered.layers.is_empty());
+    assert!(unlayered.layers_unavailable);
     let mut renamed = view.clone();
     renamed["schema"] = json!("guard-mcp-relay-view.v3");
     assert_eq!(
@@ -277,6 +277,47 @@ fn request_decodes_the_relay_wire_shape() {
     unsettled["package_evaluation_unsettled"] = json!(true);
     let request: McpRelayDecideRequestV1 = serde_json::from_value(unsettled).unwrap();
     assert!(request.package_evaluation_unsettled);
+    assert!(!request.resident_provider_catalog);
     wire["unexpected"] = json!(true);
     assert!(serde_json::from_value::<McpRelayDecideRequestV1>(wire).is_err());
+}
+
+#[test]
+fn only_a_composio_call_binds_the_provider_catalog_the_relay_left_to_the_resident() {
+    let mut wire = json!({
+        "guard_home": "/guard",
+        "hash_workspace": "/work",
+        "build": {
+            "harness": "claude-code",
+            "server_name": "composio",
+            "tool_name": "COMPOSIO_SEARCH_TOOLS",
+            "source_scope": "project",
+            "config_path": "/work/.mcp.json",
+            "transport": "stdio",
+            "server_id": null,
+            "server_fingerprint": null,
+            "server_identity": null,
+            "provider_catalog_hash": null,
+            "tool": {"kind": "catalog", "entry": null},
+        },
+        "arguments": {"format": "mapping", "entries": []},
+        "launcher_home": "/home/user",
+        "catalog_state": "present",
+        "params": {"name": "COMPOSIO_SEARCH_TOOLS"},
+    });
+    let store = Connection::open_in_memory().unwrap();
+    // A relay that did not leave the hash to the resident hashes nothing.
+    let composio: McpRelayDecideRequestV1 = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(
+        provider_catalog_hash(&composio, Some(&store)),
+        Err(IDENTITY_FAILED)
+    );
+    wire["resident_provider_catalog"] = json!(true);
+    let composio: McpRelayDecideRequestV1 = serde_json::from_value(wire.clone()).unwrap();
+    // A store with no provider authority covers no catalog.
+    assert_eq!(provider_catalog_hash(&composio, Some(&store)), Ok(None));
+    assert_eq!(provider_catalog_hash(&composio, None), Ok(None));
+    wire["build"]["tool_name"] = json!("read");
+    let other: McpRelayDecideRequestV1 = serde_json::from_value(wire).unwrap();
+    assert_eq!(provider_catalog_hash(&other, Some(&store)), Ok(None));
 }

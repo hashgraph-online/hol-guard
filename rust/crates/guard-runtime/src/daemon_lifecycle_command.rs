@@ -13,6 +13,8 @@ use crate::daemon_lifecycle_text::python_int;
 
 const HOOK_LAUNCHER_ARGS: [&str; 2] = ["__guard-bounded-hook", "__guard-cursor-hook"];
 const MODULE: &str = "codex_plugin_scanner.cli";
+/// `daemon_edge::standalone::SERVE_COMMAND`.
+const NATIVE_SERVE_COMMAND: &str = "daemon-serve";
 
 /// `_guard_daemon_command_parts_match`.
 pub(crate) fn parts_match(ctx: &Ctx, parts: &[String]) -> bool {
@@ -22,7 +24,7 @@ pub(crate) fn parts_match(ctx: &Ctx, parts: &[String]) -> bool {
     {
         return false;
     }
-    if ctx.frozen_context(parts).is_some() {
+    if ctx.frozen_context(parts).is_some() || is_native_serve(parts) {
         return true;
     }
     for index in 0..parts.len().saturating_sub(1) {
@@ -42,6 +44,20 @@ pub(crate) fn parts_match(ctx: &Ctx, parts: &[String]) -> bool {
         }
     }
     false
+}
+
+/// The native daemon: `hol-guard-runtime daemon-serve --guard-home H --port P`.
+fn is_native_serve(parts: &[String]) -> bool {
+    let [program, command, ..] = parts else {
+        return false;
+    };
+    let name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    command == NATIVE_SERVE_COMMAND
+        && (name == "hol-guard-runtime" || name == "hol-guard-runtime.exe")
 }
 
 /// `_guard_home_from_command_parts`.

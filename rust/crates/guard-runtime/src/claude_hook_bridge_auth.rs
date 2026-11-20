@@ -1,7 +1,7 @@
 //! Daemon state authentication and identity-challenge verification for the
 //! native Claude hook bridge: a port of `_private_file_text`,
 //! `_authenticated_state` and `_verify_challenge_response` in
-//! `codex_daemon_hook_auth.py`. Every error string is the `ValueError`
+//! `scripts/daemon_hook_auth.py`. Every error string is the `ValueError`
 //! message CPython raises, because the bridge writes it into the hook reason.
 
 #[cfg(unix)]
@@ -154,7 +154,7 @@ fn read_private_text(file: File, label: &str) -> Result<String, String> {
 }
 
 /// The `UnicodeDecodeError` text `read_text(encoding="utf-8")` raises.
-fn utf8_error_message(bytes: &[u8], error: std::str::Utf8Error) -> String {
+pub(crate) fn utf8_error_message(bytes: &[u8], error: std::str::Utf8Error) -> String {
     let start = error.valid_up_to();
     let (end, reason) = match error.error_len() {
         None => (bytes.len(), "unexpected end of data"),
@@ -197,7 +197,10 @@ pub(crate) fn py_fromhex(text: &str) -> Option<Vec<u8>> {
 
 /// `_sign_discovery_payload`: HMAC-SHA256 of the canonical payload under the
 /// 32-byte discovery key, as lowercase hex.
-fn sign_discovery_payload(key: &str, payload: &Map<String, Value>) -> Result<String, String> {
+pub(crate) fn sign_discovery_payload(
+    key: &str,
+    payload: &Map<String, Value>,
+) -> Result<String, String> {
     let key = py_fromhex(key)
         .filter(|key| key.len() == 32)
         .ok_or_else(|| MALFORMED_KEY.to_owned())?;

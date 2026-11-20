@@ -182,7 +182,7 @@ def test_help_redirection_target_does_not_hide_destructive_command(
     # --help must keep the command blocked, never fabricate a safe variant.
     assert payload["status"] == "native_unavailable"
     reviewed = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path)
-    assert reviewed.native_minimum_action == "block"
+    assert reviewed.payload["minimum_action"] == "block"
     assert reviewed.evaluation.minimum_action == "block"
     assert reviewed.evaluation.command.uncertainty_reason == "command_redirect_not_yet_supported"
     assert not reviewed.evaluation.decision_plane.proof_routes

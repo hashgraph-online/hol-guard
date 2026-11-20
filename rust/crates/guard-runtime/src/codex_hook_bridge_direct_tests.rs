@@ -1,8 +1,10 @@
 use super::{
-    answered_response, bounded_direct_request, bounded_event, direct_event, direct_request,
+    answered_response, answered_response_reporting, bounded_direct_request,
+    bounded_emergency_safe_request, bounded_event, direct_event, direct_request,
     grok_direct_answer, grok_direct_request, harness_event, parse_hook_query, HookQuery,
     CLAUDE_CODE, CODEX, CURSOR,
 };
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -214,6 +216,55 @@ fn a_bounded_hook_asks_under_the_daemons_own_homes() {
 }
 
 #[test]
+fn a_bounded_hook_whose_daemon_failed_asks_for_the_emergency_safe_profile_alone() {
+    let homes = homes("emergency");
+    let built = |harness: &str, guard_home: &Path| {
+        bounded_emergency_safe_request(harness, guard_home, PAYLOAD, Duration::from_millis(300))
+            .map(|bytes| serde_json::from_slice::<Value>(&bytes).unwrap())
+    };
+    for harness in [
+        "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode",
+    ] {
+        assert_eq!(
+            built(harness, &homes.guard_home).unwrap(),
+            json!({
+                "operation": "hook_direct",
+                "deadline_budget_ms": 300,
+                "request": {
+                    "harness": harness,
+                    "guard_home": text(&homes.guard_home),
+                    "deadline_budget_ms": 300,
+                    "emergency_safe_only": true,
+                    "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash"},
+                },
+            }),
+            "{harness}"
+        );
+    }
+    // The ordinary lane keeps asking for every answer the resident holds, so
+    // a resident that predates the profile still answers it.
+    let ordinary = bounded_direct_request(
+        "kimi",
+        &homes.guard_home,
+        PAYLOAD,
+        Duration::from_millis(300),
+    )
+    .map(|bytes| serde_json::from_slice::<Value>(&bytes).unwrap())
+    .unwrap();
+    assert_eq!(ordinary["request"].get("emergency_safe_only"), None);
+    // The home and harness rules are the ordinary lane's; nothing is widened
+    // for a hook whose daemon has already failed.
+    for harness in ["grok", "codex", "cursor", "unknown"] {
+        assert_eq!(built(harness, &homes.guard_home), None, "{harness}");
+    }
+    assert_eq!(built("kimi", &homes.root.join("missing")), None);
+    assert_eq!(
+        bounded_emergency_safe_request("kimi", &homes.guard_home, "[]", Duration::from_millis(1)),
+        None
+    );
+}
+
+#[test]
 fn a_grok_hook_asks_with_the_home_the_daemon_keeps() {
     let homes = homes("grok");
     let built = |guard_home: &Path, home: &str| {
@@ -256,7 +307,7 @@ fn a_grok_hook_asks_with_the_home_the_daemon_keeps() {
     for event in ["PermissionRequest", "Notification"] {
         assert_eq!(
             grok_direct_answer(&homes.guard_home, "", event, PAYLOAD, deadline),
-            None,
+            Err(DirectMiss::Event),
             "{event}"
         );
     }
@@ -304,6 +355,55 @@ fn only_an_answer_returns_its_harness_response() {
         );
     }
     assert_eq!(answered_response(b"not json"), None);
+}
+
+#[test]
+fn a_miss_tells_a_deferral_from_a_reply_the_bridge_cannot_use() {
+    let reported =
+        |output: &Value| answered_response_reporting(&serde_json::to_vec(output).unwrap());
+    assert_eq!(
+        reported(&json!({"schema": "guard-hook-direct-result.v1", "outcome": "defer"})),
+        Err(DirectMiss::Defer)
+    );
+    for output in [
+        json!({"schema": "other", "outcome": "defer"}),
+        json!({"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": {}}),
+        json!({"schema": "guard-hook-direct-result.v1"}),
+    ] {
+        assert_eq!(reported(&output), Err(DirectMiss::Unanswered), "{output}");
+    }
+    assert_eq!(
+        answered_response_reporting(b"not json"),
+        Err(DirectMiss::Unanswered)
+    );
+    let codes = [
+        DirectMiss::Disabled,
+        DirectMiss::Event,
+        DirectMiss::Request,
+        DirectMiss::NoState,
+        DirectMiss::NoResident,
+        DirectMiss::Token,
+        DirectMiss::Late,
+        DirectMiss::Send,
+        DirectMiss::Defer,
+        DirectMiss::Unanswered,
+    ]
+    .map(DirectMiss::code);
+    assert_eq!(
+        codes,
+        [
+            "disabled",
+            "event",
+            "request",
+            "no_state",
+            "no_resident",
+            "token",
+            "late",
+            "send",
+            "defer",
+            "unanswered"
+        ]
+    );
 }
 
 #[test]

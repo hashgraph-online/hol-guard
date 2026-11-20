@@ -15,7 +15,7 @@ Activation = Literal["default-on", "opt-in"]
 _MAP_SCHEMA: Final = "guard.extension-trust-class-map.v1"
 _BINDING_SCHEMA: Final = "guard.extension-trust-binding.v1"
 _VALID_CLASSES: Final = frozenset({"first-party", "trusted-library", "external"})
-_HOL_PUBLISHER: Final = {"id": "hol", "displayName": "Hashgraph Online"}
+_HOL_PUBLISHER: Final = {"id": "hol", "displayName": "HOL"}
 _CURATED_PUBLISHER: Final = {"id": "hol-curated", "displayName": "HOL curated library"}
 
 

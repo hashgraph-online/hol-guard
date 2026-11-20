@@ -1,17 +1,18 @@
 //! How a local CLI grant refines the hook action.
 //!
-//! `warn` and the generic review due to non-recognition follow the grant:
-//! allowed to `allow`, blocked to `block`. Any other review or
-//! `require-reapproval` carries a risk signal of its own, so a block still
-//! applies but an allow leaves it standing. A command the workspace
-//! sandbox bounds (`sandbox-required`), or a review left only because the
-//! program lives outside the sandbox's executable roots, never leaves the
-//! sandbox on a grant: an allowed CLI widens the sandbox by the grant's
-//! capabilities (`allow-contained-with-grant`), a blocked one is blocked, and
-//! one this device never decided keeps its action, the outside-roots review
-//! naming the connector to set up. A grant answer that cannot be trusted
-//! keeps the action, so nothing here can turn a sandbox requirement into
-//! `allow`.
+//! `warn` and a review due only to non-recognition follow the grant: allowed
+//! to `allow`, blocked to `block`. That includes the review left because the
+//! program lives outside the workspace sandbox's executable roots, which
+//! asks the same question the grant answers, so an allowed CLI runs there as
+//! it does on a harness with no sandbox and as an Always allow on its review
+//! would; one this device never decided keeps the review, naming the
+//! connector to set up. Any other review or `require-reapproval` carries a
+//! risk signal of its own, so a block still applies but an allow leaves it
+//! standing. A command the workspace sandbox bounds (`sandbox-required`)
+//! never leaves the sandbox on a grant: an allowed CLI widens the sandbox by
+//! the grant's capabilities (`allow-contained-with-grant`) and a blocked one
+//! is blocked. A grant answer that cannot be trusted keeps the action, so
+//! nothing here can turn a sandbox requirement into `allow`.
 
 use guard_contracts::LocalCliHookRequestV1;
 use serde_json::{json, Value};
@@ -22,6 +23,7 @@ use crate::local_cli_hook_op::Launch;
 pub(crate) const ALLOW_CONTAINED_WITH_GRANT: &str = "allow-contained-with-grant";
 /// The review `workspace_contained` leaves when the sandbox cannot run the
 /// program; `guard_command::pretool::workspace_contained::OUTSIDE_ROOTS_REASON`.
+#[cfg(test)]
 pub(crate) const OUTSIDE_ROOTS_REASON: &str =
     "native_workspace_containment_executable_outside_roots";
 /// The reason code a sandbox-bound command the grant widens is routed to;
@@ -62,11 +64,7 @@ impl Refined {
 
 /// Whether the action stays inside the workspace sandbox whatever the grant.
 pub(crate) fn sandbox_bound(request: &LocalCliHookRequestV1) -> bool {
-    match request.current_action.as_str() {
-        "sandbox-required" => true,
-        "review" => request.current_reason_code.as_deref() == Some(OUTSIDE_ROOTS_REASON),
-        _ => false,
-    }
+    request.current_action == "sandbox-required"
 }
 
 /// Whether an allowed grant lifts this unbounded action to `allow`: `allow`
@@ -132,7 +130,7 @@ pub(crate) fn refine(
     }
 }
 
-/// The review fields a granted outside-roots command is routed to.
+/// The review fields a granted sandbox-bound command is routed to.
 ///
 /// The caller owns no part of this verdict: it narrows the review it holds to
 /// the surfaces this operation reads, and copies the answer back. A caller
@@ -186,9 +184,32 @@ pub(crate) fn unverified_action(request: &LocalCliHookRequestV1) -> &str {
 
 /// `has_local_cli_block_rules`; an unreadable store counts as having one.
 pub(crate) fn has_block_rules(request: &LocalCliHookRequestV1) -> bool {
-    let Ok(path) =
-        crate::local_store_read::require_store_path(&request.store_path, &request.guard_home)
-    else {
+    has_block_rules_at(&request.store_path, &request.guard_home)
+}
+
+/// `has_block_rules` for the store at `store_path` under `guard_home`.
+pub(crate) fn has_block_rules_at(store_path: &str, guard_home: &str) -> bool {
+    holds_rows_at(
+        store_path,
+        guard_home,
+        &[
+            ("local_cli_grant", Some("blocked")),
+            ("local_cli_command_grant", Some("block")),
+        ],
+    )
+}
+
+/// Whether the store at `store_path` holds any CLI grant, allowed or
+/// blocked. A grant read only finds a custom rule for a CLI with a
+/// `local_cli_grant` row, so without one no launch need be derived. An
+/// unreadable store counts as holding one.
+pub(crate) fn has_grant_rows_at(store_path: &str, guard_home: &str) -> bool {
+    holds_rows_at(store_path, guard_home, &[("local_cli_grant", None)])
+}
+
+/// Whether any of `tables` holds a row, in `state` when one is named.
+fn holds_rows_at(store_path: &str, guard_home: &str, tables: &[(&str, Option<&str>)]) -> bool {
+    let Ok(path) = crate::local_store_read::require_store_path(store_path, guard_home) else {
         return true;
     };
     let connection = match crate::local_store_read::open_read_only(&path) {
@@ -196,20 +217,24 @@ pub(crate) fn has_block_rules(request: &LocalCliHookRequestV1) -> bool {
         Ok(None) => return false,
         Err(_) => return true,
     };
-    for (table, state) in [
-        ("local_cli_grant", "blocked"),
-        ("local_cli_command_grant", "block"),
-    ] {
+    for &(table, state) in tables {
         match crate::local_store_read::table_exists(&connection, table) {
             Ok(false) => continue,
             Ok(true) => {}
             Err(_) => return true,
         }
-        let found = connection.query_row(
-            &format!("select exists(select 1 from {table} where state = ?1)"),
-            [state],
-            |row| row.get::<_, bool>(0),
-        );
+        let found = match state {
+            Some(state) => connection.query_row(
+                &format!("select exists(select 1 from {table} where state = ?1)"),
+                [state],
+                |row| row.get::<_, bool>(0),
+            ),
+            None => connection.query_row(
+                &format!("select exists(select 1 from {table})"),
+                [],
+                |row| row.get::<_, bool>(0),
+            ),
+        };
         if found.unwrap_or(true) {
             return true;
         }

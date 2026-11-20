@@ -73,9 +73,171 @@ pub(crate) enum Printed {
     All,
 }
 
+/// The verb, the read mode and the operands of the arguments after `config`.
+struct Form<'a> {
+    verb: &'a str,
+    mode: &'a str,
+    operands: Vec<&'a str>,
+}
+
 /// Classifies the arguments after `config`. Only reads return a value; every
 /// write form, `--file`/`--blob` sources and editor launches return `None`.
 pub(crate) fn read_form(arguments: &[String]) -> Option<Printed> {
+    let Form {
+        verb,
+        mode,
+        operands,
+    } = parse(arguments)?;
+    let key = |name: &str| {
+        (!name.is_empty() && !name.contains('=')).then(|| Printed::Key(name.to_ascii_lowercase()))
+    };
+    match (verb, mode, operands.as_slice()) {
+        ("list", "", []) | ("", "--list" | "-l", []) => Some(Printed::All),
+        ("get", "--get-regexp", [_]) | ("", "--get-regexp", [_] | [_, _]) => Some(Printed::All),
+        ("get", "", [name]) | ("", "" | "--get" | "--get-all", [name]) => key(name),
+        ("", "--get" | "--get-all", [name, _]) => key(name),
+        _ => None,
+    }
+}
+
+/// An operand the shell could expand into something Git reads as an option
+/// rather than as the pattern Guard parsed. Expansion keeps a word's leading
+/// literal text, so a word opening with a glob or an expansion is the only one
+/// whose first character the parse cannot see: `[-]-file=*` is a pattern here
+/// and `--file=secret`, naming a file of Git's choosing, by the time Git runs.
+/// A bracket class is the one glob that writes its members down, so it is read
+/// rather than refused outright.
+fn could_expand_into_an_option(operand: &str) -> bool {
+    match operand.chars().next() {
+        None => true,
+        Some('[') => leading_class_can_match_a_dash(operand),
+        Some(first) => matches!(first, '*' | '?' | '{' | '~' | '$' | '\\'),
+    }
+}
+
+/// Whether the bracket class an operand opens with could match a leading `-`.
+/// A class is the one glob whose members are written down, so reading them
+/// answers the question the leading character could not: `[r]emote.*url` can
+/// only ever produce `r` and stays the pattern Guard parsed, while `[-]-file=*`
+/// and `[^a]-file=*` can each produce a dash and keep the path screen.
+///
+/// Two shapes are read as classes that could hold a dash rather than taken
+/// apart. An expansion inside the class is run by the shell before the class
+/// is ever a class, so `[!{a,-}]-file=*` is two words by the time Git sees it
+/// and `[$x]-file=*` carries whatever `x` holds; the members written here are
+/// not the members that run. And a range only
+/// holds the characters between its ends under ASCII ordering: a shell
+/// collating with `strcoll` under a UTF-8 locale follows the locale's order
+/// instead, which in glibc's table puts `-` inside spans such as `[_-z]`. A
+/// range whose ends do not sit in one ASCII alphanumeric span therefore leaves
+/// the answer unknown, and since negating the class turns that answer around,
+/// neither way is safe to assume and the class keeps the path screen.
+fn leading_class_can_match_a_dash(operand: &str) -> bool {
+    let chars: Vec<char> = operand.chars().collect();
+    let Some((end, readable)) = super::class_end(&chars, 0) else {
+        // A `[` with no closing `]` is literal, so the word still opens with
+        // the bracket itself and never with a dash.
+        return false;
+    };
+    if !readable {
+        // A leading `]`, a backslash or a `[:name:]` puts members in the class
+        // that this reader cannot enumerate, so the class is taken as one that
+        // could hold a dash.
+        return true;
+    }
+    let negated = matches!(chars.get(1), Some('!' | '^'));
+    let members = &chars[usize::from(negated) + 1..end];
+    if members
+        .iter()
+        .any(|member| matches!(member, '{' | '}' | '$' | '`'))
+    {
+        // The shell expands braces, parameters and command substitutions
+        // before it reads a class, so these members are not the ones that run.
+        return true;
+    }
+    let mut listed = false;
+    let mut index = 0;
+    while index < members.len() {
+        // A `-` with a member on each side spells a range; one that opens or
+        // closes the class is a member of its own.
+        if index + 2 < members.len() && members[index + 1] == '-' {
+            let (low, high) = (members[index], members[index + 2]);
+            let ascii_span =
+                [('a', 'z'), ('A', 'Z'), ('0', '9')]
+                    .into_iter()
+                    .any(|(first, last)| {
+                        (first..=last).contains(&low) && (first..=last).contains(&high)
+                    });
+            if !ascii_span {
+                // Outside one ASCII alphanumeric span a locale's collation
+                // decides what the range holds. Whether `-` is inside it is
+                // unknown, and a negated class turns that answer around, so
+                // neither way is the safe one to assume.
+                return true;
+            }
+            listed |= low <= '-' && '-' <= high;
+            index += 3;
+            continue;
+        }
+        listed |= members[index] == '-';
+        index += 1;
+    }
+    // A negated class matches every character it does not list, so it produces
+    // a dash exactly when the listed members leave one out.
+    listed != negated
+}
+
+/// The arguments the path screen still covers. A `--get-regexp` operand is
+/// matched against the keys in the configuration file, so it is a pattern
+/// rather than a path and the screen would refuse every `remote.*url`. Every
+/// other argument is one the shell can expand over the files that are there,
+/// turning `git config *` into the write `git config user.name value`, so it
+/// keeps the screen those expanded words would face. An operand the shell
+/// could turn into an option keeps it too, for the same reason.
+pub(crate) fn screened_arguments(arguments: &[String]) -> Vec<&str> {
+    let patterns = configuration_pattern_operands(parse(arguments));
+    arguments
+        .iter()
+        .map(String::as_str)
+        .filter(|argument| !patterns.contains(argument))
+        .collect()
+}
+
+/// The `--get-regexp` operands of a `git config` read in `segment`, if it is
+/// one. Git matches each against the keys in the configuration file and never
+/// expands it over the files that are there, so it is a pattern rather than a
+/// path and the screens that refuse every `remote.*url` do not apply to it.
+///
+/// An operand the shell could still turn into an option is left out, because
+/// Guard would be reading a pattern where Git reads a flag.
+pub(crate) fn configuration_patterns(segment: &crate::CommandSegmentV1) -> Vec<&str> {
+    if crate::command_compatibility::basename(segment) != "git" {
+        return Vec::new();
+    }
+    let arguments = &segment.arguments;
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return Vec::new();
+    };
+    if arguments.get(index).map(String::as_str) != Some("config") {
+        return Vec::new();
+    }
+    configuration_pattern_operands(parse(&arguments[index + 1..]))
+}
+
+/// The operands of `form` that Git reads as configuration patterns and the
+/// shell cannot turn into anything else.
+fn configuration_pattern_operands(form: Option<Form<'_>>) -> Vec<&str> {
+    match form {
+        Some(form) if form.mode == "--get-regexp" => form
+            .operands
+            .into_iter()
+            .filter(|operand| !could_expand_into_an_option(operand))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn parse(arguments: &[String]) -> Option<Form<'_>> {
     let (verb, rest) = match arguments.split_first() {
         Some((first, rest)) if matches!(first.as_str(), "get" | "list") => (first.as_str(), rest),
         _ => ("", arguments),
@@ -107,16 +269,11 @@ pub(crate) fn read_form(arguments: &[String]) -> Option<Printed> {
             return None;
         }
     }
-    let key = |name: &str| {
-        (!name.is_empty() && !name.contains('=')).then(|| Printed::Key(name.to_ascii_lowercase()))
-    };
-    match (verb, mode, operands.as_slice()) {
-        ("list", "", []) | ("", "--list" | "-l", []) => Some(Printed::All),
-        ("get", "--get-regexp", [_]) | ("", "--get-regexp", [_] | [_, _]) => Some(Printed::All),
-        ("get", "", [name]) | ("", "" | "--get" | "--get-all", [name]) => key(name),
-        ("", "--get" | "--get-all", [name, _]) => key(name),
-        _ => None,
-    }
+    Some(Form {
+        verb,
+        mode,
+        operands,
+    })
 }
 
 /// Git pages the listing forms (`--list`, `--get-all`, `--get-regexp`) by

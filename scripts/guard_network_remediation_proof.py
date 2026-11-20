@@ -11,11 +11,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, cast
 
-_REPOSITORY_SOURCE = Path(__file__).resolve().parents[1] / "src"
-if str(_REPOSITORY_SOURCE) not in sys.path:
-    sys.path.insert(0, str(_REPOSITORY_SOURCE))
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
 
-from codex_plugin_scanner.guard.runtime.network_capability_reachability import (  # noqa: E402
+from scripts.network_capability_reachability import (  # noqa: E402
     load_reachability_manifest,
     repository_manifest_path,
     validate_reachability_manifest,
@@ -65,9 +65,8 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_network_grant_engine.py",
     ),
     "REM-126": (
-        "tests/test_guard_network_supervisor.py",
+        "rust/crates/guard-runtime/src/daemon_edge_network_tests.rs",
         "tests/test_guard_daemon_recovery_resilience.py",
-        "tests/test_guard_provider_recovery.py",
     ),
     "REM-127": ("tests/test_guard_network_capability_reachability.py",),
     "REM-128": (

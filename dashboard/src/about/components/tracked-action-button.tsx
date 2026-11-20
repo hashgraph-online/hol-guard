@@ -51,6 +51,7 @@ export function TrackedExternalButton({
       target={safe.target}
       rel={safe.rel}
       onClick={handleClick}
+      data-primary={variant === "primary" ? "true" : undefined}
       className={`${base} ${size} ${tone} no-underline`}
     >
       {children}

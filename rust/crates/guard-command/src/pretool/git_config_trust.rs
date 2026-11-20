@@ -54,6 +54,13 @@ pub(in crate::pretool) fn clean_environment(
         {
             return false;
         }
+        // Entries the hook judged to change only how Git quotes paths, as the
+        // `core.quotePath` entry editors export in every terminal.
+        if execution_environment.is_some_and(|context| context.git_config_environment_inert)
+            && guard_contracts::git_config_count_entry(name)
+        {
+            return false;
+        }
         let key = name.to_ascii_uppercase();
         key.starts_with("GIT_TRACE")
             || key.starts_with("DYLD_")
@@ -81,6 +88,38 @@ pub(in crate::pretool) fn clean_environment(
                     | "DYLD_LIBRARY_PATH"
             )
     })
+}
+
+/// Whether the Git a segment names runs, from this home and working
+/// directory, as a binary in a trusted install location under an environment
+/// that leaves its setup alone. A read that needs no configuration probe
+/// still runs whatever the search path finds first, and the probe is also
+/// where the environment was screened: `GIT_DIR` hands Git a repository
+/// where the route found none, and a loader variable reaches even a trusted
+/// binary, so both questions are asked here instead. The route expanded `~`
+/// against the declared home, so a shell with another home would send Git
+/// somewhere the route never looked; the probe refuses that case too.
+pub(in crate::pretool) fn trusted_launch(
+    executable: &str,
+    context: crate::pretool::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(declared_home), Some(cwd)) = (context.home_dir, context.cwd) else {
+        return false;
+    };
+    let (Ok(home), Ok(cwd)) = (fs::canonicalize(declared_home), fs::canonicalize(cwd)) else {
+        return false;
+    };
+    let shell_home = execution_environment
+        .and_then(|context| context.home.as_deref())
+        .unwrap_or(declared_home);
+    if fs::canonicalize(shell_home).ok().as_deref() != Some(home.as_path()) {
+        return false;
+    }
+    home.is_dir()
+        && cwd.is_dir()
+        && clean_environment(execution_environment, &home, &cwd)
+        && trusted_command(executable, &home, &cwd, execution_environment).is_some()
 }
 
 pub(in crate::pretool) fn trusted_command(

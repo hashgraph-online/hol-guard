@@ -3,13 +3,15 @@
 //! The destructive-shell rule matches every `rm`, `dd`, `truncate` and in-place
 //! edit, and marks each match uncertain because the rule alone cannot prove a
 //! target is safe to lose. A plain `rm` or `rmdir` in the workspace is ordinary
-//! cleanup, and `sed -i` is the same file edit an agent's own edit tool makes:
-//! the sandbox keeps both off the network, credentials, the home directory and
-//! `.git`, so this module accepts that uncertainty for those programs only.
-//! A sed script cannot reach past the sandbox either, so it is not parsed. A
-//! recursive removal could still take uncommitted work with it, so each of its
-//! targets must be missing or ignored by Git, and it must run before any other
-//! command could create or move what it names.
+//! cleanup, `truncate` empties or resizes a file the same way `> file` does,
+//! and `sed -i` or `perl -i` is the same file edit an agent's own edit tool
+//! makes, whether it names its files or `find -exec` hands them over: the
+//! sandbox keeps all of them off the network, credentials, the home directory
+//! and `.git`, so this module accepts that uncertainty for those programs
+//! only. command_shape screens sed scripts so shell execution cannot
+//! hide behind containment; perl's runs in the sandbox like any perl. A
+//! recursive removal could take uncommitted work, so its targets must be missing
+//! or Git-ignored, and it must run before any other command, perl included.
 use super::super::git_session_probe::Probe;
 use super::PathContext;
 use crate::CanonicalCommandV1;
@@ -18,6 +20,9 @@ use guard_contracts::{
     PreToolResultV1,
 };
 use std::path::Path;
+
+#[path = "workspace_contained_edit_scripts.rs"]
+mod edit_scripts;
 
 pub(super) const SHELL_DESTRUCTION: &str = "command.shell-mutations.destructive-shell";
 
@@ -29,14 +34,16 @@ fn segment_indexes(observation: &NativeCommandObservationV1) -> impl Iterator<It
         .chain(observation.effective_segment_indexes.iter().copied())
 }
 
-/// The operands of a plain `rm` or `rmdir` segment and whether it recurses,
-/// no operands for an in-place `sed` edit, or `None` for any other program,
-/// option or shell expansion.
+/// The operands of a plain `rm`, `rmdir` or `truncate` segment and whether it
+/// recurses, no operands for an in-place `sed` or `perl` edit, or `None` for
+/// any other program, option or shell expansion.
 fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)> {
     let segment = model.segments.get(index)?;
     let program = segment.executable.as_deref()?;
-    if !matches!(program, "rm" | "rmdir" | "sed")
-        || segment.path_overridden
+    if !matches!(
+        program,
+        "rm" | "rmdir" | "sed" | "perl" | "truncate" | "find"
+    ) || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
     {
@@ -44,6 +51,22 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
     }
     if program == "sed" {
         return in_place_edit(&segment.arguments).then(|| (false, Vec::new()));
+    }
+    // `find ... -type f -exec sed -i ... {} +` makes the same edit over each
+    // file the walk found; the reach check holds the walk to the workspace.
+    if program == "find" {
+        return crate::find_exec_sed(&segment.arguments)
+            .is_some_and(|edit| in_place_edit(&edit[1..]))
+            .then(|| (false, Vec::new()));
+    }
+    // Perl runs its script in the sandbox whatever the switches; the reach
+    // check still holds every operand to the workspace.
+    if program == "perl" {
+        return (super::super::inplace_edit_reason::inplace_editor(segment) == Some("perl"))
+            .then(|| (false, Vec::new()));
+    }
+    if program == "truncate" {
+        return truncate_targets(&segment.arguments).map(|operands| (false, operands));
     }
     let (mut recursive, mut options, mut operands) = (false, true, Vec::new());
     for argument in &segment.arguments {
@@ -70,6 +93,72 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
         }
     }
     (program == "rm" || !recursive).then_some((recursive, operands))
+}
+
+/// The file operands of a `truncate` segment, or `None` for an option neither
+/// GNU nor BSD documents, or a word the shell would expand. Truncating a file
+/// is the write `> file` performs, so the targets are held to the same bounds
+/// a plain removal is: the reach check still refuses one outside the
+/// workspace.
+///
+/// That check reads the word it is given, so a pattern is refused here rather
+/// than accepted for its literal spelling: the shell picks the files, and
+/// `.*/*` names nothing outside the workspace while selecting what is inside
+/// `.git`.
+fn truncate_targets(arguments: &[String]) -> Option<Vec<&str>> {
+    let (mut options, mut operands) = (true, Vec::new());
+    let mut words = arguments.iter();
+    while let Some(argument) = words.next() {
+        let argument = argument.as_str();
+        if options && argument == "--" {
+            options = false;
+        } else if options && argument.starts_with("--") {
+            let long = &argument[2..];
+            let (name, value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            match name {
+                "no-create" | "io-blocks" if value.is_none() => {}
+                // The size, or the file whose size to copy.
+                "size" | "reference" => {
+                    if value.is_none() && words.next().is_none() {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        } else if options && argument.len() > 1 && argument.starts_with('-') {
+            let flags = &argument[1..];
+            for (position, flag) in flags.char_indices() {
+                match flag {
+                    'c' | 'o' => {}
+                    // The rest of the word, or the next word, is the value. A
+                    // size is a count, so it is read either way; a reference is
+                    // a path, and the reach check reads a separate word but
+                    // skips anything still attached to its option, so the
+                    // attached spelling would carry a file past it unseen.
+                    's' => {
+                        if position + 1 == flags.len() && words.next().is_none() {
+                            return None;
+                        }
+                        break;
+                    }
+                    'r' => {
+                        if position + 1 != flags.len() || words.next().is_none() {
+                            return None;
+                        }
+                        break;
+                    }
+                    _ => return None,
+                }
+            }
+        } else if argument.is_empty() || argument.contains(['$', '`', '~', '*', '?', '[', '{']) {
+            return None;
+        } else {
+            operands.push(argument);
+        }
+    }
+    (!operands.is_empty()).then_some(operands)
 }
 
 /// Whether `sed` runs with `-i` (GNU or BSD spelling) and only the options
@@ -182,12 +271,14 @@ pub(super) fn loses_work(
         .segments
         .iter()
         .enumerate()
-        .position(|(index, _)| removal(model, index).is_none())
+        .position(|(index, segment)| {
+            removal(model, index).is_none() || segment.executable.as_deref() == Some("perl")
+        })
         .unwrap_or(model.segments.len());
     if removals.iter().any(|(index, _)| *index > first_other) {
         return true;
     }
-    let mut probe = None;
+    let mut ignore = IgnoreProbe::new(context, execution_environment);
     removals
         .iter()
         .flat_map(|(_, operands)| operands)
@@ -198,22 +289,70 @@ pub(super) fn loses_work(
             if std::fs::symlink_metadata(cwd.join(operand)).is_err() {
                 return false;
             }
-            let probe = probe.get_or_insert_with(|| {
-                let probe = Probe::new("git", &[], context, None, execution_environment)?;
+            !ignore.ignores(operand)
+        })
+}
+
+/// Whether a local `rsync` copy could replace a destination Git does not
+/// ignore. Overwriting uncommitted files loses work the sandbox cannot
+/// restore, the same loss a recursive removal is held to.
+pub(super) fn rsync_replaces_work(
+    model: &CanonicalCommandV1,
+    command_text: Option<&str>,
+    context: PathContext<'_>,
+    execution_environment: Option<&GuardExecutionEnvironmentV1>,
+) -> bool {
+    let mut ignore = IgnoreProbe::new(context, execution_environment);
+    super::super::rsync_local::replaces_work(
+        &model.segments,
+        Some(command_text.unwrap_or(&model.normalized_text)),
+        context.cwd.map(Path::new),
+        &mut |operand| ignore.ignores(operand),
+    )
+}
+
+/// Git's answer to whether a path is ignored. The repository is asked only
+/// when a path exists, and only after its configuration proves inert.
+struct IgnoreProbe<'a> {
+    context: PathContext<'a>,
+    execution_environment: Option<&'a GuardExecutionEnvironmentV1>,
+    probe: Option<Option<Probe>>,
+}
+
+impl<'a> IgnoreProbe<'a> {
+    fn new(
+        context: PathContext<'a>,
+        execution_environment: Option<&'a GuardExecutionEnvironmentV1>,
+    ) -> Self {
+        Self {
+            context,
+            execution_environment,
+            probe: None,
+        }
+    }
+
+    fn ignores(&mut self, operand: &str) -> bool {
+        let (context, environment) = (self.context, self.execution_environment);
+        self.probe
+            .get_or_insert_with(|| {
+                let probe = Probe::new("git", &[], context, None, environment)?;
                 let (effective, repository) = probe.config()?;
                 super::super::git_local_writes::inert(&effective, &repository).then_some(probe)
-            });
-            probe
-                .as_ref()
-                .and_then(|probe| probe.text(&["check-ignore", "--", operand]))
-                .is_none()
-        })
+            })
+            .as_ref()
+            .and_then(|probe| probe.text(&["check-ignore", "--", operand]))
+            .is_some()
+    }
 }
 
 /// Whether a destructive argument names the whole workspace, an ancestor of
 /// it, or every entry at its root. Deleting build output stays contained;
 /// wiping the workspace loses uncommitted work like `git reset --hard`.
-fn broad_target(argument: &str, workspace: &Path) -> bool {
+///
+/// `below` is how many directories under the workspace root the segment's
+/// shell stands, so a relative operand is resolved from there: after
+/// `cd build`, `rm -f ../*` names every entry at the root, not at its parent.
+fn broad_target(argument: &str, workspace: &Path, below: usize) -> bool {
     use std::path::Component;
     // BSD `sed -i ''` passes an empty backup suffix, not a path.
     if argument.is_empty() || argument.starts_with('-') {
@@ -226,7 +365,14 @@ fn broad_target(argument: &str, workspace: &Path) -> bool {
     let joined = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        workspace.join(path)
+        // The names of the directories the shell descended through do not
+        // matter: a `..` pops whatever stands above it, so a placeholder per
+        // level resolves the operand at the right depth.
+        let mut base = workspace.to_path_buf();
+        for _ in 0..below {
+            base.push("_");
+        }
+        base.join(path)
     };
     let mut normal = std::path::PathBuf::new();
     for component in joined.components() {
@@ -253,6 +399,30 @@ fn broad_target(argument: &str, workspace: &Path) -> bool {
     workspace.starts_with(&normal) || (root_glob && normal.parent() == Some(workspace.as_path()))
 }
 
+/// The files a `find ... -exec sed -i ... {} +` edits, spelled as the glob
+/// that names them: each root joined with the walk's first name test, or the
+/// bare root when it has none. `find . -name '*.py' -exec sed -i` then reads
+/// as `sed -i ./*.py`, an edit the wipe screen lets through, and `find .
+/// -type f -exec sed -i` as an edit of the whole root, which it does not.
+fn found_targets(segment: &crate::CommandSegmentV1) -> Option<Vec<String>> {
+    if segment.executable.as_deref() != Some("find") {
+        return None;
+    }
+    crate::find_exec_sed(&segment.arguments)?;
+    let at = segment.arguments.iter().position(|word| word == "-exec")?;
+    let shape = crate::read_only_fanout::find_shape(&segment.arguments[..at])?;
+    Some(
+        shape
+            .roots
+            .iter()
+            .map(|root| match shape.patterns.first() {
+                Some(pattern) => format!("{}/{pattern}", root.trim_end_matches('/')),
+                None => root.clone(),
+            })
+            .collect(),
+    )
+}
+
 pub(super) fn destroys_workspace(
     result: &PreToolResultV1,
     model: &CanonicalCommandV1,
@@ -261,6 +431,7 @@ pub(super) fn destroys_workspace(
     let Some(extensions) = result.command_extensions.as_ref() else {
         return true;
     };
+    let below = super::cwd::depths(model, workspace);
     extensions
         .observations
         .iter()
@@ -268,10 +439,42 @@ pub(super) fn destroys_workspace(
         .flat_map(segment_indexes)
         .any(|index| {
             model.segments.get(index).is_none_or(|segment| {
+                let below = below.get(index).copied().unwrap_or(0);
+                if let Some(targets) = found_targets(segment) {
+                    return targets
+                        .iter()
+                        .any(|target| broad_target(target, workspace, below));
+                }
+                let scripts = edit_scripts::edit_scripts(segment);
                 segment
                     .arguments
                     .iter()
-                    .any(|argument| broad_target(argument, workspace))
+                    .enumerate()
+                    .filter(|(position, _)| !scripts.contains(position))
+                    .any(|(_, argument)| broad_target(argument, workspace, below))
             })
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    /// A destructive operand is resolved from the directory its segment runs
+    /// in. `cd build && rm -f ../*` names every entry at the workspace root,
+    /// which is the loss this screen refuses, even though the same operand
+    /// read from the root would point at the root's parent.
+    #[test]
+    fn a_parent_glob_after_a_descent_names_the_workspace_root() {
+        let workspace = Path::new("/synthetic/workspace");
+        assert!(super::broad_target("../*", workspace, 1));
+        assert!(super::broad_target("..", workspace, 1));
+        assert!(super::broad_target("../../*", workspace, 2));
+        // Without a proven descent the same operand leaves the workspace, and
+        // the reach checks refuse it before this one is asked.
+        assert!(!super::broad_target("../*", workspace, 0));
+        // A named entry one level down is ordinary build output.
+        assert!(!super::broad_target("../target", workspace, 1));
+        assert!(!super::broad_target("out", workspace, 1));
+    }
 }

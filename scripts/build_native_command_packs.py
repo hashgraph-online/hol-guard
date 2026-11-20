@@ -74,7 +74,7 @@ def input_stream(root: Path, output, identities: set[str] | None = None) -> int:
                         "schemaVersion": "guard.extension-trust-class-map.v1",
                         "classes": classes,
                         "publishers": {
-                            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                            "hol": {"id": "hol", "displayName": "HOL"},
                             "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
                         },
                     },
@@ -243,7 +243,7 @@ def bootstrap_compiler() -> Path:
     subprocess.run(
         [
             "cargo",
-            "+1.88.0",
+            "+1.89.0",
             "build",
             "--locked",
             "--release",

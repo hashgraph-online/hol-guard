@@ -19,13 +19,20 @@ test.describe("evidence: command evidence repair", () => {
       await route.fulfill({ response, json: payload });
     });
 
+    await page.route("**/v1/protection/repair", async (route) => {
+      const response = await route.fetch();
+      // Keep the notice mounted until the click has reached the real repair.
+      // An analytics refresh before the click must not remove its target.
+      repaired = response.ok();
+      await route.fulfill({ response });
+    });
+
     await page.goto(commandsUrl());
     const summary = page.getByRole("region", { name: "Command activity summary" });
     const notice = summary.getByRole("status").filter({ hasText: "Counts may be incomplete." });
     await expect(notice).toContainText("Guard could not save some command results.");
 
     const repair = page.waitForResponse((response) => new URL(response.url()).pathname === "/v1/protection/repair");
-    repaired = true;
     await notice.getByRole("button", { name: "Repair evidence" }).click();
     const response = await repair;
     expect(response.status()).toBe(200);

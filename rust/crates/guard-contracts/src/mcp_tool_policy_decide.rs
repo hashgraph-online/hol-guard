@@ -23,7 +23,12 @@ pub const MCP_TOOL_POLICY_DECIDE_RESULT_SCHEMA: &str = "guard-mcp-tool-policy-de
 /// Capability advertised by the runtime when this operation is available.
 pub const MCP_TOOL_POLICY_DECIDE_FEATURE: &str = "mcp-tool-policy-decide-v1";
 /// Largest canonical request serialization the op will accept.
-pub const MCP_TOOL_POLICY_DECIDE_MAX_BYTES: usize = 8 * 1024 * 1024;
+///
+/// Held under [`MAX_NATIVE_REQUEST_BYTES`](crate::MAX_NATIVE_REQUEST_BYTES),
+/// which the transport enforces on the frame before this op ever sees it. A
+/// bound above that would be unreachable: a request between the two would be
+/// refused as a malformed frame instead of being told its own size is why.
+pub const MCP_TOOL_POLICY_DECIDE_MAX_BYTES: usize = 6 * 1024 * 1024 - 64 * 1024;
 /// Most effect observations one request may carry.
 pub const MCP_TOOL_POLICY_DECIDE_MAX_OBSERVATIONS: usize = 96;
 

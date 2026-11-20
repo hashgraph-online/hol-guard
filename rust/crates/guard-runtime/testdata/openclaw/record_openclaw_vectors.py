@@ -10,8 +10,9 @@ runner-authority kind), never from Rust output:
 
 Each case materializes a fixture tree under a temporary root, runs the
 original `detect` from that root and records the artifacts and config paths
-plus the request the native facade sends: the config path and the payload the
-Python loader still reads, as JSON text. The executable lookup stays in Python
+plus the request the native facade sends: the config path, which the native
+kind loads itself. No case spells an `$include` with `~`, so the facade's
+`user_home` is left out. The executable lookup stays in Python
 and is switched off. An inventory that would carry a lone surrogate is
 recorded as a refusal. `<ROOT>` stands for the fixture root. A skill root or
 directory digest hashes the resolved absolute path, so it is recorded as
@@ -36,7 +37,6 @@ from record_adapter_vectors import artifact_dict, materialize, release, scrub  #
 
 from codex_plugin_scanner.guard.adapters import openclaw, openclaw_support  # noqa: E402
 from codex_plugin_scanner.guard.adapters.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.adapters.openclaw_config import load_config  # noqa: E402
 
 openclaw._command_available = lambda _executable: False
 
@@ -52,7 +52,6 @@ def facade_args(context: HarnessContext) -> dict:
         "workspace": None if workspace is None else str(workspace),
         "cwd": os.getcwd(),
         "config_path": str(path),
-        "payload": json.dumps(load_config(path)),
     }
 
 

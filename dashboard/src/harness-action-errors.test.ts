@@ -2,10 +2,13 @@ import { GuardHarnessActionError } from "./guard-api";
 import {
   isApprovalGateRequiredError,
   isGuardHarnessActionError,
+  isPackageFirewallOperationInProgressError,
   isSupplyChainSyncConnectError,
   isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
+  readPackageFirewallActionFailure,
   resolveApprovalGateSyncFailure,
+  setupActionErrorMessage,
 } from "./harness-action-errors";
 
 function assert(condition: boolean, message: string): void {
@@ -175,4 +178,54 @@ assert(
   "failed to fetch maps to daemon connection guidance",
 );
 
+assert(
+  readPackageFirewallActionFailure(new TypeError("Failed to fetch")).includes("lost connection to the local daemon"),
+  "a dropped daemon connection reads as connection guidance for package actions, not the raw browser error",
+);
+assert(
+  !readPackageFirewallActionFailure(new TypeError("NetworkError when attempting to fetch resource.")).includes("NetworkError"),
+  "Firefox network errors are rewritten too",
+);
+assert(
+  readPackageFirewallActionFailure(new Error("Package shim install is blocked.")) === "Package shim install is blocked.",
+  "daemon-supplied failure messages pass through unchanged",
+);
+assert(readPackageFirewallActionFailure("boom") === "Action failed.", "non-Error throws fall back to a generic message");
+
 console.log("harness-action-errors.test.ts: all assertions passed");
+
+assert(
+  isPackageFirewallOperationInProgressError(
+    makeHarnessError(409, {
+      error: "operation_in_progress",
+      message: "Guard is still finishing a package protection change. Check its status before retrying.",
+      operation: "sync",
+    }),
+  ),
+  "a sync that is still running in the daemon is recognized",
+);
+assert(
+  !isPackageFirewallOperationInProgressError(makeHarnessError(409, { error: "folder_picker_busy" })),
+  "other conflicts are not mistaken for a running sync",
+);
+
+const ownerConflict =
+  "A Codex Guard handler at PreToolUse/group[0]/handler[0] in ~/.codex/config.toml runs a program that no "
+  + "longer exists. Delete that handler, then run `hol-guard install codex`; existing hooks have been preserved.";
+assert(
+  setupActionErrorMessage(
+    makeHarnessError(409, { error: "codex_hook_owner_conflict", harness: "codex", message: ownerConflict }),
+  ) === ownerConflict,
+  "a repair refusal shows Guard's explanation, not its reason code",
+);
+assert(
+  setupActionErrorMessage(makeHarnessError(503, { error: "native_handler_policy_unavailable" }))
+    === "native_handler_policy_unavailable",
+  "a refusal without an explanation still names its reason code",
+);
+assert(
+  setupActionErrorMessage(
+    makeHarnessError(400, { error: "confirmation_required", message: "server text" }),
+  ) === "Disconnect requires confirmation so accidental clicks cannot remove local protection.",
+  "disconnect confirmation keeps its own copy",
+);

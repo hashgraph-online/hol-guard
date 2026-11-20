@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_artifact_content_hash as bridge
-from codex_plugin_scanner.guard.cli import commands_support_permission_store as permission_store
 from codex_plugin_scanner.guard.cli import prompt as prompt_module
 from codex_plugin_scanner.guard.models import GuardArtifact
 
@@ -93,14 +92,6 @@ def test_an_answer_that_is_not_a_hash_is_refused(payload: object, monkeypatch: p
     _serve(monkeypatch, payload, [])
     with pytest.raises(bridge.ArtifactContentHashUnavailableError):
         bridge.native_artifact_content_hash(_artifact())
-
-
-def test_a_resident_that_cannot_answer_leaves_the_permission_unminted(monkeypatch: pytest.MonkeyPatch) -> None:
-    def unavailable(artifact: GuardArtifact, *, guard_home: Path | None = None) -> str:
-        raise bridge.ArtifactContentHashUnavailableError
-
-    monkeypatch.setattr(permission_store, "native_artifact_content_hash", unavailable)
-    assert permission_store._content_hash(_artifact(), guard_home=Path("/guard-home")) is None
 
 
 def test_a_prompt_asks_for_its_hashes_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:

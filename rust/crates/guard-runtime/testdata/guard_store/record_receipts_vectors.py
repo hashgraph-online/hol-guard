@@ -27,8 +27,10 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
-os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+# `auto` selects the runtime bundled beside the imported package and nothing
+# else, so a `HOL_GUARD_NATIVE_BINARY` left in the environment is read by
+# nothing here and needs no clearing.
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from codex_plugin_scanner.guard import (

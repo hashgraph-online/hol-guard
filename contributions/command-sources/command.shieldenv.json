@@ -1,0 +1,84 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.shieldenv",
+    "name": "shieldenv",
+    "version": "1.0.0",
+    "license": "MIT",
+    "source": "built-in",
+    "required": false,
+    "risk_classes": ["low"],
+    "description": "Provides fast, local-first secret scanning and pre-commit checks via ShieldEnv without modifying core repository configurations.",
+    "homepage": "https://github.com/ShieldRunner-NET/shieldenv",
+    "executables": [
+      "shieldenv"
+    ],
+    "action_classes": [
+      "local_secret_scan"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "dependencies": [],
+    "ecosystem_ids": [],
+    "delegated_protection": null,
+    "icon": {
+      "kind": "none"
+    },
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.shieldrunner-net",
+      "url": "https://github.com/ShieldRunner-NET/shieldenv"
+    },
+    "permissions": [
+      {
+        "permission_id": "command.shieldenv.permission.scan",
+        "implementation_version": "1.0.0",
+        "label": "ShieldEnv Scan Permission",
+        "description": "Allows executing local secret scanning commands via ShieldEnv.",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["local_secret_scan"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Use built-in checks when possible."
+        ],
+        "risk_tier": "low",
+        "baseline_floor": "review",
+        "example_command": "shieldenv scan --path contributions/"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.shieldenv.scan",
+        "rule_version": "1.0.0",
+        "permission_id": "command.shieldenv.permission.scan",
+        "title": "ShieldEnv scan",
+        "description": "Identifies `shieldenv scan`.",
+        "severity": "low",
+        "risk_classes": ["low"],
+        "action_classes": ["local_secret_scan"],
+        "safer_alternatives": [],
+        "default_mode": "review",
+        "safe_variants": [],
+        "native_capability": null,
+        "matcher": {
+          "op": "leading-subcommand.v1",
+          "config": {
+            "executables": ["shieldenv", "shieldenv.cmd", "shieldenv.exe"],
+            "subcommands": ["scan"]
+          }
+        }
+      }
+    ],
+    "project_markers": [],
+    "safer_alternatives": [
+      "Use built-in checks when possible."
+    ],
+    "reference_urls": []
+  }
+}

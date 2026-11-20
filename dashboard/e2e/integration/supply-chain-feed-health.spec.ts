@@ -28,9 +28,11 @@ test.describe("Feed Health against the live daemon", () => {
     await expect(card("Daemon status")).toContainText("Guard daemon is active and processing.");
     await expect(card("Cloud sync")).toContainText(runtime.cloud_state_label);
     await expect(card("Cloud sync")).toContainText(runtime.cloud_state_detail);
-    // The seeds record decisions moments ago, so the feed counts as fresh.
+    // The seeds record decisions moments ago, but recent activity says nothing
+    // about the intel feed: with no cloud pairing the feed is sample data, not "Fresh".
     expect(runtime.latest_receipts.length).toBeGreaterThan(0);
-    await expect(card("Feed freshness")).toContainText("Fresh");
+    await expect(card("Feed freshness")).toContainText("Sample data");
+    await expect(card("Feed freshness")).not.toContainText(/\bFresh\b/);
     await expect(card("Last activity")).toContainText("Most recent action processed by Guard.");
 
     await expect(page.getByText("Cloud sync health", { exact: true })).toBeVisible();

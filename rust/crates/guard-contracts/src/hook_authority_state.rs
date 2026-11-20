@@ -32,6 +32,15 @@ pub const HOOK_AUTHORITY_STATE_FEATURE: &str = "hook-authority-state-v1";
 /// Capability for the single-transaction Cursor lookup and removal and the
 /// Claude session discard ops.
 pub const HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE: &str = "hook-authority-state-session-ops-v1";
+/// Capability for `claude_question_settle`: the single-transaction answer to
+/// the HOL Guard approval question.
+pub const HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE: &str =
+    "hook-authority-state-question-settle-v1";
+/// Capability for `claude_permission_request`, `claude_permission_prompt` and
+/// `claude_turn_stop`: the daemon's Claude Code lifecycle answers, each in one
+/// transaction.
+pub const HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE: &str =
+    "hook-authority-state-claude-lifecycle-v1";
 /// Largest canonical request serialization the op will accept.
 pub const HOOK_AUTHORITY_STATE_MAX_BYTES: usize = 512 * 1024;
 
@@ -46,6 +55,8 @@ pub struct HookAuthorityStateRequestV1 {
     /// Absolute path to the resolved guard home.
     pub guard_home: String,
     /// One of the `claude_*` / `cursor_*` operations or `state_is_fresh`.
+    /// `claude_lifecycle` selects the Claude hook operation from `payload`.
+    /// `claude_question_save` persists a settled Claude approval plan.
     pub op: String,
     /// Wall-clock timestamp (`datetime.isoformat()`), used for signing,
     /// freshness and the audit rows.
@@ -105,6 +116,10 @@ pub struct HookAuthorityStateRequestV1 {
     /// `state_is_fresh` only: the age limit in seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_age_seconds: Option<i64>,
+    /// `claude_question_settle` only: `os.path.expanduser("~")` on the host,
+    /// when resolvable, for a `~` config path in the saved decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tilde_home: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

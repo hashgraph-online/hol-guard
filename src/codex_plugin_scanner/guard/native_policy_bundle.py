@@ -11,7 +11,6 @@ Any transport failure, malformed answer, or missing capability raises a typed
 
 from __future__ import annotations
 
-import hashlib
 import itertools
 import json
 import math
@@ -297,27 +296,3 @@ def policy_bundle_paged_rows(kind: str, request_input: dict[str, object]) -> lis
     if total != len(rows):
         raise PolicyBundleNativeUnavailableError(_SCHEMA_MISMATCH)
     return rows
-
-
-def policy_bundle_paged_text(kind: str, request_input: dict[str, object]) -> str:
-    """Collect a text verdict that can exceed one resident response, page by page.
-
-    The reassembled text must match the byte count and SHA-256 Rust reported for
-    the whole document.
-    """
-
-    parts: list[str] = []
-    total: object = None
-    digest: object = None
-    for page in _pages(kind, request_input):
-        part = page.get("value")
-        if not isinstance(part, str):
-            raise PolicyBundleNativeUnavailableError(_SCHEMA_MISMATCH)
-        if total is not None and (page.get("total") != total or page.get("sha256") != digest):
-            raise PolicyBundleNativeUnavailableError(_SCHEMA_MISMATCH)
-        total, digest = page.get("total"), page.get("sha256")
-        parts.append(part)
-    encoded = "".join(parts).encode("utf-8")
-    if total != len(encoded) or digest != hashlib.sha256(encoded).hexdigest():
-        raise PolicyBundleNativeUnavailableError(_SCHEMA_MISMATCH)
-    return encoded.decode("utf-8")

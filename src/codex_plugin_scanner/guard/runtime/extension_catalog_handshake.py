@@ -66,7 +66,7 @@ def prepare_extension_catalog_handshake(
         observation, body = _observe(catalog_factory, answer)
         answer = _negotiate(guard_home, {**request, "catalog": observation})
     if answer is None:
-        return dict(_CATALOG_RUNTIME_UNAVAILABLE), None
+        return catalog_runtime_unavailable_summary(), None
     summary = answer.get("summary")
     url = answer.get("upload_url")
     if answer.get("decision") != "done" or not isinstance(summary, dict):
@@ -76,6 +76,12 @@ def prepare_extension_catalog_handshake(
     if not isinstance(url, str) or body is None:
         raise RuntimeError(_MALFORMED)
     return summary, ExtensionCatalogUpload(url=url, body=body)
+
+
+def catalog_runtime_unavailable_summary() -> dict[str, object]:
+    """The session summary for a catalog the native runtime could not provide."""
+
+    return dict(_CATALOG_RUNTIME_UNAVAILABLE)
 
 
 def _negotiate(guard_home: Path | None, request: dict[str, object]) -> dict[str, object] | None:

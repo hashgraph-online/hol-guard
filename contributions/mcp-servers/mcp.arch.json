@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.arch",
+  "version": "1.0.0",
+  "name": "Arch",
+  "description": "Arch is a pay-per-call theological review of writing against Scripture. Local stdio server from tnvolman/arch-cursor-plugin. Guard matches only the executable basename arch-mcp. arch_review POSTs to https://arch.tnvolman.com/v1/review and sends ARCH_API_KEY as X-API-Key. kjv_lookup is local and sends nothing. Logs and provider copies are kept no more than 30 days, except where a provider's terms require longer. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.tnvolman",
+    "displayName": "Michael McClanahan",
+    "url": "https://github.com/tnvolman/arch-cursor-plugin"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F172A"
+  },
+  "homepage": "https://arch.tnvolman.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "arch-mcp"
+  },
+  "riskClasses": [
+    "external-message-egress",
+    "external-metered-payment"
+  ],
+  "tools": [
+    {
+      "name": "arch_review",
+      "state": "review"
+    },
+    {
+      "name": "kjv_lookup",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/tnvolman/arch-cursor-plugin",
+    "https://github.com/tnvolman/arch-cursor-plugin/blob/main/server/index.mjs",
+    "https://github.com/tnvolman/arch-cursor-plugin/blob/main/server/kjv.mjs",
+    "https://github.com/tnvolman/arch-cursor-plugin/commit/eaf99bbc8fd66fcf89f058c1415eaabcc1e5f799",
+    "https://arch.tnvolman.com/v1/review",
+    "https://arch.tnvolman.com/privacy",
+    "https://arch.tnvolman.com/terms",
+    "https://www.anthropic.com/legal/commercial-terms",
+    "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+    "https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training",
+    "https://docs.railway.com/observability/logs",
+    "https://developers.cloudflare.com/logs/logpull/enabling-log-retention/",
+    "https://developers.cloudflare.com/logs/logpull/understanding-the-basics/",
+    "https://developers.cloudflare.com/analytics/graphql-api/limits/",
+    "https://github.com/tnvolman/the-forge/blob/06544142cf71cea2775a39abfc5569f31ca19a46/src/routes/arch.py"
+  ],
+  "saferAlternatives": [
+    "Set the MCP command to an executable named arch-mcp. Guard matches only that basename. Published mcp.json uses node ./server/index.mjs, which is not matched. At eaf99bbc server/index.mjs is mode 100644. No PRIVACY.md.",
+    "Node v22.23.4 (undici 6.29.1) https fetch adds user-agent node, accept-language *, sec-fetch-mode cors, accept-encoding br, gzip, deflate, host, content-length, and connection keep-alive, besides the plugin headers. Other Node 18+ versions are unverified.",
+    "arch_review only POSTs JSON {text, max_tokens?, payment_method_id?, idempotency_key?} to https://arch.tnvolman.com/v1/review. Code sets Content-Type, Accept, X-API-Key (the ARCH_API_KEY value), and Idempotency-Key when idempotency_key is non-empty.",
+    "If ARCH_API_KEY is missing or empty, or text is empty or over 50000 characters, arch_review sends nothing. kjv_lookup only reads bundled server/data/kjv.json and sends no reference, verse text, or API key.",
+    "Plugin stores neither text nor the key. Privacy page (19 Oct 2026): text is sent to Anthropic, held in memory, not stored. Call count, last-used, and charge rows (intent id, amount, currency, status, char count; not the text) stay until deleted on request.",
+    "the-forge 06544142 arch.py:264 logs email and key_prefix (first 12 chars). :338 and :570 log character count. :939 stores an 8-char prefix and a hash. No reviewed log writes the full X-API-Key. Exceptions at :206, :368, and :620 are unverified.",
+    "Commercial terms: \"Anthropic may not train models on Customer Content from Services.\"",
+    "Logs and provider copies are kept no more than 30 days, except where a provider's terms require longer (for example Anthropic safety review or legal holds). Anthropic: 30 days (7996866). Railway Hobby/Pro: up to 30 days. Cloudflare: up to 7 days."
+  ]
+}

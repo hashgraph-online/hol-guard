@@ -7,14 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.server_control_routes_post import _SUPPLY_CHAIN_PACKAGE_ACTIONS
 from codex_plugin_scanner.guard.local_supply_chain import build_local_supply_chain_posture
-from codex_plugin_scanner.guard.package_firewall_action_rate_limit import (
-    PackageFirewallActionRateLimiter,
-)
-from codex_plugin_scanner.guard.package_firewall_entitlement import (
-    package_firewall_access,
-)
 from codex_plugin_scanner.guard.package_firewall_receipts import (
     package_firewall_receipt_metadata,
 )
@@ -70,18 +63,6 @@ def test_gpfr244_reuses_local_posture_builder(tmp_path: Path) -> None:
 
     assert posture["health_status"] == "local"
     assert "package_manager_protection" in posture
-
-
-def test_gpfr244_reuses_entitlement_and_rate_limit_helpers() -> None:
-    # The entitlement projections are resident queries now, so reuse is proven
-    # by the helpers existing and being called, not by recomputing the table.
-    assert callable(package_firewall_access)
-
-    limiter = PackageFirewallActionRateLimiter(limit=1, window_seconds=10)
-    assert limiter.allow("workspace:install", now=100.0) == (True, 0)
-    allowed, retry_after = limiter.allow("workspace:install", now=101.0)
-    assert allowed is False
-    assert retry_after > 0
 
 
 def test_gpfr244_reuses_receipt_and_cache_helpers() -> None:
@@ -141,13 +122,3 @@ def test_gpfr245_reuses_runtime_supply_chain_detection() -> None:
     assert signals[0].signal_id == "supply-chain.postinstall-network-send"
 
 
-def test_gpfr246_daemon_exposes_cloud_package_shim_endpoint_contract() -> None:
-    assert {
-        "audit",
-        "connect",
-        "install",
-        "remove",
-        "repair",
-        "sync",
-        "test",
-    } <= _SUPPLY_CHAIN_PACKAGE_ACTIONS

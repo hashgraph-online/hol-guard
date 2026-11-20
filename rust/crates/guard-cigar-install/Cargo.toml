@@ -1,0 +1,28 @@
+[package]
+name = "guard-cigar-install"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+guard-cigar-artifacts = { path = "../guard-cigar-artifacts" }
+guard-cigar-release = { path = "../guard-cigar-release" }
+guard-secure-fs = { path = "../guard-secure-fs" }
+serde_json.workspace = true
+tar = { version = "=0.4.46", default-features = false }
+sha2.workspace = true
+zip = { version = "=9.1.2", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["user"] }
+
+[dev-dependencies]
+guard-context-assistance = { path = "../guard-context-assistance" }
+ring.workspace = true
+tempfile = "3.10"
+
+[lints]
+workspace = true

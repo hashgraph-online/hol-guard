@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
-from codex_plugin_scanner.guard.daemon.mcp_relay_package_evidence_drain import (
+from codex_plugin_scanner.guard.evidence_drains.mcp_relay_package_evidence_drain import (
     is_mcp_relay_package_evidence,
     record_mcp_relay_package_evidence,
 )
@@ -211,8 +209,6 @@ def test_a_record_naming_another_package_is_dropped(
 
     assert not record_mcp_relay_package_evidence(object(), tmp_path, _record())
     assert calls == []
-
-
 def test_a_call_that_is_no_package_request_is_dropped(
     tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], parsed: dict[str, Any]
 ) -> None:
@@ -220,8 +216,6 @@ def test_a_call_that_is_no_package_request_is_dropped(
 
     assert not record_mcp_relay_package_evidence(object(), tmp_path, _record())
     assert calls == []
-
-
 def test_arguments_the_record_does_not_match_are_dropped(
     tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], parsed: dict[str, Any]
 ) -> None:
@@ -285,17 +279,3 @@ def test_a_package_half_the_proxy_could_not_have_written_is_dropped(
 
     assert not record_mcp_relay_package_evidence(object(), tmp_path, _record(package=package))
     assert calls == []
-
-
-def test_the_direct_drain_routes_a_package_record_here(
-    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]], parsed: dict[str, Any]
-) -> None:
-    store = object()
-    host = SimpleNamespace(store=store, guard_home=tmp_path)
-
-    assert hook_direct_evidence_drain.record_direct_hook_evidence(host, _record())
-
-    [(kind, recorded)] = calls
-    assert kind == "allow"
-    assert recorded["store"] is store
-    assert recorded["artifact"].artifact_id == ARTIFACT_ID

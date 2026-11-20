@@ -12,13 +12,14 @@ from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_GATE_NAME, AUTHORITY_LOCK_NAME
-from .native_policy_snapshot_constants import NativePolicySnapshotError
+from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY, NativePolicySnapshotError
 
 # One acquisition budget covers the entry gate and the lease behind it, so a
 # caller that chains reads can divide this span instead of paying it twice.
 AUTHORITY_LOCK_TIMEOUT_SECONDS = 30.0
 
 _LOCKS = threading.local()
+_PRIVATE_LOCK_NAME_LIMIT = 128
 _LEASE_POLL_SECONDS = 0.01
 # The first retries are short so an acquirer that only missed a turnstile
 # held for microseconds does not pay a full poll interval for it.
@@ -124,8 +125,12 @@ def read_private_state(guard_home: Path, name: str, maximum_bytes: int) -> bytes
     if os.name == "nt":
         from . import native_policy_snapshot as api
 
-        with api._windows_private_state_binding(guard_home) as binding:
-            return api._windows_read_snapshot_bytes(binding.path / name, maximum_bytes=maximum_bytes)
+        return api._windows_read_private_file(
+            guard_home / NATIVE_RUNTIME_STATE_DIRECTORY,
+            name,
+            maximum_bytes=maximum_bytes,
+            private_root=guard_home,
+        )
     with _unix_state_directory(guard_home) as directory:
         flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
         try:
@@ -152,22 +157,18 @@ def read_private_state(guard_home: Path, name: str, maximum_bytes: int) -> bytes
 def write_private_state(guard_home: Path, name: str, payload: bytes, maximum_bytes: int) -> None:
     if not payload or len(payload) > maximum_bytes or Path(name).name != name or name in {"", ".", ".."}:
         raise _invalid()
-    temporary = f".{name}.{secrets.token_hex(16)}.tmp"
     if os.name == "nt":
         from . import native_policy_snapshot as api
 
-        with api._windows_private_state_binding(guard_home) as binding:
-            api._windows_write_private_file_atomic(
-                parent_path=binding.path,
-                parent_handle=binding.handle,
-                directory_handles=binding.handles,
-                temporary_name=temporary,
-                destination_name=name,
-                payload=payload,
-                maximum_bytes=maximum_bytes,
-                kind="command_control_authority",
-            )
+        api._windows_write_private_file_atomic(
+            directory=guard_home / NATIVE_RUNTIME_STATE_DIRECTORY,
+            name=name,
+            payload=payload,
+            maximum_bytes=maximum_bytes,
+            private_root=guard_home,
+        )
         return
+    temporary = f".{name}.{secrets.token_hex(16)}.tmp"
     with _unix_state_directory(guard_home) as directory:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
         descriptor = os.open(temporary, flags, 0o600, dir_fd=directory)
@@ -273,6 +274,81 @@ def _authority_entry_gate(guard_home: Path, *, deadline: float) -> Iterator[None
         _await_lease(descriptor, shared=False, deadline=deadline)
         resources.callback(_release_lease, descriptor)
         yield
+
+
+@contextmanager
+def hold_owner_private_lock(guard_home: Path, name: str, *, timeout_seconds: float = 1.0) -> Iterator[None]:
+    """Serialize one owner-private transaction without taking lifecycle authority.
+
+    The lock is a separate regular file under the validated Guard home.  It is
+    intentionally independent from the command-control authority lease so
+    optional diagnostics cannot contend with, or accidentally authorize, a
+    lifecycle mutation.
+    """
+
+    if not name or len(name) > _PRIVATE_LOCK_NAME_LIMIT or Path(name).name != name or name in {".", ".."}:
+        raise _invalid()
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    if os.name == "nt":
+        from . import native_policy_snapshot as api
+
+        with api._windows_private_directory_binding(guard_home) as binding:
+            descriptor = api._windows_open_private_fd(binding.path / name, maximum_bytes=1)
+            try:
+                metadata = os.fstat(descriptor)
+                if metadata.st_size == 0:
+                    os.write(descriptor, b"0")
+                    os.fsync(descriptor)
+                while True:
+                    try:
+                        from .native_command_control_windows_lock import try_lock_authority_file
+
+                        try_lock_authority_file(descriptor, shared=False)
+                        break
+                    except OSError as error:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError("Timed out waiting for the owner-private lock.") from error
+                        time.sleep(min(0.01, remaining))
+                try:
+                    yield
+                finally:
+                    from .native_command_control_windows_lock import unlock_authority_file
+
+                    unlock_authority_file(descriptor)
+            finally:
+                os.close(descriptor)
+        return
+
+    with _unix_directory(guard_home, private=False) as directory:
+        flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+        descriptor = os.open(name, flags, 0o600, dir_fd=directory)
+        try:
+            metadata = _validate_file(descriptor, maximum_bytes=1, repair_mode=True)
+            if metadata.st_size == 0:
+                os.write(descriptor, b"0")
+                os.fsync(descriptor)
+            while True:
+                try:
+                    import fcntl
+
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as error:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("Timed out waiting for the owner-private lock.") from error
+                    time.sleep(min(0.01, remaining))
+            if not _same_file(metadata, os.stat(name, dir_fd=directory, follow_symlinks=False)):
+                raise _invalid()
+            try:
+                yield
+            finally:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
 
 @contextmanager

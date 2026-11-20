@@ -88,10 +88,31 @@ pub(super) fn member(input: &Value) -> Outcome {
     let text = |key: &str| input[key].as_str().ok_or_else(request);
     let (path, asset, name) = (text("path")?, text("asset")?, text("name")?);
     let length = input["length"].as_u64().ok_or_else(request)?;
+    members(Path::new(path), asset, [(name, length)])?
+        .pop()
+        .ok_or_else(request)
+}
+
+/// Verify members against one bounded, immutable read of their container.
+/// The bytes and inspected directory are dropped before the caller reads the
+/// next container; only the selected member replies leave this function.
+pub(super) fn members<'a>(
+    path: &Path,
+    asset: &str,
+    members: impl IntoIterator<Item = (&'a str, u64)>,
+) -> Result<Vec<Value>, String> {
     let family = location::family(asset).ok_or("delivery container name invalid")?;
-    let bytes = files::read(Path::new(path), family.bound())
-        .map_err(|_| "delivery container unreadable")?;
+    #[cfg(test)]
+    READS.with(|reads| reads.set(reads.get() + 1));
+    let bytes = files::read(path, family.bound()).map_err(|_| "delivery container unreadable")?;
     let container = inspect(&bytes, asset)?;
+    members
+        .into_iter()
+        .map(|(name, length)| selected(&bytes, &container, name, length))
+        .collect()
+}
+
+fn selected(bytes: &[u8], container: &Container<'_>, name: &str, length: u64) -> Outcome {
     let entry = container
         .rows
         .iter()
@@ -100,7 +121,7 @@ pub(super) fn member(input: &Value) -> Outcome {
     if u64::try_from(entry.size).ok() != Some(length) {
         return Err("delivery container member length differs".into());
     }
-    let range = zip::data(&bytes, entry, container.start).ok_or(STRUCTURE)?;
+    let range = zip::data(bytes, entry, container.start).ok_or(STRUCTURE)?;
     let digest = name
         .split_once('-')
         .and_then(|(_, rest)| rest.split_once('.'))
@@ -110,6 +131,16 @@ pub(super) fn member(input: &Value) -> Outcome {
         return Err("delivery container member integrity invalid".into());
     }
     Ok(json!({"data": STANDARD.encode(data)}))
+}
+
+#[cfg(test)]
+thread_local! {
+    static READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn read_count() -> usize {
+    READS.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

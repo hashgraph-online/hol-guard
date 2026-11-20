@@ -1,5 +1,9 @@
 """A clone whose origin branch is one commit ahead of the checked-out branch.
 
+The same origin serves the listing case: ``git ls-remote --heads origin main``
+reads the remote the URL names and writes nothing, so it needs the remote and
+none of the rest of the shape.
+
 Agents often bring a branch up to date in two steps, ``git fetch origin``
 then ``git merge --ff-only origin/main``, instead of ``git pull --ff-only``.
 The merge alone touches no network, so once the work tree proof that admits
@@ -16,6 +20,9 @@ from pathlib import Path
 FAST_FORWARD_CASE = "omp-native-git-fast-forward-merge-origin"
 FAST_FORWARD_HOOK_CASE = "git-fast-forward-merge-post-merge-hook"
 FAST_FORWARD_CASES = frozenset({FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE})
+# Listing what the same origin advertises needs the remote URL and nothing
+# else: no commit ahead to merge, and no effect on the checkout to check.
+LS_REMOTE_CASE = "omp-native-git-ls-remote-origin-heads"
 ORIGIN_URL = "https://github.com/acme/app.git"
 UPSTREAM_FILE = "UPSTREAM.md"
 UPSTREAM_TEXT = "Synthetic upstream change.\n"
@@ -69,7 +76,7 @@ def add_post_merge_hook(home: Path, worktree: Path) -> None:
 def add_fast_forward_shape(
     main: Path, worktree: Path, home: Path, environment: dict[str, str], scenario_id: str | None
 ) -> None:
-    if scenario_id not in FAST_FORWARD_CASES:
+    if scenario_id not in FAST_FORWARD_CASES and scenario_id != LS_REMOTE_CASE:
         return
     add_fast_forward_origin(main, worktree, environment)
     if scenario_id == FAST_FORWARD_HOOK_CASE:

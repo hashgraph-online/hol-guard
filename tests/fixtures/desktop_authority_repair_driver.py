@@ -15,7 +15,9 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.cloud_control import server_control_cloud_sync as _ctl_cloud_sync
+from tests import harness_ops_support as harness_support
 
 
 def fixture_home() -> Path:
@@ -31,19 +33,17 @@ def fixture_home() -> Path:
 
 
 def seed(home: Path, *, inverse: bool = False) -> int:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
     from codex_plugin_scanner.guard.approval_gate import update_settings
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
-    from codex_plugin_scanner.guard.daemon import server
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.store import GuardStore
+    from tests.codex_hook_paths_support import hook_manifest_path
 
     config = home / ".codex/config.toml"
     config.parent.mkdir(mode=0o700)
     config.write_text("[features]\nhooks = true\n", encoding="utf-8")
     context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     if inverse:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from tests.test_codex_hook_recovery import crash
@@ -62,12 +62,8 @@ def seed(home: Path, *, inverse: bool = False) -> int:
     if not inverse:
         manifest.unlink()  # Generated incident fixture: receipt/config/key stay intact.
     store = GuardStore(context.guard_home)
-    for name in ("_start_aibom_inventory_refresh", "_start_supply_chain_bundle_refresh", "_start_headless_cloud_sync"):
-        setattr(server.GuardDaemonServer, name, lambda _self: None)
-    server.start_command_queue_worker = lambda _store, existing: existing
-    server.start_cloud_sync_sync_worker = lambda _store, existing, **_kwargs: existing
     _ctl_cloud_sync._queue_headless_cloud_sync = lambda **_kwargs: {"status": "not_configured"}
-    daemon = server.GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=home)
     try:
         if not inverse:
             daemon.start()
@@ -95,9 +91,9 @@ def main() -> int:
     if sys.argv[1:] in (["--seed"], ["--seed-inverse"]):
         return seed(home, inverse=sys.argv[1:] == ["--seed-inverse"])
     if (home / "isolated-publication-inverse").is_file():
-        from codex_plugin_scanner.guard.adapters.base import HarnessContext
-        from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
         from codex_plugin_scanner.guard.cli import codex_authority_repair
+        from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
+        from codex_plugin_scanner.guard.harness_context import HarnessContext
         from codex_plugin_scanner.guard.store import GuardStore
 
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

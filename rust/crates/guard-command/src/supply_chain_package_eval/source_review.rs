@@ -31,6 +31,22 @@ pub(super) fn evaluate_non_registry_sources(
     external_archive_network_authorized: bool,
     retain_external_archive_blob: bool,
 ) -> Option<PackageEvalResult> {
+    if let Some(target) = targets.iter().find(|target| {
+        optional_string(target.get("source_invalid_reason")).as_deref()
+            == Some(crate::package_intent_parser::NPM_CONFIG_PACKAGE_UNIDENTIFIED)
+    }) {
+        let package = heuristic_package_result(
+            target,
+            "block",
+            crate::package_intent_parser::NPM_CONFIG_PACKAGE_UNIDENTIFIED,
+            "npm configuration adds a package to this npx command, and Guard could not read that package's name.",
+            "high",
+        );
+        let draft = local_block_draft(package, Vec::new());
+        let result = finalize_evaluation(deps, &draft, package_intent_hash, None);
+        persist_evidence(deps, store, artifact, &result, now_value);
+        return Some(result);
+    }
     let external_archive_targets: Vec<&Map<String, Value>> = targets
         .iter()
         .filter(|t| target_is_external_https_archive(t))

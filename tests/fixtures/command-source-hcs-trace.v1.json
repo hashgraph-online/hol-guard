@@ -1,0 +1,4852 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "hcs-trace inspect command",
+            "hcs-trace follow command",
+            "hcs-trace scan command",
+            "hcs-trace write command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "dependencies": [],
+          "description": "Reviews HCS Trace 0.2.0 topic inspection, live polling, full-topic scans, and exports. Covers direct executables and positional npx/npm exec package invocations, including version suffixes. Direct help narrows only the matching rule; package-launcher help retains review. The CLI reads Hedera data and can write export files locally.",
+          "ecosystem_ids": [],
+          "executables": [
+            "hcs-trace",
+            "hcs-trace.cmd",
+            "hcs-trace.exe"
+          ],
+          "extension_id": "command.hcs-trace",
+          "homepage": "https://github.com/signalnodes/hcs-trace",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "HCS Trace",
+          "permissions": [
+            {
+              "action_classes": [
+                "hcs-trace inspect command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews query, decode, and topic requests to Hedera Mirror Nodes. Query can continue through additional pages, and --all removes the page prompt. Decode also fetches messages from the network.",
+              "example_command": "hcs-trace query 0.0.123",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.58.0",
+              "label": "HCS topic inspection",
+              "permission_id": "command.hcs-trace.permission.inspect",
+              "risk_tier": "low",
+              "safer_guidance": [
+                "Choose the intended --network and topic before fetching messages.",
+                "Use --limit to reduce the query page size or the number of messages decoded."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "hcs-trace follow command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews tail, which repeatedly polls a Mirror Node until interrupted. The default interval is 3000 milliseconds.",
+              "example_command": "hcs-trace tail 0.0.123",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.58.0",
+              "label": "HCS live polling",
+              "permission_id": "command.hcs-trace.permission.follow",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Use query or decode for a finite inspection.",
+                "Choose a suitable --interval and stop tail when inspection is complete."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "hcs-trace scan command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews stats and export, which scan the full topic by default, and query --all/-a. In 0.2.0, stats --sample changes the page size but still follows every page. Export writes to stdout unless --output is supplied. Filtering can require fetching more messages than the export --limit because the limit counts matching output records.",
+              "example_command": "hcs-trace stats 0.0.123",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.58.0",
+              "label": "HCS topic scan and export",
+              "permission_id": "command.hcs-trace.permission.scan",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Use query --limit for a smaller initial inspection; stats --sample does not bound the total scan in 0.2.0.",
+                "Use export --limit to limit output records; filters may still require scanning additional pages.",
+                "Check the destination before redirecting output or supplying --output."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "hcs-trace write command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews export --output, which opens a local file for writing and can truncate an existing file before the first Mirror Node request succeeds. JSON, JSONL, and CSV formats share this behavior.",
+              "example_command": "hcs-trace export 0.0.123 --output topic.jsonl",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.58.0",
+              "label": "HCS export file output",
+              "permission_id": "command.hcs-trace.permission.write",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Choose a new output path or back up an existing destination before exporting.",
+                "Omit --output to write to stdout, then review any shell redirection separately."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "reference_urls": [
+            "https://github.com/signalnodes/hcs-trace/tree/8178a866b989e8413376afc16ae140b848dd8764",
+            "https://www.npmjs.com/package/hcs-trace/v/0.2.0"
+          ],
+          "required": false,
+          "risk_classes": [
+            "network",
+            "filesystem"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "hcs-trace inspect command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews query, decode, and topic requests to Hedera Mirror Nodes. Query can continue through additional pages, and --all removes the page prompt. Decode also fetches messages from the network.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "decode"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "decode"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "decode"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "topic"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "topic"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "topic"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.hcs-trace.permission.inspect",
+              "risk_classes": [
+                "network"
+              ],
+              "rule_id": "command.hcs-trace.inspect",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "query"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "query"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "decode"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "decode"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "topic"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "topic"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Direct HCS Trace help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Choose the intended --network and topic before fetching messages.",
+                "Use --limit to reduce the query page size or the number of messages decoded."
+              ],
+              "severity": "low",
+              "title": "HCS topic inspection"
+            },
+            {
+              "action_classes": [
+                "hcs-trace follow command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews tail, which repeatedly polls a Mirror Node until interrupted. The default interval is 3000 milliseconds.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "tail"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "tail"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "tail"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.hcs-trace.permission.follow",
+              "risk_classes": [
+                "network"
+              ],
+              "rule_id": "command.hcs-trace.follow",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "tail"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "tail"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Direct HCS Trace help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Use query or decode for a finite inspection.",
+                "Choose a suitable --interval and stop tail when inspection is complete."
+              ],
+              "severity": "medium",
+              "title": "HCS live polling"
+            },
+            {
+              "action_classes": [
+                "hcs-trace scan command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews stats and export, which scan the full topic by default, and query --all/-a. In 0.2.0, stats --sample changes the page size but still follows every page. Export writes to stdout unless --output is supplied. Filtering can require fetching more messages than the export --limit because the limit counts matching output records.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "stats"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "stats"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "stats"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "export"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "export"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [],
+                      "subcommands": [
+                        "export"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [
+                        "--all"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [
+                        "--all"
+                      ],
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [
+                        "--all"
+                      ],
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [
+                        "-a"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [
+                        "-a"
+                      ],
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [
+                        "-a"
+                      ],
+                      "subcommands": [
+                        "query"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.hcs-trace.permission.scan",
+              "risk_classes": [
+                "network",
+                "filesystem"
+              ],
+              "rule_id": "command.hcs-trace.scan",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "stats"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "stats"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "export"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "export"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--all",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "query"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--all",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "query"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-a",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "query"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "-a",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "query"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Direct HCS Trace help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Use query --limit for a smaller initial inspection; stats --sample does not bound the total scan in 0.2.0.",
+                "Use export --limit to limit output records; filters may still require scanning additional pages.",
+                "Check the destination before redirecting output or supplying --output."
+              ],
+              "severity": "medium",
+              "title": "HCS topic scan and export"
+            },
+            {
+              "action_classes": [
+                "hcs-trace write command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews export --output, which opens a local file for writing and can truncate an existing file before the first Mirror Node request succeeds. JSON, JSONL, and CSV formats share this behavior.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hcs-trace",
+                        "hcs-trace.cmd",
+                        "hcs-trace.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--raw",
+                        "--json",
+                        "--all",
+                        "-a",
+                        "--decode",
+                        "--explain"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "required_flags": [
+                        "--output"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "subcommands": [
+                        "export"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "hcs-trace",
+                      "required_flags": [
+                        "--output"
+                      ],
+                      "subcommands": [
+                        "export"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "-y",
+                        "--yes",
+                        "--no-install",
+                        "--offline"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--network",
+                        "--limit",
+                        "-l",
+                        "--from",
+                        "--seq",
+                        "--format",
+                        "--output",
+                        "--delay",
+                        "--sample",
+                        "--interval",
+                        "--since",
+                        "--filter-standard",
+                        "--filter-payer",
+                        "--filter-text",
+                        "--filter-confidence"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "hcs-trace",
+                      "required_flags": [
+                        "--output"
+                      ],
+                      "subcommands": [
+                        "export"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.hcs-trace.permission.write",
+              "risk_classes": [
+                "filesystem"
+              ],
+              "rule_id": "command.hcs-trace.write",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--output",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "export"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "hcs-trace",
+                            "hcs-trace.cmd",
+                            "hcs-trace.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--raw",
+                            "--json",
+                            "--all",
+                            "-a",
+                            "--decode",
+                            "--explain"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "options_with_values": [
+                            "--network",
+                            "--limit",
+                            "-l",
+                            "--from",
+                            "--seq",
+                            "--format",
+                            "--output",
+                            "--delay",
+                            "--sample",
+                            "--interval",
+                            "--since",
+                            "--filter-standard",
+                            "--filter-payer",
+                            "--filter-text",
+                            "--filter-confidence"
+                          ],
+                          "required_flags": [
+                            "--output",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "subcommands": [
+                            "export"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Direct HCS Trace help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Choose a new output path or back up an existing destination before exporting.",
+                "Omit --output to write to stdout, then review any shell redirection separately."
+              ],
+              "severity": "medium",
+              "title": "HCS export file output"
+            }
+          ],
+          "safer_alternatives": [
+            "Use bounded inspection where possible and choose a new path for file exports."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agent-gauntlet",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.apex",
+          "command.appimg",
+          "command.astrix",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.ccx",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.drip",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.givi",
+          "command.golive",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.hcs-trace",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-arch",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-astrix",
+          "command.mcp-authyouragent",
+          "command.mcp-authzloom",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-borer",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-duckdb-vectors",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-figlens",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-keepawake",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-loomdesk",
+          "command.mcp-mac-address-lookup",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-nuvui",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-oids",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-p6-mcp",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-pumpkit",
+          "command.mcp-quidli-connect",
+          "command.mcp-raw-browser",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-roslyngate",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seminara",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-smithguard",
+          "command.mcp-switchbord",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.mori",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.opencomms",
+          "command.probe",
+          "command.procedural-memory",
+          "command.pyrig",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.shieldenv",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "HOL",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "hcs-trace query 0.0.123 --network mainnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-mainnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --network testnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-testnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --network previewnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-previewnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "query-inactive",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.inspect"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-disabled",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace.cmd query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-cmd",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace.exe query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-exe",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "query-helplong",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "query-helpshort",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx -y hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-npx",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx -y hcs-trace@0.2.0 query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-npx-versioned",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec -- hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-npm",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec -- hcs-trace@0.2.0 query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-npm-versioned",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx hcs-trace query --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-npx-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123 --network mainnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-mainnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123 --network testnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-testnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123 --network previewnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-previewnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "decode-inactive",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.inspect"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-disabled",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace.cmd decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-cmd",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace.exe decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-exe",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "decode-helplong",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "decode-helpshort",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx -y hcs-trace decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-npx",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx -y hcs-trace@0.2.0 decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-npx-versioned",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec -- hcs-trace decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-npm",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec -- hcs-trace@0.2.0 decode 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-npm-versioned",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx hcs-trace decode --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-npx-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic 0.0.123 --network mainnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-mainnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic 0.0.123 --network testnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-testnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic 0.0.123 --network previewnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-previewnet",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "topic-inactive",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic 0.0.123",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.inspect"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-disabled",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace.cmd topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-cmd",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace.exe topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-exe",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "topic-helplong",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace topic -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "topic-helpshort",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx -y hcs-trace topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-npx",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx -y hcs-trace@0.2.0 topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-npx-versioned",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec -- hcs-trace topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-npm",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec -- hcs-trace@0.2.0 topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-npm-versioned",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx hcs-trace topic --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "topic-npx-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace tail 0.0.123 --network mainnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-mainnet",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace tail 0.0.123 --network testnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-testnet",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace tail 0.0.123 --network previewnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-previewnet",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "tail-inactive",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace tail 0.0.123",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.follow"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-disabled",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace.cmd tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-cmd",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace.exe tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-exe",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace tail --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "tail-helplong",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace tail -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "tail-helpshort",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "npx -y hcs-trace tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-npx",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "npx -y hcs-trace@0.2.0 tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-npx-versioned",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "npm exec -- hcs-trace tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-npm",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "npm exec -- hcs-trace@0.2.0 tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-npm-versioned",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "npx hcs-trace tail --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-npx-help",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123 --network mainnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-mainnet",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123 --network testnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-testnet",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123 --network previewnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-previewnet",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "stats-inactive",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.scan"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-disabled",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace.cmd stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-cmd",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace.exe stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-exe",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "stats-helplong",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "stats-helpshort",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npx -y hcs-trace stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-npx",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npx -y hcs-trace@0.2.0 stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-npx-versioned",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npm exec -- hcs-trace stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-npm",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npm exec -- hcs-trace@0.2.0 stats 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-npm-versioned",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npx hcs-trace stats --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-npx-help",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --network mainnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-mainnet",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --network testnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-testnet",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --network previewnet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-previewnet",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "export-inactive",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.scan"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-disabled",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace.cmd export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-cmd",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace.exe export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-exe",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "export-helplong",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "export-helpshort",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npx -y hcs-trace export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-npx",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npx -y hcs-trace@0.2.0 export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-npx-versioned",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npm exec -- hcs-trace export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-npm",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npm exec -- hcs-trace@0.2.0 export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-npm-versioned",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "npx hcs-trace export --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-npx-help",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123 --sample 20",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "sample-still-scans",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --limit 20",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "bounded-export",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --limit 20 --filter-standard HCS-10 --decode",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "filtered-export",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --all",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-all",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 -a",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-all-short",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace --network testnet query --limit=5 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "reordered",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --filter-text --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "value-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --filter-text '--help'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "quoted-value-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --filter-text=--help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "equals-value-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 -- --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "help-after-delimiter",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --unknown value",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "unknown-option",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --unknown --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "unknown-before-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "file-value-help",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "file-output",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output=topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "file-output-equals",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output 'topic export.jsonl'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "file-output-spaces",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output first.jsonl --output second.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "file-output-repeat",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output topic.jsonl --limit 0",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "limit-zero",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --limit -1",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "limit-negative",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123 --sample nope",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "limit-invalid",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123 --seq 42 --explain --format json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-sequence",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace decode 0.0.123 --from 42 -l 5 --format raw",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decode-from",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --json --from 42 --limit 5",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-json",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --filter-standard HCS-10 --filter-payer 0.0.321 --filter-text 'agent connect' --filter-confidence high",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "query-filters",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace tail 0.0.123 --interval 5000 --since 42 --raw",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "tail-options",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "hcs-trace stats 0.0.123 --delay 100 --sample 10",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "stats-delay",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --format csv --from 42 --delay 100 --decode --output topic.csv",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-csv",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --format json --output topic.json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-json",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export --output topic.jsonl --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "write-help",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "stdout-no-write",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --filter-text --output",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "output-as-value",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "root-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace submit 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "unknown-command",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace --help && hcs-trace export 0.0.123 --output topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "help-then-export",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output topic.jsonl; hcs-trace export --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "export-then-help",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 | cat",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pipeline",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace topic 0.0.123 || hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0,
+        1
+      ],
+      "id": "or-list",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "bash -c 'hcs-trace export 0.0.123 --output topic.jsonl'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "shell-wrapper",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "'/opt/HCS Tools/hcs-trace' query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "path-spaces",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx hcs-trace@latest tail 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-tag",
+      "rule_id": "command.hcs-trace.follow"
+    },
+    {
+      "command": "npx.cmd -y hcs-trace export 0.0.123 --output topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-cmd",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "npx --package other hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-other-package",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npm exec --package other -- hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npm-other-package",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx other query hcs-trace",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-unrelated",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx https://example.com/hcs-trace.tgz query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-url",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx ./hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-local",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx hcs-trace export 0.0.123 --output --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-value-help",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "npx hcs-trace export 0.0.123 --output topic.jsonl --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-help-retains-write",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export --help > topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "redirection",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "\"C:\\Program Files\\HCS Trace\\hcs-trace.cmd\" topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "windows-path",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 -- --output topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "output-after-delimiter",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "npx --no-install hcs-trace query 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-no-install",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "npx hcs-trace --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-root-help",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --filter-text --all",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "value-all",
+      "rule_id": "command.hcs-trace.scan"
+    },
+    {
+      "command": "hcs-trace query --help; hcs-trace topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "help-plus-read",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "missing-value",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output topic.jsonl",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.write"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "write-disabled",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export 0.0.123 --output topic.jsonl",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "write-inactive",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace export --output topic.jsonl --help",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.write"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "disabled-write-help",
+      "rule_id": "command.hcs-trace.write"
+    },
+    {
+      "command": "hcs-trace query 0.0.123 --all",
+      "disabled_permissions": [
+        "command.hcs-trace.permission.scan"
+      ],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-scan-overlap",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "env hcs-trace topic 0.0.123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "env-wrapper",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "pwd",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-safe",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "printf '%s' hcs-trace",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "mention-only",
+      "rule_id": "command.hcs-trace.inspect"
+    },
+    {
+      "command": "hcs-trace --help; rm -rf /",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.hcs-trace"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "first-party-deletion",
+      "rule_id": "command.hcs-trace.inspect"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

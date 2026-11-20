@@ -9,8 +9,11 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import activation_store, activation_transition, preparation, transport
-from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
+from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
+    ExtensionControlApiError,
+    ExtensionControlApiService,
+)
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     require_exclusive_command_control_mutation_lease,
 )
@@ -337,14 +340,21 @@ def test_active_security_race_rejects_before_consuming_approved_proof(flow, deli
     assert durable_state(flow.store) == before
 
 
-def test_inactive_security_observation_does_not_invalidate_approved_proof(flow,delivery):
+def test_inactive_security_observation_does_not_invalidate_approved_proof(flow, delivery):
     from codex_plugin_scanner.guard.catalog_delivery import active_security
     from tests.test_native_active_pack_security import publication
 
-    approved = flow.service.preview({**flow.payload,"session_nonce":"inactive-security","approval_password":_PASSWORD})
-    active_security._observe_capability(flow.store,active_security.read(flow.store),
-        active_security._activation(flow.store),publication(delivery,"command.unused"),delivery.fetch)
-    applied = flow.service.apply({**flow.payload,"proof_id":approved["proof_id"]})
+    approved = flow.service.preview(
+        {**flow.payload, "session_nonce": "inactive-security", "approval_password": _PASSWORD}
+    )
+    active_security._observe_capability(
+        flow.store,
+        active_security.read(flow.store),
+        active_security._activation(flow.store),
+        publication(delivery, "command.unused"),
+        delivery.fetch,
+    )
+    applied = flow.service.apply({**flow.payload, "proof_id": approved["proof_id"]})
     assert applied["revision"] == 2
 
 

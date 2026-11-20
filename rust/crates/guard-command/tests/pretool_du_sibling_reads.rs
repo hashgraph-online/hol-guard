@@ -100,6 +100,44 @@ fn sibling_checkout_sizes_proceed() {
     }
 }
 
+/// A depth of one prints only the operand's direct children, the names
+/// `ls -la` of it already prints, so it takes the `ls` proof instead of the
+/// tree screen that a deeper walk needs.
+#[test]
+fn a_depth_of_one_takes_the_listing_proof() {
+    let home = home();
+    let org = home.join("Code/org");
+    let portal = org.join("app-portal");
+    write(home.join("Code/app-portal-fix/.env"), "TOKEN=placeholder\n");
+    for (cwd, command) in [
+        (&portal, "du -h -d 1 ../../app-portal-fix"),
+        (
+            &portal,
+            "du -d 1 -x -h ../../app-portal-fix 2>/dev/null | sort -hr | head -40",
+        ),
+        (&portal, "du -ah --max-depth=1 ../../app-portal-fix"),
+        (&org, "du -h -d1 app-portal"),
+    ] {
+        assert_eq!(decision(&home, cwd, command), "allow", "{command}");
+    }
+    let deeper = decision(&home, &portal, "du -h -d 2 ../../app-portal-fix");
+    assert!(!deeper.contains("allow"), "{deeper}");
+    // GNU and BSD du apply the last depth option. A shallow first option
+    // must not suppress the recursive screen for a deeper final option.
+    for command in [
+        "du -h -d1 -d2 ../../app-portal-fix",
+        "du -ah --max-depth=1 --max-depth=2 ../../app-portal-fix",
+        "du -h --max-depth 1 -d 2 ../../app-portal-fix",
+    ] {
+        let seen = decision(&home, &portal, command);
+        assert!(!seen.contains("allow"), "{command}: {seen}");
+    }
+    assert_eq!(
+        decision(&home, &portal, "du -h -d2 -d1 ../../app-portal-fix"),
+        "allow"
+    );
+}
+
 #[test]
 fn du_keeps_the_ls_decision_for_secret_and_absent_paths() {
     let home = home();
@@ -112,7 +150,7 @@ fn du_keeps_the_ls_decision_for_secret_and_absent_paths() {
     ] {
         let listing = decision(&home, &portal, &format!("ls -ld {target}"));
         let sizes = decision(&home, &portal, &format!("du -sh {target}"));
-        assert_ne!(sizes, "allow", "{target}");
+        assert!(!sizes.contains("allow"), "{target}: {sizes}");
         assert_eq!(sizes == "allow", listing == "allow", "{target}");
     }
 }
@@ -142,7 +180,11 @@ fn unproven_sibling_sizes_still_ask() {
             format!("du -sh --exclude-from={sibling}/list.txt {sibling}"),
         ),
         (&portal, "du -shL ../../app-portal-fix".to_owned()),
-        (&portal, "du -h -d 1 ../../app-portal-fix".to_owned()),
+        (&portal, "du -h -d 2 ../../app-portal-fix".to_owned()),
+        (&portal, "du -h ../../app-portal-fix".to_owned()),
+        (&portal, "du -sah ../../app-portal-fix".to_owned()),
+        (&portal, "du -h -d 1 ../../app-portal-fix/.cache".to_owned()),
+        (&org, "du -h -d 1 ~/.ssh".to_owned()),
         (&portal, "du -sh -".to_owned()),
         (
             &org,
@@ -150,6 +192,7 @@ fn unproven_sibling_sizes_still_ask() {
         ),
         (&org, "du -sh ~/.ssh".to_owned()),
     ] {
-        assert_ne!(decision(&home, cwd, &command), "allow", "{command}");
+        let seen = decision(&home, cwd, &command);
+        assert!(!seen.contains("allow"), "{command}: {seen}");
     }
 }
