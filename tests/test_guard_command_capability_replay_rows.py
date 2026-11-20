@@ -81,3 +81,11 @@ def test_a_malformed_job_keeps_every_row_for_the_runtime_to_refuse(tmp_path: Pat
     assert naming(["job-1"]) == rows
     assert naming({"id": " job-1 ", "idempotencyKey": 7}) == rows
     assert naming({"id": "job-2", "idempotencyKey": "key-2"}) == [rows[1]]
+
+
+def test_the_replay_lookup_receives_only_the_fields_it_filters_on() -> None:
+    job = {"id": "job-1", "idempotencyKey": "key-1", "payload": {"blob": "x" * 2_000_000}}
+
+    assert command_capability_module._replay_subject(job) == {"id": "job-1", "idempotencyKey": "key-1"}
+    assert command_capability_module._replay_subject({"payload": {}}) == {}
+    assert command_capability_module._replay_subject("not-a-job") == "not-a-job"

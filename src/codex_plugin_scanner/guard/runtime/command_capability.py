@@ -257,6 +257,18 @@ def _binding_for_resident(store: GuardStore) -> tuple[str | None, str | None, st
     return device_id, workspace_id, None
 
 
+def _replay_subject(subject: object) -> object:
+    """Send the replay lookup only the fields it filters on.
+
+    A job payload can be far larger than the ledger's request limit, and the
+    lookup reads nothing but the job id and the idempotency key.
+    """
+
+    if not isinstance(subject, Mapping):
+        return subject
+    return {key: subject[key] for key in ("id", "idempotencyKey") if key in subject}
+
+
 def _capability_verdict(
     store: GuardStore,
     *,
@@ -285,7 +297,7 @@ def _capability_verdict(
                 store,
                 "replay_rows",
                 now=current,
-                subject=dict(subject) if isinstance(subject, Mapping) else subject,
+                subject=_replay_subject(subject),
             )
         )
         if subject is not None

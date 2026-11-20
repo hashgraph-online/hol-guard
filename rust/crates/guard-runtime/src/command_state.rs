@@ -27,7 +27,7 @@ use crate::sync_state_ledger::{
 };
 
 pub(crate) const COMMAND: &str = "command-state";
-pub(crate) const FEATURE: &str = "native-command-state-v1";
+pub(crate) const FEATURE: &str = "native-command-state-v2";
 const SCHEMA: &str = "command-state.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 
@@ -354,8 +354,6 @@ fn mark_consumed(conn: &Connection, request: &Request, now: i64) -> Result<Value
     Ok(Value::Null)
 }
 
-/// Python `==` over decoded JSON: an integer equals the same value written as
-/// a float, which `serde_json::Value` equality does not allow.
 /// `issue_command_capability`: installs a newly signed capability. A new
 /// capability never inherits a queue result, an active lease, a grant or a
 /// waiting job from the queue before it, so those go in the same
@@ -422,6 +420,8 @@ fn clear(conn: &Connection) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
+/// Python `==` over decoded JSON: an integer equals the same value written as
+/// a float, which `serde_json::Value` equality does not allow.
 fn py_equal(left: &Value, right: &Value) -> bool {
     match (left, right) {
         (Value::Number(left), Value::Number(right)) => match (left.as_f64(), right.as_f64()) {
