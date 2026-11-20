@@ -343,15 +343,27 @@ def run_authorized_contained_test(
                 raise _reject(receipt) from error
             raise
         return exit_code
+    # Authorize after planning so the live decision follows every file the
+    # planner read. Rust may still pick the workspace sandbox for this shape.
+    receipt = settled_authority(authorize, payload)
+    exit_code = run_workspace(receipt)
+    if exit_code is not None:
+        return exit_code
     # Native authority names the receipt this planned run must carry, from the
-    # same reason table the hook renders receipts with.
+    # same reason table the hook renders receipts with. A run the workspace
+    # sandbox took never needs it, so it is asked only once that sandbox declines.
     if inline_plan is not None:
         kind, plan_profile = "inline_eval", inline_plan.profile_version
     elif node_tool_plan is not None:
         kind, plan_profile = "node_tool", node_tool_plan.profile_version
+    elif git:
+        kind, plan_profile = "git", None
+    elif vitest:
+        kind, plan_profile = "vitest", None
+    elif node_test:
+        kind, plan_profile = "node_test", None
     else:
-        kind = "git" if git else "vitest" if vitest else "node_test" if node_test else "pytest"
-        plan_profile = None
+        kind, plan_profile = "pytest", None
     reason, profile = contained_expectation(kind, plan_profile, command)
 
     def required(response: object, *, expected_reason: str = reason, expected_profile: str = profile) -> bool:
@@ -364,12 +376,6 @@ def run_authorized_contained_test(
             and response.get("observe_mode") is not True
         )
 
-    # Authorize after planning so the live decision follows every file the
-    # planner read. Rust may still pick the workspace sandbox for this shape.
-    receipt = settled_authority(authorize, payload)
-    exit_code = run_workspace(receipt)
-    if exit_code is not None:
-        return exit_code
     if not required(
         receipt,
         expected_reason=PACKAGE_TEST_REASON if package_test else reason,

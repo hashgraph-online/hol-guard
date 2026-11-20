@@ -43,14 +43,16 @@ pub(crate) fn expectation(input: &Value) -> Result<Value, RestrictedPytestError>
         Some(Value::String(profile)) => Some(profile.as_str()),
         Some(_) => return Err(invalid()),
     };
-    let program = match fields.get("command") {
-        Some(Value::Array(words)) => match words.first() {
-            None => "",
-            Some(Value::String(word)) => program_name(word),
-            Some(_) => return Err(invalid()),
-        },
+    let words = match fields.get("command") {
+        Some(Value::Array(words)) if !words.is_empty() => words,
         _ => return Err(invalid()),
     };
+    let words = words
+        .iter()
+        .map(Value::as_str)
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(invalid)?;
+    let program = program_name(words[0]);
     let reason = reason(kind, plan_profile, program).ok_or_else(invalid)?;
     let profile = crate::hook_responses::contained_execution_profile(reason).ok_or_else(invalid)?;
     Ok(json!({"reason": reason, "profile": profile}))

@@ -146,6 +146,15 @@ fn a_malformed_request_is_refused() {
     assert!(refused(
         json!({"kind": "git", "plan_profile": null, "command": [1]})
     ));
+    assert!(refused(
+        json!({"kind": "git", "plan_profile": null, "command": []})
+    ));
+    assert!(refused(
+        json!({"kind": "git", "plan_profile": null, "command": ["git", 1]})
+    ));
+    assert!(!refused(
+        json!({"kind": "git", "plan_profile": null, "command": ["git", "diff"]})
+    ));
 }
 
 #[test]

@@ -210,6 +210,45 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
     assert calls[2][2]["home_dir"] == home
 
 
+def test_a_workspace_receipt_runs_without_asking_for_the_expected_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The workspace sandbox never needs the planned run's receipt, so it is never asked for.
+
+    A planned run that native authority routes to the workspace sandbox used to
+    reach it whatever the read-only table said. Asking for the expectation first
+    would refuse that run whenever the lookup failed.
+    """
+
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
+    asked: list[str] = []
+
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        asked.append(operation)
+        if operation == "contained_expectation":
+            raise RestrictedPytestError("native_restricted_unavailable", "no answer")
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
+        return dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool", "package_test"), False)
+
+    ran: list[object] = []
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sink, "receipt_matches", lambda receipt: True)
+    monkeypatch.setattr(sink, "run_workspace_contained", lambda *args, **kwargs: ran.append(kwargs) or 0)
+    monkeypatch.setattr(sink, "run_restricted_pytest", lambda *args, **kwargs: pytest.fail("read-only run started"))
+
+    assert (
+        sink.run_authorized_contained_test(
+            payload(), workspace=tmp_path, timeout_seconds=20, authorize=lambda original: {"decision": "deny"}
+        )
+        == 0
+    )
+    assert len(ran) == 1
+    assert "contained_expectation" not in asked
+
+
 @pytest.mark.parametrize("fresh_profile", ["node-test-readonly-v1", "pytest-readonly-v2", "wrong"])
 def test_node_requires_its_own_fresh_profile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fresh_profile: str

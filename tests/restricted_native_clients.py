@@ -6,7 +6,9 @@ clients keep the tests driving the resident's per-kind answers directly.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
+from pathlib import Path
 
 from codex_plugin_scanner.guard.native_restricted_pytest import restricted_native
 from codex_plugin_scanner.guard.runtime.restricted_package_test import KIND_NAMES
@@ -70,7 +72,11 @@ def contained_expectation_reply(fields: object) -> dict[str, str]:
     assert isinstance(fields, dict)
     kind, plan_profile, command = fields["kind"], fields["plan_profile"], fields["command"]
     if kind == "inline_eval" and plan_profile == "node-eval-readonly-v1":
-        program = str(command[0]).replace("\\", "/").rsplit("/", 1)[-1] if command else ""
+        # `contained_argv::program_name`: the platform's own file name, and an
+        # `.exe` suffix dropped only on Windows.
+        program = Path(str(command[0])).name if command else ""
+        if os.name == "nt" and len(program) > 4 and program[-4:].lower() == ".exe":
+            program = program[:-4]
         reason = (
             "native_bun_eval_readonly_containment_required"
             if program == "bun"
