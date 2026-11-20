@@ -449,6 +449,26 @@ fn answer(
             return Err(defer);
         }
     }
+    let exact_command_response = if exact_command_block && shell_action(&edge) {
+        let edge_answer = reviewed_edge(&edge, PRE_TOOL_USE)?;
+        let result = edge_answer
+            .get("result")
+            .and_then(Value::as_object)
+            .ok_or(HookDirectDefer::SavedDecision)?;
+        let context = saved_decision::Context {
+            harness: &request.harness,
+            payload: &saved_decision_payload,
+            recorded_payload: &evidence_payload,
+            workspace: &workspace,
+            home_dir: &request_home,
+            guard_home: &guard_home,
+            binding: &binding,
+            hint: None,
+        };
+        saved_decision::exact_command_block_response(&context, result)?
+    } else {
+        None
+    };
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
@@ -463,6 +483,11 @@ fn answer(
             },
             saved_payload.as_ref(),
         ) {
+            (Err(HookDirectDefer::NotAllow), Some(_)) if exact_command_response.is_some() => {
+                let mut answer = reviewed_edge(&edge, PRE_TOOL_USE)?;
+                answer["harness_response"] = exact_command_response.clone().unwrap();
+                answer
+            }
             // The daemon returns a saved decision's response as is.
             (Err(HookDirectDefer::NotAllow), Some(payload)) => {
                 let hint = saved_decision::HintScope {
@@ -483,7 +508,9 @@ fn answer(
             }
             (passed, _) => {
                 let mut answered = passed?;
-                if let Some(command) = sink_command.as_deref() {
+                if let Some(response) = exact_command_response.clone() {
+                    answered["harness_response"] = response;
+                } else if let Some(command) = sink_command.as_deref() {
                     let target = contained::SinkTarget {
                         command,
                         harness: &request.harness,
@@ -504,28 +531,6 @@ fn answer(
         POST_TOOL_USE => post_tool_answer(&edge)?,
         _ => prompt_answer(&edge)?,
     };
-    // The daemon checks exact shell-command blocks after the edge. The direct
-    // lane applies that same block before evidence is queued, while an
-    // unreadable store defers to the daemon's fail-closed lookup.
-    if exact_command_block && shell_action(&edge) {
-        let result = answered
-            .get("result")
-            .and_then(Value::as_object)
-            .ok_or(HookDirectDefer::SavedDecision)?;
-        let context = saved_decision::Context {
-            harness: &request.harness,
-            payload: &saved_decision_payload,
-            recorded_payload: &evidence_payload,
-            workspace: &workspace,
-            home_dir: &request_home,
-            guard_home: &guard_home,
-            binding: &binding,
-            hint: None,
-        };
-        if let Some(response) = saved_decision::exact_command_block_response(&context, result)? {
-            answered["harness_response"] = response;
-        }
-    }
     // Not part of the hook's answer: the drain raises it with the evidence.
     let connector_notice = answered
         .as_object_mut()

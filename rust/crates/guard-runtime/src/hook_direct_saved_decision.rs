@@ -37,25 +37,15 @@
 use super::local_cli::block::ReviewVerdict;
 use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
 use crate::connector_setup::grant_lifts;
-use crate::local_store_read::{
-    open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
-};
-use crate::policy_bundle_store_identities::{cached_bundle_authority, BundleAuthority};
+use crate::local_store_read::{open_read_only, STORE_FILE_NAME};
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use crate::policy_store::PolicySnapshotStore;
-use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_command::hook_responses::{pre_tool, Object};
-use guard_contracts::{
-    PolicyDecisionLookupRequestV1, HOOK_RENDER_MAX_BYTES, NATIVE_EXACT_ACTION_MAX_BYTES,
-    POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
-};
-use guard_policy_snapshot::policy_integrity::is_remote_policy_source;
-use rusqlite::{Connection, OptionalExtension};
+use guard_contracts::{HOOK_RENDER_MAX_BYTES, NATIVE_EXACT_ACTION_MAX_BYTES};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Instant;
-use zeroize::Zeroizing;
 
 const REVIEW_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
 /// `GUARD_CONTROL_ACTION_TYPES` and `package`: never lifted by a broad grant.
@@ -66,9 +56,6 @@ const NON_OVERRIDABLE_ACTION_TYPES: [&str; 5] = [
     "guard-control-operation",
     "package",
 ];
-/// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
-const REMOTE_SOURCES_SQL: &str = "('cloud-sync', 'team-policy', 'policy-bundle', \
-     'policy-bundle-canonical', 'cloud-signed-memory')";
 const SAVED_BLOCK_REASON_CODE: &str = "saved_exact_action_block";
 const SAVED_BLOCK_REASON: &str = "You chose to always block this exact action in HOL Guard.";
 /// The worst-case growth of a request on the daemon's wire, where every byte
@@ -266,85 +253,7 @@ fn saved_response(
     result: &Object,
     token: &str,
 ) -> Result<Option<Value>, HookDirectDefer> {
-    let binding = context.binding;
-    let (Some(integrity), Some(key)) = (
-        binding.policy_integrity_state.as_ref(),
-        binding.integrity_key.as_ref(),
-    ) else {
-        return Err(HookDirectDefer::SavedDecision);
-    };
-    if integrity.enforcement != "enforce"
-        || integrity.mode != "protected"
-        || !integrity.cutover_complete
-        || !integrity.degraded_reasons.is_empty()
-        || integrity.generation.is_none()
-        || integrity.key_id.as_deref() != Some(key.key_id.as_str())
-    {
-        return Err(HookDirectDefer::SavedDecision);
-    }
-    let integrity_state =
-        serde_json::to_value(integrity).map_err(|_| HookDirectDefer::SavedDecision)?;
-    let Some(has_local_policy) = store.readable(&integrity_state)? else {
-        return Err(HookDirectDefer::SavedDecision);
-    };
-    let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
-    let (bundle_identities, _) = store.bundle_authority(&now)?;
-    let composition = portable::composition(context.workspace)?;
-    let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
-    let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
-    let request = PolicyDecisionLookupRequestV1 {
-        schema: POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
-        request_id: String::new(),
-        store_path: store_path.to_string_lossy().into_owned(),
-        guard_home: context.guard_home.to_owned(),
-        harness: context.harness.to_owned(),
-        artifact_id: Some(store.artifact_id.to_owned()),
-        artifact_hash: Some(token.to_owned()),
-        workspace: Some(context.workspace.to_owned()),
-        publisher: None,
-        now,
-        runtime_exact_match_context: None,
-        consume_one_shot: false,
-        local_once_only: false,
-        integrity_state: Some(if has_local_policy {
-            integrity_state
-        } else {
-            json!({})
-        }),
-        integrity_key_b64: has_local_policy.then(|| key_b64.to_string()),
-        integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
-        local_once_integrity_key_b64: Some(key_b64.to_string()),
-        local_once_integrity_key_id: Some(key.key_id.clone()),
-        policy_bundle_decision_identities: (!bundle_identities.is_empty())
-            .then_some(bundle_identities),
-        // The lookup lifts Cloud-excepted bundle rules itself; the local and
-        // portable probes both match exceptions on the checkout path.
-        exception_workspace: Some(context.workspace.to_owned()),
-        cloud_exception_bundle: Default::default(),
-        probe_groups: None,
-        portable_workspace: None,
-        evidence_binding: None,
-    };
-    let lookup = |workspace: &str| {
-        let request = PolicyDecisionLookupRequestV1 {
-            workspace: Some(workspace.to_owned()),
-            ..request.clone()
-        };
-        crate::policy_decision_lookup_op::evaluate_non_consuming(&request, store.connection)
-            .map_err(|_| HookDirectDefer::SavedDecision)
-    };
-    // A workspace that already names its identity reads that lookup alone, so
-    // the local lookup is never run for it: it would answer nothing, and a row
-    // it matched with invalid integrity would defer the hook over an audit
-    // write this read-only connection cannot take.
-    let lookup = match composition {
-        portable::Composition::Local => lookup(context.workspace)?,
-        portable::Composition::Named(identity) => portable::restrictive_only(lookup(&identity)?),
-        portable::Composition::Both(identity) => {
-            let local = lookup(context.workspace)?;
-            portable::compose(local, lookup(&identity)?)?
-        }
-    };
+    let lookup = lookup::policy_lookup(context, store.connection, store.artifact_id, Some(token))?;
     match saved_verdict(result, &lookup, store.artifact_id, token) {
         Some((verdict, status)) => render(context.harness, &verdict, status)
             .map(Some)
@@ -353,154 +262,11 @@ fn saved_response(
     }
 }
 
-/// Apply a stored block for the exact shell command the daemon would check
-/// after the edge. The direct lane uses the same integrity-bound lookup as an
-/// exact-action decision, while leaving a missing or unreadable store to the
-/// daemon's fail-closed path.
 pub(super) fn exact_command_block_response(
     context: &Context<'_>,
     result: &Object,
 ) -> Result<Option<Value>, HookDirectDefer> {
-    let Some(command) = crate::local_store_read::pre_tool_command(context.payload) else {
-        return Ok(None);
-    };
-    let candidates = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
-        command: Some(command),
-        artifact_type: Some("shell_command"),
-        artifact_id: None,
-        artifact_name: None,
-        harness: None,
-    });
-    let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
-    let connection = open_read_only(&store_path)
-        .map_err(|_| HookDirectDefer::SavedDecision)?
-        .ok_or(HookDirectDefer::SavedDecision)?;
-    for artifact_id in candidates.exact_artifact_ids {
-        let lookup = exact_command_lookup(context, &connection, &artifact_id)?;
-        let Some(decision) = lookup.get("decision").and_then(Value::as_object) else {
-            continue;
-        };
-        if decision.get("scope").and_then(Value::as_str) != Some("artifact")
-            || decision.get("artifact_id").and_then(Value::as_str) != Some(artifact_id.as_str())
-            || decision.get("action").and_then(Value::as_str) != Some("block")
-        {
-            continue;
-        }
-        let remote = is_remote_policy_source(decision.get("source").and_then(Value::as_str));
-        let mut blocked = result.clone();
-        blocked.insert("decision".to_owned(), json!("deny"));
-        blocked.insert("minimum_action".to_owned(), json!("block"));
-        blocked.insert("policy_action".to_owned(), json!("block"));
-        blocked.insert(
-            "reason_code".to_owned(),
-            json!(if remote {
-                "policy_exact_command_block"
-            } else {
-                "saved_exact_command_block"
-            }),
-        );
-        blocked.insert(
-            "reason".to_owned(),
-            json!(if remote {
-                "Your Guard Cloud policy blocks this exact command. Do not retry it; continue with a permitted alternative."
-            } else {
-                "You chose to always block this exact command in HOL Guard. Do not retry it; continue with a permitted alternative."
-            }),
-        );
-        return render(context.harness, &blocked, "blocked")
-            .map(Some)
-            .ok_or(HookDirectDefer::SavedDecision);
-    }
-    Ok(None)
-}
-
-fn exact_command_lookup(
-    context: &Context<'_>,
-    connection: &Connection,
-    artifact_id: &str,
-) -> Result<Value, HookDirectDefer> {
-    let binding = context.binding;
-    let (Some(integrity), Some(key)) = (
-        binding.policy_integrity_state.as_ref(),
-        binding.integrity_key.as_ref(),
-    ) else {
-        return Err(HookDirectDefer::SavedDecision);
-    };
-    if integrity.enforcement != "enforce"
-        || integrity.mode != "protected"
-        || !integrity.cutover_complete
-        || !integrity.degraded_reasons.is_empty()
-        || integrity.generation.is_none()
-        || integrity.key_id.as_deref() != Some(key.key_id.as_str())
-    {
-        return Err(HookDirectDefer::SavedDecision);
-    }
-    let integrity_state =
-        serde_json::to_value(integrity).map_err(|_| HookDirectDefer::SavedDecision)?;
-    let store = StoreShape {
-        connection,
-        harness: context.harness,
-        artifact_id,
-    };
-    let Some(has_local_policy) = store.readable(&integrity_state)? else {
-        return Err(HookDirectDefer::SavedDecision);
-    };
-    let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
-    let (bundle_identities, _) = store.bundle_authority(&now)?;
-    let composition = portable::composition(context.workspace)?;
-    let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
-    let request = PolicyDecisionLookupRequestV1 {
-        schema: POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
-        request_id: String::new(),
-        store_path: Path::new(context.guard_home)
-            .join(STORE_FILE_NAME)
-            .to_string_lossy()
-            .into_owned(),
-        guard_home: context.guard_home.to_owned(),
-        harness: context.harness.to_owned(),
-        artifact_id: Some(artifact_id.to_owned()),
-        artifact_hash: None,
-        workspace: Some(context.workspace.to_owned()),
-        publisher: None,
-        now,
-        runtime_exact_match_context: None,
-        consume_one_shot: false,
-        local_once_only: false,
-        integrity_state: Some(if has_local_policy {
-            integrity_state
-        } else {
-            json!({})
-        }),
-        integrity_key_b64: has_local_policy.then(|| key_b64.to_string()),
-        integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
-        local_once_integrity_key_b64: Some(key_b64.to_string()),
-        local_once_integrity_key_id: Some(key.key_id.clone()),
-        policy_bundle_decision_identities: (!bundle_identities.is_empty())
-            .then_some(bundle_identities),
-        exception_workspace: Some(context.workspace.to_owned()),
-        cloud_exception_bundle: Default::default(),
-        probe_groups: None,
-        portable_workspace: None,
-        evidence_binding: None,
-    };
-    let lookup = |workspace: &str| {
-        let request = PolicyDecisionLookupRequestV1 {
-            workspace: Some(workspace.to_owned()),
-            ..request.clone()
-        };
-        crate::policy_decision_lookup_op::evaluate_non_consuming(&request, connection)
-            .map_err(|_| HookDirectDefer::SavedDecision)
-    };
-    match composition {
-        portable::Composition::Local => lookup(context.workspace),
-        portable::Composition::Named(identity) => {
-            Ok(portable::restrictive_only(lookup(&identity)?))
-        }
-        portable::Composition::Both(identity) => {
-            let local = lookup(context.workspace)?;
-            portable::compose(local, lookup(&identity)?)
-        }
-    }
+    exact_command::exact_command_block_response(context, result)
 }
 
 /// `native_saved_decision_response` after its lookup: the verdict to render
@@ -625,107 +391,7 @@ fn truthy(value: Option<&Value>) -> bool {
     }
 }
 
-/// The store, as the daemon's lookup would read it.
-struct StoreShape<'a> {
-    connection: &'a Connection,
-    harness: &'a str,
-    artifact_id: &'a str,
-}
-
-impl StoreShape<'_> {
-    /// Whether the daemon reads this store's decisions as the resident does:
-    /// a schema it supports.
-    fn supported(&self) -> Result<bool, HookDirectDefer> {
-        let unavailable = |_| HookDirectDefer::SavedDecision;
-        Ok(matches!(
-            schema_version(self.connection).map_err(unavailable)?,
-            Some(version) if version <= SUPPORTED_SCHEMA_VERSION
-        ))
-    }
-
-    /// Whether the store holds any custom grant or block rule.
-    fn grants(&self) -> Result<bool, HookDirectDefer> {
-        let unavailable = |_| HookDirectDefer::SavedDecision;
-        for table in ["local_cli_grant", "local_cli_command_grant"] {
-            if table_exists(self.connection, table).map_err(unavailable)?
-                && self.any(&format!("select 1 from {table} limit 1"), &[])?
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-
-    /// The daemon's decision probe for `token`, or for any token when the
-    /// resident could not derive one.
-    fn decided(&self, token: Option<&str>) -> Result<bool, HookDirectDefer> {
-        let artifact = "select 1 from policy_decisions where harness in (?1, '*') \
-                        and scope = 'artifact' and artifact_id = ?2";
-        match token {
-            Some(token) => self.any(
-                &format!("{artifact} and artifact_hash = ?3 limit 1"),
-                &[self.harness, self.artifact_id, token],
-            ),
-            None => self.any(
-                &format!("{artifact} limit 1"),
-                &[self.harness, self.artifact_id],
-            ),
-        }
-    }
-
-    /// Whether the store holds a local decision, when the daemon's lookup
-    /// reads it under the published integrity state: the published state is
-    /// still stored. `None` otherwise.
-    /// Portable decisions are read through the workspace's identity
-    /// (`portable::composition`).
-    fn readable(&self, integrity_state: &Value) -> Result<Option<bool>, HookDirectDefer> {
-        let has_local_policy = self.any(
-            &format!(
-                "select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL} limit 1"
-            ),
-            &[],
-        )?;
-        let stored: Option<String> = self
-            .connection
-            .query_row(
-                "select payload_json from sync_state where state_key = 'policy_integrity'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|_| HookDirectDefer::SavedDecision)?;
-        let stored = stored.and_then(|text| serde_json::from_str::<Value>(&text).ok());
-        Ok((stored.as_ref() == Some(integrity_state)).then_some(has_local_policy))
-    }
-
-    /// The decision identities the cached signed bundle authorizes at `now`,
-    /// which keep or drop a policy-bundle row, and the bundle they came from;
-    /// empty when the store holds no such row. A bundle the resident cannot
-    /// judge as the daemon would defers.
-    fn bundle_authority(&self, now: &str) -> Result<BundleAuthority, HookDirectDefer> {
-        if !self.any(
-            "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
-            &[],
-        )? {
-            return Ok((Vec::new(), None));
-        }
-        #[cfg(test)]
-        if let Some(authority) =
-            crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|bundle| bundle.borrow().clone())
-        {
-            return Ok(authority);
-        }
-        cached_bundle_authority(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
-    }
-
-    fn any(&self, query: &str, values: &[&str]) -> Result<bool, HookDirectDefer> {
-        self.connection
-            .query_row(query, rusqlite::params_from_iter(values.iter()), |_| Ok(()))
-            .optional()
-            .map(|found| found.is_some())
-            .map_err(|_| HookDirectDefer::SavedDecision)
-    }
-}
+use store::StoreShape;
 
 #[path = "hook_direct_saved_query.rs"]
 mod query;
@@ -735,6 +401,15 @@ pub(crate) mod consume;
 
 #[path = "hook_direct_saved_portable.rs"]
 mod portable;
+
+#[path = "hook_direct_saved_store.rs"]
+mod store;
+
+#[path = "hook_direct_saved_lookup.rs"]
+mod lookup;
+
+#[path = "hook_direct_saved_exact_command.rs"]
+mod exact_command;
 
 // Read once the direct lane queues a reviewed `PreToolUse` itself.
 #[path = "hook_direct_review_request.rs"]
