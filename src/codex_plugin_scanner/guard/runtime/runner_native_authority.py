@@ -415,8 +415,9 @@ def policy_shadow_source(
     """Which stored bundle shadows a v2 candidate, and whether it only evaluates.
 
     Answers ``"stored"``, ``"existing"`` or ``None`` for the shadow. Only the
-    stored bundles' version and issue time travel: two more whole bundles
-    would not fit one request.
+    fields the choice reads travel: each bundle's version and issue time, and
+    the candidate's default mode. Whole bundles, escaped for transport, could
+    outgrow one request even when each passed bundle validation.
     """
 
     def header(bundle: object) -> dict[str, object] | None:
@@ -424,9 +425,15 @@ def policy_shadow_source(
             return None
         return {key: bundle[key] for key in ("contractVersion", "issuedAt") if key in bundle}
 
+    candidate_fields: dict[str, object] = header(dict(candidate)) or {}
+    payload_field = candidate.get("payload")
+    spec = payload_field.get("spec") if isinstance(payload_field, dict) else None
+    defaults = spec.get("defaults") if isinstance(spec, dict) else None
+    if isinstance(defaults, dict) and "mode" in defaults:
+        candidate_fields["payload"] = {"spec": {"defaults": {"mode": defaults["mode"]}}}
     payload = native_runner_authority(
         "policy_shadow_source",
-        {"candidate": dict(candidate), "stored_legacy": header(stored_legacy), "existing": header(existing)},
+        {"candidate": candidate_fields, "stored_legacy": header(stored_legacy), "existing": header(existing)},
     )
     source = _typed(payload, "legacy", str, nullable=True)
     if source not in (None, "stored", "existing"):
