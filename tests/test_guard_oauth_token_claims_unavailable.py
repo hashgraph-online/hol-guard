@@ -54,6 +54,17 @@ def test_a_rotated_credential_keeps_its_saved_binding() -> None:
 
 
 @pytest.mark.usefixtures("unavailable")
+def test_a_new_access_token_never_inherits_the_previous_binding() -> None:
+    credentials: dict[str, object] = {"grant_id": "grant-1", "machine_id": "machine-1", "workspace_id": "ws-1"}
+    binding = oauth_token_claims.oauth_effective_binding(
+        credentials,
+        access_token=_token({"grant": {"grantId": "grant-2"}}),
+        issuer="https://issuer.test",
+    )
+    assert binding == {"device_id": None, "grant_id": None, "machine_id": None, "workspace_id": None}
+
+
+@pytest.mark.usefixtures("unavailable")
 def test_credential_recovery_reads_no_binding_and_expiry_lookup_raises() -> None:
     token = _token({"exp": 1})
     assert oauth_token_claims.oauth_binding_metadata(token, issuer="https://issuer.test") == {}

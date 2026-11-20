@@ -103,8 +103,12 @@ def oauth_effective_binding(
 
     A freshly issued ``access_token`` replaces the saved fields; otherwise the
     saved fields stay and the saved token only fills gaps. When the native
-    answer is unavailable the saved fields stay as they are, so a refresh never
-    loses the rotated refresh token over a claim lookup.
+    answer is unavailable the rotated refresh token is still saved, so a
+    refresh never loses it over a claim lookup. The saved fields stay only when
+    no new token arrived: a new token's binding was never read, so its fields
+    stay empty and the next sync recovers them through
+    ``oauth_binding_from_credentials`` rather than pairing the new token with
+    the previous token's binding.
     """
 
     refreshed = access_token is not None
@@ -117,7 +121,7 @@ def oauth_effective_binding(
         refreshed=refreshed,
     )
     if answer is None:
-        saved = _saved_binding(credentials)
+        saved = {} if refreshed else _saved_binding(credentials)
         return {key: saved.get(key) for key in _BINDING_KEYS}
     binding = _strings(answer.get("binding"))
     return {key: binding.get(key) for key in _BINDING_KEYS}
