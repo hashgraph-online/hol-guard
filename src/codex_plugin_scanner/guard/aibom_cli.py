@@ -316,7 +316,7 @@ def sync_aibom_snapshots(
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
-        except OSError as error:
+        except (OSError, RuntimeError) as error:
             failure_summary = {
                 "synced": False,
                 "synced_at": synced_at,

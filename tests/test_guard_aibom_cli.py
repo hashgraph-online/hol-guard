@@ -984,7 +984,7 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
     assert backoff.get("accepted") == 0
 
 
-@pytest.mark.parametrize("failure_kind", ("http", "network"))
+@pytest.mark.parametrize("failure_kind", ("http", "network", "native"))
 def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1032,6 +1032,8 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
                 hdrs=Message(),
                 fp=None,
             )
+        if failure_kind == "native":
+            raise RuntimeError("Guard Cloud request did not finish.")
         raise OSError("network unavailable")
 
     monkeypatch.setattr(aibom_cli, "_batch_inventory_events", plan_mixed_snapshots)
