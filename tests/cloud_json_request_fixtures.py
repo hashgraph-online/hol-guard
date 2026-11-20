@@ -48,3 +48,18 @@ def _command_lease_over_command_queue(request: pytest.FixtureRequest, monkeypatc
     from tests.support.command_lease_transport import command_lease_over_command_queue
 
     monkeypatch.setattr(cloud_command_lease, "cloud_command_lease", command_lease_over_command_queue)
+
+
+@pytest.fixture(autouse=True)
+def _command_report_over_command_queue(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send Guard command acks and results through the command queue request functions a test fakes.
+
+    Mark a test ``native_command_report`` to send them with the native command.
+    """
+
+    if request.node.get_closest_marker("native_command_report") is not None:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_command_lease
+    from tests.support.command_report_transport import command_report_over_command_queue
+
+    monkeypatch.setattr(cloud_command_lease, "cloud_command_report", command_report_over_command_queue)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import urllib.error
@@ -43,7 +44,6 @@ from .command_queue_authorization import start_command_authorization, start_over
 from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, start_review_drains, with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
-from .command_queue_http import request_json as _json_request
 from .command_queue_lease_ready import lane_lease_ready_operations
 from .command_queue_loop import (
     COMMAND_QUEUE_ERROR_BACKOFF_ENV,  # noqa: F401 - public compatibility export
@@ -78,7 +78,6 @@ from .command_queue_state import record_exact_route_failure as _record_exact_rou
 from .command_queue_state import save_command_queue_state as _save_state
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
-    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     exact_cloud_review_operations,
 )
 from .exact_cloud_review_transport import (
@@ -146,6 +145,13 @@ def _exact_json_request(
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
+    """POST ``payload`` below the exact Cloud Review route.
+
+    The native runtime sends the queue's leases, acks and results itself. This
+    and ``_json_request`` remain the per-route requests the unit-test doubles
+    replay those native calls over (``tests/support/command_lease_transport.py``).
+    """
+
     return request_json(
         auth_context, method=method, path=path, payload=payload, base_path=EXACT_CLOUD_REVIEW_COMMAND_API_BASE
     )
@@ -179,17 +185,27 @@ def _review_connection_scope(store: GuardStore, job: dict[str, object]) -> Abstr
 
 
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
-    request = _exact_json_request if uses_exact_transport(job) else _json_request
-    path = f"/{_job_id(job)}/ack" if uses_exact_transport(job) else f"/{_job_id(job)}/heartbeat"
-    payload: dict[str, object] = {"leaseId": _lease_id(job)}
-    if uses_exact_transport(job):
-        payload["protocolVersion"] = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    request(auth_context, method="POST", path=path, payload=payload)
+    """Ack the leased ``job``: the native runtime picks its route, path and body."""
+
+    from . import cloud_command_lease
+
+    cloud_command_lease.cloud_command_report(
+        auth_context, job_id=_job_id(job), exact=uses_exact_transport(job), kind="ack", lease_id=_lease_id(job)
+    )
 
 
 def _post_result(auth_context: dict[str, object], job: dict[str, object], payload: dict[str, object]) -> None:
-    request = _exact_json_request if uses_exact_transport(job) else _json_request
-    request(auth_context, method="POST", path=f"/{_job_id(job)}/result", payload=payload)
+    """Send ``job``'s result on the route it was leased on, through the native runtime."""
+
+    from . import cloud_command_lease
+
+    cloud_command_lease.cloud_command_report(
+        auth_context,
+        job_id=_job_id(job),
+        exact=uses_exact_transport(job),
+        kind="result",
+        body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+    )
 
 
 def _lease_next_job(

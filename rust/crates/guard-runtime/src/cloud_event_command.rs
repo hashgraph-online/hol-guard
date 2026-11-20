@@ -10,6 +10,7 @@ use serde_json::{json, Map, Value};
 use crate::cloud_bundle_command::{failure, store_for};
 use crate::cloud_bundle_fetch::{brokered, SyncError};
 use crate::cloud_command_lease::{lease, LeaseCall};
+use crate::cloud_command_report::{report, ReportCall};
 use crate::cloud_event_sync::{event_store, sync_guard_events};
 use crate::cloud_json_request::{send, JsonRequest};
 use crate::cloud_oauth_refresh::{refresh, RefreshCall};
@@ -30,6 +31,8 @@ pub(crate) const OAUTH_REFRESH_FEATURE: &str = "cloud-oauth-refresh-v1";
 pub(crate) const OAUTH_REFRESH_CIRCUIT_FEATURE: &str = "cloud-oauth-refresh-circuit-v1";
 /// The `command_lease` action.
 pub(crate) const COMMAND_LEASE_FEATURE: &str = "cloud-command-lease-v1";
+/// The `command_report` action.
+pub(crate) const COMMAND_REPORT_FEATURE: &str = "cloud-command-report-v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -51,6 +54,9 @@ struct Request {
     /// What the caller asked to lease for `command_lease`.
     #[serde(default)]
     command_lease: Option<LeaseCall>,
+    /// The job ack or result the caller asked to send for `command_report`.
+    #[serde(default)]
+    command_report: Option<ReportCall>,
     /// What the caller built for `oauth_refresh`.
     #[serde(default)]
     oauth_refresh: Option<RefreshCall>,
@@ -74,6 +80,8 @@ enum Action {
     Request,
     /// Lease the next Guard Cloud command job, exact Review jobs first.
     CommandLease,
+    /// Ack a leased Guard Cloud command job or send its result.
+    CommandReport,
     /// One refresh-token exchange for a grant the caller owns.
     OauthRefresh,
     /// Read or record the refresh circuit for the stored grant.
@@ -98,6 +106,12 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
             Some(call) => brokered(|| lease(request.auth_context.as_ref(), call)),
             None => Err(SyncError::Failed(
                 "The Guard command lease is missing.".to_owned(),
+            )),
+        },
+        Action::CommandReport => match &request.command_report {
+            Some(call) => brokered(|| report(request.auth_context.as_ref(), call)),
+            None => Err(SyncError::Failed(
+                "The Guard command report is missing.".to_owned(),
             )),
         },
         Action::OauthRefresh => match &request.oauth_refresh {
@@ -146,6 +160,7 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
                 },
                 Action::Request
                 | Action::CommandLease
+                | Action::CommandReport
                 | Action::OauthRefresh
                 | Action::OauthRefreshCircuit => Err(SyncError::Failed(
                     "The Guard Cloud request is missing.".to_owned(),
@@ -177,6 +192,17 @@ mod tests {
         assert_eq!(
             answer["error"],
             json!("The Guard Cloud request is missing.")
+        );
+    }
+
+    #[test]
+    fn a_report_without_its_call_is_a_failure() {
+        let answer =
+            run_command(b"{\"guardHome\": \"/nonexistent\", \"action\": \"command_report\"}");
+        assert_eq!(answer["ok"], json!(false));
+        assert_eq!(
+            answer["error"],
+            json!("The Guard command report is missing.")
         );
     }
 

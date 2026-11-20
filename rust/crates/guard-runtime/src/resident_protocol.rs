@@ -113,6 +113,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::cloud_event_command::RECEIPTS_FEATURE.into(),
         crate::cloud_event_command::REQUEST_FEATURE.into(),
         crate::cloud_event_command::COMMAND_LEASE_FEATURE.into(),
+        crate::cloud_event_command::COMMAND_REPORT_FEATURE.into(),
         crate::cloud_event_command::OAUTH_REFRESH_FEATURE.into(),
         crate::cloud_event_command::OAUTH_REFRESH_CIRCUIT_FEATURE.into(),
         crate::plugin_telemetry_host::FEATURE.into(),
