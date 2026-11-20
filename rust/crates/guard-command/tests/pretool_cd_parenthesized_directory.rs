@@ -80,8 +80,8 @@ fn a_read_below_a_parenthesized_directory_keeps_its_proof() {
         format!("cd \"{group_text}\" && pwd"),
         format!("cd \"{group_text}\" && ls"),
         format!("cd \"{group_text}\" && head -40 page.tsx"),
-        format!("cd \"app/(marketing)/challenge\" && pwd"),
-        format!("cd app/\\(marketing\\)/challenge && pwd"),
+        "cd \"app/(marketing)/challenge\" && pwd".to_owned(),
+        "cd app/\\(marketing\\)/challenge && pwd".to_owned(),
     ] {
         assert_eq!(shell(home_text, &cwd, &command), "allow", "{command}");
     }
