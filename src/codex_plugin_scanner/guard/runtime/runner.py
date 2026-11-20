@@ -1606,18 +1606,25 @@ def _refresh_guard_oauth_access_token_once(
         raise GuardSyncNotAvailableError(_guard_runtime_upgrade_restart_message(), retryable=True)
     from . import cloud_bundle_sync
 
-    answer = cloud_bundle_sync.cloud_oauth_refresh(
-        {
-            "tokenEndpoint": token_endpoint,
-            "clientId": client_id,
-            "refreshToken": refresh_token,
-            "dpopKey": {
-                "privateKeyPem": dpop_key_material.private_key_pem,
-                "publicJwk": dict(dpop_key_material.public_jwk),
-                "algorithm": dpop_key_material.algorithm,
-            },
-        }
-    )
+    try:
+        answer = cloud_bundle_sync.cloud_oauth_refresh(
+            {
+                "tokenEndpoint": token_endpoint,
+                "clientId": client_id,
+                "refreshToken": refresh_token,
+                "dpopKey": {
+                    "privateKeyPem": dpop_key_material.private_key_pem,
+                    "publicJwk": dict(dpop_key_material.public_jwk),
+                    "algorithm": dpop_key_material.algorithm,
+                },
+            }
+        )
+    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError):
+        raise
+    except RuntimeError as error:
+        # The native runtime was missing or did not answer: an outage the
+        # caller retries, not a refusal of this grant.
+        raise GuardSyncNotAvailableError(str(error), retryable=True) from error
     payload = _refreshed_oauth_payload(answer)
     access_token = _optional_string(payload.get("access_token"))
     token_type = _optional_string(payload.get("token_type"))

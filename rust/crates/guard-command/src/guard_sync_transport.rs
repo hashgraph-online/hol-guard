@@ -106,7 +106,16 @@ fn issuer_origin(issuer: &str) -> Result<String, String> {
 fn origin_host(origin: &str) -> String {
     url::Url::parse(origin)
         .ok()
-        .and_then(|u| u.host_str().map(str::to_owned))
+        .and_then(|u| {
+            u.host_str()
+                // An IPv6 host keeps its brackets in `host_str`; Python's
+                // `hostname` drops them, so `[::1]` compares as `::1`.
+                .map(|host| {
+                    host.trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .to_owned()
+                })
+        })
         .unwrap_or_default()
         .to_lowercase()
 }

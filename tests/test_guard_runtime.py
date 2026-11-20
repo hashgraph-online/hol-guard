@@ -20178,7 +20178,7 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    with pytest.raises(RuntimeError, match="oauth upstream down") as error:
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
         guard_runner_module.sync_runtime_session(
             store,
             session={
@@ -20197,6 +20197,7 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
             },
         )
 
+    assert error.value.retryable is True
     assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
 
 

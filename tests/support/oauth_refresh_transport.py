@@ -34,11 +34,14 @@ def _invalid_grant(payload: object) -> bool:
     )
 
 
-def _error_reason(error: urllib.error.HTTPError) -> str:
+def _error_body(error: urllib.error.HTTPError) -> str:
     try:
-        raw_body = error.read().decode("utf-8")
+        return error.read().decode("utf-8")
     except OSError:
-        raw_body = ""
+        return ""
+
+
+def _error_reason(error: urllib.error.HTTPError, raw_body: str) -> str:
     try:
         payload = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
@@ -98,7 +101,11 @@ def cloud_oauth_refresh_over_urllib(call: Mapping[str, object]) -> dict[str, obj
             with network.managed_urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
                 raw = response.read()
         except urllib.error.HTTPError as error:
-            payload = runner._http_error_payload(error) if error.code in {400, 401, 403, 429} else None
+            raw_body = _error_body(error)
+            try:
+                payload = json.loads(raw_body) if raw_body else None
+            except json.JSONDecodeError:
+                payload = None
             challenge = runner._dpop_nonce_from_http_error(error, payload)
             if challenge is not None and challenge != nonce and nonce_retries < _MAX_NONCE_RETRIES:
                 nonce = challenge
@@ -113,10 +120,10 @@ def cloud_oauth_refresh_over_urllib(call: Mapping[str, object]) -> dict[str, obj
             if error.code in {400, 401, 403}:
                 if _invalid_grant(payload):
                     return {"outcome": "dead_grant"}
-                return {"outcome": "rejected", "reason": _error_reason(error)}
+                return {"outcome": "rejected", "reason": _error_reason(error, raw_body)}
             if error.code in {502, 503, 504}:
-                return {"outcome": "unreachable", "reason": _error_reason(error)}
-            return {"outcome": "failed", "reason": _error_reason(error)}
+                return {"outcome": "unreachable", "reason": _error_reason(error, raw_body)}
+            return {"outcome": "failed", "reason": _error_reason(error, raw_body)}
         except OSError as error:
             if runner._is_guard_cloud_unreachable_error(error):
                 return {"outcome": "unreachable", "reason": str(error)}

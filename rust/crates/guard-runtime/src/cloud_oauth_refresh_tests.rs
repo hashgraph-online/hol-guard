@@ -40,3 +40,12 @@ fn an_unsignable_key_is_unusable() {
     let answer = refresh(&call(&endpoint)).unwrap();
     assert_eq!(answer["outcome"], json!("unusable"));
 }
+
+#[test]
+fn the_ipv6_loopback_token_endpoint_is_trusted() {
+    assert!(trusted_token_endpoint("http://[::1]:8000/api/guard/oauth/token").is_ok());
+    assert!(matches!(
+        trusted_token_endpoint("http://[2001:db8::1]:8000/api/guard/oauth/token"),
+        Err(SyncError::EndpointUntrusted(_))
+    ));
+}
