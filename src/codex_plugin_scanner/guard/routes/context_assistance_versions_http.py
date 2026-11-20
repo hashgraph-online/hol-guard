@@ -62,4 +62,3 @@ def respond(handler: Any, kind: str, payload: dict[str, object]) -> None:
         )
         return
     handler._write_json(result, extra_headers={"Cache-Control": "no-store"})
-
