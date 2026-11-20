@@ -420,21 +420,21 @@ fn generic_label(label: &str) -> bool {
 
 /// `platform.node()`: the node name the device name is derived from.
 #[cfg(unix)]
-fn host_name() -> Option<String> {
+pub(crate) fn host_name() -> Option<String> {
     nix::unistd::gethostname().ok()?.into_string().ok()
 }
 
 /// On Windows `platform.node()` is the DNS host name, which `COMPUTERNAME`
 /// (the upper-cased, 15-character NetBIOS name) does not match.
 #[cfg(windows)]
-fn host_name() -> Option<String> {
+pub(crate) fn host_name() -> Option<String> {
     guard_runtime_windows_process::dns_host_name()?
         .into_string()
         .ok()
 }
 
 #[cfg(not(any(unix, windows)))]
-fn host_name() -> Option<String> {
+pub(crate) fn host_name() -> Option<String> {
     None
 }
 
