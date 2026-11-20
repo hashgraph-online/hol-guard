@@ -362,6 +362,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::CommandJobPlan(request) => {
+                crate::command_job_plan_op::evaluate_command_job_plan_request(&request)
+            }
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }

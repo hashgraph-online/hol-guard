@@ -17,6 +17,9 @@ from codex_plugin_scanner.guard.runtime.review_policy_memory_executor import REV
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_review_signing_helpers import REVIEW_SIGNING_KEY_ID, review_verification_keys, sign_review_payload
 
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
+
 
 def _store(tmp_path: Path) -> GuardStore:
     store = GuardStore(tmp_path / "guard-home")

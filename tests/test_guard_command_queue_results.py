@@ -18,6 +18,9 @@ from tests.test_guard_command_queue import (  # noqa: F401 - autouse fixtures ap
     _isolate_legacy_queue_mechanics,
 )
 
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
+
 
 @pytest.mark.usefixtures("native_command_capability_runtime")
 def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:

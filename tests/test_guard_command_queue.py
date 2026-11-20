@@ -49,6 +49,9 @@ from tests.guard_review_signing_helpers import (
 )
 from tests.local_request_snapshots_client import cloud_safe_local_request_payload
 
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
+
 
 @pytest.fixture(autouse=True)
 def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:

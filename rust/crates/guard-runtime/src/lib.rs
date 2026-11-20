@@ -267,6 +267,7 @@ mod command_capability_op;
 mod command_effect;
 mod command_envelope_op;
 mod command_expression_validate_op;
+mod command_job_plan_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
 #[path = "adapters/command_probe.rs"]

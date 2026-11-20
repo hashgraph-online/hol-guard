@@ -34,6 +34,9 @@ from tests.guard_exact_cloud_review_support import (
     review_request as _request,
 )
 
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
+
 
 def test_exact_cloud_review_uses_local_time_not_forged_queue_admission(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
