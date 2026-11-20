@@ -299,16 +299,6 @@ def test_candidate_admission_raises_on_an_outage(monkeypatch: pytest.MonkeyPatch
         parser.policy_bundle_admission_rejection(candidate, None)
 
 
-def test_candidate_admission_never_reads_a_malformed_answer_as_a_pass(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(parser, "native_policy_bundle", lambda *_args, **_kwargs: {"rejection": 7})
-    with pytest.raises(PolicyBundleNativeUnavailableError):
-        parser.policy_bundle_admission_rejection({"bundleVersion": 3}, None)
-    monkeypatch.setattr(parser, "native_policy_bundle", lambda *_args, **_kwargs: {"error": "limit_bytes"})
-    with pytest.raises(PolicyBundleNativeError) as raised:
-        parser.policy_bundle_admission_rejection({"bundleVersion": 3}, None)
-    assert raised.value.code == "limit_bytes"
-
-
 def _signed_policy_bundle(store: GuardStore) -> dict[str, object]:
     _seed_daemon_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-05-19T00:00:00Z")

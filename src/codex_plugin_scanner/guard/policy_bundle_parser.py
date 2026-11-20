@@ -16,6 +16,7 @@ from .native_policy_bundle import (
     native_policy_bundle,
     policy_bundle_chunks,
 )
+from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
 
 CANONICAL_COMPILE_REJECTION_PREFIX = "canonical_compile_"
 
@@ -72,7 +73,6 @@ _REFERENCE_KEYS = (
     "payloadHash",
     "issuedAt",
     "workspaceId",
-    "cloudExceptions",
     "cloudExceptionsIssuedAt",
     "cloudExceptionsHash",
 )
@@ -83,6 +83,26 @@ def _view_chunks(bundle: object, keys: tuple[str, ...]) -> list[str] | None:
     if not isinstance(bundle, dict):
         return None
     return policy_bundle_chunks({key: bundle[key] for key in keys if key in bundle})
+
+
+def _reference_chunks(reference: object, candidate: dict[str, object]) -> list[str] | None:
+    """The reference fields the gates compare, with its exception set as a hash.
+
+    Only the hash of the accepted Cloud exception set is compared, so the set
+    itself never shares a request with the candidate. Two bundles near the size
+    limit would otherwise exceed the transport cap together.
+    """
+
+    if not isinstance(reference, dict):
+        return None
+    view = {key: reference[key] for key in _REFERENCE_KEYS if key in reference}
+    if (
+        candidate.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+        and not isinstance(view.get("cloudExceptionsHash"), str)
+        and "cloudExceptions" in reference
+    ):
+        view["cloudExceptionsHash"] = policy_bundle_cloud_exceptions_hash(reference)
+    return policy_bundle_chunks(view)
 
 
 def policy_bundle_admission_rejection(
@@ -101,17 +121,20 @@ def policy_bundle_admission_rejection(
         "candidate_admission",
         {
             "bundle_chunks": _view_chunks(candidate, _CANDIDATE_KEYS),
-            "reference_chunks": _view_chunks(reference, _REFERENCE_KEYS),
+            "reference_chunks": _reference_chunks(reference, candidate),
             "daemon_version": __version__,
         },
     )
     error = result.get("error")
     if isinstance(error, str):
         raise PolicyBundleNativeError(error, result)
-    rejection = result.get("rejection")
-    if rejection is None or isinstance(rejection, str):
+    # An answer without an explicit verdict is an outage, never a pass.
+    if "rejection" not in result or "error" in result:
+        raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
+    rejection = result["rejection"]
+    if rejection is None or (isinstance(rejection, str) and rejection):
         return rejection
-    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
 
 
 def policy_bundle_downgrade_verdict(
@@ -130,14 +153,21 @@ def policy_bundle_downgrade_verdict(
     try:
         request: dict[str, object] = {
             "bundle_chunks": _view_chunks(candidate, _CANDIDATE_KEYS),
-            "reference_chunks": _view_chunks(reference, _REFERENCE_KEYS),
+            "reference_chunks": _reference_chunks(reference, candidate),
             "expected_chunks": _view_chunks(expected_last_good, _EXPECTED_KEYS),
         }
+        result = native_policy_bundle("downgrade_verdict", request)
     except PolicyBundleNativeUnavailableError:
         raise
     except ValueError:
         return True
-    return _flag("downgrade_verdict", request, otherwise=True)
+    if isinstance(result.get("error"), str):
+        return True
+    value = result.get("value")
+    if isinstance(value, bool):
+        return value
+    # A reply without a boolean verdict is an outage, never "no downgrade".
+    raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION, result)
 
 
 def policy_bundle_is_enforceable(policy_bundle: dict[str, object]) -> bool:
