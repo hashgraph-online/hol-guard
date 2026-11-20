@@ -89,6 +89,12 @@ pub(crate) fn unread_risks(code: &str) -> (bool, bool) {
         "add --all",
         "add .",
         "add -u",
+        // `git-stage(1)` is Git's own second name for `git-add(1)`, so a
+        // script too long to read through must be screened for both spellings.
+        "stage -A",
+        "stage --all",
+        "stage .",
+        "stage -u",
         "\"-A\"",
         "'-A'",
         "--all",
