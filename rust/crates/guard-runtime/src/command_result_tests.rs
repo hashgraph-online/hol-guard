@@ -312,3 +312,29 @@ fn stdin_envelope_answers_and_refuses() {
         assert_eq!(response["error"], "command_result_request_invalid");
     }
 }
+
+#[test]
+fn large_results_up_to_the_cloud_body_limit_are_built() {
+    let big = "x".repeat(6 * 1024 * 1024);
+    let request = json!({
+        "schema": "command-result.v1",
+        "job": generic_job(),
+        "execution": {"packages": big},
+        "now": NOW,
+    });
+    let output = run_command(request.to_string().as_bytes()).expect("output");
+    let response: Value = serde_json::from_slice(&output).expect("json");
+    assert_eq!(response["result"]["status"], "succeeded");
+    assert_eq!(
+        response["result"]["result"]["packages"]
+            .as_str()
+            .map(str::len),
+        Some(6 * 1024 * 1024)
+    );
+
+    let oversized = vec![b' '; 16 * 1024 * 1024 + 1];
+    assert_eq!(
+        run_command(oversized.as_slice()),
+        Err("command_result_request_too_large".to_owned())
+    );
+}

@@ -1154,6 +1154,7 @@ def test_poll_once_posts_a_failure_when_the_shared_scope_raises_after_the_job_ra
     assert result_payloads[0]["failureCode"] == "execution_error"
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
     result_payloads: list[dict[str, object]] = []
@@ -1197,6 +1198,7 @@ def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, mon
     assert "shim status failed" in str(result_payloads[0]["failureMessage"])
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_poll_once_posts_waiting_local_confirm_result_for_destructive_job(
     tmp_path: Path,
     monkeypatch,
@@ -1247,6 +1249,7 @@ def test_poll_once_posts_waiting_local_confirm_result_for_destructive_job(
     )
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_result_payload_reuses_stable_success_idempotency_key() -> None:
     job = {"id": "job-duplicate-result", "leaseId": "lease-duplicate-result"}
     execution = {"data": {"ok": True}}

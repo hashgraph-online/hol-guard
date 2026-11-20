@@ -76,6 +76,9 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
     try:
         return native_command_result(job, execution)
     except CommandResultUnavailableError as error:
+        # Ownership exception: the runtime builds every result it can answer,
+        # including its own failures. This fallback exists only for the case
+        # where no runtime answers at all, so it cannot live in the runtime.
         payload: dict[str, object] = {
             "leaseId": lease,
             "idempotencyKey": f"{job_key}:{lease}:failed",
