@@ -499,7 +499,6 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "printf"
                 | "which"
                 | "whence"
-                | "where"
                 | "whoami"
                 | "uname"
                 | "date"
