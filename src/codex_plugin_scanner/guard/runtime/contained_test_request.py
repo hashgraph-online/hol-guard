@@ -76,6 +76,32 @@ def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: 
         raise _reject() from error
 
 
+def contained_expectation(kind: str, plan_profile: str | None, command: list[str]) -> tuple[str, str]:
+    """The containment reason and profile a planned run's receipt must carry.
+
+    Native authority answers both from the planner that ran (``kind``), the
+    profile that planner settled on, and the planned program, using the reason
+    table the hook renders receipts from. An answer it cannot give refuses the
+    run.
+    """
+    from ..native_restricted_pytest import restricted_native
+
+    try:
+        answer = restricted_native(
+            "contained_expectation",
+            {"kind": kind, "plan_profile": plan_profile, "command": command},
+            dict,
+        )
+    except RestrictedPytestError as error:
+        raise _reject() from error
+    if not isinstance(answer, dict):
+        raise _reject()
+    reason, profile = answer.get("reason"), answer.get("profile")
+    if set(answer) != {"reason", "profile"} or not isinstance(reason, str) or not isinstance(profile, str):
+        raise _reject()
+    return reason, profile
+
+
 def _contained_receipt(receipt: object) -> bool:
     return (
         isinstance(receipt, Mapping)

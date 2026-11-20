@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
+from tests.restricted_native_clients import contained_expectation_reply
 
 
 def payload() -> dict[str, object]:
@@ -158,6 +159,8 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
     calls = []
 
     def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         # The sink reads every contained command's words through native
         # authority. A kind mapping returned in its place is a mapping whose
         # keys are strings, which a reader looking for words takes for the
@@ -258,6 +261,8 @@ def test_the_sink_runs_the_prefix_split_native_authority_read(monkeypatch: pytes
     asked: list[object] = []
 
     def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         asked.append((operation, fields["command"], fields["drop_data"]))
         return {"core_index": 2, "assignments": [["CI", "1"]], "dropped_data": False}
 
