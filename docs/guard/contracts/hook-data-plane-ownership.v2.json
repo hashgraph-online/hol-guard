@@ -345,7 +345,6 @@
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_unavailable.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_policy_admission.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_availability_policy.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_policy_fence_window.py",
     "src/codex_plugin_scanner/guard/native_approval_errors.py",
     "src/codex_plugin_scanner/guard/native_approval_gate.py",
     "src/codex_plugin_scanner/guard/native_approval_reuse.py",

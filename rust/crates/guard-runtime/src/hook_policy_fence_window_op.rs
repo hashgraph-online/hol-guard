@@ -12,11 +12,15 @@ use crate::resident_protocol::encode_response;
 
 pub(crate) const HOOK_POLICY_FENCE_WINDOW_FEATURE: &str = "hook-policy-fence-window-v1";
 pub(crate) const HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE: &str = "hook-policy-fence-window-write-v1";
+pub(crate) const HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE: &str = "hook-policy-fence-window-wait-v1";
 const REQUEST_SCHEMA: &str = "guard-hook-policy-fence-window-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-policy-fence-window-result.v1";
 const EVENT_NAME: &str = "policy_source_fence_window";
 const OVERFLOW_EVENT_NAME: &str = "policy_source_fence_window_overflow";
 const MAX_WAIT_MS: u64 = 8_000;
+const POLL_MS: u64 = 100;
+const DELIVERY_MARGIN_MS: u64 = 250;
+const ATTEMPT_MARGIN_MS: u64 = 250;
 const MAX_WINDOW_AGE_MICROS: i64 = 9_000_000;
 const MAX_BATCH_EVENTS: usize = 16;
 const MAX_PENDING_EVENTS: usize = 2 * MAX_BATCH_EVENTS;
@@ -34,6 +38,10 @@ pub(crate) struct HookPolicyFenceWindowRequestV1 {
     pub(crate) waited_ms: Option<u64>,
     #[serde(default)]
     pub(crate) attempt_until_micros: Option<i64>,
+    #[serde(default)]
+    pub(crate) elapsed_ms: Option<u64>,
+    #[serde(default)]
+    pub(crate) remaining_ms: Option<u64>,
     #[serde(default)]
     pub(crate) persist_events: bool,
 }
@@ -104,6 +112,45 @@ fn restore_batch(pending: &mut VecDeque<FenceEvent>, batch: Vec<FenceEvent>) -> 
     dropped
 }
 
+#[derive(Serialize)]
+struct PollPlan {
+    sleep_ms: u64,
+    retry_by_ms: u64,
+    attempt_budget_ms: u64,
+}
+
+fn plan_wait(elapsed_ms: u64, remaining_ms: u64) -> Option<PollPlan> {
+    let attempt_budget_ms = remaining_ms.saturating_sub(DELIVERY_MARGIN_MS);
+    let retry_by_ms = MAX_WAIT_MS
+        .saturating_sub(elapsed_ms)
+        .min(attempt_budget_ms.saturating_sub(ATTEMPT_MARGIN_MS));
+    (retry_by_ms >= POLL_MS).then_some(PollPlan {
+        sleep_ms: POLL_MS,
+        retry_by_ms,
+        attempt_budget_ms,
+    })
+}
+
+fn register_attempt(request: &HookPolicyFenceWindowRequestV1, budget_ms: u64) {
+    let (Some(windows), Ok(now)) = (WINDOWS.get(), now_micros()) else {
+        return;
+    };
+    let Ok(mut windows) = windows.lock() else {
+        return;
+    };
+    if let Some(waiter) = windows
+        .get_mut(&request.guard_home)
+        .and_then(|state| state.waiters.get_mut(&request.request_id))
+    {
+        let duration = i64::try_from(budget_ms)
+            .unwrap_or(i64::MAX)
+            .saturating_mul(1000);
+        waiter
+            .attempt_until_micros
+            .get_or_insert(now.saturating_add(duration));
+    }
+}
+
 pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u8>, String> {
     if request.schema != REQUEST_SCHEMA
         || request.request_id.is_empty()
@@ -112,10 +159,28 @@ pub(crate) fn evaluate(request: &HookPolicyFenceWindowRequestV1) -> Result<Vec<u
         || request.guard_home.len() > 4096
         || !matches!(
             request.action.as_str(),
-            "enter" | "leave" | "attempt" | "absorb_direct"
+            "enter" | "leave" | "attempt" | "absorb_direct" | "wait"
         )
     {
         return Err("hook_policy_fence_window_payload_invalid".to_owned());
+    }
+    if request.action == "wait" {
+        // Scheduling is independent of telemetry storage. In particular a
+        // busy event log must not consume a worker or suppress a valid poll.
+        let poll = plan_wait(
+            request.elapsed_ms.unwrap_or(MAX_WAIT_MS),
+            request.remaining_ms.unwrap_or(0),
+        );
+        if let Some(poll) = &poll {
+            register_attempt(request, poll.attempt_budget_ms);
+        }
+        return encode_response(&json!({
+            "schema": RESULT_SCHEMA,
+            "result": {
+                "request_id": request.request_id,
+                "poll": poll,
+            },
+        }));
     }
     let now = now_micros()?;
     let window_state = WINDOWS.get_or_init(|| Mutex::new(HashMap::new()));

@@ -10,8 +10,53 @@ fn request(home: &str, action: &str) -> HookPolicyFenceWindowRequestV1 {
         admitted: None,
         waited_ms: None,
         attempt_until_micros: None,
+        elapsed_ms: None,
+        remaining_ms: None,
         persist_events: false,
     }
+}
+
+#[test]
+fn wait_plan_preserves_the_rebuild_cap_and_both_deadline_margins() {
+    let mut call = request("/synthetic/fence-plan", "wait");
+    call.elapsed_ms = Some(7_900);
+    call.remaining_ms = Some(600);
+    let response: Value = serde_json::from_slice(&evaluate(&call).unwrap()).unwrap();
+    assert_eq!(
+        response["result"]["poll"],
+        json!({"sleep_ms": 100, "retry_by_ms": 100, "attempt_budget_ms": 350})
+    );
+    assert!(plan_wait(7_901, 20_000).is_none());
+    assert!(plan_wait(0, 599).is_none());
+    assert!(plan_wait(u64::MAX, 20_000).is_none());
+    assert!(plan_wait(0, 0).is_none());
+}
+
+#[test]
+fn native_wait_plan_registers_one_attempt_lease_for_the_window() {
+    let home = "/synthetic/fence-plan-lease";
+    let enter = request(home, "enter");
+    evaluate(&enter).unwrap();
+    let mut poll = request(home, "wait");
+    poll.request_id.clone_from(&enter.request_id);
+    poll.elapsed_ms = Some(0);
+    poll.remaining_ms = Some(2000);
+    let before = now_micros().unwrap();
+    evaluate(&poll).unwrap();
+    let expiry = || {
+        WINDOWS.get().unwrap().lock().unwrap()[home].waiters[&poll.request_id]
+            .attempt_until_micros
+            .unwrap()
+    };
+    let first = expiry();
+    assert!((before + 1_750_000..=now_micros().unwrap() + 1_750_000).contains(&first));
+    // A later plan can shorten the caller's attempt but cannot prolong the registration.
+    let mut repeated_poll = request(home, "wait");
+    repeated_poll.request_id.clone_from(&poll.request_id);
+    repeated_poll.elapsed_ms = Some(500);
+    repeated_poll.remaining_ms = Some(2000);
+    evaluate(&repeated_poll).unwrap();
+    assert_eq!(expiry(), first);
 }
 
 #[test]

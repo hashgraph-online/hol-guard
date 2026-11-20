@@ -13,6 +13,7 @@ from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_direct_route import native_or_daemon_edge
 from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
+from ..native_policy_fence_window import POLICY_SOURCE_FENCE_ERROR, PolicySourceFenceBusyError
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -26,7 +27,6 @@ from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
 )
 from .hook_native_saved_approval import native_exact_command_block_response
-from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -343,8 +343,8 @@ class HookWorkerNativeMixin:
             record_native_resident_client_failure_code(None)
         if edge is None:
             failure = native_resident_client_failure_code()
-            if failure in POLICY_SOURCE_FENCE_ERRORS and event_name in {"PreToolUse", "UserPromptSubmit"}:
-                raise PolicySourceFenceBusyError(failure, recording_only=recording_only)
+            if failure == POLICY_SOURCE_FENCE_ERROR and event_name in {"PreToolUse", "UserPromptSubmit"}:
+                raise PolicySourceFenceBusyError(failure)
             if (
                 isinstance(failure, str)
                 and event_name in {"PreToolUse", "UserPromptSubmit"}
