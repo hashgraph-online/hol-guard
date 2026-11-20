@@ -84,17 +84,18 @@ pub(crate) fn unread_risks(code: &str) -> (bool, bool) {
     ]
     .iter()
     .any(|word| code.contains(word));
+    // Every spelling of a whole-tree stage: `git-stage(1)` is Git's own second
+    // name for `git-add(1)`, and `-- .` spells the dot as a pathspec rather
+    // than an option. A bare `--all` already covers both names.
     let stage = [
         "add -A",
-        "add --all",
         "add .",
         "add -u",
-        // `git-stage(1)` is Git's own second name for `git-add(1)`, so a
-        // script too long to read through must be screened for both spellings.
+        "add -- .",
         "stage -A",
-        "stage --all",
         "stage .",
         "stage -u",
+        "stage -- .",
         "\"-A\"",
         "'-A'",
         "--all",
