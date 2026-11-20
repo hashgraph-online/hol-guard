@@ -7,8 +7,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
+from ..native_command_result import CommandResultUnavailableError, native_command_result
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-from .exact_cloud_review_transport import exact_result, uses_exact_transport
+from .exact_cloud_review_transport import uses_exact_transport
 from .time_support import parse_utc_timestamp
 
 
@@ -60,48 +61,34 @@ def redacted_error(error: BaseException, *, http_formatter, os_formatter) -> str
 
 
 def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
-    protocol = {"protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION} if uses_exact_transport(job) else {}
-    if execution.get("waitingLocalConfirm") is True:
-        sanitized = dict(execution)
-        sanitized.pop("waitingLocalConfirm", None)
-        return {
-            **protocol,
-            "leaseId": lease_id(job),
-            "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:waiting_local_confirm",
-            "status": "waiting_local_confirm",
-            "result": sanitized,
-        }
-    failure_code = execution.get("failureCode")
-    if isinstance(failure_code, str) and failure_code:
-        return {
-            **protocol,
-            "leaseId": lease_id(job),
-            "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:failed",
+    """The payload Guard Cloud records for one settled job, built by the runtime.
+
+    The runtime checks an exact Review result against its versioned contract;
+    one that fails posts as ``exact_result_contract_invalid``.
+
+    The job has already run, so a runtime that cannot answer must not lose the
+    outcome or let the job be leased and run again: the lease closes with a
+    ``native_command_result_unavailable`` failure instead.
+    """
+
+    lease = lease_id(job)
+    job_key = job_id(job)
+    try:
+        return native_command_result(job, execution)
+    except CommandResultUnavailableError as error:
+        # Ownership exception: the runtime builds every result it can answer,
+        # including its own failures. This fallback exists only for the case
+        # where no runtime answers at all, so it cannot live in the runtime.
+        payload: dict[str, object] = {
+            "leaseId": lease,
+            "idempotencyKey": f"{job_key}:{lease}:failed",
             "status": "failed",
-            "failureCode": failure_code,
-            "failureMessage": str(execution.get("failureMessage") or failure_code),
+            "failureCode": "native_command_result_unavailable",
+            "failureMessage": f"Guard could not build this job's result ({error.code}).",
         }
-    if uses_exact_transport(job):
-        try:
-            result = exact_result(job, execution)
-        except ValueError:
-            return {
-                **protocol,
-                "leaseId": lease_id(job),
-                "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:failed",
-                "status": "failed",
-                "failureCode": "exact_result_contract_invalid",
-                "failureMessage": "The exact Guard Review result did not satisfy the canonical contract.",
-            }
-    else:
-        result = execution
-    return {
-        **protocol,
-        "leaseId": lease_id(job),
-        "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:succeeded",
-        "status": "succeeded",
-        "result": result,
-    }
+        if uses_exact_transport(job):
+            payload = {"protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION, **payload}
+        return payload
 
 
 __all__ = [
