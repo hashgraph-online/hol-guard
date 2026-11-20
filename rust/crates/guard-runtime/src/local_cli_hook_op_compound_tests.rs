@@ -112,7 +112,11 @@ fn changed_script_after_cd_with_relative_path_names_exact_connector() {
         .unwrap()
         .1
         .expect("single script is named");
-    fixture.grant(named["cli_id"].as_str().unwrap(), &"0".repeat(64), "allowed");
+    fixture.grant(
+        named["cli_id"].as_str().unwrap(),
+        &"0".repeat(64),
+        "allowed",
+    );
 
     let relative = format!("cd {} && ./approve-merge.sh --dry-run", fixture.workspace);
     let (action, connector) = run_with_connector(&review(&fixture, &relative)).unwrap();
@@ -125,7 +129,10 @@ fn changed_script_after_cd_with_relative_path_names_exact_connector() {
     // A failed directory change, semicolon, or extra command is not proven.
     for command in [
         format!("cd {} ; ./approve-merge.sh --dry-run", fixture.workspace),
-        format!("cd {} && ./approve-merge.sh --dry-run && echo done", fixture.workspace),
+        format!(
+            "cd {} && ./approve-merge.sh --dry-run && echo done",
+            fixture.workspace
+        ),
         "cd /this-does-not-exist && ./approve-merge.sh --dry-run".to_owned(),
     ] {
         let (action, connector) = run_with_connector(&review(&fixture, &command)).unwrap();

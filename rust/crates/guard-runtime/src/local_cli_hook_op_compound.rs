@@ -79,10 +79,8 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
     {
         return None;
     }
-    let directory = std::fs::canonicalize(
-        std::path::Path::new(&request.cwd).join(&first.arguments[0]),
-    )
-    .ok()?;
+    let directory =
+        std::fs::canonicalize(std::path::Path::new(&request.cwd).join(&first.arguments[0])).ok()?;
     if !directory.is_dir() {
         return None;
     }
