@@ -608,7 +608,7 @@ def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
     globs = [call for call in calls if call["name"] == "glob"]
     if not globs:
         return None
-    if not any(ROUTE_SEGMENT_SELECTOR in str(call["args"].get("path", "")) for call in globs):
+    if any(ROUTE_SEGMENT_SELECTOR not in str(call["args"].get("path", "")) for call in globs):
         return "the glob call did not select through the dynamic route directory"
     return None
 
