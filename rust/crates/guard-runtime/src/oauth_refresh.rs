@@ -228,23 +228,7 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
         });
     payload.insert("credentials_ref".into(), Value::String(secret_ref.clone()));
     payload.insert("credentials_sha256".into(), Value::String(secret_hash));
-    for key in [
-        "grant_id",
-        "machine_id",
-        "device_id",
-        "workspace_id",
-        "supply_chain_plan_id",
-        "runtime_id",
-        "runtime_label",
-    ] {
-        if let Some(v) = binding
-            .get(key)
-            .cloned()
-            .or_else(|| credentials.get(key).cloned())
-        {
-            payload.insert(key.into(), v);
-        }
-    }
+    carry_binding_fields(&mut payload, &binding, credentials);
     carry_account_fields(
         &mut payload,
         credentials,
@@ -268,6 +252,26 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
         })?;
     store.set_sync_payload(CREDENTIALS_STATE_KEY, &Value::Object(payload));
     Ok(())
+}
+
+/// Put the binding and the saved runtime metadata on the rotated credential
+/// row. The binding already keeps the saved fields when no new access token
+/// arrived, so a new token's binding never falls back to the previous one.
+fn carry_binding_fields(
+    payload: &mut Map<String, Value>,
+    binding: &Map<String, Value>,
+    credentials: &Value,
+) {
+    for key in ["grant_id", "machine_id", "device_id", "workspace_id"] {
+        if let Some(v) = binding.get(key) {
+            payload.insert(key.into(), v.clone());
+        }
+    }
+    for key in ["supply_chain_plan_id", "runtime_id", "runtime_label"] {
+        if let Some(v) = credentials.get(key) {
+            payload.insert(key.into(), v.clone());
+        }
+    }
 }
 
 /// Put the account grant and profile on the rotated credential row. A refresh
@@ -497,6 +501,32 @@ pub(crate) fn refresh_oauth_access_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rotated_row_keeps_only_the_computed_binding() {
+        let saved = serde_json::json!({
+            "grant_id": "grant-old",
+            "machine_id": "machine-old",
+            "device_id": "device-old",
+            "workspace_id": "workspace-old",
+            "runtime_id": "runtime-1",
+        });
+        let mut binding = Map::new();
+        binding.insert("grant_id".into(), Value::String("grant-new".into()));
+        let mut payload = Map::new();
+        carry_binding_fields(&mut payload, &binding, &saved);
+        assert_eq!(
+            payload.get("grant_id"),
+            Some(&Value::String("grant-new".into()))
+        );
+        for key in ["machine_id", "device_id", "workspace_id"] {
+            assert!(payload.get(key).is_none(), "{key}");
+        }
+        assert_eq!(
+            payload.get("runtime_id"),
+            Some(&Value::String("runtime-1".into()))
+        );
+    }
 
     #[test]
     fn a_rotation_keeps_the_saved_account_grant_and_profile() {
