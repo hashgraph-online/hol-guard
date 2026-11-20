@@ -38,6 +38,9 @@ const EXECUTABLE_NAME: &str = "hol-guard-runtime";
 const FIRST_RUN_OPERATION: &str = "compiler-info";
 const FIRST_RUN_LIMIT: Duration = Duration::from_secs(30);
 const CHUNK: usize = 1024 * 1024;
+/// The source-compiler manifest the wheel ships beside the runtime.
+const MANIFEST_NAME: &str = "source-compiler-manifest.json";
+const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 
 /// Place and first-run this runtime's kept copy on a thread of its own.
 pub(super) fn prime_in_background(home: &Path) {
@@ -61,22 +64,50 @@ pub(super) fn prime_in_background(home: &Path) {
 /// None when the folder is not private, or a different copy is in the way.
 pub(super) fn place(home: &Path, source: &Path) -> Option<PathBuf> {
     let root = private_root(home)?;
-    let digest = sha256_file(source).ok()?;
+    // The packaged manifest's digest saves a pass over 100 MB. It only names
+    // the copy: the copy's own digest must match it before it is placed.
+    let digest = match manifest_digest(source) {
+        Some(digest) => digest,
+        None => sha256_file(source).ok()?,
+    };
     let kept = root.join(format!("{KEPT_PREFIX}{digest}"));
     let copy = kept.join(EXECUTABLE_NAME);
     if fs::symlink_metadata(&kept).is_ok() {
         return same_bytes(&copy, source).then_some(copy);
     }
     let staged = stage(&root, source, &digest)?;
-    // A copy another process placed first stays; only a matching one is run.
-    let renamed = fs::rename(&staged, &kept).is_ok();
-    if !renamed {
-        let _ = fs::remove_dir_all(&staged);
+    if fs::rename(&staged, &kept).is_ok() {
+        return Some(copy);
     }
+    // Another process placed a copy first. It stays, and runs only if it matches.
+    let _ = fs::remove_dir_all(&staged);
     same_bytes(&copy, source).then_some(copy)
 }
 
-/// Write `source` under a private name in `root`, checking its digest.
+/// The runtime digest the package manifest beside `source` names, when its
+/// size matches `source`.
+fn manifest_digest(source: &Path) -> Option<String> {
+    let manifest = source.parent()?.join(MANIFEST_NAME);
+    let mut raw = Vec::new();
+    File::open(manifest)
+        .ok()?
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_end(&mut raw)
+        .ok()?;
+    if raw.len() as u64 > MAX_MANIFEST_BYTES {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&raw).ok()?;
+    let size = value.get("compiler_size")?.as_u64()?;
+    let digest = value.get("compiler_sha256")?.as_str()?;
+    let plain_hex = digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    (plain_hex && fs::metadata(source).ok()?.len() == size).then(|| digest.to_owned())
+}
+
+/// Write `source` under a private name in `root`; kept only when its digest is `digest`.
 fn stage(root: &Path, source: &Path, digest: &str) -> Option<PathBuf> {
     let staged = root.join(format!(
         "{DIRECTORY_PREFIX}{}-{}",
@@ -105,7 +136,9 @@ fn write_copy(source: &Path, target: &Path) -> io::Result<String> {
         hasher.update(&buffer[..read]);
         output.write_all(&buffer[..read])?;
     }
-    output.sync_all()?;
+    // Not synced: the copy is a cache. One cut short by a crash differs from
+    // the verified bytes, and the host replaces it before any run.
+    output.flush()?;
     Ok(hex::encode(hasher.finalize()))
 }
 

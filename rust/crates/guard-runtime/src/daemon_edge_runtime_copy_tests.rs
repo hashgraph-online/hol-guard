@@ -151,3 +151,64 @@ fn a_test_home_is_never_primed() {
         "/tmp/pytest-of-user/pytest-3/home/.hol-guard"
     )));
 }
+
+fn manifest(base: &Path, size: usize, digest: &str) {
+    let body = serde_json::json!({"compiler_size": size, "compiler_sha256": digest});
+    fs::write(base.join(MANIFEST_NAME), body.to_string()).unwrap();
+}
+
+#[test]
+fn the_packaged_manifest_names_the_copy() {
+    let (base, home) = private_home();
+    let bytes = b"runtime named by its manifest".to_vec();
+    let source = runtime(base.path(), &bytes);
+    manifest(base.path(), bytes.len(), &digest(&bytes));
+
+    let copy = place(&home, &source).expect("copy placed");
+
+    assert_eq!(
+        copy.parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        format!("{KEPT_PREFIX}{}", digest(&bytes))
+    );
+    assert_eq!(fs::read(copy).unwrap(), bytes);
+}
+
+#[test]
+fn a_manifest_digest_the_bytes_do_not_have_places_nothing() {
+    let (base, home) = private_home();
+    let bytes = b"runtime".to_vec();
+    let source = runtime(base.path(), &bytes);
+    let wrong = digest(b"another runtime");
+    manifest(base.path(), bytes.len(), &wrong);
+
+    assert_eq!(place(&home, &source), None);
+    assert_eq!(
+        fs::read_dir(home.join(PRIVATE_ROOT_NAME)).unwrap().count(),
+        0
+    );
+}
+
+#[test]
+fn a_manifest_for_another_size_is_ignored() {
+    let (base, home) = private_home();
+    let bytes = b"runtime".to_vec();
+    let source = runtime(base.path(), &bytes);
+    manifest(base.path(), bytes.len() + 1, &digest(b"another runtime"));
+
+    let copy = place(&home, &source).expect("copy placed from the bytes' own digest");
+
+    assert_eq!(
+        copy.parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        format!("{KEPT_PREFIX}{}", digest(&bytes))
+    );
+}
