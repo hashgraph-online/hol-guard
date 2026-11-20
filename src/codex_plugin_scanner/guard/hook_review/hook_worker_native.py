@@ -316,6 +316,8 @@ class HookWorkerNativeMixin:
                 probe=probe,
             )
             if direct_answer:
+                if edge is None:
+                    break
                 return _edge_harness_response(edge), True
             refreshed = (
                 None
