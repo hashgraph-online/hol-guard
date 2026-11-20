@@ -297,6 +297,7 @@ class WorkerHost:
         try:
             thread.start()
         except RuntimeError:
+            _LOGGER.warning("Guard worker host could not start the resident stream opener", exc_info=True)
             return
         self._threads.append(thread)
 

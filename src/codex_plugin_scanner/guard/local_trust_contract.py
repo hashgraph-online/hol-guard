@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 import pickle
 import signal
@@ -229,8 +230,6 @@ def run_trust_backend_check(
 
     if timeout_seconds <= 0 or (startup_timeout_seconds is not None and startup_timeout_seconds <= 0):
         return timeout_result
-    import multiprocessing
-
     try:
         context = multiprocessing.get_context("spawn")
     except ValueError as error:

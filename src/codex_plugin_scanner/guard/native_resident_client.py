@@ -99,14 +99,20 @@ def native_resident_guard_home_containing(executable: Path, paths: tuple[Path, .
     own route.
     """
 
-    targets = [os.path.normcase(os.path.abspath(path)) for path in paths]
     with _CLIENTS_LOCK:
         state_dirs = [Path(state_dir) for runtime, state_dir in _CLIENT_POOLS if runtime == str(executable)]
     for state_dir in state_dirs:
-        home = os.path.normcase(str(state_dir.parent)).rstrip("\\/")
-        if all(target == home or target.startswith(home + os.sep) for target in targets):
+        if native_resident_home_holds(state_dir.parent, paths):
             return state_dir.parent
     return None
+
+
+def native_resident_home_holds(guard_home: Path, paths: tuple[Path, ...]) -> bool:
+    """Whether every path is ``guard_home`` itself or inside it."""
+
+    home = os.path.normcase(os.path.abspath(guard_home)).rstrip("\\/")
+    targets = [os.path.normcase(os.path.abspath(path)) for path in paths]
+    return all(target == home or target.startswith(home + os.sep) for target in targets)
 
 
 def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:
@@ -479,6 +485,7 @@ __all__ = [
     "native_resident_client_request",
     "native_resident_client_request_if_idle",
     "native_resident_guard_home_containing",
+    "native_resident_home_holds",
     "record_native_resident_client_failure_code",
     "record_native_resident_client_failure_hold_key",
     "record_native_resident_error_frame",

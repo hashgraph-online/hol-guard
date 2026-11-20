@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
+from .cli.oauth_client import resolve_guard_oauth_client_config
 from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
@@ -267,8 +268,6 @@ forget_in_child(_ENCRYPTED_SECRET_INIT_LOCKS)
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
-    from .cli.oauth_client import resolve_guard_oauth_client_config
-
     oauth_client = resolve_guard_oauth_client_config(issuer)
     return f"{oauth_client.issuer}/api/guard/receipts/sync"
 

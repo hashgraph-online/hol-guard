@@ -108,6 +108,17 @@ def test_other_callers_still_only_borrow_a_stream(stream: _Stream, process_start
     assert process_starts == ["ensure"]
 
 
+def test_paths_outside_the_starting_home_only_borrow(
+    stream: _Stream, process_starts: list[str], home: Path, tmp_path: Path
+) -> None:
+    with resident._starting_stream(home):
+        # A sibling whose name only starts with the home's name is not inside it.
+        private_state._windows_ensure_private_directory(tmp_path / "guard-other")
+
+    assert stream.requests == []
+    assert process_starts == ["ensure"]
+
+
 def test_a_missing_runtime_directory_is_created_before_the_stream_opens(
     stream: _Stream, process_starts: list[str], home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

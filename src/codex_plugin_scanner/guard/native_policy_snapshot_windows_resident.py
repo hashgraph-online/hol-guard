@@ -43,7 +43,11 @@ def resident_private_state_answer(request: Mapping[str, object], *, output_limit
 
     if os.name != "nt":
         return None
-    from .native_resident_client import native_resident_client_request, native_resident_guard_home_containing
+    from .native_resident_client import (
+        native_resident_client_request,
+        native_resident_guard_home_containing,
+        native_resident_home_holds,
+    )
     from .native_runtime import _isolated_environment, native_runtime_status
 
     deadline = time.monotonic() + _TIMEOUT_SECONDS
@@ -58,7 +62,7 @@ def resident_private_state_answer(request: Mapping[str, object], *, output_limit
         return None
     paths = tuple(Path(str(request[field])) for field in ("directory", "private_root") if field in request)
     starting_home = _STARTING_HOME.get()
-    starts = starting_home is not None and _within(starting_home, paths)
+    starts = starting_home is not None and bool(paths) and native_resident_home_holds(starting_home, paths)
     guard_home = starting_home if starts else native_resident_guard_home_containing(status.identity.path, paths)
     if guard_home is None:
         return None
@@ -82,12 +86,6 @@ def resident_private_state_answer(request: Mapping[str, object], *, output_limit
         return None
     answer = decoded.get("answer")
     return answer if isinstance(answer, dict) else None
-
-
-def _within(guard_home: Path, paths: tuple[Path, ...]) -> bool:
-    home = os.path.normcase(os.path.abspath(guard_home)).rstrip("\\/")
-    targets = [os.path.normcase(os.path.abspath(path)) for path in paths]
-    return bool(targets) and all(target == home or target.startswith(home + os.sep) for target in targets)
 
 
 @contextlib.contextmanager
