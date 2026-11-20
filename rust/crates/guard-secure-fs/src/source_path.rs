@@ -79,43 +79,42 @@ pub fn sensitive_external_filename(path: &Path) -> bool {
     }
     let joined = stem.replace(['-', '.'], "_");
     let words: Vec<&str> = joined.split('_').filter(|word| !word.is_empty()).collect();
-    words.iter().any(|word| match *word {
-        "token" | "tokens" => !design_system_words(&words),
+    words.iter().enumerate().any(|(at, word)| match *word {
+        "token" | "tokens" => !design_system_token(&words, at),
         other => EXTERNAL_SENSITIVE_PARTS.contains(&other),
     })
 }
 
-/// Whether the words around a `token` name a design system rather than a
-/// credential.
-///
-/// A design token is a named style value -- a colour, a spacing step, a type
-/// ramp -- and the files that carry them are ordinary project content:
-/// `color-tokens.json`, `theme-token-drift.md`, `design_tokens.yaml`. The
-/// word on its own still marks a credential, so `github-token.txt` and
-/// `refresh_token.json` keep their review; only a name that also says which
-/// part of a design system it describes is read this way.
-///
-/// `credential_directory` reads a directory's words the same way, so
-/// `color-tokens/` and `design-tokens/` agree.
-pub(crate) fn design_system_words(words: &[&str]) -> bool {
-    words.iter().any(|word| DESIGN_SYSTEM_WORDS.contains(word))
+/// Clear a token marker only when the immediately preceding word names a
+/// design value. A design word elsewhere cannot clear an API or vendor token:
+/// `brand-github-token` and `style_api_token` stay sensitive. Singular
+/// `theme-token` and `brand-token` may be access credentials, so they do not
+/// receive the design-document exception.
+pub(crate) fn design_system_token(words: &[&str], at: usize) -> bool {
+    let Some(previous) = at.checked_sub(1).and_then(|index| words.get(index)) else {
+        return false;
+    };
+    DESIGN_SYSTEM_WORDS.contains(previous)
+        && !(words[at] == "token"
+            && matches!(*previous, "brand" | "brands" | "theme" | "themes"))
+        && !words
+            .iter()
+            .any(|word| CREDENTIAL_TOKEN_QUALIFIERS.contains(word))
 }
 
 /// Parts of a design system a token file is named for.
-const DESIGN_SYSTEM_WORDS: [&str; 13] = [
-    "brand",
-    "color",
-    "colors",
-    "colour",
-    "colours",
-    "design",
-    "palette",
-    "spacing",
-    "style",
-    "styles",
-    "theme",
-    "themes",
-    "typography",
+const DESIGN_SYSTEM_WORDS: &[&str] = &[
+    "brand", "brands", "color", "colors", "colour", "colours",
+    "design", "designs", "palette", "palettes", "spacing",
+    "style", "styles", "theme", "themes", "typography", "typographies",
+];
+
+/// Explicit credential context overrides an otherwise adjacent design word.
+const CREDENTIAL_TOKEN_QUALIFIERS: &[&str] = &[
+    "access", "api", "auth", "aws", "bearer", "credential", "credentials",
+    "github", "gitlab", "key", "login", "npm", "oauth", "private",
+    "refresh", "secret", "secrets", "service", "session", "shopify",
+    "slack", "stripe",
 ];
 
 /// Code syntax eligible for source inspection. Data formats such as JSON,
