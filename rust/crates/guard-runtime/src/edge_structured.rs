@@ -1,19 +1,11 @@
 //! Structured output mediation for a Pi or Oh My Pi `PostToolUse` the daemon
 //! sends the edge.
 //!
-//! After the edge decides, the daemon used to load the managed policy from
-//! Guard config and run three native queries it only transported: the view
-//! resolves to a binding, `mediate_prepare` scans the model-visible content
-//! against it, and `mediate_finish` forwards only once a second read of the
-//! view still names the binding the scan ran under. The daemon now sends the
-//! managed-policy view with the envelope (`structured_output_config`), and
-//! the edge runs the same resolution and mediation the resident's direct
-//! lane runs, so its answer already carries `structured_content_mediation`.
-//!
-//! The second read stays with the daemon, which alone holds the config: the
-//! edge has no later view to compare against, so it proposes the forward
-//! against the view it was given, and the daemon withholds it if a fresh read
-//! of the config no longer matches that view.
+//! The edge resolves the managed-policy view from the authenticated direct
+//! lane and runs the same resolution and mediation the resident's direct lane
+//! runs. Its answer already carries `structured_content_mediation`, so the
+//! daemon does not supply or recheck a second policy copy. The envelope field
+//! remains a compatibility path for isolated callers and older fixtures.
 
 use crate::hook_direct::{
     pi, DEFAULT_DEADLINE_BUDGET_MS, MAX_DEADLINE_BUDGET_MS, STRUCTURED_OUTPUT_FIELD,
@@ -55,22 +47,41 @@ pub(crate) fn attached(
     envelope: &GuardHookEnvelopeV2,
     mut edge: GuardHookEdgeResultV2,
     started: Instant,
+    origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> GuardHookEdgeResultV2 {
-    attach(envelope, &mut edge, started);
+    attach(envelope, &mut edge, started, origin_store);
     edge
 }
 
-fn attach(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeResultV2, started: Instant) {
-    let Some(view) = envelope.structured_output_config.as_ref() else {
-        return;
-    };
+fn attach(
+    envelope: &GuardHookEnvelopeV2,
+    edge: &mut GuardHookEdgeResultV2,
+    started: Instant,
+    origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
+) {
     if !pi::structured_mediation(&edge.harness, &edge.event_name)
         || edge.result["decision"] != "allow"
     {
         return;
     }
+    let resident_view = origin_store.map(|store| {
+        let digest = envelope
+            .policy_snapshot
+            .get("policy_digest")
+            .and_then(Value::as_str)?;
+        store.structured_output_binding(envelope.policy_generation, digest)
+    });
+    let view = match resident_view {
+        Some(Some(Some(view))) => Some(view),
+        Some(Some(None)) => return,
+        Some(None) => Some(authority_unavailable()),
+        None => envelope.structured_output_config.clone(),
+    };
+    let Some(view) = view else {
+        return;
+    };
     let resolution =
-        pi::resolution(&edge.harness, Some(view)).unwrap_or_else(authority_unavailable);
+        pi::resolution(&edge.harness, Some(&view)).unwrap_or_else(authority_unavailable);
     // The edge's own receipt, which the daemon mediates against once it has
     // recorded it; a receipt that cannot be encoded is no receipt, which
     // `mediate_prepare` withholds on.

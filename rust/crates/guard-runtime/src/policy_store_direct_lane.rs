@@ -55,8 +55,8 @@ const DIRECT_LANE_ACK_SETTLE: Duration = Duration::from_millis(100);
 const DIRECT_LANE_ACK_SETTLE_POLL: Duration = Duration::from_millis(5);
 
 pub(crate) struct DirectLaneBinding {
-    generation: u64,
-    policy_digest: String,
+    pub(crate) generation: u64,
+    pub(crate) policy_digest: String,
     workspaces: BTreeSet<String>,
     inputs: Vec<DirectLaneInputV1>,
     pub(crate) home_dir: Option<String>,

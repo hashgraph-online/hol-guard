@@ -36,6 +36,7 @@ use serde_json::{Map, Value};
 
 use crate::hook_direct_evidence::DirectEvidenceQueue;
 use crate::hook_evidence_writer_op as writer_op;
+use crate::policy_store::PolicySnapshotStore;
 
 /// The resident feature under which an envelope may ask for this.
 pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
@@ -62,8 +63,9 @@ pub(crate) fn encode(
     resident: bool,
     edge: GuardHookEdgeResultV2,
     started: Instant,
+    origin_store: Option<&PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
-    let mut edge = crate::edge_structured::attached(envelope, edge, started);
+    let mut edge = crate::edge_structured::attached(envelope, edge, started, origin_store);
     if resident && envelope.record_receipt && !budget_spent(envelope, started) {
         let activity = edge_activity(envelope, &edge);
         edge.receipt_recorded = true;

@@ -461,7 +461,7 @@ fn evaluate_validated_envelope<Lease>(
     edge_result_check::check(&edge)?;
     // After the check, so a refused edge leaves no sink snapshot behind.
     edge_containment::attach(&envelope, &mut edge);
-    crate::edge_receipt::encode(&envelope, origin_store.is_some(), edge, started)
+    crate::edge_receipt::encode(&envelope, origin_store.is_some(), edge, started, origin_store)
 }
 
 /// Evaluate a resident hook envelope against the already-installed in-memory
