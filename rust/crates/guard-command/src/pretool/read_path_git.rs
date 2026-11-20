@@ -5,8 +5,9 @@ use super::{canonical_root, plain};
 
 /// Git ref files in a repository below the verified workspace or user home,
 /// or in the common git directory of the linked worktree the session runs in
-/// (often a sibling checkout outside both): `.git/HEAD`, `.git/refs/{heads,tags,remotes}/**` and a linked worktree's
-/// `.git/worktrees/<name>/HEAD`. They hold a ref name or object id only.
+/// (often a sibling checkout outside both): `.git/HEAD`, `.git/refs/{heads,tags,remotes}/**`, a linked worktree's
+/// `.git/worktrees/<name>/HEAD` and that worktree's `gitdir` pointer. They
+/// hold a ref name, an object id or one path only.
 /// `.git/config`, hooks, logs and every other entry stay guarded. A linked
 /// worktree's common directory supplies the `.git` marker, so a hidden
 /// ancestor of that sibling checkout does not hide it. Home and cwd
@@ -65,9 +66,39 @@ pub(in crate::pretool) fn git_ref_document(
         && match &parts[marker + 1..] {
             ["HEAD"] => true,
             ["worktrees", _, "HEAD"] => true,
+            ["worktrees", _, "gitdir"] => worktree_admin_pointer(canonical),
             ["refs", "heads" | "tags" | "remotes", rest @ ..] => !rest.is_empty(),
             _ => false,
         }
+}
+
+/// A linked worktree's administrative `gitdir` pointer: one line naming the
+/// absolute path of the worktree's own `.git` file. It is the inverse of the
+/// pointer [`worktree_gitfile`] already admits, and it names a checkout the
+/// session already works in rather than repository content. The size and
+/// content screen keeps a file planted under that name from carrying
+/// anything beyond the single path a pointer holds.
+fn worktree_admin_pointer(canonical: &std::path::Path) -> bool {
+    use std::io::Read;
+
+    let Ok(metadata) = std::fs::symlink_metadata(canonical) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() > 1024 {
+        return false;
+    }
+    let mut content = String::new();
+    if std::fs::File::open(canonical)
+        .and_then(|file| file.take(1025).read_to_string(&mut content))
+        .is_err()
+        || content.len() > 1024
+    {
+        return false;
+    }
+    let line = content.strip_suffix('\n').unwrap_or(&content);
+    !line.is_empty()
+        && !line.contains(['\n', '\r', '\0'])
+        && std::path::Path::new(line).is_absolute()
 }
 
 /// A repository's own `.git/config`: a small regular file of a repository
