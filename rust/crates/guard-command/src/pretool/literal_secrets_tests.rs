@@ -357,3 +357,21 @@ fn a_quoted_sql_password_holding_the_other_quote_is_a_secret() {
         assert!(!holds_literal_secret(text), "{text}");
     }
 }
+
+#[test]
+fn a_metric_name_carrying_a_window_is_not_a_secret() {
+    for text in [
+        "      metricKey: 'downloads_30d',",
+        "      windowKey: 'window_7d',",
+        "      bucketKey: 'top_100_items',",
+        "const cacheKey = 'repository_90d';",
+    ] {
+        assert!(!holds_literal_secret(text), "{text}");
+    }
+    for text in [
+        format!("      apiKey: '{}',", joined(&["k7m2q9", "x4vb3n"])),
+        format!("const token = '{}';", joined(&["qf4zr8", "wn2kd6"])),
+    ] {
+        assert!(holds_literal_secret(&text), "{text}");
+    }
+}
