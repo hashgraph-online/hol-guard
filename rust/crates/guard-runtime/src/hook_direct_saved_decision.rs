@@ -49,6 +49,7 @@ use guard_contracts::{
     PolicyDecisionLookupRequestV1, HOOK_RENDER_MAX_BYTES, NATIVE_EXACT_ACTION_MAX_BYTES,
     POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
 };
+use guard_policy_snapshot::policy_integrity::is_remote_policy_source;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -349,6 +350,156 @@ fn saved_response(
             .map(Some)
             .ok_or(HookDirectDefer::SavedDecision),
         None => Ok(None),
+    }
+}
+
+/// Apply a stored block for the exact shell command the daemon would check
+/// after the edge. The direct lane uses the same integrity-bound lookup as an
+/// exact-action decision, while leaving a missing or unreadable store to the
+/// daemon's fail-closed path.
+pub(super) fn exact_command_block_response(
+    context: &Context<'_>,
+    result: &Object,
+) -> Result<Option<Value>, HookDirectDefer> {
+    let Some(command) = crate::local_store_read::pre_tool_command(context.payload) else {
+        return Ok(None);
+    };
+    let candidates = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+        command: Some(command),
+        artifact_type: Some("shell_command"),
+        artifact_id: None,
+        artifact_name: None,
+        harness: None,
+    });
+    let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
+    let connection = open_read_only(&store_path)
+        .map_err(|_| HookDirectDefer::SavedDecision)?
+        .ok_or(HookDirectDefer::SavedDecision)?;
+    for artifact_id in candidates.exact_artifact_ids {
+        let lookup = exact_command_lookup(context, &connection, &artifact_id)?;
+        let Some(decision) = lookup.get("decision").and_then(Value::as_object) else {
+            continue;
+        };
+        if decision.get("scope").and_then(Value::as_str) != Some("artifact")
+            || decision.get("artifact_id").and_then(Value::as_str) != Some(artifact_id.as_str())
+            || decision.get("action").and_then(Value::as_str) != Some("block")
+        {
+            continue;
+        }
+        let remote = is_remote_policy_source(decision.get("source").and_then(Value::as_str));
+        let mut blocked = result.clone();
+        blocked.insert("decision".to_owned(), json!("deny"));
+        blocked.insert("minimum_action".to_owned(), json!("block"));
+        blocked.insert("policy_action".to_owned(), json!("block"));
+        blocked.insert(
+            "reason_code".to_owned(),
+            json!(if remote {
+                "policy_exact_command_block"
+            } else {
+                "saved_exact_command_block"
+            }),
+        );
+        blocked.insert(
+            "reason".to_owned(),
+            json!(if remote {
+                "Your Guard Cloud policy blocks this exact command. Do not retry it; continue with a permitted alternative."
+            } else {
+                "You chose to always block this exact command in HOL Guard. Do not retry it; continue with a permitted alternative."
+            }),
+        );
+        return render(context.harness, &blocked, "blocked")
+            .map(Some)
+            .ok_or(HookDirectDefer::SavedDecision);
+    }
+    Ok(None)
+}
+
+fn exact_command_lookup(
+    context: &Context<'_>,
+    connection: &Connection,
+    artifact_id: &str,
+) -> Result<Value, HookDirectDefer> {
+    let binding = context.binding;
+    let (Some(integrity), Some(key)) = (
+        binding.policy_integrity_state.as_ref(),
+        binding.integrity_key.as_ref(),
+    ) else {
+        return Err(HookDirectDefer::SavedDecision);
+    };
+    if integrity.enforcement != "enforce"
+        || integrity.mode != "protected"
+        || !integrity.cutover_complete
+        || !integrity.degraded_reasons.is_empty()
+        || integrity.generation.is_none()
+        || integrity.key_id.as_deref() != Some(key.key_id.as_str())
+    {
+        return Err(HookDirectDefer::SavedDecision);
+    }
+    let integrity_state =
+        serde_json::to_value(integrity).map_err(|_| HookDirectDefer::SavedDecision)?;
+    let store = StoreShape {
+        connection,
+        harness: context.harness,
+        artifact_id,
+    };
+    let Some(has_local_policy) = store.readable(&integrity_state)? else {
+        return Err(HookDirectDefer::SavedDecision);
+    };
+    let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
+    let (bundle_identities, _) = store.bundle_authority(&now)?;
+    let composition = portable::composition(context.workspace)?;
+    let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
+    let request = PolicyDecisionLookupRequestV1 {
+        schema: POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        store_path: Path::new(context.guard_home)
+            .join(STORE_FILE_NAME)
+            .to_string_lossy()
+            .into_owned(),
+        guard_home: context.guard_home.to_owned(),
+        harness: context.harness.to_owned(),
+        artifact_id: Some(artifact_id.to_owned()),
+        artifact_hash: None,
+        workspace: Some(context.workspace.to_owned()),
+        publisher: None,
+        now,
+        runtime_exact_match_context: None,
+        consume_one_shot: false,
+        local_once_only: false,
+        integrity_state: Some(if has_local_policy {
+            integrity_state
+        } else {
+            json!({})
+        }),
+        integrity_key_b64: has_local_policy.then(|| key_b64.to_string()),
+        integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
+        local_once_integrity_key_b64: Some(key_b64.to_string()),
+        local_once_integrity_key_id: Some(key.key_id.clone()),
+        policy_bundle_decision_identities: (!bundle_identities.is_empty())
+            .then_some(bundle_identities),
+        exception_workspace: Some(context.workspace.to_owned()),
+        cloud_exception_bundle: Default::default(),
+        probe_groups: None,
+        portable_workspace: None,
+        evidence_binding: None,
+    };
+    let lookup = |workspace: &str| {
+        let request = PolicyDecisionLookupRequestV1 {
+            workspace: Some(workspace.to_owned()),
+            ..request.clone()
+        };
+        crate::policy_decision_lookup_op::evaluate_non_consuming(&request, connection)
+            .map_err(|_| HookDirectDefer::SavedDecision)
+    };
+    match composition {
+        portable::Composition::Local => lookup(context.workspace),
+        portable::Composition::Named(identity) => {
+            Ok(portable::restrictive_only(lookup(&identity)?))
+        }
+        portable::Composition::Both(identity) => {
+            let local = lookup(context.workspace)?;
+            portable::compose(local, lookup(&identity)?)
+        }
     }
 }
 

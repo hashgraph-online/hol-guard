@@ -148,7 +148,7 @@ fn insert_decision(
     connection: &Connection,
     harness: &str,
     artifact_id: &str,
-    token: &str,
+    token: Option<&str>,
     action: &str,
     source: &str,
 ) -> i64 {
@@ -226,7 +226,7 @@ fn a_local_store_with_the_decision_is_read() {
         &connection,
         "claude-code",
         ARTIFACT,
-        TOKEN,
+        Some(TOKEN),
         "allow",
         "approval-gate",
     );
@@ -298,7 +298,7 @@ fn a_store_the_lookup_reads_differently_defers() {
             &connection,
             "claude-code",
             ARTIFACT,
-            TOKEN,
+            Some(TOKEN),
             "allow",
             "approval-gate",
         );
@@ -321,7 +321,7 @@ fn a_damaged_schema_marker_defers() {
         &connection,
         "claude-code",
         ARTIFACT,
-        TOKEN,
+        Some(TOKEN),
         "allow",
         "approval-gate",
     );
@@ -341,7 +341,7 @@ fn a_decision_for_another_token_defers() {
         &connection,
         "*",
         ARTIFACT,
-        "guard-exact-action:v1:other",
+        Some("guard-exact-action:v1:other"),
         "allow",
         "approval-gate",
     );
@@ -349,7 +349,14 @@ fn a_decision_for_another_token_defers() {
     assert!(!store.decided(Some(TOKEN)).unwrap());
     // A token the resident could not derive may be the other one.
     assert!(store.decided(None).unwrap());
-    insert_decision(&connection, "*", ARTIFACT, TOKEN, "block", "approval-gate");
+    insert_decision(
+        &connection,
+        "*",
+        ARTIFACT,
+        Some(TOKEN),
+        "block",
+        "approval-gate",
+    );
     assert!(store.decided(Some(TOKEN)).unwrap());
 }
 
@@ -391,6 +398,62 @@ fn bound_request(
     let (edge, payload, artifact_id, exact) = bound_query(binding, workspace);
     let token = crate::native_exact_action_op::exact_action_token(&exact).unwrap();
     (edge, payload, artifact_id, token)
+}
+
+#[cfg(unix)]
+#[test]
+fn an_exact_command_block_is_rendered_by_the_resident() {
+    let (store_path, connection) = local_store("exact-command-block");
+    let command = "cat src/a.py";
+    let candidates = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+        command: Some(command),
+        artifact_type: Some("shell_command"),
+        artifact_id: None,
+        artifact_name: None,
+        harness: None,
+    });
+    let artifact_id = candidates.exact_artifact_ids.first().unwrap().clone();
+    insert_decision(
+        &connection,
+        "claude-code",
+        &artifact_id,
+        None,
+        "block",
+        "approval-gate",
+    );
+    let workspace = workspace("exact-command-block");
+    let payload = serde_json::json!({
+        "tool_input": {"command": command},
+        "cwd": workspace,
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    let binding = binding();
+    let guard_home = store_path.parent().unwrap().to_str().unwrap().to_owned();
+    let context = Context {
+        harness: "claude-code",
+        payload: &payload,
+        recorded_payload: &payload,
+        workspace: &workspace,
+        home_dir: "/tmp",
+        guard_home: &guard_home,
+        binding: &binding,
+        hint: None,
+    };
+    let result = serde_json::from_value::<Object>(serde_json::json!({
+        "decision": "allow",
+        "minimum_action": "review",
+        "policy_action": "review",
+        "action": {"action_type": "shell"},
+    }))
+    .unwrap();
+    let response = exact_command_block_response(&context, &result)
+        .unwrap()
+        .expect("saved block response");
+    assert_eq!(response["approval_reuse_status"], "blocked");
+    assert_eq!(response["policy_action"], "block");
+    assert_eq!(response["reason_code"], "saved_exact_command_block");
 }
 
 /// The edge, payload, artifact id and exact-action query of the bound
