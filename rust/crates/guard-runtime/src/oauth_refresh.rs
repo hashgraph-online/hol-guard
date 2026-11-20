@@ -666,6 +666,7 @@ pub(crate) fn refresh_oauth_access_token(
                 access_token,
                 rotation_refresh_token,
                 access_token_expires_at,
+                ..
             } => {
                 let effective_refresh =
                     rotation_refresh_token.unwrap_or_else(|| attempt_refresh_token.clone());
@@ -727,7 +728,9 @@ pub(crate) fn refresh_oauth_access_token(
                     gst::OAUTH_REFRESH_UNREACHABLE
                 )))
             }
-            OAuthRefreshOutcome::Failed(reason) => return Err(failed_refresh_error(reason)),
+            OAuthRefreshOutcome::Rejected(reason)
+            | OAuthRefreshOutcome::Unusable(reason)
+            | OAuthRefreshOutcome::Failed(reason) => return Err(failed_refresh_error(reason)),
         }
     }
     // Second invalid_grant post-rotation = genuinely revoked: record the

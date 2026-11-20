@@ -11,6 +11,7 @@ use crate::cloud_bundle_command::{failure, store_for};
 use crate::cloud_bundle_fetch::{brokered, SyncError};
 use crate::cloud_event_sync::{event_store, sync_guard_events};
 use crate::cloud_json_request::{send, JsonRequest};
+use crate::cloud_oauth_refresh::{refresh, RefreshCall};
 use crate::cloud_pain_signal_sync::sync_pain_signals;
 use crate::cloud_receipt_upload::{upload_receipts, UploadRequest, UploadState};
 use crate::cloud_runtime_session_sync::sync_runtime_session;
@@ -21,6 +22,8 @@ pub(crate) const FEATURE: &str = "cloud-event-sync-v1";
 pub(crate) const RECEIPTS_FEATURE: &str = "cloud-receipt-upload-v1";
 /// The `request` action.
 pub(crate) const REQUEST_FEATURE: &str = "cloud-json-request-v4";
+/// The `oauth_refresh` action.
+pub(crate) const OAUTH_REFRESH_FEATURE: &str = "cloud-oauth-refresh-v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -39,6 +42,9 @@ struct Request {
     /// What the caller built for `request`.
     #[serde(default)]
     request: Option<JsonRequest>,
+    /// What the caller built for `oauth_refresh`.
+    #[serde(default)]
+    oauth_refresh: Option<RefreshCall>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +60,8 @@ enum Action {
     Receipts,
     /// One authenticated JSON request the caller built.
     Request,
+    /// One refresh-token exchange for a grant the caller owns.
+    OauthRefresh,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Value {
@@ -68,6 +76,12 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
             Some(call) => brokered(|| send(request.auth_context.as_ref(), call)),
             None => Err(SyncError::Failed(
                 "The Guard Cloud request is missing.".to_owned(),
+            )),
+        },
+        Action::OauthRefresh => match &request.oauth_refresh {
+            Some(call) => brokered(|| refresh(call)),
+            None => Err(SyncError::Failed(
+                "The Guard OAuth refresh request is missing.".to_owned(),
             )),
         },
         action => {
@@ -90,7 +104,7 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
                         "The receipt upload request is missing.".to_owned(),
                     )),
                 },
-                Action::Request => Err(SyncError::Failed(
+                Action::Request | Action::OauthRefresh => Err(SyncError::Failed(
                     "The Guard Cloud request is missing.".to_owned(),
                 )),
             }

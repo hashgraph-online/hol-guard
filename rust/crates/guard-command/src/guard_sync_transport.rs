@@ -1181,6 +1181,9 @@ pub enum OAuthRefreshOutcome {
         access_token: String,
         rotation_refresh_token: Option<String>,
         access_token_expires_at: Option<String>,
+        /// The whole token response, for a caller that reads its entitlement
+        /// and profile fields.
+        payload: Value,
     },
     /// The endpoint issued a `DPoP-Nonce`; retry with it (bounded by caller).
     NonceChallenge(String),
@@ -1193,7 +1196,13 @@ pub enum OAuthRefreshOutcome {
     /// 502/503/504): an outage that clears up on its own, not a sign-in that
     /// needs reconnecting.
     Unreachable(String),
-    /// Any other transport or payload failure — reauthorizable.
+    /// A 400, 401 or 403 that is not `invalid_grant`: the endpoint refused
+    /// this grant without revoking it.
+    Rejected(String),
+    /// The proof could not be signed, or the endpoint answered without a
+    /// usable access token: the stored sign-in cannot be refreshed as it is.
+    Unusable(String),
+    /// Any other transport or HTTP failure.
     Failed(String),
 }
 
@@ -1346,7 +1355,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
         req.now_unix,
     ) {
         Ok(proof) => proof,
-        Err(reason) => return OAuthRefreshOutcome::Failed(reason),
+        Err(reason) => return OAuthRefreshOutcome::Unusable(reason),
     };
     let mut headers = BTreeMap::new();
     headers.insert(
@@ -1369,7 +1378,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             let Some(payload) =
                 parse_json_body(&resp.body_bytes).and_then(|v| v.as_object().cloned())
             else {
-                return OAuthRefreshOutcome::Failed(
+                return OAuthRefreshOutcome::Unusable(
                     "Guard Cloud token refresh returned a non-JSON response.".to_owned(),
                 );
             };
@@ -1384,7 +1393,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 _ => (String::new(), false),
             };
             if !token_type_ok {
-                return OAuthRefreshOutcome::Failed(
+                return OAuthRefreshOutcome::Unusable(
                     "Guard Cloud token refresh returned an unusable token.".to_owned(),
                 );
             }
@@ -1399,6 +1408,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 access_token,
                 rotation_refresh_token,
                 access_token_expires_at,
+                payload,
             }
         }
         Err(SyncHttpError::Http {
@@ -1424,7 +1434,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 if invalid_grant_oauth_payload(&body) {
                     return OAuthRefreshOutcome::DeadGrant;
                 }
-                return OAuthRefreshOutcome::Failed(http_error_reason_message(
+                return OAuthRefreshOutcome::Rejected(http_error_reason_message(
                     status, &headers, &body,
                 ));
             }

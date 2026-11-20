@@ -9,12 +9,11 @@ import importlib.metadata
 import io
 import json
 import logging
+import math
 import os
 import socket
 import time
 import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
@@ -32,7 +31,6 @@ from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
 from ..harness_context import HarnessContext
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
-from ..mdm.network import managed_urlopen
 from ..models import PolicyDecision
 from ..native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
@@ -127,9 +125,6 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
-from .sync_retry_delay import (
-    parse_retry_after_header as _parse_retry_after_header,
-)
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
 )
@@ -1452,28 +1447,6 @@ def _dpop_nonce_from_http_error(error: urllib.error.HTTPError, payload: object) 
     return nonce
 
 
-def _oauth_refresh_error_message(error: urllib.error.HTTPError) -> str:
-    try:
-        raw_body = error.read().decode("utf-8")
-    except OSError:
-        raw_body = ""
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        description = _optional_string(payload.get("error_description"))
-        if description is not None:
-            return description
-        error_code = _optional_string(payload.get("error"))
-        if error_code is not None:
-            return error_code
-    normalized_body = raw_body.strip()
-    if normalized_body:
-        return normalized_body
-    return f"HTTP Error {error.code}: {error.reason}"
-
-
 def _guard_oauth_reauthorization_message() -> str:
     return "Guard authorization expired. Run `hol-guard connect` to sign in again."
 
@@ -1509,24 +1482,6 @@ def _guard_runtime_upgrade_restart_message() -> str:
     return (
         "HOL Guard was upgraded while this process was running. Restart the agent application "
         "before Guard Cloud access resumes."
-    )
-
-
-def _invalid_grant_oauth_payload(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return _invalid_grant_oauth_error_details(
-        _optional_string(payload.get("error")),
-        _optional_string(payload.get("error_description")),
-    )
-
-
-def _invalid_grant_oauth_error_details(
-    error_code: str | None,
-    description: str | None,
-) -> bool:
-    return error_code == "invalid_grant" or (
-        description is not None and "missing, expired, or already consumed" in description.lower()
     )
 
 
@@ -1607,6 +1562,33 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         raise GuardSyncEndpointUntrustedError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
+def _refreshed_oauth_payload(answer: dict[str, object]) -> dict[str, object]:
+    """The token response of a native refresh, or the error its outcome names."""
+
+    outcome = answer.get("outcome")
+    reason = _optional_string(answer.get("reason")) or "Guard Cloud did not say why."
+    if outcome == "refreshed":
+        payload = answer.get("payload")
+        if not isinstance(payload, dict):
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        return payload
+    if outcome == "rate_limited":
+        retry_after = answer.get("retryAfterSeconds")
+        seconds = 0
+        if isinstance(retry_after, int | float) and not isinstance(retry_after, bool):
+            seconds = math.ceil(retry_after)
+        raise _GuardOAuthRefreshRateLimitedError(seconds)
+    if outcome == "dead_grant":
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
+    if outcome == "rejected":
+        raise _GuardOAuthRefreshRejectedError(f"{_guard_oauth_reauthorization_message()} {reason}")
+    if outcome == "unusable":
+        raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {reason}")
+    if outcome == "unreachable":
+        raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True)
+    raise RuntimeError(f"Guard OAuth token refresh failed: {reason}")
+
+
 def _refresh_guard_oauth_access_token_once(
     *,
     token_endpoint: str,
@@ -1616,85 +1598,41 @@ def _refresh_guard_oauth_access_token_once(
 ) -> dict[str, object]:
     if _guard_runtime_was_upgraded():
         raise GuardSyncNotAvailableError(_guard_runtime_upgrade_restart_message(), retryable=True)
-    request_body = urllib.parse.urlencode(
+    from . import cloud_bundle_sync
+
+    answer = cloud_bundle_sync.cloud_oauth_refresh(
         {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "refresh_token": refresh_token,
-        }
-    ).encode("utf-8")
-    dpop_nonce: str | None = None
-    nonce_retry_count = 0
-    while True:
-        try:
-            dpop_proof = _sign_guard_dpop_proof(
-                request_url=token_endpoint,
-                method="POST",
-                dpop_key_material=dpop_key_material,
-                nonce=dpop_nonce,
-            )
-        except GuardSyncNotAvailableError:
-            raise
-        except (RuntimeError, TypeError, ValueError) as error:
-            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-        request = urllib.request.Request(
-            token_endpoint,
-            data=request_body,
-            method="POST",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-                "User-Agent": _GUARD_SYNC_USER_AGENT,
-                "DPoP": dpop_proof,
+            "tokenEndpoint": token_endpoint,
+            "clientId": client_id,
+            "refreshToken": refresh_token,
+            "dpopKey": {
+                "privateKeyPem": dpop_key_material.private_key_pem,
+                "publicJwk": dict(dpop_key_material.public_jwk),
+                "algorithm": dpop_key_material.algorithm,
             },
-        )
-        try:
-            with managed_urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            payload = _http_error_payload(error) if error.code in {400, 401, 403, 429} else None
-            challenge_nonce = _dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
-                dpop_nonce = challenge_nonce
-                nonce_retry_count += 1
-                continue
-            if error.code == 429:
-                raise _GuardOAuthRefreshRateLimitedError(_parse_retry_after_header(error)) from error
-            if error.code in {400, 401, 403}:
-                if _invalid_grant_oauth_payload(payload):
-                    raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
-                refresh_error_message = _oauth_refresh_error_message(error)
-                raise _GuardOAuthRefreshRejectedError(
-                    f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
-                ) from error
-            refresh_error_message = _oauth_refresh_error_message(error)
-            raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
-        except OSError as error:
-            if _is_guard_cloud_unreachable_error(error):
-                raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True) from error
-            raise RuntimeError(_sync_url_error_message(error)) from error
-        if not isinstance(payload, dict):
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        access_token = _optional_string(payload.get("access_token"))
-        token_type = _optional_string(payload.get("token_type"))
-        if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        access_token_expires_at = _oauth_access_token_expires_at(
-            access_token,
-            payload=payload,
-            now=datetime.now(timezone.utc),
-        )
-        return {
-            "access_token": access_token,
-            "access_token_expires_at": access_token_expires_at,
-            "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
-                payload,
-                now=datetime.now(timezone.utc),
-            ),
-            "cloud_user_profile": extract_cloud_user_profile(payload),
-            "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
-            "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
         }
+    )
+    payload = _refreshed_oauth_payload(answer)
+    access_token = _optional_string(payload.get("access_token"))
+    token_type = _optional_string(payload.get("token_type"))
+    if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+    access_token_expires_at = _oauth_access_token_expires_at(
+        access_token,
+        payload=payload,
+        now=datetime.now(timezone.utc),
+    )
+    return {
+        "access_token": access_token,
+        "access_token_expires_at": access_token_expires_at,
+        "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
+            payload,
+            now=datetime.now(timezone.utc),
+        ),
+        "cloud_user_profile": extract_cloud_user_profile(payload),
+        "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
+        "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
+    }
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
