@@ -19,9 +19,17 @@ def resident_down(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(policy_bundle_parser, "native_policy_bundle", unavailable)
 
 
-@pytest.mark.usefixtures("resident_down")
-def test_an_outage_record_still_says_what_happened() -> None:
+def test_an_outage_record_is_written_without_asking_the_resident_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[str] = []
+
+    def answer(kind: str, _request: dict[str, object]) -> dict[str, object]:
+        asked.append(kind)
+        return {}
+
+    monkeypatch.setattr(policy_bundle_parser, "native_policy_bundle", answer)
     record = policy_bundle_parser.policy_bundle_rejection_payload(NATIVE_UNAVAILABLE_REJECTION)
+
+    assert asked == []
 
     assert record["reason"] == NATIVE_UNAVAILABLE_REJECTION
     assert isinstance(record["message"], str)

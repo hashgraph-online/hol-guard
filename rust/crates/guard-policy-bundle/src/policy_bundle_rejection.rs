@@ -10,7 +10,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::policy_bundle_op::{Fail, Handled};
+use crate::policy_bundle_op::{optional_text, Fail, Handled};
 use crate::policy_bundle_py::Obj;
 
 pub(crate) const CANONICAL_COMPILE_PREFIX: &str = "canonical_compile_";
@@ -173,14 +173,6 @@ pub(crate) fn payload(reason: Option<&str>, rule_id: Option<&str>) -> Value {
     Value::Object(record)
 }
 
-fn optional(input: &Obj, name: &str) -> Result<Option<String>, Fail> {
-    match input.get(name) {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(text)) => Ok(Some(text.clone())),
-        Some(_) => Err(Fail::Invalid),
-    }
-}
-
 pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
     (kind == "rejection_payload").then(|| rejection_payload(input))
 }
@@ -189,7 +181,7 @@ fn rejection_payload(input: &Obj) -> Handled {
     if input.keys().any(|key| key != "reason" && key != "rule_id") {
         return Err(Fail::Invalid);
     }
-    let reason = optional(input, "reason")?;
-    let rule_id = optional(input, "rule_id")?;
-    Ok(payload(reason.as_deref(), rule_id.as_deref()))
+    let reason = optional_text(input, "reason")?;
+    let rule_id = optional_text(input, "rule_id")?;
+    Ok(payload(reason, rule_id))
 }

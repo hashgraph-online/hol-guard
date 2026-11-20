@@ -129,10 +129,14 @@ def policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = No
 
     Rust writes the record: the reason, the sentence telling an administrator
     what to do, and the rule that refused to compile. Without the resident the
-    record keeps the reason alone, plus the outage sentence when the reason is
-    the outage itself.
+    record keeps the reason alone. The outage record is written here without
+    asking, since that reason means the resident just failed to answer.
     """
 
+    resolved = reason or "invalid_policy_bundle"
+    if resolved == NATIVE_UNAVAILABLE_REJECTION:
+        # The resident just failed to answer; asking it again would wait out a second timeout.
+        return {"reason": resolved, "message": _NATIVE_UNAVAILABLE_MESSAGE}
     try:
         record = native_policy_bundle("rejection_payload", {"reason": reason, "rule_id": rule_id})
     except PolicyBundleNativeError:
@@ -143,11 +147,7 @@ def policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = No
         and isinstance(record.get("ruleId", ""), str)
     ):
         return dict(record)
-    resolved = reason or "invalid_policy_bundle"
-    fallback: dict[str, object] = {"reason": resolved}
-    if resolved == NATIVE_UNAVAILABLE_REJECTION:
-        fallback["message"] = _NATIVE_UNAVAILABLE_MESSAGE
-    return fallback
+    return {"reason": resolved}
 
 
 def policy_bundle_rejection_message(reason: str | None) -> str | None:
