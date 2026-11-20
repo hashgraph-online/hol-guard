@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "uvx",
-    "package": "docusense-mcp"
+    "package": "docusense-mcp@0.1.2"
   },
   "riskClasses": [
     "local-data-access",
@@ -49,10 +49,10 @@
     { "name": "other", "state": "review" }
   ],
   "referenceUrls": [
-    "https://github.com/hksharma2004/docu-sense",
-    "https://github.com/hksharma2004/docu-sense/blob/main/src/docusense/mcp_server.py",
-    "https://github.com/hksharma2004/docu-sense/blob/main/src/docusense/jobs.py",
-    "https://pypi.org/project/docusense-mcp/"
+    "https://github.com/hksharma2004/docu-sense/tree/v0.1.2",
+    "https://github.com/hksharma2004/docu-sense/blob/v0.1.2/src/docusense/mcp_server.py",
+    "https://github.com/hksharma2004/docu-sense/blob/v0.1.2/src/docusense/jobs.py",
+    "https://pypi.org/project/docusense-mcp/0.1.2/"
   ],
   "saferAlternatives": [
     "Keep add_document on review: it reads local files or whole folders into the store under DOCUSENSE_HOME (default ~/.docusense).",
