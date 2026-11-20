@@ -13,6 +13,7 @@ from .health_lease_contract import HealthLeaseBinding, HealthLeaseOutbox
 from .protection_lease_contract import ProtectionLeaseChallenge
 
 _CHALLENGE_SCHEMA = "guard-protection-attestation-challenge.v1"
+_RESPONSE_LIMIT_BYTES = 4096
 _CHALLENGE_KEYS = {
     "challengeId",
     "deviceId",
@@ -55,7 +56,7 @@ class GuardCloudMachineHealthTransport:
         return self._store.get_cloud_sync_profile() is not None
 
     def _request(self, method: str, path: str, body: bytes | None = None) -> tuple[int, bytes]:
-        from ..runtime.cloud_bundle_sync import cloud_raw_request
+        from ..runtime.cloud_bundle_sync import CloudResponseOversizedError, cloud_raw_request
         from ..runtime.runner import _resolve_guard_sync_auth_context
 
         if (method == "GET") != (body is None):
@@ -79,13 +80,16 @@ class GuardCloudMachineHealthTransport:
                 body=body,
                 timeout_seconds=15,
                 retry_timeout_seconds=15,
+                max_response_bytes=_RESPONSE_LIMIT_BYTES,
             )
         except urllib.error.HTTPError as exc:
             bounded = exc.read(1025)
             raise OSError(f"health_lease_delivery_http_{exc.code}:{_cloud_error_code(bounded)}") from exc
+        except CloudResponseOversizedError as exc:
+            raise OSError("health_lease_delivery_response_oversized") from exc
         except RuntimeError as exc:
             raise OSError("health_lease_delivery_unavailable") from exc
-        if len(payload) > 4096:
+        if len(payload) > _RESPONSE_LIMIT_BYTES:
             raise OSError("health_lease_delivery_response_oversized")
         return status, payload
 

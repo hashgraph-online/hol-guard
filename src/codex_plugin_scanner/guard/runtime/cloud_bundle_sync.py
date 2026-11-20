@@ -133,11 +133,13 @@ def cloud_raw_request(
     body: bytes | None,
     timeout_seconds: float,
     retry_timeout_seconds: float,
+    max_response_bytes: int | None = None,
 ) -> tuple[int, bytes]:
     """:func:`cloud_json_request` that returns the 2xx status and body unread.
 
     For an endpoint that may answer ``204 No Content`` or whose body the caller
-    parses under its own limits. Failures are raised the same way.
+    parses under its own limits. Failures are raised the same way, and a body
+    longer than ``max_response_bytes`` raises :class:`CloudResponseOversizedError`.
     """
 
     answer = _native_cloud_request(
@@ -148,6 +150,7 @@ def cloud_raw_request(
         timeout_seconds=timeout_seconds,
         retry_timeout_seconds=retry_timeout_seconds,
         raw=True,
+        max_response_bytes=max_response_bytes,
     )
     return cloud_raw_answer(url, answer)
 
@@ -161,6 +164,7 @@ def _native_cloud_request(
     timeout_seconds: float,
     retry_timeout_seconds: float,
     raw: bool,
+    max_response_bytes: int | None = None,
 ) -> object:
     request: dict[str, object] = {
         "url": url,
@@ -170,6 +174,8 @@ def _native_cloud_request(
     }
     if raw:
         request["answer"] = "raw"
+    if max_response_bytes is not None:
+        request["maxResponseBytes"] = int(max_response_bytes)
     body_file: str | None = None
     try:
         if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
@@ -193,6 +199,10 @@ def _native_cloud_request(
             Path(body_file).unlink(missing_ok=True)
 
 
+class CloudResponseOversizedError(RuntimeError):
+    """A raw Guard Cloud response was longer than the caller's limit."""
+
+
 def cloud_json_answer(url: str, answer: object) -> dict[str, object]:
     """Guard Cloud's object answer from the native ``request`` result, or its failure raised."""
 
@@ -211,6 +221,8 @@ def cloud_raw_answer(url: str, answer: object) -> tuple[int, bytes]:
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
     raw = answer.get("raw")
     if isinstance(raw, dict):
+        if raw.get("oversized") is True:
+            raise CloudResponseOversizedError("Guard Cloud returned a response larger than the caller reads.")
         status = raw.get("status")
         body = raw.get("body")
         if isinstance(status, int) and not isinstance(status, bool) and isinstance(body, str):

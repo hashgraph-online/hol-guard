@@ -123,7 +123,7 @@ def test_a_body_over_the_inline_limit_is_sent_from_a_private_file(
     assert list(tmp_path.iterdir()) == []
 
 
-def _send_raw(origin: str, url: str, body: bytes | None) -> tuple[int, bytes]:
+def _send_raw(origin: str, url: str, body: bytes | None, max_response_bytes: int | None = None) -> tuple[int, bytes]:
     from codex_plugin_scanner.guard.config import resolve_guard_home
 
     return cloud_bundle_sync.cloud_raw_request(
@@ -133,6 +133,7 @@ def _send_raw(origin: str, url: str, body: bytes | None) -> tuple[int, bytes]:
         body=body,
         timeout_seconds=5,
         retry_timeout_seconds=5,
+        max_response_bytes=max_response_bytes,
     )
 
 
@@ -148,6 +149,15 @@ def test_a_raw_request_returns_the_status_and_the_body_unread(cloud_origin: str)
     assert status == 200
     assert json.loads(body) == {"item": None, "path": "/api/guard/runtime/keys"}
     assert _CloudHandler.bodies == [b'{"key":1}']
+
+
+def test_a_raw_request_reports_a_body_over_the_callers_limit(cloud_origin: str) -> None:
+    url = f"{cloud_origin}/api/guard/runtime/keys"
+    with pytest.raises(cloud_bundle_sync.CloudResponseOversizedError):
+        _send_raw(cloud_origin, url, b'{"key":1}', max_response_bytes=8)
+
+    status, _body = _send_raw(cloud_origin, url, b'{"key":1}', max_response_bytes=4096)
+    assert status == 200
 
 
 def test_a_raw_request_raises_a_refusal_as_the_http_error(cloud_origin: str) -> None:

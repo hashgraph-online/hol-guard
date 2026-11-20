@@ -66,6 +66,10 @@ pub(crate) struct JsonRequest {
     /// and body as they came back.
     #[serde(default)]
     answer: Answer,
+    /// The largest raw body the caller reads. A longer body is reported as
+    /// oversized instead of returned, so a small channel keeps its own limit.
+    #[serde(default)]
+    max_response_bytes: Option<u64>,
 }
 
 /// What the caller reads from a successful exchange.
@@ -127,7 +131,7 @@ pub(crate) fn send(
     }
     match answer {
         Ok(Answered::Json(answer)) => accepted(answer),
-        Ok(Answered::Raw(status, body)) => raw(status, body),
+        Ok(Answered::Raw(status, body)) => raw(status, body, request.max_response_bytes),
         Err(SyncFetchError::Http(failure)) => Ok(json!({"refusal": {
             "status": failure.status,
             "headers": failure.headers,
@@ -231,7 +235,10 @@ enum Answered {
 }
 
 /// The status and body as they came back; the body must be UTF-8.
-fn raw(status: u16, body: Vec<u8>) -> Result<Value, SyncError> {
+fn raw(status: u16, body: Vec<u8>, max_bytes: Option<u64>) -> Result<Value, SyncError> {
+    if max_bytes.is_some_and(|max| body.len() as u64 > max) {
+        return Ok(json!({"raw": {"status": status, "oversized": true}}));
+    }
     let body =
         String::from_utf8(body).map_err(|_| SyncError::Failed(INVALID_RESPONSE.to_owned()))?;
     Ok(json!({"raw": {"status": status, "body": body}}))

@@ -262,11 +262,11 @@ fn a_request_reads_json_unless_it_asks_for_the_raw_answer() {
 #[test]
 fn a_raw_answer_keeps_the_status_and_an_empty_body() {
     assert_eq!(
-        raw(204, Vec::new()).unwrap(),
+        raw(204, Vec::new(), None).unwrap(),
         json!({"raw": {"status": 204, "body": ""}})
     );
     assert_eq!(
-        raw(200, b"{\"ok\":true}".to_vec()).unwrap(),
+        raw(200, b"{\"ok\":true}".to_vec(), None).unwrap(),
         json!({"raw": {"status": 200, "body": "{\"ok\":true}"}})
     );
 }
@@ -274,7 +274,19 @@ fn a_raw_answer_keeps_the_status_and_an_empty_body() {
 #[test]
 fn a_raw_answer_that_is_not_utf8_is_invalid() {
     assert!(matches!(
-        raw(200, vec![0xff, 0xfe]),
+        raw(200, vec![0xff, 0xfe], None),
         Err(SyncError::Failed(reason)) if reason == INVALID_RESPONSE
     ));
+}
+
+#[test]
+fn raw_reports_a_body_over_the_callers_limit_as_oversized() {
+    assert_eq!(
+        raw(200, vec![b'x'; 5], Some(4)).unwrap(),
+        json!({"raw": {"status": 200, "oversized": true}})
+    );
+    assert_eq!(
+        raw(200, b"abcd".to_vec(), Some(4)).unwrap(),
+        json!({"raw": {"status": 200, "body": "abcd"}})
+    );
 }
