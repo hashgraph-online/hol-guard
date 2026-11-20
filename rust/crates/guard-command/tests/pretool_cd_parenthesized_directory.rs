@@ -84,7 +84,7 @@ fn a_read_below_a_parenthesized_directory_keeps_its_proof() {
         format!("cd \"{group_text}\" && ls"),
         format!("cd \"{group_text}\" && head -40 page.tsx"),
         "cd \"app/(group)/overview\" && pwd".to_owned(),
-        "cd app/\\(marketing\\)/challenge && pwd".to_owned(),
+        "cd app/\\(group\\)/overview && pwd".to_owned(),
     ] {
         assert_eq!(shell(home_text, &cwd, &command), allowed(), "{command}");
     }
@@ -119,10 +119,7 @@ fn an_unquoted_parenthesis_is_still_unproven() {
     let home_text = home.to_str().unwrap();
     let project = home.join("project");
     let cwd = project.to_str().unwrap().to_owned();
-    for command in [
-        "cd app/(group)/overview && pwd",
-        "cd $(echo app) && pwd",
-    ] {
+    for command in ["cd app/(group)/overview && pwd", "cd $(echo app) && pwd"] {
         let actions = shell(home_text, &cwd, command);
         assert!(
             actions.iter().all(|action| action != "allow"),
