@@ -470,5 +470,5 @@ fn an_entry_below_new_parent_folders_runs_in_the_worktree_it_creates() {
     }
 }
 
-#[path = "pretool_extension_allow_worktree_leading.rs"]
+#[path = "pretool_extension_allow_worktree/leading.rs"]
 mod leading_entry;
