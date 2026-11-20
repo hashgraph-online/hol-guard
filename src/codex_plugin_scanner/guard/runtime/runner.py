@@ -1632,11 +1632,16 @@ def _refresh_guard_oauth_access_token_once(
     token_type = _optional_string(payload.get("token_type"))
     if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-    access_token_expires_at = oauth_access_token_expires_at(
-        access_token,
-        expires_in=payload.get("expires_in"),
-        now=datetime.now(timezone.utc),
-    )
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(
+            access_token,
+            expires_in=payload.get("expires_in"),
+            now=datetime.now(timezone.utc),
+        )
+    except NativeRunnerAuthorityError:
+        # The refreshed token still works; without an expiry it is only
+        # refreshed again before reuse instead of being served from cache.
+        access_token_expires_at = None
     return {
         "access_token": access_token,
         "access_token_expires_at": access_token_expires_at,

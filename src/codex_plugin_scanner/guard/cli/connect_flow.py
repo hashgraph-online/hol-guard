@@ -23,6 +23,7 @@ from ..dpop_key_binding import signed_dpop_proof
 from ..mdm.network import managed_urlopen
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..oauth_token_claims import oauth_access_token_expires_at, oauth_token_identity
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
@@ -127,15 +128,16 @@ class GuardOAuthTokenExchangeResult:
     def __post_init__(self) -> None:
         if self.access_token_expires_at is not None:
             return
-        object.__setattr__(
-            self,
-            "access_token_expires_at",
-            oauth_access_token_expires_at(
+        try:
+            expires_at = oauth_access_token_expires_at(
                 self.access_token,
                 expires_in=self.expires_in,
                 now=datetime.now(timezone.utc),
-            ),
-        )
+            )
+        except NativeRunnerAuthorityError:
+            # No saved expiry only means the token is refreshed before reuse.
+            expires_at = None
+        object.__setattr__(self, "access_token_expires_at", expires_at)
 
     def target_binding(self, *, machine_fallback: str | None = None) -> GuardOAuthTargetBinding:
         return {
@@ -519,15 +521,19 @@ def _parse_guard_token_exchange_payload(
     if token_type.lower() != "bearer":
         raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
     now = datetime.now(timezone.utc)
-    identity = oauth_token_identity(access_token)
     expires_in = _int_payload_value(payload, "expires_in", 0)
+    try:
+        identity = oauth_token_identity(access_token)
+        access_token_expires_at = oauth_access_token_expires_at(access_token, expires_in=expires_in, now=now)
+    except NativeRunnerAuthorityError as error:
+        # Saving the credential without its grant, machine and workspace would
+        # leave a row no later sync can tell apart from an unbound one.
+        raise RuntimeError(
+            "Guard OAuth token exchange failed: Guard's local runtime could not read the access token."
+        ) from error
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
-        access_token_expires_at=oauth_access_token_expires_at(
-            access_token,
-            expires_in=expires_in,
-            now=now,
-        ),
+        access_token_expires_at=access_token_expires_at,
         refresh_token=str(payload.get("refresh_token") or "").strip() or None,
         expires_in=expires_in,
         scope=str(payload.get("scope") or "").strip(),

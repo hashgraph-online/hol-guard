@@ -57,14 +57,26 @@ def _strings(value: object) -> dict[str, str]:
 
 
 def oauth_token_identity(access_token: str) -> dict[str, str | None]:
-    """The grant, machine, workspace and device claims, each ``None`` when absent."""
+    """The grant, machine, workspace and device claims, each ``None`` when absent.
 
-    answer = _native("identity", claims=_claims(access_token)) or {}
-    identity = _strings(answer.get("identity"))
+    Raises ``NativeRunnerAuthorityError`` when the runtime cannot answer, so a
+    token exchange never saves a credential row whose binding was never read.
+    """
+
+    answer = native_runner_authority("oauth_token_claims", {"op": "identity", "claims": _claims(access_token)})
+    identity = _strings(answer.get("identity") if isinstance(answer, dict) else None)
     return {key: identity.get(key) for key in ("grant_id", "machine_id", "workspace_id", "device_id")}
 
 
 def oauth_binding_metadata(access_token: str, *, issuer: str | None = None) -> dict[str, str]:
+    """The token's binding, or ``{}`` when it has none or the runtime cannot answer.
+
+    Callers use this to recover a credential row whose metadata is missing.
+    Recovering the row without its binding keeps the refresh token usable, and
+    the next sync recovers the binding again through
+    ``oauth_binding_from_credentials`` once the runtime answers.
+    """
+
     answer = _native("binding", claims=_claims(access_token), issuer=issuer) or {}
     return _strings(answer.get("binding"))
 
@@ -112,15 +124,22 @@ def oauth_effective_binding(
 
 
 def oauth_access_token_expires_at(access_token: str, *, expires_in: object, now: datetime) -> str | None:
-    """The token's own ``exp``, else ``now + expires_in``, else ``None``."""
+    """The token's own ``exp``, else ``now + expires_in``, else ``None``.
 
-    answer = _native(
-        "expires_at",
-        claims=_claims(access_token),
-        expires_in=expires_in if isinstance(expires_in, (int, float, str)) else None,
-        now=now.isoformat(),
+    Raises ``NativeRunnerAuthorityError`` when the runtime cannot answer, so
+    the caller decides whether a missing expiry is acceptable.
+    """
+
+    answer = native_runner_authority(
+        "oauth_token_claims",
+        {
+            "op": "expires_at",
+            "claims": _claims(access_token),
+            "expires_in": expires_in if isinstance(expires_in, (int, float, str)) else None,
+            "now": now.isoformat(),
+        },
     )
-    expires_at = (answer or {}).get("expires_at")
+    expires_at = answer.get("expires_at") if isinstance(answer, dict) else None
     return expires_at if isinstance(expires_at, str) else None
 
 
