@@ -1,4 +1,30 @@
-use super::{exact_command_block, read_by_daemon, settle, settle_within};
+use super::{exact_command_block, read_by_daemon};
+use guard_contracts::GuardHookEnvelopeV2 as Envelope;
+use serde_json::Map;
+
+/// No step of a chained command passes alone in these tests.
+fn no_step(_payload: &Value, _budget_ms: u64) -> Option<Map<String, Value>> {
+    None
+}
+
+fn settle(
+    envelope: &Envelope,
+    harness: &str,
+    event_name: &str,
+    result: &Value,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
+    super::settle(envelope, harness, event_name, result, &no_step)
+}
+
+fn settle_within(
+    envelope: &Envelope,
+    harness: &str,
+    event_name: &str,
+    result: &Value,
+    wait: Duration,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
+    super::settle_within(envelope, harness, event_name, result, &no_step, wait)
+}
 use crate::context_digest_package_scripts::package_json_scripts;
 use guard_contracts::{
     GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, GuardHookLocalCliRulesV1,
@@ -499,3 +525,6 @@ fn only_a_shell_action_no_custom_rule_blocked_is_probed() {
         assert!(!read_by_daemon(&result, None), "{result}");
     }
 }
+
+#[path = "edge_local_cli_compound_tests.rs"]
+mod compound;
