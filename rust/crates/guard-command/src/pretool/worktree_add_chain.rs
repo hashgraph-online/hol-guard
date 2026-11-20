@@ -118,7 +118,28 @@ fn leading_entry(
     let [target] = first.arguments.as_slice() else {
         return None;
     };
-    super::super::directory_targets::verified_cwd_target(target, context)
+    let resolved = super::super::directory_targets::verified_cwd_target(target, context)?;
+    // An anchored alias can be trusted for a standalone cd, but not for a
+    // worktree chain. The shell preserves logical PWD while Git resolves
+    // relative worktree paths from the physical directory. A later cd ..
+    // could therefore enter another checkout than the one Git created.
+    // Relative operands already require an unaliased spelling in
+    // verified_cwd_target; require the same for anchored Unix operands.
+    #[cfg(unix)]
+    {
+        let tilde = super::super::directory_targets::home_variable::tilde_spelling(target);
+        let spelled = tilde.as_deref().unwrap_or(target);
+        let expanded = if spelled == "~" || spelled.starts_with("~/") {
+            super::super::read_paths::expand_home_read_path(spelled, context.home_dir)?
+        } else {
+            spelled.to_owned()
+        };
+        let supplied = std::path::Path::new(&expanded);
+        if supplied.is_absolute() && supplied != std::path::Path::new(&resolved) {
+            return None;
+        }
+    }
+    Some(resolved)
 }
 
 fn prove(
