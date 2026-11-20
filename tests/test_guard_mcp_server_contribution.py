@@ -26,6 +26,7 @@ _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
 _LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
+_LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _NJC_CHAIN_READS_URL = "https://njc-tx-explain.departmentofjazz.workers.dev/mcp"
 
 
@@ -56,6 +57,12 @@ def _njc_chain_reads_payload() -> dict[str, object]:
 
 def _krusch_skylight_payload() -> dict[str, object]:
     payload = json.loads(_KRUSCH_SKYLIGHT.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _lienzo_ui_payload() -> dict[str, object]:
+    payload = json.loads(_LIENZO_UI.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -264,6 +271,52 @@ def test_krusch_skylight_local_writes_require_review() -> None:
     for tool_name in ("skylight_status", "skylight_list_events", "skylight_pull_chores", "skylight_list_meals"):
         assert declared[tool_name] == "review"
         assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_lienzo_ui_contribution_is_external_opt_in_and_version_pinned() -> None:
+    payload = _lienzo_ui_payload()
+    validate_mcp_contribution(payload, filename=_LIENZO_UI.name)
+    assert payload["id"] == "mcp.lienzo-ui"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "lienzo-ui-mcp@1.7.3",
+    }
+
+
+def test_lienzo_ui_export_aliases_require_review() -> None:
+    payload = _lienzo_ui_payload()
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    for tool_name in ("export_unity", "exportar_unity"):
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_lienzo_ui_stays_inert_until_local_admin_enable() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "lienzo-ui-mcp@1.7.3"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="lienzo-ui",
+        tool_name="exportar_unity",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    enabled = _AuthorityStore(
+        (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-lienzo-ui", ControlState.ENABLED),)
+    )
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_njc_chain_reads_paid_tools_require_review() -> None:
