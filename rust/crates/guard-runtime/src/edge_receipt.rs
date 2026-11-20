@@ -60,6 +60,31 @@ const APPROVAL_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
 /// outside the resident's own edge request, which never records.
 pub(crate) fn encode(
     envelope: &GuardHookEnvelopeV2,
+    origin_store: Option<&PolicySnapshotStore>,
+    edge: GuardHookEdgeResultV2,
+    started: Instant,
+) -> Result<Vec<u8>, String> {
+    encode_inner(
+        envelope,
+        origin_store.is_some(),
+        edge,
+        started,
+        origin_store,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn encode_for_test(
+    envelope: &GuardHookEnvelopeV2,
+    resident: bool,
+    edge: GuardHookEdgeResultV2,
+    started: Instant,
+) -> Result<Vec<u8>, String> {
+    encode_inner(envelope, resident, edge, started, None)
+}
+
+fn encode_inner(
+    envelope: &GuardHookEnvelopeV2,
     resident: bool,
     edge: GuardHookEdgeResultV2,
     started: Instant,

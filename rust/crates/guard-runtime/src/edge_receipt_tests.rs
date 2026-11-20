@@ -93,7 +93,7 @@ pub(super) fn encoded(
     resident: bool,
     edge: GuardHookEdgeResultV2,
 ) -> Value {
-    serde_json::from_slice(&encode(envelope, resident, edge, Instant::now(), None).unwrap())
+    serde_json::from_slice(&encode_for_test(envelope, resident, edge, Instant::now()).unwrap())
         .unwrap()
 }
 
