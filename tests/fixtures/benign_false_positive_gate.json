@@ -11999,6 +11999,7 @@
     {
       "id": "neg-omp-goal-carrying-a-private-key-path",
       "fix_area": "omp",
+      "sandbox_does_not_protect": true,
       "harnesses": [
         "omp"
       ],
