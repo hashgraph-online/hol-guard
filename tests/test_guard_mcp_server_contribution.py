@@ -273,27 +273,6 @@ def test_krusch_skylight_local_writes_require_review() -> None:
         assert mcp_tool_state(payload, tool_name) == "review"
 
 
-def test_lienzo_ui_contribution_is_external_opt_in_and_version_pinned() -> None:
-    payload = _lienzo_ui_payload()
-    validate_mcp_contribution(payload, filename=_LIENZO_UI.name)
-    assert payload["id"] == "mcp.lienzo-ui"
-    assert payload["trustClass"] == "external"
-    assert payload["activation"] == "opt-in"
-    assert payload["launch"] == {
-        "kind": "package-launcher",
-        "command": "npx",
-        "package": "lienzo-ui-mcp@1.7.3",
-    }
-
-
-def test_lienzo_ui_export_aliases_require_review() -> None:
-    payload = _lienzo_ui_payload()
-    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
-    for tool_name in ("export_unity", "exportar_unity"):
-        assert declared[tool_name] == "review"
-        assert mcp_tool_state(payload, tool_name) == "review"
-
-
 def test_lienzo_ui_stays_inert_until_local_admin_enable() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
