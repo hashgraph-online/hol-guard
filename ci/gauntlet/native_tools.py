@@ -43,7 +43,7 @@ BACKGROUND_READ_CASE = "omp-native-read-background-job-output"
 # for the bracket directory, so a listing that leaves the brackets out is other
 # work rather than this scenario.
 ROUTE_SEGMENT_GLOB_CASE = "omp-native-glob-dynamic-route-segment"
-ROUTE_SEGMENT_SELECTOR = "[slug]"
+ROUTE_SEGMENT_DIRECTORY = ("app", "items", "[slug]")
 JOB_OUTPUT_PATH = re.compile(r"proc://(?P<job>[A-Za-z0-9_][A-Za-z0-9_.-]*)(?::[1-9][0-9]*-[1-9][0-9]*)?")
 # The scenario's one command is `git hash-object README.md`, so its output is a single object id.
 # Holding the read to it keeps a read of some other job, or of an empty table row, from passing.
@@ -597,6 +597,28 @@ def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str], r
     return "delegated report did not answer the token and password fields"
 
 
+def _route_segment_glob_path(value: object) -> bool:
+    """Require complete bracketed route components, not a token in a basename.
+
+    Native glob paths may be relative, workspace-redacted or absolute on POSIX
+    and Windows. Traversal and unrelated relative directories cannot prove
+    this scenario was exercised.
+    """
+    if not isinstance(value, str) or not value or "\x00" in value:
+        return False
+    path = value.replace("\\", "/")
+    if "//" in path:
+        return False
+    parts = path.split("/")
+    if any(part in (".", "..") for part in parts):
+        return False
+    if path.startswith("{{workspace}}/"):
+        return tuple(path[len("{{workspace}}/"):].split("/")[:3]) == ROUTE_SEGMENT_DIRECTORY
+    if path.startswith("/") or re.match(r"^[A-Za-z]:/", path):
+        return any(tuple(parts[i:i + 3]) == ROUTE_SEGMENT_DIRECTORY for i in range(len(parts) - 2))
+    return tuple(parts[:3]) == ROUTE_SEGMENT_DIRECTORY
+
+
 def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
     """Whether a glob call really selected through the dynamic route directory.
 
@@ -608,7 +630,7 @@ def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
     globs = [call for call in calls if call["name"] == "glob"]
     if not globs:
         return None
-    if any(ROUTE_SEGMENT_SELECTOR not in str(call["args"].get("path", "")) for call in globs):
+    if any(not _route_segment_glob_path(call["args"].get("path")) for call in globs):
         return "the glob call did not select through the dynamic route directory"
     return None
 
