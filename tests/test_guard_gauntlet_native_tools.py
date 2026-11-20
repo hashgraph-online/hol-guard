@@ -67,6 +67,12 @@ def test_realistic_fixture_has_lfs_config_nested_repo_and_linked_worktree(tmp_pa
     assert "tools/nested-repo" not in tracked
 
 
+def test_route_group_fixture_creates_both_directories_used_by_the_scenario(tmp_path) -> None:
+    fixture = create_fixture(tmp_path / "fx", scenario_id="route-group-directory-reads")
+    assert (fixture.workspace / "app/(group)/overview/page.tsx").is_file()
+    assert (fixture.workspace / "app/(group)/challenge").is_dir()
+
+
 def test_default_fixture_stays_minimal(tmp_path) -> None:
     fixture = create_fixture(tmp_path / "fx")
     assert not (fixture.home / ".gitconfig").exists()
@@ -117,6 +123,30 @@ def test_scope_judge_requires_the_dynamic_route_glob_to_use_its_bracket_director
     assert native_tools_scope_error(scenario, [selected, elsewhere], {}) is not None
     assert native_tools_scope_error(scenario, [selected, elsewhere], {}, guard_denied=True) is not None
     assert native_tools_scope_error(scenario, [selected, selected], {}) is None
+    for path in (
+        "app/items/[slug]",
+        "{{workspace}}/app/items/[slug]/page.tsx",
+        r"{{workspace}}\app\items\[slug]\page.tsx",
+        "/tmp/guard-fixture/project/app/items/[slug]/page.tsx",
+        r"C:\Users\fixture\project\app\items\[slug]\page.tsx",
+    ):
+        assert native_tools_scope_error(scenario, [_call("glob", path=path)], {}) is None, path
+    for path in (
+        "src/[slug].ts",
+        "app/items/[slug].ts",
+        "app/other/[slug]/page.tsx",
+        "other/app/items/[slug]/page.tsx",
+        "app/items/[slug]/../.ssh/id_rsa",
+        "app/items/[slug]/./page.tsx",
+        "{{workspace}}/../app/items/[slug]/page.tsx",
+        "/tmp/work/app/items/[slug]/../private",
+        "app/items/[slug2]/page.tsx",
+        "",
+    ):
+        call = _call("glob", path=path)
+        assert native_tools_scope_error(scenario, [call], {}) is not None, path
+        assert native_tools_scope_error(scenario, [call], {}, guard_denied=True) is not None, path
+    assert native_tools_scope_error(scenario, [_call("glob", path=None)], {}) is not None
 
 
 def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
