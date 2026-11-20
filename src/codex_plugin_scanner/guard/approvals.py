@@ -156,11 +156,11 @@ def _serialize_approval_resolution(function: Callable[_P, _R]) -> Callable[_P, _
             from .local_clis.local_cli_reallow import finalize_reallow_siblings
 
             finalize_reallow_siblings(
-                store=kwargs["store"],
+                store=cast(GuardStore, kwargs["store"]),
                 request_id=request_id,
                 changed_cli=changed_cli,
-                approval_gate_input=kwargs.get("approval_gate_input"),
-                now=kwargs.get("now") or _now(),
+                approval_gate_input=cast(ApprovalGateInput | None, kwargs.get("approval_gate_input")),
+                now=cast(str, kwargs.get("now") or _now()),
             )
         return result
 
