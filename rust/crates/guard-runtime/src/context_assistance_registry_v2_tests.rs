@@ -61,6 +61,12 @@ fn modern(fixture: &Fixture) -> Installation {
     record.receipt = Some(seal_installation_receipt(&metadata, &key).unwrap());
     record
 }
+/// Listed installations other than the built-in engine, which is always first.
+fn stored(home: &Path) -> Vec<Value> {
+    let mut choices = list(home).unwrap();
+    assert_eq!(choices.remove(0)["runtime_id"], BUILTIN_ID);
+    choices
+}
 fn key_path(fixture: &Fixture) -> PathBuf {
     fs::canonicalize(&fixture.0)
         .unwrap()
@@ -72,7 +78,7 @@ fn legacy_reads_preserve_record_bytes_and_do_not_provision_a_key() {
     let path = fixture.write(&fixture.record());
     let before = fs::read(&path).unwrap();
     assert!(load(&fixture.0, "local-314").is_ok());
-    let choices = list(&fixture.0).unwrap();
+    let choices = stored(&fixture.0);
     assert_eq!(choices[0]["sdk_version"], "0.14.1");
     assert_eq!(choices[0]["core_version"], "0.14.1");
     assert_eq!(choices[0]["managed"], false);
@@ -90,7 +96,7 @@ fn authenticated_modern_metadata_is_read_without_sdk_paths_or_processes() {
     let before = fs::read(&path).unwrap();
     let loaded = load(&fixture.0, &record.runtime_id).unwrap();
     assert_eq!(loaded.qualification, "guard_qualified");
-    let choices = list(&fixture.0).unwrap();
+    let choices = stored(&fixture.0);
     assert_eq!(
         choices[0]["build_id"],
         record.approval.release.as_ref().unwrap().identity.build_id

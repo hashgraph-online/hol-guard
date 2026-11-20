@@ -100,6 +100,16 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
+import {
+  decisionRefusedSession,
+  decisionSessionCandidates,
+  decisionSessionVerdict,
+  GuardDecisionSignInRequiredError,
+  markAnonymousDecisionRefused,
+  markSessionRefused,
+  rememberLinkedGuardSession,
+  type GuardDecisionSessionVerdict,
+} from "./dashboard-decision-session";
 import { applyHarnessCigarPatch } from "./fleet-app-modes";
 import {
   pulseEnrollmentBody,
@@ -413,10 +423,57 @@ export function readGuardToken(): string | null {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-    return guardToken;
+    return rememberLinkedGuardSession(guardToken);
   }
   return readGuardStorage(GUARD_TOKEN_PARAM);
+}
+
+export { GuardDecisionSignInRequiredError, type GuardDecisionSessionVerdict } from "./dashboard-decision-session";
+
+/** The session this tab should decide `requestId` with, or why it cannot. */
+export function guardDecisionSession(requestId: string): GuardDecisionSessionVerdict {
+  if (isGuardDemoMode()) {
+    return { kind: "ready", token: null };
+  }
+  return decisionSessionVerdict(requestId, readGuardToken());
+}
+
+/**
+ * A decision call sent with each session that may decide its request in
+ * turn. A session the daemon refuses is remembered and the next one is
+ * tried; when none is left the card asks the user to sign in. A 401 that
+ * carries an approval-gate code is the gate's answer and is returned as is.
+ */
+async function fetchDecisionWithSession(
+  requestId: string,
+  input: string,
+  init: (guardToken: string | null) => RequestInit,
+): Promise<Response> {
+  const verdict = guardDecisionSession(requestId);
+  if (verdict.kind === "sign_in") {
+    throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
+  }
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens: Array<string | null> = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    // The tab's own session may be renewed by the first call; every Pulse
+    // continuation then sends the renewed one, not the session it replaced.
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput: RequestInfo, sendInit?: RequestInit): Promise<Response> =>
+      tabSession
+        ? fetchWithGuardAuthOnce(sendInput, sendInit)
+        : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!(await decisionRefusedSession(response))) {
+      return response;
+    }
+    if (token === null) {
+      markAnonymousDecisionRefused();
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
+    }
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 
 function saveGuardToken(guardToken: string): void {
@@ -3359,7 +3416,7 @@ export async function resolveRequestWithQueueResult(
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
+  const init = (guardToken: string | null): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3390,7 +3447,7 @@ export async function resolveRequestWithQueueResult(
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
     })
   });
-  const response = await fetchGuardApi(path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload: Record<string, unknown> | null = null;
     try {
@@ -3673,7 +3730,22 @@ export type GuardDesktopHandoffResult = {
  * Desktop watches for the request and opens its own visible update flow,
  * which re-verifies the release before installing anything.
  */
-export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+/** A refusal or failure answered by the daemon: the request reached Guard. */
+export class GuardDesktopHandoffError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, code: string | null, status: number) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export async function requestGuardDesktopHandoff(
+  offeredVersion: string | null = null,
+): Promise<GuardDesktopHandoffResult> {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -3687,7 +3759,14 @@ export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffR
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion
+          ? { handoff_to_desktop: true, latest_version: offeredVersion }
+          : { handoff_to_desktop: true },
+      ),
       signal: controller.signal,
     });
   } finally {
@@ -3699,7 +3778,7 @@ export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffR
       stringValue(payload.message) ??
       stringValue(payload.error) ??
       `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,
@@ -3807,15 +3886,22 @@ export async function retryResume(requestId: string): Promise<GuardCodexResumeRe
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
-  const response = await fetchGuardApi(path, init());
+  let response: Response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -4713,9 +4799,10 @@ export async function resolveMcpPolicyRequest(input: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<McpPolicyDecisionResult> {
-  const response = await fetchGuardApi(
+  const response = await fetchDecisionWithSession(
+    input.requestId,
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -4723,7 +4810,7 @@ export async function resolveMcpPolicyRequest(input: {
         ...(input.approval_password ? { approval_password: input.approval_password } : {}),
         ...(input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}),
       }),
-    },
+    }),
   );
   const payloadBody = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {

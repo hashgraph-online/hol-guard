@@ -970,7 +970,13 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          SOURCE_SHA=$(git rev-parse HEAD)
+          # The evaluator artifact may come from the producer's cache, which is
+          # keyed on the native sources rather than the commit. A cache hit
+          # carries the SHA of the commit that built those same sources, so the
+          # wheel and its command pack bundle name the runtime's own build SHA,
+          # as the wheel already does its rule digest.
+          SOURCE_SHA=$(rust/target/release/hol-guard-runtime capabilities --json | jq -r '.build_sha')
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Seal the native wheel
@@ -993,7 +999,7 @@ jobs:
             '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' \
             > "$work/source-build.json"
           "$compiler" compile < "$work/source-build.json" > "$work/source-compiled.json"
-          uv build --wheel --out-dir "$work/pure"
+          HOL_GUARD_BUNDLE_SOURCE_SHA="$SOURCE_SHA" uv build --wheel --out-dir "$work/pure"
           uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
             --wheel "$work/pure/hol_guard-${VERSION}-py3-none-any.whl" \
             --runtime "$runtime" \

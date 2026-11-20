@@ -9,6 +9,7 @@ members = [
     "crates/guard-cigar-release",
     "crates/guard-cigar-install",
     "crates/guard-cigar-artifacts",
+    "crates/guard-cigar-native",
     "crates/guard-command",
     "crates/guard-command-catalog-data",
     "crates/guard-contracts",

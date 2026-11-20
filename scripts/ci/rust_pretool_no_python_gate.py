@@ -250,7 +250,13 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/edge.rs",
-            ("evaluate_pre_tool_envelope", "edge_result_check::validate_pre_tool_result"),
+            ("evaluate_pre_tool_chain(", "edge_result_check::validate_pre_tool_result"),
+        ),
+        (
+            # The native review and the policy join the edge runs before its
+            # session stop; chained command steps are judged through it too.
+            root / "rust/crates/guard-runtime/src/edge_pre_tool_chain.rs",
+            ("evaluate_pre_tool_envelope", "apply_pre_tool_policy_for_hook"),
         ),
         (
             # PostToolUse is decided by the same native edge: the Rust review,
@@ -352,8 +358,13 @@ def _worker_failures(root: Path) -> list[str]:
     native_edge_snapshot = function_node(
         native_hook, "_review_native_edge_with_snapshot", class_name="HookWorkerNativeMixin"
     )
-    if "_review_raw_hook_native" not in function_calls(native_edge_snapshot):
+    if "native_or_daemon_edge" not in function_calls(native_edge_snapshot):
         failures.append("HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge")
+    direct_route_path = root / "src/codex_plugin_scanner/guard/native_hook_direct_route.py"
+    if direct_route_path.exists():
+        direct_route = function_node(direct_route_path, "native_or_daemon_edge")
+        if "_review_raw_hook_native" not in function_calls(direct_route):
+            failures.append("native_or_daemon_edge does not invoke the daemon edge fallback")
     # The resident renders the harness response for the edge decision; the
     # worker returns that rendering instead of building PostToolUse output.
     edge_calls = function_calls(native_edge_snapshot)

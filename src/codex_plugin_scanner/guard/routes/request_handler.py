@@ -17,11 +17,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
 from ..native_daemon_manage import (
     write_guard_daemon_state,
 )
 from ..resident_evidence_client import ResidentEvidenceClient
+from ..resident_evidence_dispatch import ResidentEvidenceDispatch
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_health.diagnostics import DaemonDiagnostics
@@ -97,7 +97,7 @@ class _GuardDaemonHTTPServer:
     dashboard_reconnect_lock: threading.Lock
     dashboard_reconnect_consumed_challenges: dict[str, int]
     runtime_hook_evidence_writer: ResidentEvidenceClient
-    runtime_hook_evidence_dispatch: HookEvidenceDispatch
+    runtime_resident_evidence_dispatch: ResidentEvidenceDispatch
     request_capacity: threading.BoundedSemaphore
     request_capacity_limit: int
     connection_capacity: threading.BoundedSemaphore

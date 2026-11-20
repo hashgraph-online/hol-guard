@@ -355,6 +355,41 @@ def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> 
     assert reconciled["ok"]["repaired_harnesses"] == []  # type: ignore[index]
 
 
+@pytest.mark.parametrize(
+    ("daemon_url", "bound"),
+    [
+        ("http://127.0.0.1:4781", "http://127.0.0.1:4781"),
+        ("http://example.com:4781", None),
+        ("http://127.0.0.1:4781/x", None),
+        (4781, None),
+    ],
+)
+def test_worker_reconcile_answers_claude_with_the_daemon_it_runs_inside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, daemon_url: object, bound: str | None
+) -> None:
+    # The daemon has not reported ready while its reconcile runs, so a live
+    # check against it waits out the health probe on every cold start.
+    from codex_plugin_scanner.guard import claude_hook_entry, runtime_artifact_reconciliation
+    from codex_plugin_scanner.guard.runtime_artifact_reconciliation import RuntimeArtifactReconciliation
+
+    seen: list[str] = []
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:9")
+
+    def reconcile(store: GuardStore, *, home_dir: Path | None = None) -> RuntimeArtifactReconciliation:
+        del home_dir
+        seen.append(json.loads(claude_hook_entry.claude_facts(store.guard_home))["daemon_url"])
+        return RuntimeArtifactReconciliation((), (), (), (), ())
+
+    monkeypatch.setattr(runtime_artifact_reconciliation, "reconcile_runtime_artifacts", reconcile)
+
+    reconciled = _call(tmp_path, "worker.reconcile_artifacts", {"home": None, "daemon_url": daemon_url})
+
+    assert reconciled["ok"]["ok"] is True  # type: ignore[index]
+    assert seen == [bound or "http://127.0.0.1:9"]
+    # Nothing stays bound once the call ends.
+    assert json.loads(claude_hook_entry.claude_facts(tmp_path))["daemon_url"] == "http://127.0.0.1:9"
+
+
 def test_worker_aibom_pass_answers(tmp_path: Path) -> None:
     aibom = _call(tmp_path, "worker.aibom_inventory", {})
     assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]

@@ -61,7 +61,7 @@ fn prewarm_command(executable: &Path, home: &Path) -> Command {
 
 /// The same rule the daemon lifecycle applies to a Guard home under a pytest
 /// temporary directory.
-fn ephemeral_home(home: &Path) -> bool {
+pub(super) fn ephemeral_home(home: &Path) -> bool {
     home.components().any(|part| {
         let part = part.as_os_str().to_string_lossy();
         part.starts_with("pytest-") || part.contains("pytest-of-")

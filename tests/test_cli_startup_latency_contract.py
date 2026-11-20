@@ -214,113 +214,6 @@ def test_hol_guard_daemon_serve_skips_command_surface(
     assert _COMMANDS_SUPPORT not in sys.modules
 
 
-def test_daemon_workers_fast_path_argv_accepts_only_the_native_launch_shape() -> None:
-    from codex_plugin_scanner.guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv
-
-    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "/g"]) is True
-    assert is_daemon_workers_fast_path_argv(["guard", "desktop", "daemon-workers", "--guard-home", "/g"]) is True
-    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "--help"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--help"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "/g", "--json"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "library-serve", "--guard-home", "/g"]) is True
-    assert is_daemon_workers_fast_path_argv(["desktop", "library-call", "--guard-home", "/g"]) is True
-    assert is_daemon_workers_fast_path_argv(["desktop", "library-serve", "--guard-home", "/g", "--x"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "converge", "--guard-home", "/g"]) is False
-    assert is_daemon_workers_fast_path_argv(["desktop", "bootstrap", "--guard-home", "/g"]) is False
-
-
-def test_hol_guard_daemon_workers_skips_command_surface(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from codex_plugin_scanner.guard import native_context
-    from codex_plugin_scanner.guard.workers import host
-
-    calls: list[tuple[str, Path | None]] = []
-
-    def fake_bind(guard_home: Path | None, *, remember: bool = True) -> None:
-        del remember
-        calls.append(("bind", guard_home))
-
-    def fake_host(guard_home: Path) -> int:
-        calls.append(("host", guard_home))
-        return 0
-
-    monkeypatch.setattr(native_context, "bind_context_digest_home", fake_bind)
-    monkeypatch.setattr(host, "run_worker_host", fake_host)
-    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
-    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
-    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
-    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
-    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
-
-    guard_home = tmp_path / "guard"
-    code, _ = _run_as_hol_guard(["desktop", "daemon-workers", "--guard-home", str(guard_home)])
-
-    assert code == 0
-    # The digest home is bound before the host starts, as the command router does.
-    assert calls == [("bind", guard_home.resolve()), ("host", guard_home.resolve())]
-    assert _COMMANDS_HUB not in sys.modules
-    assert _COMMANDS_PARSER not in sys.modules
-    assert _COMMANDS_SUPPORT not in sys.modules
-
-
-@pytest.mark.parametrize(
-    ("command", "handler"),
-    [("library-serve", "serve_library_calls"), ("library-call", "run_library_call")],
-)
-def test_hol_guard_library_children_skip_command_surface(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    command: str,
-    handler: str,
-) -> None:
-    from codex_plugin_scanner.guard.cli import desktop_library_call
-
-    served: list[Path] = []
-
-    def fake_child(guard_home: Path) -> int:
-        served.append(guard_home)
-        return 0
-
-    monkeypatch.setattr(desktop_library_call, handler, fake_child)
-    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
-    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
-    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
-    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
-    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
-
-    guard_home = tmp_path / "guard"
-    code, _ = _run_as_hol_guard(["desktop", command, "--guard-home", str(guard_home)])
-
-    assert code == 0
-    assert served == [guard_home.resolve()]
-    assert _COMMANDS_HUB not in sys.modules
-    assert _COMMANDS_PARSER not in sys.modules
-    assert _COMMANDS_SUPPORT not in sys.modules
-
-
-def test_hol_guard_daemon_workers_fast_path_reports_a_host_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from codex_plugin_scanner.guard.workers import host
-
-    def failing_host(guard_home: Path) -> int:
-        del guard_home
-        raise RuntimeError("worker host could not start")
-
-    monkeypatch.setattr(host, "run_worker_host", failing_host)
-
-    code, _ = _run_as_hol_guard(["desktop", "daemon-workers", "--guard-home", str(tmp_path / "guard")])
-
-    assert code == 1
-    assert "worker host could not start" in capsys.readouterr().err
-
-
 _HELP_PATH_FORBIDDEN_MODULES = (
     _COMMANDS_HUB,
     _COMMANDS_SUPPORT,
@@ -363,6 +256,29 @@ def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
     assert result["usage"] is True
     loaded = set(result["modules"])
     assert [name for name in _HELP_PATH_FORBIDDEN_MODULES if name in loaded] == []
+
+
+def test_worker_host_import_leaves_the_cryptography_backend_unloaded() -> None:
+    """The worker host imports the store; neither needs the cryptography backend to start."""
+
+    import json
+    import subprocess
+
+    probe = (
+        "import json, sys\n"
+        "import codex_plugin_scanner.guard.workers.host\n"
+        "print(json.dumps(sorted(name for name in sys.modules if name.split('.')[0] == 'cryptography')))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", probe],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == []
 
 
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:

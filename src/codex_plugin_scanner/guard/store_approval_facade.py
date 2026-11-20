@@ -115,7 +115,7 @@ class StoreApprovalsMixin:
         hook renders it itself.
 
         ``connector_lookup`` is the launch of a review Guard did not recognise
-        (``native_review_connector_lookup``). The resident looks up the
+        (``native_connector_lookup``). The resident looks up the
         connector it waits on, queues the review under that connector's group
         with its setup hint and wording, and keeps the review's context with
         it in the same write. The row carries what it found as

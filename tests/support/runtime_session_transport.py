@@ -1,7 +1,7 @@
 """Carry the runtime session upload over urllib in unit tests.
 
 The native ``cloud-event-sync`` command posts the runtime session itself, so a
-test that fakes ``urllib`` or ``runner._urlopen_json_with_timeout_retry`` would
+test that fakes ``urllib`` or ``cloud_sync_transport._urlopen_json_with_timeout_retry`` would
 otherwise never see that request. Most such tests check what the runner does
 with Cloud's answer (the catalog step, the summary, the queued event), not the
 upload. This double sends the same request through the Python transport those
@@ -65,11 +65,12 @@ def runtime_session_over_urllib(
 def _post_runtime_session(guard_home: Path, auth_context: dict[str, object], session: dict[str, object]) -> object:
     from codex_plugin_scanner.guard.runtime import runner
     from codex_plugin_scanner.guard.store import GuardStore
+    from tests.support import cloud_sync_transport
 
     url = runner._sync.normalized_runtime_sessions_sync_url(
         runner._validate_guard_sync_url(runner._auth_context_sync_url(auth_context))
     )
-    request = runner._guard_sync_request(
+    request = cloud_sync_transport._guard_sync_request(
         auth_context,
         request_url=url,
         method="POST",
@@ -77,7 +78,7 @@ def _post_runtime_session(guard_home: Path, auth_context: dict[str, object], ses
         extra_headers=None,
     )
     try:
-        payload = runner._urlopen_json_with_timeout_retry(
+        payload = cloud_sync_transport._urlopen_json_with_timeout_retry(
             request=request,
             timeout_seconds=runner._RUNTIME_SYNC_TIMEOUT_SECONDS,
             retry_timeout_seconds=runner._RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,

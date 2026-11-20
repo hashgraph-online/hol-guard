@@ -1,5 +1,6 @@
-use super::{exact_command_block, read_by_daemon, settle, settle_within};
+use super::{exact_command_block, read_by_daemon};
 use crate::context_digest_package_scripts::package_json_scripts;
+use compound::{settle_alone as settle, settle_alone_within as settle_within};
 use guard_contracts::{
     GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, GuardHookLocalCliRulesV1,
     GuardHookSourceMetadataV2, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
@@ -499,3 +500,6 @@ fn only_a_shell_action_no_custom_rule_blocked_is_probed() {
         assert!(!read_by_daemon(&result, None), "{result}");
     }
 }
+
+#[path = "edge_local_cli_compound_tests.rs"]
+mod compound;

@@ -70,6 +70,7 @@ mod archive_inspect_containment;
 mod archive_verdict_seam;
 mod artifact_content_hash_op;
 mod artifact_risk_op;
+mod auto_update_state;
 mod bash_post_delivery;
 #[cfg(unix)]
 mod binding_capture_capture;
@@ -266,11 +267,15 @@ mod command_capability_op;
 mod command_effect;
 mod command_envelope_op;
 mod command_expression_validate_op;
+mod command_job_plan_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
 #[path = "adapters/command_probe.rs"]
 mod command_probe;
+mod command_queue_repair;
+mod command_result;
 mod command_risk_groups;
+mod command_state;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -837,20 +842,25 @@ mod pyyaml_dump;
 mod runtime_output;
 mod runtime_output_directory;
 mod swarm_op;
+mod sync_state_ledger;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 mod cloud_bundle_command;
 mod cloud_bundle_fetch;
 mod cloud_bundle_network;
 mod cloud_bundle_sync;
+mod cloud_command_lease;
 mod cloud_event_command;
 mod cloud_event_sync;
+mod cloud_json_request;
+mod cloud_oauth_refresh;
 mod cloud_pain_signal_sync;
 mod cloud_receipt_upload;
 mod cloud_receipt_upload_rows;
 mod cloud_runtime_session_sync;
 mod codex_hook_identity_op;
 mod command_pack_record_op;
+mod hook_connector_facts_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
 #[allow(dead_code)]
@@ -868,10 +878,14 @@ mod hook_evidence_store_wire;
 mod hook_evidence_writer_op;
 mod hook_launch_cli;
 mod hook_path_rules;
+mod hook_payload_facts_op;
+mod hook_policy_admission_op;
 mod hook_policy_config;
+mod hook_policy_fence_window_op;
 mod hook_process_spawn;
 mod hook_render_op;
 mod hook_render_posture;
+mod hook_review_binding_op;
 mod insights_share_payload;
 mod installation_continuity;
 mod inventory_export_redaction;
@@ -903,6 +917,7 @@ mod local_cli_hook_op;
 mod local_cli_identify;
 mod local_cli_observer;
 mod local_cli_script_source;
+mod local_identity;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
@@ -951,6 +966,7 @@ mod mcp_proxy_route;
 mod mcp_proxy_shlex;
 mod mcp_proxy_signals;
 mod mcp_registry_page;
+mod mcp_registry_search;
 mod mcp_registry_setup;
 mod mcp_relay;
 mod mcp_relay_args;
@@ -1015,7 +1031,9 @@ mod network_status_build;
 mod network_status_validation;
 mod oauth_package_firewall_entitlement;
 mod oauth_refresh;
+mod oauth_refresh_circuit;
 mod oauth_secret_authority;
+mod oauth_token_claims;
 mod oci_bundle_evidence;
 mod oci_bundle_mounts;
 mod oci_bundle_op;
@@ -1130,6 +1148,8 @@ mod policy_lookup_portable;
 mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
+mod policy_shadow_source;
+mod policy_shadow_verdict;
 mod policy_snapshot_build;
 mod policy_snapshot_publish;
 mod policy_store;
@@ -1445,6 +1465,11 @@ pub fn launch() {
     }
     if guard_command::source_cli::is_command(&arguments) {
         std::process::exit(guard_command::source_cli::main(arguments));
+    }
+    // CIGAR's bridges and worker run as private modes of this executable, so
+    // local context needs no Python and no second binary.
+    if guard_cigar_native::is_command(&arguments) {
+        std::process::exit(guard_cigar_native::main(&arguments));
     }
     // Neither the hook nor the error path may panic on a closed stderr: a
     // panic inside the panic hook aborts the process and loses the code.

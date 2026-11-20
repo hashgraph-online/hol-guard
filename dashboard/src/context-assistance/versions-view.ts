@@ -12,8 +12,20 @@ export const versionHeading = "text-base font-semibold tracking-[-0.01em] text-b
 export const versionLead = "mt-1 max-w-[62ch] text-sm leading-6 text-brand-dark/70";
 export const versionBytes = (bytes: number) => (bytes / 1048576).toFixed(1) + " MiB";
 /** Installed runtimes passed Guard's checks on this computer; the record tag predates that wording. */
-export const installationLabel = (qualification: "local_candidate" | "guard_qualified") =>
-  qualification === "guard_qualified" ? "checked on this computer" : "local development build";
+export function installationLabel(qualification: "local_candidate" | "guard_qualified" | "guard_builtin"): string {
+  if (qualification === "guard_builtin") return "built into Guard, no Python needed";
+  if (qualification === "guard_qualified") return "checked on this computer";
+  return "local development build";
+}
+/** Who looks after a runtime: shipped in Guard, installed by Guard, or added by hand. */
+export function runtimeOwnerLabel(item: { builtin?: boolean; managed?: boolean }): string {
+  if (item.builtin) return "ships with Guard";
+  if (item.managed) return "Guard managed";
+  return "added outside Guard";
+}
+/** "Python 3.12.4", or "Built into Guard" for the engine that needs no Python. */
+export const runtimeHostLabel = (python: [number, number, number] | null) =>
+  python === null ? "Built into Guard" : "Python " + python.join(".");
 const OS: Record<string, string> = { darwin: "macOS", linux: "Linux", windows: "Windows", win32: "Windows" };
 const ARCH: Record<string, string> = { arm64: "Apple silicon", aarch64: "Arm", x86_64: "Intel", amd64: "Intel", x64: "Intel" };
 /** "darwin-arm64" reads as "macOS · Apple silicon"; unknown tags pass through untouched. */

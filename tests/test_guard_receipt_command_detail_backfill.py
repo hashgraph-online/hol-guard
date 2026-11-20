@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.runner import sync_receipts
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_receipt_payload_client import cloud_sync_receipt_payload
+from tests.support import cloud_sync_transport
 from tests.support import receipt_upload_transport as upload
 
 
@@ -211,7 +212,7 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
     monkeypatch.setattr(upload, "RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 6)
     monkeypatch.setattr(upload, "RECEIPT_SYNC_BATCH_SIZE", 2)
     monkeypatch.setattr(guard_runner, "_resolve_cloud_receipt_redaction_level", lambda _store: "none")
-    monkeypatch.setattr(guard_runner, "_guard_sync_request", lambda *args, **kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *args, **kwargs: object())
     monkeypatch.setattr(upload, "receipt_sync_rows_for_upload", lambda _store, cursor_rowid: [])
 
     attempted_batches = {"count": 0}
@@ -222,7 +223,7 @@ def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_s
             return {"syncedAt": "2026-07-04T00:00:00+00:00", "receiptsStored": 2}
         raise OSError("network down")
 
-    monkeypatch.setattr(guard_runner, "_urlopen_json_with_timeout_retry", _fake_sync)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", _fake_sync)
 
     preview_rows, preview_marker = upload.receipt_sync_rows_with_command_detail_backfill(
         store,

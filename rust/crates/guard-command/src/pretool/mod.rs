@@ -597,7 +597,30 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
     // would floor an ordinary `remote.*url` read. The pattern still faces the
     // markers the glob's own text names, the screen a search pattern faces.
     let patterns = git_config_reads::configuration_patterns(segment);
+    // A word after the standalone `--` delimiter is positional, even if it
+    // looks like `--name=value`. Git treats it as a pathspec, so discarding
+    // its prefix before screening could conceal credential-named files.
+    let mut positional = false;
+    // For grep/rg, -e/-f (or --regexp/--file) consume their next word as
+    // a pattern or pattern-file operand, even when that word is "--".
+    let pattern_options = matches!(
+        crate::command_compatibility::basename(segment).as_str(),
+        "grep" | "rg"
+    );
+    let mut pattern_value = false;
     arguments_outside_message(segment).any(|argument| {
+        let is_pattern_value = std::mem::take(&mut pattern_value);
+        if argument == "--" && !is_pattern_value {
+            positional = true;
+            return false;
+        }
+        if pattern_options
+            && !positional
+            && !is_pattern_value
+            && matches!(argument.as_str(), "-e" | "--regexp" | "-f" | "--file")
+        {
+            pattern_value = true;
+        }
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
@@ -612,7 +635,7 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
             // it match `--include=private-key.tsx`, so an ordinary filtered
             // search picks up a fixed floor no Allow can settle. The value
             // after the `=` still faces every screen a bare operand faces.
-            Some((name, value)) if option_name(name) => {
+            Some((name, value)) if !positional && option_name(name) => {
                 sensitive_read_path_argument(&readable_pattern(value).0)
             }
             Some((name, _))
@@ -751,13 +774,33 @@ fn class_end(chars: &[char], start: usize) -> Option<(usize, bool)> {
 fn arguments_outside_message(
     segment: &crate::CommandSegmentV1,
 ) -> impl Iterator<Item = &String> + '_ {
+    // Git diff/log/show/checkout/restore use -m for merge handling, not
+    // for a message. Hiding the following "--" would hide a pathspec.
+    let merge_flag = crate::command_compatibility::basename(segment) == "git"
+        && crate::command_compatibility::git_command_index(&segment.arguments)
+            .and_then(|index| segment.arguments.get(index))
+            .is_some_and(|command| {
+                matches!(
+                    command.as_str(),
+                    "diff"
+                        | "diff-files"
+                        | "diff-index"
+                        | "diff-tree"
+                        | "log"
+                        | "show"
+                        | "whatchanged"
+                        | "checkout"
+                        | "restore"
+                )
+            });
     let mut message_value = false;
     segment.arguments.iter().filter(move |argument| {
         let is_message = std::mem::take(&mut message_value);
-        message_value = matches!(argument.as_str(), "-m" | "--message");
+        message_value = !merge_flag && matches!(argument.as_str(), "-m" | "--message");
         let lowered = argument.to_ascii_lowercase();
-        let attached_message = lowered.starts_with("--message=")
-            || (lowered.starts_with("-m") && !lowered.starts_with("--"));
+        let attached_message = !merge_flag
+            && (lowered.starts_with("--message=")
+                || (lowered.starts_with("-m") && !lowered.starts_with("--")));
         !(is_message || attached_message)
     })
 }
@@ -1597,6 +1640,8 @@ fn evaluate_single_command(
 #[cfg(test)]
 #[path = "control_flow_tests.rs"]
 mod control_flow_tests;
+#[cfg(test)]
+mod fixed_glob_option_boundary_tests;
 #[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;

@@ -299,3 +299,26 @@ fn rejects_oversized_commands_without_partial_exact_parse() {
     );
     assert!(parsed.segments.is_empty());
 }
+
+#[test]
+fn the_compile_check_shortcut_reads_a_route_group_but_not_a_subshell() {
+    let route_group = parse_command(&request(
+        "cd 'app/(group)' && find src -name '*.py' -exec python -m py_compile {} +",
+    ))
+    .unwrap();
+    assert_eq!(
+        route_group.confidence, "exact",
+        "{:?}",
+        route_group.uncertainty_reason
+    );
+    assert_eq!(route_group.segments.len(), 2);
+    assert_eq!(route_group.segments[0].arguments, ["app/(group)"]);
+
+    // The same text without quotes is a subshell, whatever follows it.
+    let subshell = parse_command(&request(
+        "cd app/(group) && find src -name '*.py' -exec python -m py_compile {} +",
+    ))
+    .unwrap();
+    assert_eq!(subshell.confidence, "uncertain");
+    assert!(subshell.segments.is_empty());
+}

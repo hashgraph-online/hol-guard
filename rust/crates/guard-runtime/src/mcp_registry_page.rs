@@ -1,15 +1,10 @@
-//! `mcp_registry_page` runner-authority kind: one search page of the official
-//! public MCP server registry, read into the listing Guard shows.
+//! One search page of the official public MCP server registry, read into the
+//! listing Guard shows. `mcp_registry_search` fetches the page.
 //!
-//! Python fetches the page from the fixed registry origin with a bounded body;
-//! this reads it.
-//!
-//! - `{"body": str}`, the response body base64 encoded, answers
-//!   `{"listing": {...}}` with the page's `results`, `count` and
-//!   `more_available`, or `{"error": "registry_response_invalid"}` when the
-//!   body is not a well-formed registry page: not UTF-8 JSON, a repeated
-//!   object key, a non-finite number, more than 20 servers, or a server entry
-//!   missing its name, version or official registry metadata.
+//! [`listing`] answers the page's `results`, `count` and `more_available`, or
+//! `None` when the body is not a well-formed registry page: not UTF-8 JSON, a
+//! repeated object key, a non-finite number, more than 20 servers, or a server
+//! entry missing its name, version or official registry metadata.
 //!
 //! Only pinned, literal stdio recipes Codex can own become `package_options`:
 //! an `npx` npm package or a `uvx` PyPI package from its default registry,
@@ -17,14 +12,10 @@
 //! environment variables or runtime arguments. Nothing on the page is
 //! verified or installed, so every result says so.
 
-use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
 
 use crate::pyjson::{parse_unique, PyVal};
-use crate::runner_authority_detector::args_object;
-use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
-const MAX_BODY_BYTES: usize = 512_000;
 const MAX_SERVERS: usize = 20;
 const MAX_REMOTES: usize = 8;
 const MAX_PACKAGES: usize = 8;
@@ -33,20 +24,7 @@ const MAX_PACKAGE_ARGUMENTS: usize = 16;
 const OFFICIAL_META: &str = "io.modelcontextprotocol.registry/official";
 const SOURCE: &str = "official-mcp-registry";
 
-pub(crate) fn dispatch(args: &Value) -> KindResult {
-    let body = args_object(args)?
-        .get("body")
-        .and_then(Value::as_str)
-        .and_then(|encoded| STANDARD.decode(encoded).ok())
-        .filter(|body| body.len() <= MAX_BODY_BYTES)
-        .ok_or(ERR_INVALID)?;
-    Ok(match listing(&body) {
-        Some(listing) => json!({ "listing": listing }),
-        None => json!({ "error": "registry_response_invalid" }),
-    })
-}
-
-fn listing(body: &[u8]) -> Option<Value> {
+pub(crate) fn listing(body: &[u8]) -> Option<Value> {
     let page = parse_unique(std::str::from_utf8(body).ok()?).ok()?;
     if !finite(&page) {
         return None;

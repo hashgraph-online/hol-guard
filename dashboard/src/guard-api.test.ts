@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 
 import {
+  GuardDesktopHandoffError,
+  requestGuardDesktopHandoff,
   buildDemoRuntimeSnapshot,
   clearReviewQueue,
   fetchCommandActivityApi,
@@ -10,6 +12,7 @@ import {
   GuardOperationTimeoutError,
   GuardProtectionRepairError,
   GuardSessionUnavailableError,
+  GuardDecisionSignInRequiredError,
   fetchQueueSummary,
 	  fetchResumeStatus,
 	  formatHarnessCommand,
@@ -1815,15 +1818,14 @@ try {
     scope: "global",
     reason: "reviewed"
   });
-  throw new Error("expected malformed token refresh to preserve the 401 failure");
+  throw new Error("expected a refused tab without a session to ask for sign-in");
 } catch (error) {
-  assert(error instanceof Error, "L077c: malformed refresh returns an Error");
-  if (!(error instanceof Error)) {
-    throw error;
-  }
-  assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
+  assert(
+    error instanceof GuardDecisionSignInRequiredError && error.reason === "no_session",
+    "L077c: a 401 to a tab without a session asks for sign-in instead of a bare failure",
+  );
 }
-assert(malformedRefreshCalls.length === 1, "L077c: malformed refresh does not retry or bootstrap without a token");
+assert(malformedRefreshCalls.length === 1, "L077c: a tab without a session sends once and does not retry or bootstrap");
 
 installGuardWindow("?guard-token=token-codex-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchCodexResolveCalls = installFetchStub({
@@ -2088,5 +2090,41 @@ try {
 }
 assert(abandonedError instanceof DOMException && abandonedError.name === "AbortError", "an abort during the retry wait rejects");
 assert(busyFetches === 1, "an aborted request is not sent again");
+
+// The desktop update hand-off names the version the banner offered and
+// keeps a daemon refusal distinct from a request that never got an answer.
+installGuardWindow("?guard-token=token-handoff&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+Object.assign(window, { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout });
+const handoffBodies: unknown[] = [];
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  handoffBodies.push(JSON.parse(String(init?.body ?? "{}")));
+  return new Response(
+    JSON.stringify({ handoff_requested: true, current_version: "3.61.0a1", latest_version: "3.61.0a5" }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+};
+const handoffResult = await requestGuardDesktopHandoff("3.61.0a5");
+assert(handoffResult.handoff_requested && handoffResult.latest_version === "3.61.0a5", "hand-off reports the requested version");
+assert(
+  JSON.stringify(handoffBodies[0]) === JSON.stringify({ handoff_to_desktop: true, latest_version: "3.61.0a5" }),
+  "hand-off sends the offered version",
+);
+globalThis.fetch = async (): Promise<Response> =>
+  new Response(JSON.stringify({ error: "update_not_available", message: "Guard is already on the latest version." }), {
+    status: 400,
+    headers: { "Content-Type": "application/json" },
+  });
+let handoffRefusal: unknown = null;
+try {
+  await requestGuardDesktopHandoff("3.61.0a5");
+} catch (error) {
+  handoffRefusal = error;
+}
+assert(
+  handoffRefusal instanceof GuardDesktopHandoffError &&
+    handoffRefusal.code === "update_not_available" &&
+    handoffRefusal.status === 400,
+  "a daemon refusal keeps its code",
+);
 
 console.log("guard-api.test.ts: all tests passed");

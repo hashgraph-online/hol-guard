@@ -31,6 +31,7 @@ pytest_plugins = [
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
     "tests.network_trust_fixtures",
+    "tests.cloud_json_request_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -115,6 +116,16 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_alpha_tag_answers() -> Iterator[None]:
+    """Start each test without alpha tag answers remembered by an earlier one."""
+    from codex_plugin_scanner.guard.cli.update_alpha_tag_lookup import forget_alpha_tag_answers
+
+    forget_alpha_tag_answers()
+    yield
+    forget_alpha_tag_answers()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_verified_runtime_copy() -> Iterator[None]:
     """Start each test without the process's reused runtime copy."""
     from codex_plugin_scanner.guard.extension_builder import native_executable_root
@@ -174,6 +185,18 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
+
+
+@pytest.fixture(autouse=True)
+def _fresh_resident_health_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start each test with a closed resident circuit.
+
+    Health is keyed by runtime digest and Guard home, and tests that share the
+    default home would otherwise inherit failures an earlier test recorded.
+    """
+    from codex_plugin_scanner.guard import native_runtime_resilience
+
+    monkeypatch.setattr(native_runtime_resilience, "_STATES", type(native_runtime_resilience._STATES)())
 
 
 @pytest.fixture(autouse=True)

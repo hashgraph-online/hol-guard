@@ -1,7 +1,6 @@
 """Local tool scripts do not turn into arbitrary package execution consent."""
 
 import json
-import shlex
 from types import SimpleNamespace
 
 import pytest
@@ -15,7 +14,7 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
 # write are all one reading in native authority, tested there
 # (`contained_node_tool_tests.rs`), and so is the whole plan outside Windows
 # (`node_tool_plan_tests.rs`). These tests stand the Windows sink on that
-# answer and cover what stays here: the manifest read and the route it asks.
+# answer and cover what stays here: the route it asks and what it refuses.
 _REPORT = {"kind": "tool", "runtime_arguments": [], "expected_entry": None, "mode": "report"}
 _TSC = _REPORT | {"name": "tsc", "entries": ["typescript/bin/tsc"]}
 
@@ -33,17 +32,6 @@ def _routes(monkeypatch, answer, *, build_output=None):
         if operation == "node_build_output_root":
             assert build_output is not None
             return str(build_output)
-        if operation == "script_words":
-            # The words of a manifest script are read with the same lexer the
-            # route that admits the script reads it with; that reading is
-            # pinned in `contained_argv_tests.rs`. This stand-in answers the
-            # way native authority answers on this platform.
-            try:
-                return shlex.split(fields["script"], comments=False)
-            except ValueError as error:
-                raise RestrictedPytestError(
-                    "node_tool_invalid_command", "The local script could not be parsed."
-                ) from error
         assert operation == "node_tool_route"
         value = answer(fields) if callable(answer) else answer
         if isinstance(value, RestrictedPytestError):
@@ -51,17 +39,6 @@ def _routes(monkeypatch, answer, *, build_output=None):
         return value
 
     monkeypatch.setattr(tool, "restricted_native", _native)
-
-
-def _script(task, body):
-    """A named script on the first reading, its own words on the second."""
-
-    def answer(fields):
-        if fields["script_body"] is None:
-            return {"kind": "script", "task": task}
-        return body(fields["script_body"])
-
-    return answer
 
 
 def test_a_refused_route_is_not_a_protected_plan(monkeypatch, tmp_path):
@@ -90,66 +67,25 @@ def test_a_reply_that_is_not_a_route_stops_the_run(monkeypatch, tmp_path, reply)
         tool._prepare_windows_route(["tsc", "--noEmit"], workspace=tmp_path, cwd=tmp_path)
 
 
-def test_a_manifest_script_reaches_the_classifier_as_its_own_words(monkeypatch, tmp_path):
-    """The name a project chose decides nothing; the body behind it is read."""
-    (tmp_path / "package.json").write_text(
-        json.dumps({"scripts": {"lint": "eslint src && curl https://example.invalid"}})
-    )
-    seen = []
+@pytest.mark.parametrize("command", [["bun", "run", "lint"], ["npm", "run", "lint"]])
+def test_a_package_script_is_not_a_contained_tool_run(monkeypatch, tmp_path, command):
+    """Windows admission keeps a package script on the review prompt.
 
-    def body(words):
-        seen.append(words)
-        return RestrictedPytestError("node_tool_invalid_command", "The input has write or shell effects.")
-
-    _routes(monkeypatch, _script("lint", body))
-    with pytest.raises(RestrictedPytestError, match="write or shell"):
-        tool._prepare_windows_route(["bun", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
-    assert seen == [["eslint", "src", "&&", "curl", "https://example.invalid"]]
-
-
-def test_the_sink_routes_the_words_native_authority_read(monkeypatch, tmp_path):
-    """The words that run are the words authority read, not a second split.
-
-    Native authority leaves a backslash alone where the platform spells paths
-    with it; Python's `shlex` escapes on every platform, so a sink that split
-    the script itself could run `.src` where authority had read `.\\src`.
+    The sink never reads the manifest for it: a script route is refused as a
+    run this platform does not contain, whatever the script says.
     """
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint .\\src"}}))
-    seen = []
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src"}}))
+    asked = []
 
-    def _native(operation, fields, expected):
-        if operation == "script_words":
-            assert fields == {"script": "eslint .\\src"}
-            return ["eslint", ".\\src"]
-        assert operation == "node_tool_route"
-        if fields["script_body"] is None:
-            return {"kind": "script", "task": "lint"}
-        seen.append(fields["script_body"])
-        raise RestrictedPytestError("node_tool_invalid_command", "The input has write or shell effects.")
+    def answer(fields):
+        asked.append(fields)
+        return {"kind": "script", "task": "lint"}
 
-    monkeypatch.setattr(tool, "restricted_native", _native)
-    with pytest.raises(RestrictedPytestError, match="write or shell"):
-        tool._prepare_windows_route(["npm", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
-    assert seen == [["eslint", ".\\src"]]
-
-
-@pytest.mark.parametrize(
-    ("scripts", "message"),
-    [
-        ({"build": "tsc --noEmit"}, "unavailable"),
-        ({"lint": 7}, "unavailable"),
-        ({"lint": 'eslint "src'}, "could not be parsed"),
-    ],
-)
-def test_a_script_the_sink_cannot_read_is_refused_before_it_is_routed(monkeypatch, tmp_path, scripts, message):
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": scripts}))
-
-    def body(words):
-        raise AssertionError("an unreadable script is never routed")
-
-    _routes(monkeypatch, _script("lint", body))
-    with pytest.raises(RestrictedPytestError, match=message):
-        tool._prepare_windows_route(["bun", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
+    _routes(monkeypatch, answer)
+    with pytest.raises(RestrictedPytestError, match="package script") as refused:
+        tool._prepare_windows_route(command, workspace=tmp_path, cwd=tmp_path)
+    assert refused.value.reason_code == "node_tool_invalid_command"
+    assert [fields["script_body"] for fields in asked] == [None]
 
 
 @pytest.mark.parametrize("denied", [False, True])
@@ -235,18 +171,6 @@ def test_native_capability_gate_does_not_override_extension_denial(monkeypatch, 
             sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)
     assert executed == ([True] if allowed else [])
     assert calls == ["npm run lint", "/usr/bin/node eslint.js", "/usr/bin/node --help"]
-
-
-@pytest.mark.parametrize("phase", ["prelint", "postlint"])
-def test_lifecycle_actions_are_not_silently_skipped(monkeypatch, tmp_path, phase):
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src", phase: "node lifecycle.mjs"}}))
-
-    def body(words):
-        raise AssertionError("a script with lifecycle actions is never routed")
-
-    _routes(monkeypatch, _script("lint", body))
-    with pytest.raises(RestrictedPytestError, match="lifecycle actions"):
-        tool._prepare_windows_route(["npm", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
 
 
 @pytest.mark.parametrize("name", ["src", ".git", ".env", "../outside", "."])

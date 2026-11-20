@@ -33,6 +33,7 @@ const BASE_DIGEST: &str = "9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9
 #[derive(Debug, Clone, PartialEq)]
 enum StoreCall {
     PreReplayProbe(Map<String, Value>),
+    NativeDecisionReceipt(String),
     RecordCommandActivity {
         evidence: Map<String, Value>,
         invocation_preview: Option<String>,
@@ -201,6 +202,9 @@ impl EvidenceStoreApi for StubStore {
         &self,
         receipt: &Map<String, Value>,
     ) -> Result<bool, io::Error> {
+        if let Some(decision_id) = receipt.get("decision_id").and_then(Value::as_str) {
+            self.push(StoreCall::NativeDecisionReceipt(decision_id.to_owned()));
+        }
         match &self.receipt_behaviour {
             ReceiptBehaviour::Accept => Ok(true),
             ReceiptBehaviour::Park(gate) => {
@@ -963,6 +967,31 @@ fn a_receipt_handoff_returns_before_the_store_has_written_it() {
     assert_eq!(drained.receipt_processed, 1);
     assert_eq!(drained.receipt_durable_pending, 0);
     assert!(journal.records().is_empty());
+}
+
+#[test]
+fn receipt_handoffs_preserve_submission_order() {
+    let store = StubStore::with_receipts(queue_home(), ReceiptBehaviour::Accept);
+    let journal = RecordingJournal::new();
+    let writer = queue_writer(Arc::clone(&store), Arc::clone(&journal), 64);
+
+    for index in 0..32 {
+        assert!(writer.submit_native_decision_receipt(&receipt(&format!("decision-{index}"))));
+    }
+    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
+
+    let submitted = store
+        .calls()
+        .into_iter()
+        .filter_map(|call| match call {
+            StoreCall::NativeDecisionReceipt(decision_id) => Some(decision_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let expected = (0..32)
+        .map(|index| format!("decision-{index}"))
+        .collect::<Vec<_>>();
+    assert_eq!(submitted, expected);
 }
 
 /// A worker inside a store write cannot see its drain deadline pass, and a

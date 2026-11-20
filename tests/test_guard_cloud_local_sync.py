@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.support import cloud_sync_transport
 
 
 @pytest.fixture(autouse=True)
@@ -1118,7 +1119,7 @@ def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailabl
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1171,7 +1172,7 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1311,7 +1312,7 @@ def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_co
         return {"syncedAt": "2026-04-24T00:21:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1336,14 +1337,20 @@ def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_co
     }
 
 
-def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailable(
+def test_sync_runtime_session_reports_the_runtime_local_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
-    monkeypatch.setattr(guard_runner_module, "_safe_private_ip", lambda: None)
-    monkeypatch.setattr(guard_runner_module, "_safe_private_ipv6", lambda: "fd00::42")
+    monkeypatch.setattr(
+        guard_runner_module._authority,
+        "local_identity",
+        lambda observed_at: (
+            {"lastSyncedAt": observed_at, "ipAddress": "fd00::42", "privateIpAddress": "fd00::42"},
+            {"daemonId": "local-guard", "ipAddress": "local-guard", "privateIpAddress": "local-guard"},
+        ),
+    )
     captured_body: dict[str, object] = {}
 
     def _runtime_sync_response(**kwargs):
@@ -1352,7 +1359,7 @@ def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailabl
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1406,7 +1413,7 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )

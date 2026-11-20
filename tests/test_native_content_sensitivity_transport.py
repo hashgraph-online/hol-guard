@@ -166,21 +166,8 @@ def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(m
     assert json.loads(decoded) == body
 
 
-def test_unexpected_binding_recheck_logs_only_exception_class(caplog):
-    from codex_plugin_scanner.guard.hook_review import hook_worker_structured as structured
-
-    def recheck():
-        raise LookupError("private payload must never be logged")
-
-    forward = {"structured_content_mediation": {"action": "forward"}}
-    withheld = structured.withhold_stale_forward(forward, view={}, load_config=recheck, deadline=None)
-    assert withheld["structured_content_mediation"]["reason_code"] == "structured_binding_recheck_failed"
-    assert "LookupError" in caplog.text
-    assert "private payload" not in caplog.text
-
-
 def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
-    from codex_plugin_scanner.guard.hook_review import hook_worker_structured as structured
+    from codex_plugin_scanner.guard.hook_review import hook_worker_unavailable as structured
 
     def unavailable(*args, **kwargs):
         raise client.NativeContentSensitivityError("offline")
@@ -188,22 +175,6 @@ def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
     monkeypatch.setattr(structured, "content_query", unavailable)
     assert structured.withholds_structured_destination(harness=" Pi_Coding_Agent ", event_name="PostToolUse")
     assert structured.withholds_structured_destination(harness="oh-my-pi", event_name="PostToolUse")
-
-
-def test_expired_mediation_projects_transport_failure_without_opening_a_client(monkeypatch):
-    from codex_plugin_scanner.guard.hook_review import hook_worker_structured as structured
-
-    calls = _resident(monkeypatch)
-    response = {"decision": "allow", "structured_content_mediation": {"action": "forward"}}
-    result = structured.withhold_stale_forward(
-        response,
-        view={},
-        load_config=lambda: pytest.fail("an expired deadline reads nothing"),
-        deadline=0.0,
-    )
-    assert result["structured_content_mediation"]["action"] == "withhold"
-    assert result["structured_content_mediation"]["reason_code"] == "structured_review_deadline_exceeded"
-    assert not calls
 
 
 def test_status_probe_has_request_deadline_and_memo_expires_on_binary_or_manifest_change(monkeypatch, tmp_path):

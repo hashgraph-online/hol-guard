@@ -67,7 +67,9 @@ const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 #[path = "guard_sync_transport_detailed.rs"]
 mod detailed;
-pub use detailed::{urlopen_detailed, urlopen_json_detailed, SyncFetchError, SyncHttpFailure};
+pub use detailed::{
+    urlopen_detailed, urlopen_json_detailed, urlopen_raw_detailed, SyncFetchError, SyncHttpFailure,
+};
 
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
@@ -104,7 +106,16 @@ fn issuer_origin(issuer: &str) -> Result<String, String> {
 fn origin_host(origin: &str) -> String {
     url::Url::parse(origin)
         .ok()
-        .and_then(|u| u.host_str().map(str::to_owned))
+        .and_then(|u| {
+            u.host_str()
+                // An IPv6 host keeps its brackets in `host_str`; Python's
+                // `hostname` drops them, so `[::1]` compares as `::1`.
+                .map(|host| {
+                    host.trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .to_owned()
+                })
+        })
         .unwrap_or_default()
         .to_lowercase()
 }
@@ -789,6 +800,33 @@ fn sync_retries(
     nonce_fast_path: bool,
     budget: Option<&SyncBudget>,
 ) -> Result<Option<Value>, SyncFetchError> {
+    let response = sync_exchange(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        nonce_fast_path,
+        budget,
+    )?;
+    if !parse_json_response {
+        return Ok(None);
+    }
+    serde_json::from_slice::<Value>(&response.body_bytes)
+        .map(Some)
+        .map_err(|_| {
+            EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
+                .into()
+        })
+}
+
+/// The retry loop behind [`sync_retries`]: the successful response as it came
+/// back, status and body unread.
+fn sync_exchange(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    nonce_fast_path: bool,
+    budget: Option<&SyncBudget>,
+) -> Result<SyncResponse, SyncFetchError> {
     let mut current_request = request.clone();
     let mut current_timeout = timeout_seconds;
     let mut retried_timeout = false;
@@ -812,20 +850,7 @@ fn sync_retries(
             }
         };
         match execute_request(EgressClass::Cloud, &current_request, attempt_timeout) {
-            Ok(resp) => {
-                if parse_json_response {
-                    let body = resp.body_bytes;
-                    return serde_json::from_slice::<Value>(&body)
-                        .map(Some)
-                        .map_err(|_| {
-                            EvalError::Internal(
-                                "Guard Cloud sync returned an invalid response payload.".to_owned(),
-                            )
-                            .into()
-                        });
-                }
-                return Ok(None);
-            }
+            Ok(resp) => return Ok(resp),
             Err(SyncHttpError::Http {
                 status,
                 headers,
@@ -1055,6 +1080,7 @@ fn http_error_reason_message(
 
 #[derive(Debug)]
 pub(crate) struct SyncResponse {
+    pub(crate) status: u16,
     pub(crate) body_bytes: Vec<u8>,
 }
 
@@ -1128,7 +1154,10 @@ pub(crate) fn execute_request_following(
         .read_to_vec()
         .map_err(|e| SyncHttpError::Other(format!("read body: {e}")))?;
     if (200..300).contains(&status) {
-        return Ok(SyncResponse { body_bytes: body });
+        return Ok(SyncResponse {
+            status,
+            body_bytes: body,
+        });
     }
     Err(SyncHttpError::Http {
         status,
@@ -1161,11 +1190,19 @@ pub enum OAuthRefreshOutcome {
         access_token: String,
         rotation_refresh_token: Option<String>,
         access_token_expires_at: Option<String>,
+        /// The whole token response, for a caller that reads its entitlement
+        /// and profile fields.
+        payload: Value,
     },
     /// The endpoint issued a `DPoP-Nonce`; retry with it (bounded by caller).
     NonceChallenge(String),
-    /// 429 — carry the bounded Retry-After hint; the caller owns the sleep.
-    RateLimited(f64),
+    /// 429 — the bounded numeric Retry-After hint, and the header as sent
+    /// (an HTTP date or a wait longer than the bound) for a caller that keeps
+    /// its own limit. The caller owns the sleep.
+    RateLimited {
+        wait_seconds: f64,
+        retry_after: Option<String>,
+    },
     /// `invalid_grant` / consumed-or-revoked — the grant is dead; caller must
     /// record the dead-grant breaker and demand reauthorization.
     DeadGrant,
@@ -1173,7 +1210,13 @@ pub enum OAuthRefreshOutcome {
     /// 502/503/504): an outage that clears up on its own, not a sign-in that
     /// needs reconnecting.
     Unreachable(String),
-    /// Any other transport or payload failure — reauthorizable.
+    /// A 400, 401 or 403 that is not `invalid_grant`: the endpoint refused
+    /// this grant without revoking it.
+    Rejected(String),
+    /// The proof could not be signed, or the endpoint answered without a
+    /// usable access token: the stored sign-in cannot be refreshed as it is.
+    Unusable(String),
+    /// Any other transport or HTTP failure.
     Failed(String),
 }
 
@@ -1226,34 +1269,67 @@ fn form_urlencode_field(name: &str, value: &str) -> String {
     out
 }
 
-/// `runner.py:_oauth_access_token_expires_at` (:4411) — prefer the JWT `exp`
-/// claim; otherwise `now + expires_in`; `None` when neither is usable. Returns
-/// the `datetime.isoformat()` (`+00:00`) string the store round-trips.
+/// The access token's expiry, read the way the runtime's `oauth_token_claims`
+/// `expires_at` op reads it: a positive JWT `exp` (fractions kept to the
+/// microsecond), else `now + expires_in` with `expires_in` taken as Python
+/// `int()` would, else `None`. Returns the `datetime.isoformat()` (`+00:00`)
+/// string the store round-trips.
 fn oauth_access_token_expires_at(
     access_token: &str,
     payload: &Value,
     now_unix: i64,
 ) -> Option<String> {
-    if let Some(exp) = jwt_exp_claim(access_token) {
+    if let Some(exp_micros) = jwt_exp_claim(access_token) {
         return Some(
-            crate::local_supply_chain::Timestamp::from_unix_micros(exp * 1_000_000).isoformat(),
+            crate::local_supply_chain::Timestamp::from_unix_micros(exp_micros).isoformat(),
         );
     }
-    let expires_in = match payload.get("expires_in") {
-        Some(Value::Number(n)) => n
-            .as_f64()
-            .filter(|v| *v > 0.0 && !v.is_nan())
-            .map(|v| v as i64),
-        Some(Value::String(s)) => s.parse::<i64>().ok().filter(|v| *v > 0),
-        _ => None,
-    }?;
-    Some(
-        crate::local_supply_chain::Timestamp::from_unix_micros((now_unix + expires_in) * 1_000_000)
-            .isoformat(),
-    )
+    let expires_in = payload
+        .get("expires_in")
+        .and_then(whole_seconds)
+        .filter(|seconds| *seconds > 0)?;
+    let micros = now_unix.checked_add(expires_in)?.checked_mul(1_000_000)?;
+    Some(crate::local_supply_chain::Timestamp::from_unix_micros(micros).isoformat())
 }
 
-/// Decode the JWT payload segment and read a positive numeric `exp`.
+/// Python `int(value)` for a JSON number or a decimal string.
+fn whole_seconds(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(number) => number.as_i64().or_else(|| {
+            number
+                .as_f64()
+                .filter(|seconds| seconds.is_finite() && seconds.abs() < 9.0e18)
+                .map(|seconds| seconds.trunc() as i64)
+        }),
+        Value::String(raw) => python_decimal(raw.trim_matches(|c: char| c.is_whitespace())),
+        _ => None,
+    }
+}
+
+/// `int(text)` for base-10 text: an optional sign, then digits with single
+/// underscores between them.
+fn python_decimal(text: &str) -> Option<i64> {
+    let (negative, digits) = match text.as_bytes().first()? {
+        b'-' => (true, &text[1..]),
+        b'+' => (false, &text[1..]),
+        _ => (false, text),
+    };
+    if digits.is_empty()
+        || digits.starts_with('_')
+        || digits.ends_with('_')
+        || digits.contains("__")
+        || !digits
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'_')
+    {
+        return None;
+    }
+    let magnitude: i64 = digits.replace('_', "").parse().ok()?;
+    Some(if negative { -magnitude } else { magnitude })
+}
+
+/// Decode the JWT payload segment and read a positive numeric `exp`, in
+/// microseconds since the epoch.
 fn jwt_exp_claim(access_token: &str) -> Option<i64> {
     let payload_seg = access_token.split('.').nth(1)?;
     let padded = match payload_seg.len() % 4 {
@@ -1264,11 +1340,18 @@ fn jwt_exp_claim(access_token: &str) -> Option<i64> {
         .decode(padded)
         .ok()?;
     let claims: Value = serde_json::from_slice(&bytes).ok()?;
-    claims
-        .get("exp")
-        .and_then(Value::as_f64)
-        .filter(|v| *v > 0.0)
-        .map(|v| v as i64)
+    let exp = claims.get("exp").filter(|value| value.is_number())?;
+    if !exp.as_f64().is_some_and(|seconds| seconds > 0.0) {
+        return None;
+    }
+    match exp.as_i64() {
+        Some(seconds) => seconds.checked_mul(1_000_000),
+        None => exp
+            .as_f64()
+            .map(|seconds| seconds * 1_000_000.0)
+            .filter(|micros| micros.is_finite() && micros.abs() < 9.0e18)
+            .map(|micros| micros.round_ties_even() as i64),
+    }
 }
 
 /// `runner.py:_invalid_grant_oauth_payload` (:3911) — the grant is dead on a
@@ -1326,7 +1409,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
         req.now_unix,
     ) {
         Ok(proof) => proof,
-        Err(reason) => return OAuthRefreshOutcome::Failed(reason),
+        Err(reason) => return OAuthRefreshOutcome::Unusable(reason),
     };
     let mut headers = BTreeMap::new();
     headers.insert(
@@ -1349,7 +1432,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             let Some(payload) =
                 parse_json_body(&resp.body_bytes).and_then(|v| v.as_object().cloned())
             else {
-                return OAuthRefreshOutcome::Failed(
+                return OAuthRefreshOutcome::Unusable(
                     "Guard Cloud token refresh returned a non-JSON response.".to_owned(),
                 );
             };
@@ -1364,7 +1447,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 _ => (String::new(), false),
             };
             if !token_type_ok {
-                return OAuthRefreshOutcome::Failed(
+                return OAuthRefreshOutcome::Unusable(
                     "Guard Cloud token refresh returned an unusable token.".to_owned(),
                 );
             }
@@ -1379,6 +1462,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                 access_token,
                 rotation_refresh_token,
                 access_token_expires_at,
+                payload,
             }
         }
         Err(SyncHttpError::Http {
@@ -1398,13 +1482,16 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             }
             if status == 429 {
                 let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS).min(120.0);
-                return OAuthRefreshOutcome::RateLimited(wait);
+                return OAuthRefreshOutcome::RateLimited {
+                    wait_seconds: wait,
+                    retry_after: http_header_value(&headers, "Retry-After").map(str::to_owned),
+                };
             }
             if matches!(status, 400 | 401 | 403) {
                 if invalid_grant_oauth_payload(&body) {
                     return OAuthRefreshOutcome::DeadGrant;
                 }
-                return OAuthRefreshOutcome::Failed(http_error_reason_message(
+                return OAuthRefreshOutcome::Rejected(http_error_reason_message(
                     status, &headers, &body,
                 ));
             }
@@ -1615,7 +1702,7 @@ mod sync_retry_parity_tests {
         assert!(!invalid_grant_oauth_payload(br#"{"error":42}"#));
     }
 
-    /// `_oauth_access_token_expires_at` — prefer JWT `exp`, else now+expires_in.
+    /// Expiry prefers the JWT `exp`, else now+expires_in.
     #[test]
     fn access_token_expires_at_prefers_jwt_exp_then_expires_in() {
         // unsigned-style payload segment {"exp":1893456000} base64url
@@ -1633,6 +1720,31 @@ mod sync_retry_parity_tests {
             oauth_access_token_expires_at("x", &serde_json::json!({}), 0),
             None
         );
+
+        let fractional =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(br#"{"exp":1893456000.5}"#);
+        assert_eq!(
+            oauth_access_token_expires_at(
+                &format!("aaa.{fractional}.ccc"),
+                &serde_json::json!({}),
+                0
+            )
+            .as_deref(),
+            Some("2030-01-01T00:00:00.500000+00:00")
+        );
+        let python_int =
+            oauth_access_token_expires_at("x", &serde_json::json!({"expires_in": " 1_0 "}), 0);
+        assert_eq!(python_int.as_deref(), Some("1970-01-01T00:00:10+00:00"));
+        for unusable in [
+            serde_json::json!(0.5),
+            serde_json::json!("1__0"),
+            serde_json::json!(true),
+        ] {
+            assert_eq!(
+                oauth_access_token_expires_at("x", &serde_json::json!({"expires_in": unusable}), 0),
+                None
+            );
+        }
     }
 
     /// Refresh success requires `access_token` + `token_type` in {bearer,dpop}

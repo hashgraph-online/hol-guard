@@ -159,6 +159,7 @@ fn segment_proofs(
                     | "echo"
                     | "printf"
                     | "which"
+                    | "whence"
                     | "whoami"
                     | "uname"
                     | "date"
@@ -481,8 +482,13 @@ pub(super) fn exact_safe_segment_with_context(
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
         "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
-        "type" | "command" => {
-            super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
+        // `whence` is zsh's spelling of `which`: it reports where a name
+        // resolves and runs nothing. Its proven flags are `-a`, `-p` and `-v`,
+        // none of which prints a function body. zsh's `where` is `whence -ca`,
+        // and the csh-style output prints the body of a matching function, so
+        // it stays under review next to `whence -f` and `type NAME`.
+        "type" | "command" | "whence" => {
+            super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
         }
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
         "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),

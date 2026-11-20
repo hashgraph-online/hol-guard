@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-agIHYZF9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CesXE34g.js","assets/chunks/home-protection-module-DhHiwTs6.js","assets/chunks/supply-chain-protection-stats-DZVL58wK.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CO7DaU8J.js","assets/chunks/harness-version-label-DpAtB9h1.js","assets/chunks/connect-guard-cloud-button-DtlA45p8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-D6P3kGE3.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-DHYA5vR8.js","assets/chunks/app-detail-workspace-Qi0mR_JY.js","assets/chunks/harness-action-errors-PgLjgif9.js","assets/chunks/supply-chain-hub-workspace-CXh-c9D0.js","assets/chunks/policy-workspace-page-Dsr4CEyy.js","assets/chunks/about-workspace-C4WLPFxP.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-bBGraC2U.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-COpcjev3.js","assets/chunks/home-protection-module-BsFaf4vy.js","assets/chunks/supply-chain-protection-stats-Cu9oDPz3.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-HDm75_XF.js","assets/chunks/harness-version-label-CPnNdoDR.js","assets/chunks/connect-guard-cloud-button-DMNzsDd6.js","assets/chunks/guard-repair-control-zO9jfh8e.js","assets/chunks/settings-workspace-BCwZnau4.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-CIHVd1Vf.js","assets/chunks/app-detail-workspace-DfGcDZhy.js","assets/chunks/harness-action-errors-DFbGhAUw.js","assets/chunks/supply-chain-hub-workspace-hIzul2Or.js","assets/chunks/policy-workspace-page-DRso5SAl.js","assets/chunks/about-workspace-Ws0LiqrM.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -18803,6 +18803,200 @@ function loadCurrentDashboardBuild(href) {
   }
   return true;
 }
+const SESSION_PART = /^[A-Za-z0-9_-]+$/;
+const REQUEST_ID$1 = /^[0-9a-f]{32}$/;
+function decodeBase64Url(part) {
+  if (!SESSION_PART.test(part)) {
+    return null;
+  }
+  const padded = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
+  try {
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+function dashboardSessionScope(token) {
+  if (typeof token !== "string") {
+    return null;
+  }
+  const parts = token.trim().split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+  const decoded = decodeBase64Url(parts[1] ?? "");
+  if (decoded === null) {
+    return null;
+  }
+  let claims;
+  try {
+    claims = JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+  if (typeof claims !== "object" || claims === null || Array.isArray(claims)) {
+    return null;
+  }
+  const record2 = claims;
+  const expires = typeof record2["expires_at"] === "string" ? Date.parse(record2["expires_at"]) : Number.NaN;
+  const expiresAtMs = Number.isFinite(expires) ? expires : null;
+  const bound = record2["request_id"];
+  if (typeof bound === "string" && REQUEST_ID$1.test(bound)) {
+    return { kind: "request", requestId: bound, expiresAtMs };
+  }
+  if (bound !== void 0 && bound !== null) {
+    return { kind: "request", requestId: "", expiresAtMs };
+  }
+  return { kind: "full", expiresAtMs };
+}
+function dashboardSessionExpired(scope, nowMs) {
+  return scope.expiresAtMs !== null && scope.expiresAtMs <= nowMs;
+}
+const SESSION_KEY = "guard-token";
+const tabStorage = () => window.sessionStorage;
+const browserStorage = () => window.localStorage;
+function readFrom(getStorage, key) {
+  try {
+    return getStorage().getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeTo(getStorage, key, value) {
+  try {
+    if (getStorage().getItem(key) !== value) {
+      getStorage().setItem(key, value);
+    }
+  } catch {
+  }
+}
+function writeBoth(key, value) {
+  writeTo(tabStorage, key, value);
+  writeTo(browserStorage, key, value);
+}
+function requestSessionStorageKey(requestId) {
+  return `${SESSION_KEY}:request:${requestId}`;
+}
+const refusedSessions = /* @__PURE__ */ new Set();
+function markSessionRefused(token) {
+  refusedSessions.add(token);
+}
+function sessionRefused(token) {
+  return refusedSessions.has(token);
+}
+let anonymousDecisionRefused = false;
+function markAnonymousDecisionRefused() {
+  anonymousDecisionRefused = true;
+}
+function liveFullSession(token, nowMs) {
+  const scope = dashboardSessionScope(token);
+  return token !== null && scope?.kind === "full" && !dashboardSessionExpired(scope, nowMs) && !sessionRefused(token);
+}
+let lastLinkedSession = null;
+function rememberLinkedGuardSession(guardToken) {
+  const now2 = Date.now();
+  const scope = dashboardSessionScope(guardToken);
+  const ended = scope?.kind === "request" && dashboardSessionExpired(scope, now2);
+  const firstSeen = lastLinkedSession !== guardToken && !ended;
+  lastLinkedSession = guardToken;
+  if (scope?.kind === "request" && scope.requestId) {
+    if (firstSeen) {
+      forgetExpiredRequestSessions(now2);
+      writeBoth(requestSessionStorageKey(scope.requestId), guardToken);
+    }
+    for (const stored of [readFrom(browserStorage, SESSION_KEY), readFrom(tabStorage, SESSION_KEY)]) {
+      if (stored !== guardToken && liveFullSession(stored, now2)) {
+        if (firstSeen) writeTo(tabStorage, SESSION_KEY, stored);
+        return stored;
+      }
+    }
+  }
+  if (ended) return readFrom(tabStorage, SESSION_KEY) ?? readFrom(browserStorage, SESSION_KEY) ?? guardToken;
+  if (firstSeen) writeBoth(SESSION_KEY, guardToken);
+  return guardToken;
+}
+function forgetExpiredRequestSessions(nowMs) {
+  const prefix = requestSessionStorageKey("");
+  for (const getStorage of [tabStorage, browserStorage]) {
+    try {
+      const storage2 = getStorage();
+      const expired = [];
+      for (let index = 0; index < storage2.length; index += 1) {
+        const key = storage2.key(index);
+        if (key === null || !key.startsWith(prefix)) continue;
+        const scope = dashboardSessionScope(storage2.getItem(key));
+        if (scope === null || dashboardSessionExpired(scope, nowMs)) expired.push(key);
+      }
+      for (const key of expired) storage2.removeItem(key);
+    } catch {
+    }
+  }
+}
+class GuardDecisionSignInRequiredError extends Error {
+  requestId;
+  reason;
+  constructor(requestId, reason) {
+    super("Sign in to decide this request.");
+    this.name = "GuardDecisionSignInRequiredError";
+    this.requestId = requestId;
+    this.reason = reason;
+  }
+}
+function decisionSessionCandidates(requestId, current) {
+  const now2 = Date.now();
+  const seen2 = /* @__PURE__ */ new Set();
+  const live = [];
+  const lapsed = [];
+  const tokens = [
+    current,
+    readFrom(browserStorage, SESSION_KEY),
+    readFrom(tabStorage, requestSessionStorageKey(requestId)),
+    readFrom(browserStorage, requestSessionStorageKey(requestId))
+  ];
+  for (const token of tokens) {
+    if (token === null || token === "" || seen2.has(token) || sessionRefused(token)) continue;
+    seen2.add(token);
+    const scope = dashboardSessionScope(token);
+    if (scope === null) {
+      live.push({ token, scope });
+      continue;
+    }
+    if (scope.kind === "request" && scope.requestId !== requestId) continue;
+    if (!dashboardSessionExpired(scope, now2)) {
+      live.push({ token, scope });
+    } else if (scope.kind === "full") {
+      lapsed.push({ token, scope });
+    }
+  }
+  return [...live, ...lapsed].map((candidate) => candidate.token);
+}
+function decisionSessionVerdict(requestId, current) {
+  const candidates = decisionSessionCandidates(requestId, current);
+  if (candidates.length > 0) {
+    return { kind: "ready", token: candidates[0] ?? null };
+  }
+  if (current === null) {
+    return anonymousDecisionRefused ? { kind: "sign_in", reason: "no_session" } : { kind: "ready", token: null };
+  }
+  const scope = dashboardSessionScope(current);
+  if (sessionRefused(current) || scope === null || dashboardSessionExpired(scope, Date.now())) {
+    return { kind: "sign_in", reason: "expired" };
+  }
+  return { kind: "sign_in", reason: "other_request" };
+}
+async function decisionRefusedSession(response) {
+  if (response.status !== 401) return false;
+  try {
+    const payload = await response.clone().json();
+    if (typeof payload !== "object" || payload === null) return true;
+    const error = payload["error"];
+    return error === void 0 || error === "unauthorized";
+  } catch {
+    return true;
+  }
+}
 const PROTECTION_POSTURE_COPY = {
   protected: {
     label: "Protected",
@@ -19515,10 +19709,37 @@ function readGuardToken() {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
-    return guardToken;
+    return rememberLinkedGuardSession(guardToken);
   }
   return readGuardStorage(GUARD_TOKEN_PARAM);
+}
+function guardDecisionSession(requestId) {
+  if (isGuardDemoMode()) {
+    return { kind: "ready", token: null };
+  }
+  return decisionSessionVerdict(requestId, readGuardToken());
+}
+async function fetchDecisionWithSession(requestId, input, init) {
+  const verdict = guardDecisionSession(requestId);
+  if (verdict.kind === "sign_in") {
+    throw new GuardDecisionSignInRequiredError(requestId, verdict.reason);
+  }
+  const candidates = isGuardDemoMode() ? [] : decisionSessionCandidates(requestId, readGuardToken());
+  const tokens = candidates.length > 0 ? candidates : [null];
+  for (const token of tokens) {
+    const tabSession = token !== null && token === readGuardToken();
+    const send = (sendInput, sendInit) => tabSession ? fetchWithGuardAuthOnce(sendInput, sendInit) : daemonFetch(guardApiInput(sendInput), withGuardAuthForToken(sendInit, token));
+    const response = await sendWithPulseApproval(send, input, init(token));
+    if (!await decisionRefusedSession(response)) {
+      return response;
+    }
+    if (token === null) {
+      markAnonymousDecisionRefused();
+      throw new GuardDecisionSignInRequiredError(requestId, "no_session");
+    }
+    markSessionRefused(token);
+  }
+  throw new GuardDecisionSignInRequiredError(requestId, "expired");
 }
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
@@ -21701,7 +21922,7 @@ async function resolveRequestWithQueueResult(input) {
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (guardToken = readGuardToken()) => ({
+  const init = (guardToken) => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -21724,7 +21945,7 @@ async function resolveRequestWithQueueResult(input) {
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
     })
   });
-  const response = await fetchGuardApi(path, init());
+  const response = await fetchDecisionWithSession(input.requestId, path, init);
   if (!response.ok) {
     let payload2 = null;
     try {
@@ -21935,7 +22156,17 @@ async function scheduleGuardUpdate(options) {
     error: stringValue$1(payload.error) ?? void 0
   };
 }
-async function requestGuardDesktopHandoff() {
+class GuardDesktopHandoffError extends Error {
+  code;
+  status;
+  constructor(message, code, status) {
+    super(message);
+    this.name = "GuardDesktopHandoffError";
+    this.code = code;
+    this.status = status;
+  }
+}
+async function requestGuardDesktopHandoff(offeredVersion = null) {
   if (isGuardDemoMode()) {
     return { handoff_requested: false, latest_version: null };
   }
@@ -21947,7 +22178,12 @@ async function requestGuardDesktopHandoff() {
       method: "POST",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handoff_to_desktop: true }),
+      // The version the banner offered: when Guard's own re-check briefly
+      // cannot confirm it, the daemon still hands it to the app, which
+      // re-verifies the release before installing anything.
+      body: JSON.stringify(
+        offeredVersion ? { handoff_to_desktop: true, latest_version: offeredVersion } : { handoff_to_desktop: true }
+      ),
       signal: controller.signal
     });
   } finally {
@@ -21956,7 +22192,7 @@ async function requestGuardDesktopHandoff() {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = stringValue$1(payload.message) ?? stringValue$1(payload.error) ?? `Guard update failed with ${response.status}`;
-    throw new Error(message);
+    throw new GuardDesktopHandoffError(message, stringValue$1(payload.error), response.status);
   }
   return {
     handoff_requested: payload.handoff_requested === true,
@@ -22027,15 +22263,22 @@ async function retryResume(requestId) {
     return null;
   }
   const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
-  const init = (guardToken = readGuardToken()) => ({
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeadersForToken(guardToken)
-    },
-    body: JSON.stringify({})
-  });
-  const response = await fetchGuardApi(path, init());
+  let response;
+  try {
+    response = await fetchDecisionWithSession(requestId, path, (guardToken) => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({})
+    }));
+  } catch (error) {
+    if (error instanceof GuardDecisionSignInRequiredError) {
+      throw new Error("Sign in to retry resuming: open this request from Guard on this device.");
+    }
+    throw error;
+  }
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
@@ -22652,9 +22895,10 @@ async function fetchMcpPolicyRequest(requestId) {
   return normalizeMcpPolicyRequest(payload);
 }
 async function resolveMcpPolicyRequest(input) {
-  const response = await fetchGuardApi(
+  const response = await fetchDecisionWithSession(
+    input.requestId,
     `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
+    () => ({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -22662,7 +22906,7 @@ async function resolveMcpPolicyRequest(input) {
         ...input.approval_password ? { approval_password: input.approval_password } : {},
         ...input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}
       })
-    }
+    })
   );
   const payloadBody = await response.json().catch(() => null);
   if (!response.ok) {
@@ -24046,6 +24290,21 @@ function desktopUpdateBannerModel(status, embeddedInDesktop, dismissedVersion) {
 const DESKTOP_HANDOFF_OPENING_LABEL = "Opening the app updater…";
 const DESKTOP_HANDOFF_GUIDANCE = "If the updater didn't open, choose Check for Updates from the HOL Guard menu-bar icon.";
 const DESKTOP_HANDOFF_FAILED = "The request did not reach the app. Choose Check for Updates from the HOL Guard menu-bar icon.";
+const DESKTOP_HANDOFF_ALREADY_CURRENT = "Guard is already on the latest version. Choose Check for Updates from the HOL Guard menu-bar icon to look again.";
+function desktopHandoffFailureMessage(error) {
+  if (!(error instanceof Error) || error.name !== "GuardDesktopHandoffError") {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  const code = error.code;
+  if (code === "update_not_available") {
+    return DESKTOP_HANDOFF_ALREADY_CURRENT;
+  }
+  const reason = error.message.trim();
+  if (!reason) {
+    return DESKTOP_HANDOFF_FAILED;
+  }
+  return `${reason} You can also choose Check for Updates from the HOL Guard menu-bar icon.`;
+}
 function shouldPromptRecoveryReinstall(status) {
   return status?.recovery_reinstall_available === true && status?.auto_updatable !== true && status?.version_check?.update_available === true;
 }
@@ -26789,20 +27048,28 @@ function config(value) {
   const { features, sources, storage: storage2, limits } = value;
   return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage2.mode === "memory" || storage2.mode === "sqlite") && Number.isSafeInteger(storage2.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
 }
+function engineLabel(facts) {
+  return facts.schema === "guard-cigar-builtin.v1" ? "Built into Guard" : "Python " + facts.version.join(".");
+}
 function runtime(value) {
   if (!record$5(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record$5(value.interpreter)) return false;
   const facts = value.interpreter;
-  return facts.schema === "guard-cigar-interpreter.v1" && version$1(facts.version) && ["implementation", "release_level", "abi", "platform"].every((key) => text$3(facts[key])) && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean" && isCigarProducerVersion(value.package_version) && text$3(value.protocol) && (value.core_version === void 0 || isCigarCoreLabel(value.core_version)) && (value.release === void 0 || isCigarReleaseBinding(value.release) && value.package_version === value.release.identity.sdk_version && value.core_version === value.release.identity.core_version && value.adapter_id === value.release.adapter_id && value.adapter_revision === value.release.adapter_revision) && digest$5(value.package_fingerprint) && digest$5(value.worker_fingerprint) && Array.isArray(value.features) && value.features.length <= 64 && value.features.every((item) => text$3(item, 64)) && typeof value.compile_verified === "boolean" && typeof value.active === "boolean" && (value.shared_compile_verified === void 0 || typeof value.shared_compile_verified === "boolean") && (value.persistence_compile_verified === void 0 || typeof value.persistence_compile_verified === "boolean") && (value.execution_handoff_verified === void 0 || typeof value.execution_handoff_verified === "boolean");
+  const builtinFacts = facts.schema === "guard-cigar-builtin.v1" && facts.implementation === "guard-builtin" && facts.abi === "none" && value.adapter_id === "guard-cigar-builtin-v1";
+  return (facts.schema === "guard-cigar-interpreter.v1" || builtinFacts) && version$1(facts.version) && ["implementation", "release_level", "abi", "platform"].every((key) => text$3(facts[key])) && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean" && isCigarProducerVersion(value.package_version) && text$3(value.protocol) && (value.core_version === void 0 || isCigarCoreLabel(value.core_version)) && (value.release === void 0 || isCigarReleaseBinding(value.release) && value.package_version === value.release.identity.sdk_version && value.core_version === value.release.identity.core_version && value.adapter_id === value.release.adapter_id && value.adapter_revision === value.release.adapter_revision) && digest$5(value.package_fingerprint) && digest$5(value.worker_fingerprint) && Array.isArray(value.features) && value.features.length <= 64 && value.features.every((item) => text$3(item, 64)) && typeof value.compile_verified === "boolean" && typeof value.active === "boolean" && (value.shared_compile_verified === void 0 || typeof value.shared_compile_verified === "boolean") && (value.persistence_compile_verified === void 0 || typeof value.persistence_compile_verified === "boolean") && (value.execution_handoff_verified === void 0 || typeof value.execution_handoff_verified === "boolean");
 }
 function installation(value) {
-  if (!record$5(value) || !text$3(value.runtime_id, 128) || !["local_candidate", "guard_qualified"].includes(String(value.qualification)) || !version$1(value.python_version) || !text$3(value.platform) || !digest$5(value.worker_fingerprint)) return false;
+  if (!record$5(value) || !text$3(value.runtime_id, 128) || !["local_candidate", "guard_qualified", "guard_builtin"].includes(String(value.qualification)) || !text$3(value.platform) || !digest$5(value.worker_fingerprint)) return false;
+  if (value.qualification === "guard_builtin") {
+    return value.runtime_id === "builtin" && value.builtin === true && value.python_version === null && value.managed === false && value.build_id === null && isCigarProducerVersion(value.sdk_version) && isCigarCoreLabel(value.core_version) && text$3(value.adapter_id, 128) && value.adapter_revision === 1;
+  }
+  if (!version$1(value.python_version) || value.builtin !== void 0 && value.builtin !== false) return false;
   const metadata = ["sdk_version", "core_version", "build_id", "adapter_id", "adapter_revision", "managed"];
   if (!metadata.some((key) => value[key] !== void 0)) return value.qualification === "local_candidate";
   if (!isCigarProducerVersion(value.sdk_version) || !isCigarCoreLabel(value.core_version) || !text$3(value.adapter_id, 128) || !Number.isSafeInteger(value.adapter_revision) || Number(value.adapter_revision) < 1 || Number(value.adapter_revision) > 65535 || typeof value.managed !== "boolean") return false;
   return value.qualification === "guard_qualified" ? value.managed && typeof value.build_id === "string" && value.build_id === value.build_id.trim() && /^[a-z0-9_:-]{1,128}$/i.test(value.build_id) : !value.managed && value.build_id === null;
 }
 function parseContextAssistanceStatus(value) {
-  if (!record$5(value) || value.schema !== "guard-context-assistance-status.v2" || !["off", "unavailable", "checking", "ready"].includes(String(value.availability)) || typeof value.requested_enabled !== "boolean" || typeof value.effective_enabled !== "boolean" || !config(value.preferences) || !config(value.effective_preferences) || !revision(value.generation) || !(value.restriction === null || text$3(value.restriction)) || typeof value.verification_permitted !== "boolean" || !(value.diagnostic === null || text$3(value.diagnostic)) || !(value.runtime === null || runtime(value.runtime)) || !(value.last_check === null || runtime(value.last_check)) || !(value.qualification === null || ["local_candidate", "guard_qualified"].includes(String(value.qualification))) || !(value.capabilities === void 0 || record$5(value.capabilities) && typeof value.capabilities.shared_agents === "boolean" && typeof value.capabilities.private_persistence === "boolean" && (value.capabilities.execution_context === void 0 || typeof value.capabilities.execution_context === "boolean")) || !(value.execution_ready === void 0 || typeof value.execution_ready === "boolean") || !(value.execution_observations === void 0 || value.execution_observations === null || Array.isArray(value.execution_observations) && value.execution_observations.length <= 32 && value.execution_observations.every(isContextExecutionObservation)) || !(value.installation_options === null || Array.isArray(value.installation_options) && value.installation_options.length <= 8 && value.installation_options.every(installation)) || !(value.job === null || record$5(value.job) && revision(value.job.id) && (value.job.operation === "activate" || value.job.operation === "recheck") && (value.job.phase === "verifying" || value.job.phase === "cancelling"))) {
+  if (!record$5(value) || value.schema !== "guard-context-assistance-status.v2" || !["off", "unavailable", "checking", "ready"].includes(String(value.availability)) || typeof value.requested_enabled !== "boolean" || typeof value.effective_enabled !== "boolean" || !config(value.preferences) || !config(value.effective_preferences) || !revision(value.generation) || !(value.restriction === null || text$3(value.restriction)) || typeof value.verification_permitted !== "boolean" || !(value.diagnostic === null || text$3(value.diagnostic)) || !(value.runtime === null || runtime(value.runtime)) || !(value.last_check === null || runtime(value.last_check)) || !(value.qualification === null || ["local_candidate", "guard_qualified"].includes(String(value.qualification))) || !(value.capabilities === void 0 || record$5(value.capabilities) && typeof value.capabilities.shared_agents === "boolean" && typeof value.capabilities.private_persistence === "boolean" && (value.capabilities.execution_context === void 0 || typeof value.capabilities.execution_context === "boolean")) || !(value.execution_ready === void 0 || typeof value.execution_ready === "boolean") || !(value.execution_observations === void 0 || value.execution_observations === null || Array.isArray(value.execution_observations) && value.execution_observations.length <= 32 && value.execution_observations.every(isContextExecutionObservation)) || !(value.installation_options === null || Array.isArray(value.installation_options) && value.installation_options.length <= 9 && value.installation_options.every(installation)) || !(value.job === null || record$5(value.job) && revision(value.job.id) && (value.job.operation === "activate" || value.job.operation === "recheck") && (value.job.phase === "verifying" || value.job.phase === "cancelling"))) {
     throw new Error("Context assistance returned an incompatible status. Update Guard and check again.");
   }
   if (value.qualification === "guard_qualified") {
@@ -37298,6 +37565,36 @@ function useReviewDecisionResolve(params) {
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
+  const [signInReason, setSignInReason] = reactExports.useState(null);
+  const shownRequestId = item?.request_id ?? null;
+  const recheckSignIn = reactExports.useCallback(() => {
+    if (shownRequestId === null) {
+      setSignInReason(null);
+      return true;
+    }
+    const verdict = guardDecisionSession(shownRequestId);
+    if (verdict.kind === "ready") {
+      setSignInReason(null);
+      return true;
+    }
+    setSignInReason(verdict.reason);
+    setErrorMessage(null);
+    setPendingAction(null);
+    setPendingContractKey(null);
+    return false;
+  }, [shownRequestId]);
+  reactExports.useEffect(() => {
+    recheckSignIn();
+    const handleStorage = () => {
+      recheckSignIn();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleStorage);
+    };
+  }, [recheckSignIn]);
   reactExports.useEffect(() => {
     setEffectiveApprovalGate(params.approvalGate);
   }, [params.approvalGate]);
@@ -37376,6 +37673,13 @@ function useReviewDecisionResolve(params) {
         }
       } catch (err) {
         if (!isStillShown(requestId)) return;
+        if (err instanceof GuardDecisionSignInRequiredError) {
+          setErrorMessage(null);
+          setPendingAction(null);
+          setPendingContractKey(null);
+          setSignInReason(err.reason);
+          return;
+        }
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
         if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
@@ -37413,6 +37717,7 @@ function useReviewDecisionResolve(params) {
   const handleRequestResolve = reactExports.useCallback(
     (action2) => {
       if (resolutionBlockReason !== null || decisionBusy) return;
+      if (!recheckSignIn()) return;
       if (action2 === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
@@ -37499,6 +37804,7 @@ function useReviewDecisionResolve(params) {
       isStillShown,
       item,
       approvalGate,
+      recheckSignIn,
       resolutionBlockReason
     ]
   );
@@ -37560,6 +37866,11 @@ function useReviewDecisionResolve(params) {
     setApprovalTotpCode("");
     setCooldownOptOut(false);
   }, []);
+  const handleSignInRecheck = reactExports.useCallback(() => {
+    if (recheckSignIn()) {
+      setErrorMessage(null);
+    }
+  }, [recheckSignIn]);
   const handleRetryLastAction = reactExports.useCallback(() => {
     setErrorMessage(null);
     if (lastAction !== null) {
@@ -37588,13 +37899,115 @@ function useReviewDecisionResolve(params) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown
   };
+}
+const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
+const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
+const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
+const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
+const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
+const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
+const REQUEST_ID = /^[0-9a-f]{32}$/;
+function desktopRequestUrl(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+}
+function approvalsOpenCommand(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+}
+function queueErrorIsUnauthorizedSession(message) {
+  const lower = message.trim().toLowerCase();
+  if (!lower) {
+    return false;
+  }
+  if (lower.includes("unauthorized")) {
+    return true;
+  }
+  return /request failed with 401(?:\D|$)/.test(lower);
+}
+function decisionSignInCopy(reason) {
+  switch (reason) {
+    case "other_request":
+      return {
+        headline: "This tab is signed in for a different request",
+        detail: "The link you opened earlier lets this tab decide only that request. Open this one from Guard on this device to approve or block it."
+      };
+    case "expired":
+      return {
+        headline: "Your session for this request has ended",
+        detail: "Guard sessions last a limited time and end when Guard restarts. Open the request from Guard on this device again to get a new one."
+      };
+    case "no_session":
+      return {
+        headline: "Sign in to approve or block this request",
+        detail: "You can read the request here, but Guard saves a decision only from a signed local session. Open the request from Guard on this device to sign in."
+      };
+  }
+}
+const DECISION_SIGN_IN_RECHECK_HINT = "Once it opens signed in, this tab picks up the session. If it does not, check again.";
+function ReviewDecisionSignIn(props) {
+  const headingId = reactExports.useId();
+  const { headline, detail } = decisionSignInCopy(props.reason);
+  const desktopUrl = desktopRequestUrl(props.requestId);
+  const openCommand = approvalsOpenCommand(props.requestId);
+  const [copied, setCopied] = reactExports.useState(false);
+  const copiedTimer = reactExports.useRef(null);
+  reactExports.useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    },
+    []
+  );
+  const handleCopy = reactExports.useCallback(() => {
+    if (openCommand === null || navigator.clipboard === void 0) return;
+    void navigator.clipboard.writeText(openCommand).then(
+      () => {
+        setCopied(true);
+        if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+        copiedTimer.current = window.setTimeout(() => setCopied(false), 2e3);
+      },
+      () => {
+      }
+    );
+  }, [openCommand]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      "aria-labelledby": headingId,
+      "aria-live": "polite",
+      className: "guard-fade-in mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5",
+      "data-testid": "review-decision-sign-in",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: headingId, className: "text-sm font-semibold text-brand-dark", children: headline }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose text-sm text-slate-600", children: detail }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
+            desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRecheck, children: "Check again" })
+          ] }),
+          openCommand !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Or run this in a terminal on this device:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex items-stretch gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "flex min-h-10 min-w-0 flex-1 items-center overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark select-all", children: openCommand }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleCopy, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-live": "polite", children: copied ? "Copied" : "Copy" }) })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: DECISION_SIGN_IN_RECHECK_HINT })
+        ] })
+      ] })
+    }
+  );
 }
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function ContextReviewPanel({ item }) {
@@ -37838,10 +38251,12 @@ function ReviewDecisionCard(props) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown
   } = useReviewDecisionResolve({
@@ -37994,7 +38409,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
           item,
@@ -38055,7 +38470,8 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
+      resolutionBlockReason === null && resolved === null && signInReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewDecisionSignIn, { requestId: item.request_id, reason: signInReason, onRecheck: handleSignInRecheck }),
+      resolutionBlockReason === null && resolved === null && signInReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
           {
@@ -40175,7 +40591,7 @@ function ConnectorSetupCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-muted-foreground", children: callCountCopy(group.callCount) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
-            changed ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version.` : `Guard does not recognise this ${surface.toLowerCase()} and it is not set up on this device, so its calls are paused.`,
+            changed ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version. Always allow on one of these calls attempts to allow this version while keeping your command choices. A newer block or safety check can prevent the update; check the approval result.` : `Guard does not recognise this ${surface.toLowerCase()} and it is not set up on this device, so its calls are paused.`,
             " ",
             SETUP_COPY.scope
           ] }),
@@ -40528,32 +40944,6 @@ function ReviewWorkspace(props) {
     ] })
   ] });
 }
-const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
-const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
-const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
-const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
-const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
-const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
-const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
-const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
-const REQUEST_ID = /^[0-9a-f]{32}$/;
-function desktopRequestUrl(requestId) {
-  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
-}
-function approvalsOpenCommand(requestId) {
-  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
-}
-function queueErrorIsUnauthorizedSession(message) {
-  const lower = message.trim().toLowerCase();
-  if (!lower) {
-    return false;
-  }
-  if (lower.includes("unauthorized")) {
-    return true;
-  }
-  return /request failed with 401(?:\D|$)/.test(lower);
-}
 const DESKTOP_REQUESTS_META = "guard-desktop-requests";
 const HANDOFF_KEY_PREFIX = "guard-desktop-handoff:";
 const EMBEDDED_KEY = "guard-desktop-embedded";
@@ -40889,6 +41279,7 @@ function rememberDismissedDesktopUpdateVersion(version2) {
 function GuardUpdateBanner(props) {
   const { model, onDismiss } = props;
   const [phase, setPhase] = reactExports.useState("idle");
+  const [failureMessage, setFailureMessage] = reactExports.useState(DESKTOP_HANDOFF_FAILED);
   const guidanceTimer = reactExports.useRef(null);
   const attemptRef = reactExports.useRef(0);
   reactExports.useEffect(() => {
@@ -40914,11 +41305,12 @@ function GuardUpdateBanner(props) {
     const attempt = attemptRef.current + 1;
     attemptRef.current = attempt;
     setPhase("requesting");
-    void requestGuardDesktopHandoff().then((result) => {
+    void requestGuardDesktopHandoff(model.latestVersion).then((result) => {
       if (attemptRef.current !== attempt) {
         return;
       }
       if (!result.handoff_requested) {
+        setFailureMessage(DESKTOP_HANDOFF_FAILED);
         setPhase("failed");
         return;
       }
@@ -40928,12 +41320,13 @@ function GuardUpdateBanner(props) {
           setPhase("guidance");
         }
       }, HANDOFF_GUIDANCE_DELAY_MS);
-    }).catch(() => {
+    }).catch((error) => {
       if (attemptRef.current === attempt) {
+        setFailureMessage(desktopHandoffFailureMessage(error));
         setPhase("failed");
       }
     });
-  }, [phase]);
+  }, [model.latestVersion, phase]);
   const handleDismiss = reactExports.useCallback(() => {
     rememberDismissedDesktopUpdateVersion(model.latestVersion);
     onDismiss(model.latestVersion);
@@ -40957,7 +41350,7 @@ function GuardUpdateBanner(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: model.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: model.body }),
             phase === "guidance" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: DESKTOP_HANDOFF_GUIDANCE }) : null,
-            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: DESKTOP_HANDOFF_FAILED }) : null
+            phase === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", role: "alert", children: failureMessage }) : null
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
@@ -41809,7 +42202,7 @@ function WatchProtectionBanner(props) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DAc3-viF.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-Daf_wVjI.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot, onRestored } = props;
@@ -42548,35 +42941,35 @@ function PulseApprovalOverlay() {
   )) });
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-agIHYZF9.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CesXE34g.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CO7DaU8J.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-D6P3kGE3.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-bBGraC2U.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-COpcjev3.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-HDm75_XF.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BCwZnau4.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DHYA5vR8.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-CIHVd1Vf.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-Qi0mR_JY.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DfGcDZhy.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CXh-c9D0.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-hIzul2Or.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-Dsr4CEyy.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-DRso5SAl.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-C4WLPFxP.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-Ws0LiqrM.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-CLZ3Q8oI.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-B4ysNeGD.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-C4cjm79L.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-BCIhgfRA.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -43611,7 +44004,7 @@ export {
   HiMiniExclamationCircle as ay,
   hasRepairableProtectionGap as az,
   HiMiniCommandLine as b,
-  subscribeDashboardLocation as b$,
+  isCigarCoreLabel as b$,
   overrideRows as b0,
   harnessPostureSummary as b1,
   joinNames as b2,
@@ -43622,33 +44015,33 @@ export {
   harnessWatchPrompt as b7,
   harnessPostureOptions as b8,
   canRestartHarnessWatch as b9,
-  SettingsSaveProofModal as bA,
-  revokeContextAgentSession as bB,
-  grantContextWorkspace as bC,
-  authorizeContextAgentSession as bD,
-  ContextAssistanceApiError as bE,
-  ask as bF,
-  parseContextScope as bG,
-  validContextBrokerRevision as bH,
-  isGuardDemoMode as bI,
-  commitDashboardLocation as bJ,
-  HiMiniArrowUturnLeft as bK,
-  HiMiniCodeBracketSquare as bL,
-  HiMiniHome as bM,
-  HiMiniFolderPlus as bN,
-  HiMiniClock as bO,
-  HiMiniFolderOpen as bP,
-  manageContextWorkspace as bQ,
-  compileWorkspaceContext as bR,
-  HiMiniChatBubbleLeftEllipsis as bS,
-  HiMiniDocumentMagnifyingGlass as bT,
-  HiMiniPower as bU,
-  HiMiniEyeSlash as bV,
-  HiMiniCpuChip as bW,
-  HiMiniAcademicCap as bX,
-  HiMiniArrowLeft as bY,
-  isCigarProducerVersion as bZ,
-  isCigarCoreLabel as b_,
+  HiMiniLink as bA,
+  SettingsSaveProofModal as bB,
+  revokeContextAgentSession as bC,
+  grantContextWorkspace as bD,
+  authorizeContextAgentSession as bE,
+  ContextAssistanceApiError as bF,
+  ask as bG,
+  parseContextScope as bH,
+  validContextBrokerRevision as bI,
+  isGuardDemoMode as bJ,
+  commitDashboardLocation as bK,
+  HiMiniArrowUturnLeft as bL,
+  HiMiniCodeBracketSquare as bM,
+  HiMiniHome as bN,
+  HiMiniFolderPlus as bO,
+  HiMiniClock as bP,
+  HiMiniFolderOpen as bQ,
+  manageContextWorkspace as bR,
+  compileWorkspaceContext as bS,
+  HiMiniChatBubbleLeftEllipsis as bT,
+  HiMiniDocumentMagnifyingGlass as bU,
+  HiMiniPower as bV,
+  HiMiniEyeSlash as bW,
+  HiMiniCpuChip as bX,
+  HiMiniAcademicCap as bY,
+  HiMiniArrowLeft as bZ,
+  isCigarProducerVersion as b_,
   getDefaultExportFromCjs as ba,
   React as bb,
   PULSE_FACE_SCAN_OPTIONS as bc,
@@ -43672,250 +44065,251 @@ export {
   isRecord$5 as bu,
   HiMiniArrowTopRightOnSquare as bv,
   shellHref as bw,
-  HiMiniPauseCircle as bx,
-  listContextAgentSessions as by,
-  HiMiniLink as bz,
+  engineLabel as bx,
+  HiMiniPauseCircle as by,
+  listContextAgentSessions as bz,
   HiMiniFolder as c,
-  setLocalPermissionDraftStates as c$,
-  HiMiniChatBubbleLeftRight as c0,
-  HiMiniArrowUpCircle as c1,
-  parseContextAssistanceStatus as c2,
-  isCigarBuildIdentity as c3,
-  fetchContextInstallations as c4,
-  HiMiniCloudArrowDown as c5,
-  turnOnJob as c6,
-  shouldResumeTurnOn as c7,
-  turnOnRequestedAt as c8,
-  forgetTurnOn as c9,
-  clearEvidence as cA,
-  exportDiagnostics as cB,
-  repairApprovalCenter as cC,
-  exportSettings as cD,
-  setupDesktopNotifications as cE,
-  settingsWatchBannerModel as cF,
-  WorkspacePageHeader as cG,
-  navigateFromAnchor as cH,
-  resolveSettingsSaveProofModalCopy as cI,
-  humanizeList as cJ,
-  isProtectionPosture as cK,
-  deriveProtectionPosture as cL,
-  normalizeHarnessPostures as cM,
-  approvalGateCooldownLabel as cN,
-  fetchExtensionCatalog as cO,
-  ExtensionControlApiError as cP,
-  normalizeExtensionCatalogSummary as cQ,
-  normalizeExtensionPermission as cR,
-  ExtensionControlProtocolError as cS,
-  normalizeExtensionCatalogItem as cT,
-  guardApiCacheScope as cU,
-  fetchExtensionCatalogV2Api as cV,
-  localPermissionDraftState as cW,
-  setLocalPermissionDraftState as cX,
-  extensionPolicyAuthorityUnchanged as cY,
-  newExtensionPolicyDraftIdentity as cZ,
-  extensionPolicyDraftIsDirty as c_,
-  rememberTurnOn as ca,
-  forgetTurnOnClick as cb,
-  rememberTurnOnJob as cc,
-  HiMiniArrowDownTray as cd,
-  downloadBlob as ce,
-  savedEvidenceCopy as cf,
-  guardAwareHref as cg,
-  fetchContextData as ch,
-  forgetContextHistory as ci,
-  forgetSavedEvidence as cj,
-  resolveProtectionLevelCopy as ck,
-  fetchSettings as cl,
-  fetchRuntimeSnapshot as cm,
-  clearHarnessWatchOverrides as cn,
-  withHarnessPosturePatch as co,
-  updateSettings as cp,
-  clearPolicy as cq,
-  clearReviewQueue as cr,
-  revokeApprovalGateCooldown as cs,
-  disableApprovalGateTotp as ct,
-  importSettings as cu,
-  resetSettings as cv,
-  resolveSettingsSaveProofKind as cw,
-  requiresSettingsSaveProof as cx,
-  enrollApprovalGateTotp as cy,
-  verifyApprovalGateTotp as cz,
+  extensionPolicyDraftIsDirty as c$,
+  subscribeDashboardLocation as c0,
+  HiMiniChatBubbleLeftRight as c1,
+  HiMiniArrowUpCircle as c2,
+  parseContextAssistanceStatus as c3,
+  isCigarBuildIdentity as c4,
+  fetchContextInstallations as c5,
+  HiMiniCloudArrowDown as c6,
+  turnOnJob as c7,
+  shouldResumeTurnOn as c8,
+  turnOnRequestedAt as c9,
+  verifyApprovalGateTotp as cA,
+  clearEvidence as cB,
+  exportDiagnostics as cC,
+  repairApprovalCenter as cD,
+  exportSettings as cE,
+  setupDesktopNotifications as cF,
+  settingsWatchBannerModel as cG,
+  WorkspacePageHeader as cH,
+  navigateFromAnchor as cI,
+  resolveSettingsSaveProofModalCopy as cJ,
+  humanizeList as cK,
+  isProtectionPosture as cL,
+  deriveProtectionPosture as cM,
+  normalizeHarnessPostures as cN,
+  approvalGateCooldownLabel as cO,
+  fetchExtensionCatalog as cP,
+  ExtensionControlApiError as cQ,
+  normalizeExtensionCatalogSummary as cR,
+  normalizeExtensionPermission as cS,
+  ExtensionControlProtocolError as cT,
+  normalizeExtensionCatalogItem as cU,
+  guardApiCacheScope as cV,
+  fetchExtensionCatalogV2Api as cW,
+  localPermissionDraftState as cX,
+  setLocalPermissionDraftState as cY,
+  extensionPolicyAuthorityUnchanged as cZ,
+  newExtensionPolicyDraftIdentity as c_,
+  forgetTurnOn as ca,
+  rememberTurnOn as cb,
+  forgetTurnOnClick as cc,
+  rememberTurnOnJob as cd,
+  HiMiniArrowDownTray as ce,
+  downloadBlob as cf,
+  savedEvidenceCopy as cg,
+  guardAwareHref as ch,
+  fetchContextData as ci,
+  forgetContextHistory as cj,
+  forgetSavedEvidence as ck,
+  resolveProtectionLevelCopy as cl,
+  fetchSettings as cm,
+  fetchRuntimeSnapshot as cn,
+  clearHarnessWatchOverrides as co,
+  withHarnessPosturePatch as cp,
+  updateSettings as cq,
+  clearPolicy as cr,
+  clearReviewQueue as cs,
+  revokeApprovalGateCooldown as ct,
+  disableApprovalGateTotp as cu,
+  importSettings as cv,
+  resetSettings as cw,
+  resolveSettingsSaveProofKind as cx,
+  requiresSettingsSaveProof as cy,
+  enrollApprovalGateTotp as cz,
   HiMiniCircleStack as d,
-  localCliHref as d$,
-  buildExtensionPolicyDraftMutation as d0,
-  fetchEffectiveExtensionControls as d1,
-  previewExtensionMutation as d2,
-  isCurrentExtensionPolicyDraft as d3,
-  applyExtensionMutation as d4,
-  fetchExtensionControlHistory as d5,
-  managedPermissionState as d6,
-  controlProvenance as d7,
-  treatmentLabel as d8,
-  useResolvedApprovalGate as d9,
-  filterExtensionSuggestions as dA,
-  suggestedHarnessExtensions as dB,
-  suggestedSeenExtensions as dC,
-  keepsPackageScriptCatalog as dD,
-  prefillSuggestedStates as dE,
-  recognizeLocalCli as dF,
-  preferredPackageScriptExtension as dG,
-  looksLikePackageScriptPaste as dH,
-  enrollmentCommandStates as dI,
-  isBulkApproveGateReady as dJ,
-  fetchLocalCliList as dK,
-  normalizeLocalCliList as dL,
-  unreviewedToolChangeCount as dM,
-  connectorSetupMatch as dN,
-  refreshMcpInventory as dO,
-  connectorGroupOutcome as dP,
-  allowedEarlierVersion as dQ,
-  startGuardCloudConnect as dR,
-  extensionEffectiveState as dS,
-  permissionEffectiveState as dT,
-  fetchExtensionControlApi as dU,
-  permissionForRule as dV,
-  refreshEffectiveExtensionControls as dW,
-  fetchExtensionDiscoveryApi as dX,
-  startCancelableDiscoveryJob as dY,
-  waitForMcpDiscoveryJob as dZ,
-  isLocalCliId as d_,
-  groupPermissionsByFamily as da,
-  HiMiniInformationCircle as db,
-  LocalCliApiError as dc,
-  hasSuggestedRules as dd,
-  approvalProofRecentlySatisfied as de,
-  StyledSelect as df,
-  bulkCommandState as dg,
-  fetchLocalCliApi as dh,
-  ExtensionBrandMark as di,
-  fetchMcpProviderActions as dj,
-  connectorSetupReady as dk,
-  shortIdentity as dl,
-  customExtensionDisplayName as dm,
-  previewLocalCliMutation as dn,
-  applyLocalCliMutation as dp,
-  LOCAL_CLI_CAPABILITIES as dq,
-  loadLocalCliCommands as dr,
-  DiscoveryFailure as ds,
-  readJson as dt,
-  enrollablePackageScriptCommands as du,
-  seenSuggestionMeta as dv,
-  looksLikeProjectRelocatePaste as dw,
-  packageScriptFilterNeedle as dx,
-  initialAddCommand as dy,
-  suggestedPackageScriptExtensions as dz,
+  isLocalCliId as d$,
+  setLocalPermissionDraftStates as d0,
+  buildExtensionPolicyDraftMutation as d1,
+  fetchEffectiveExtensionControls as d2,
+  previewExtensionMutation as d3,
+  isCurrentExtensionPolicyDraft as d4,
+  applyExtensionMutation as d5,
+  fetchExtensionControlHistory as d6,
+  managedPermissionState as d7,
+  controlProvenance as d8,
+  treatmentLabel as d9,
+  suggestedPackageScriptExtensions as dA,
+  filterExtensionSuggestions as dB,
+  suggestedHarnessExtensions as dC,
+  suggestedSeenExtensions as dD,
+  keepsPackageScriptCatalog as dE,
+  prefillSuggestedStates as dF,
+  recognizeLocalCli as dG,
+  preferredPackageScriptExtension as dH,
+  looksLikePackageScriptPaste as dI,
+  enrollmentCommandStates as dJ,
+  isBulkApproveGateReady as dK,
+  fetchLocalCliList as dL,
+  normalizeLocalCliList as dM,
+  unreviewedToolChangeCount as dN,
+  connectorSetupMatch as dO,
+  refreshMcpInventory as dP,
+  connectorGroupOutcome as dQ,
+  allowedEarlierVersion as dR,
+  startGuardCloudConnect as dS,
+  extensionEffectiveState as dT,
+  permissionEffectiveState as dU,
+  fetchExtensionControlApi as dV,
+  permissionForRule as dW,
+  refreshEffectiveExtensionControls as dX,
+  fetchExtensionDiscoveryApi as dY,
+  startCancelableDiscoveryJob as dZ,
+  waitForMcpDiscoveryJob as d_,
+  useResolvedApprovalGate as da,
+  groupPermissionsByFamily as db,
+  HiMiniInformationCircle as dc,
+  LocalCliApiError as dd,
+  hasSuggestedRules as de,
+  approvalProofRecentlySatisfied as df,
+  StyledSelect as dg,
+  bulkCommandState as dh,
+  fetchLocalCliApi as di,
+  ExtensionBrandMark as dj,
+  fetchMcpProviderActions as dk,
+  connectorSetupReady as dl,
+  shortIdentity as dm,
+  customExtensionDisplayName as dn,
+  previewLocalCliMutation as dp,
+  applyLocalCliMutation as dq,
+  LOCAL_CLI_CAPABILITIES as dr,
+  loadLocalCliCommands as ds,
+  DiscoveryFailure as dt,
+  readJson as du,
+  enrollablePackageScriptCommands as dv,
+  seenSuggestionMeta as dw,
+  looksLikeProjectRelocatePaste as dx,
+  packageScriptFilterNeedle as dy,
+  initialAddCommand as dz,
   HiMiniSquares2X2 as e,
-  fetchPackageFirewallStatus as e$,
-  fetchPluginUpdatesApi as e0,
-  filterCodexHostApps as e1,
-  connectorWorkspaceItems as e2,
-  customExtensionNeedsReview as e3,
-  profileSetupCommand as e4,
-  customExtensionBadge as e5,
-  extensionDisplayName as e6,
-  catalogRowSecondLine as e7,
-  extensionStateLabel as e8,
-  HiMiniGlobeAlt as e9,
-  guardActionPresentation as eA,
-  DEFAULT_FILTER_STATE as eB,
-  filterEvidence as eC,
-  sortEvidence as eD,
-  computeMetrics as eE,
-  CommandActivityWorkspace as eF,
-  EvidenceFilterBar as eG,
-  EvidenceInsightStrip as eH,
-  EvidenceActionList as eI,
-  EvidenceActionDetail as eJ,
-  policyIdentityKey as eK,
-  clearLabelForScope as eL,
-  HiMiniChartBar as eM,
-  HiMiniCheckBadge as eN,
-  isSupplyChainAuditIncomplete as eO,
-  isSupplyChainAuditEvidence as eP,
-  readString$1 as eQ,
-  IconActionButton as eR,
-  HiMiniBeaker as eS,
-  HiMiniBugAnt as eT,
-  ActivationSummary as eU,
-  ActionResultPanel as eV,
-  fetchSupplyChainBundle as eW,
-  closeOnEscape as eX,
-  ConnectFlowCard as eY,
-  ApprovalProofInline as eZ,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as e_,
-  HiMiniFunnel as ea,
-  discoveryFailureMessage as eb,
-  refreshCodexHostInventory as ec,
-  CODEX_HOST_FALLBACK as ed,
-  CONFIGURED_CONNECTIONS_FALLBACK as ee,
-  loadCurrentDashboardBuild as ef,
-  canonicalExtensionId as eg,
-  extensionDetailHref as eh,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as ei,
-  addCustomExtensionPrefillHref as ej,
-  acknowledgeDegradedExtensionControlAuthority as ek,
-  recoverExtensionControlAuthority as el,
-  connectorSetupLinkFromSearch as em,
-  readExtensionDetailUrlState as en,
-  parseProtectionRoute as eo,
-  addCustomExtensionHref as ep,
-  runHarnessAction as eq,
-  GuardHarnessActionError as er,
-  HiMiniRocketLaunch as es,
-  HiMiniTrash as et,
-  fetchGuardApi as eu,
-  formatHarnessCommand as ev,
-  appModes as ew,
-  fetchApprovalPage as ex,
-  fetchPolicy as ey,
-  appSetupTarget as ez,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as e$,
+  localCliHref as e0,
+  fetchPluginUpdatesApi as e1,
+  filterCodexHostApps as e2,
+  connectorWorkspaceItems as e3,
+  customExtensionNeedsReview as e4,
+  profileSetupCommand as e5,
+  customExtensionBadge as e6,
+  extensionDisplayName as e7,
+  catalogRowSecondLine as e8,
+  extensionStateLabel as e9,
+  appSetupTarget as eA,
+  guardActionPresentation as eB,
+  DEFAULT_FILTER_STATE as eC,
+  filterEvidence as eD,
+  sortEvidence as eE,
+  computeMetrics as eF,
+  CommandActivityWorkspace as eG,
+  EvidenceFilterBar as eH,
+  EvidenceInsightStrip as eI,
+  EvidenceActionList as eJ,
+  EvidenceActionDetail as eK,
+  policyIdentityKey as eL,
+  clearLabelForScope as eM,
+  HiMiniChartBar as eN,
+  HiMiniCheckBadge as eO,
+  isSupplyChainAuditIncomplete as eP,
+  isSupplyChainAuditEvidence as eQ,
+  readString$1 as eR,
+  IconActionButton as eS,
+  HiMiniBeaker as eT,
+  HiMiniBugAnt as eU,
+  ActivationSummary as eV,
+  ActionResultPanel as eW,
+  fetchSupplyChainBundle as eX,
+  closeOnEscape as eY,
+  ConnectFlowCard as eZ,
+  ApprovalProofInline as e_,
+  HiMiniGlobeAlt as ea,
+  HiMiniFunnel as eb,
+  discoveryFailureMessage as ec,
+  refreshCodexHostInventory as ed,
+  CODEX_HOST_FALLBACK as ee,
+  CONFIGURED_CONNECTIONS_FALLBACK as ef,
+  loadCurrentDashboardBuild as eg,
+  canonicalExtensionId as eh,
+  extensionDetailHref as ei,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as ej,
+  addCustomExtensionPrefillHref as ek,
+  acknowledgeDegradedExtensionControlAuthority as el,
+  recoverExtensionControlAuthority as em,
+  connectorSetupLinkFromSearch as en,
+  readExtensionDetailUrlState as eo,
+  parseProtectionRoute as ep,
+  addCustomExtensionHref as eq,
+  runHarnessAction as er,
+  GuardHarnessActionError as es,
+  HiMiniRocketLaunch as et,
+  HiMiniTrash as eu,
+  fetchGuardApi as ev,
+  formatHarnessCommand as ew,
+  appModes as ex,
+  fetchApprovalPage as ey,
+  fetchPolicy as ez,
   fetchWithGuardAuth as f,
-  runPackageAudit as f0,
-  resolveSupplyChainAuditFailure as f1,
-  runPackageSync as f2,
-  GuardOperationTimeoutError as f3,
-  startPackageFirewallConnect as f4,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f5,
-  repairSupplyChainProtection as f6,
-  runPackageFirewallAction as f7,
-  parseInterceptProofSnapshot as f8,
-  activatePackageFirewallRuntime as f9,
-  HiMiniDocumentPlus as fA,
-  HiMiniKey as fB,
-  HiMiniArrowUpRight as fC,
-  HiMiniArrowUp as fD,
-  HiMiniChevronLeft as fE,
-  HiMiniArrowDown as fF,
-  runAuditRemediation as fG,
-  isBlockedGuardAction as fH,
-  isSupplyChainScannerEvidence as fI,
-  HiMiniSignal as fJ,
-  EntitlementNotice as fa,
-  chooseSupplyChainAuditFolder as fb,
-  fetchReceipts as fc,
-  lazyWorkspace as fd,
-  scopeLabel as fe,
-  HiMiniCloudArrowUp as ff,
-  HiMiniCodeBracket as fg,
-  HiMiniUsers as fh,
-  HiMiniIdentification as fi,
-  policyActionLabel as fj,
-  createCloudExceptionRequest as fk,
-  HiMiniPuzzlePiece as fl,
-  fetchCloudExceptions as fm,
-  fetchCloudExceptionRequests as fn,
-  PaginationControls as fo,
-  PolicyStatField as fp,
-  HiMiniInbox as fq,
-  HiMiniQueueList as fr,
-  Surface as fs,
-  HiMiniEllipsisHorizontal as ft,
-  HiMiniMinus as fu,
-  HiMiniWrench as fv,
-  HiMiniArrowLongRight as fw,
-  fetchReleaseFeedApi as fx,
-  fetchMcpPolicyRequest as fy,
-  resolveMcpPolicyRequest as fz,
+  fetchPackageFirewallStatus as f0,
+  runPackageAudit as f1,
+  resolveSupplyChainAuditFailure as f2,
+  runPackageSync as f3,
+  GuardOperationTimeoutError as f4,
+  startPackageFirewallConnect as f5,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f6,
+  repairSupplyChainProtection as f7,
+  runPackageFirewallAction as f8,
+  parseInterceptProofSnapshot as f9,
+  resolveMcpPolicyRequest as fA,
+  HiMiniDocumentPlus as fB,
+  HiMiniKey as fC,
+  HiMiniArrowUpRight as fD,
+  HiMiniArrowUp as fE,
+  HiMiniChevronLeft as fF,
+  HiMiniArrowDown as fG,
+  runAuditRemediation as fH,
+  isBlockedGuardAction as fI,
+  isSupplyChainScannerEvidence as fJ,
+  HiMiniSignal as fK,
+  activatePackageFirewallRuntime as fa,
+  EntitlementNotice as fb,
+  chooseSupplyChainAuditFolder as fc,
+  fetchReceipts as fd,
+  lazyWorkspace as fe,
+  scopeLabel as ff,
+  HiMiniCloudArrowUp as fg,
+  HiMiniCodeBracket as fh,
+  HiMiniUsers as fi,
+  HiMiniIdentification as fj,
+  policyActionLabel as fk,
+  createCloudExceptionRequest as fl,
+  HiMiniPuzzlePiece as fm,
+  fetchCloudExceptions as fn,
+  fetchCloudExceptionRequests as fo,
+  PaginationControls as fp,
+  PolicyStatField as fq,
+  HiMiniInbox as fr,
+  HiMiniQueueList as fs,
+  Surface as ft,
+  HiMiniEllipsisHorizontal as fu,
+  HiMiniMinus as fv,
+  HiMiniWrench as fw,
+  HiMiniArrowLongRight as fx,
+  fetchReleaseFeedApi as fy,
+  fetchMcpPolicyRequest as fz,
   HiMiniComputerDesktop as g,
   HiMiniMagnifyingGlass as h,
   HiMiniListBullet as i,

@@ -323,6 +323,26 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             self._compiled_watch_ends = None
         return policy
 
+    def warm_first_publication(self) -> None:
+        """Run the first publication's policy compiles before it is allowed to publish.
+
+        Each compile is a native call remembered by its exact request, so the
+        publication that follows reuses an answer only for identical inputs;
+        an input that changes in between is compiled again. Nothing is
+        published or written, and a failure is left for the publication to meet.
+        """
+
+        from .native_policy_effective import effective_native_policy_v3
+
+        with self._condition:
+            if getattr(self, "_started", False):
+                return
+            workspaces = frozenset(self._workspace_paths)
+        try:
+            effective_native_policy_v3(self._compiled_effective_policy(workspaces=workspaces))
+        except Exception:
+            return
+
     def _compiled_command_extensions(self) -> dict[str, object]:
         try:
             binding, runtime = read_native_command_control_binding(self.store, self._command_control_runtime)

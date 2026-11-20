@@ -1,9 +1,9 @@
 """Policy bundle schema validation and integrity hashing.
 
 Rust owns v1 bundle schema validation, canonical hashing, signature
-verification and downgrade ordering. This module keeps the sync-time names,
-remediation text rendering and the transport calls; a native failure is a
-typed rejection, never a Python verdict.
+verification, downgrade ordering and the remediation text a rejection carries.
+This module keeps the sync-time names and the transport calls; a native failure
+is a typed rejection, never a Python verdict.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 from ..version import __version__
 from .native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
+    PolicyBundleNativeError,
     PolicyBundleNativeUnavailableError,
     native_policy_bundle,
     policy_bundle_chunks,
@@ -18,130 +19,11 @@ from .native_policy_bundle import (
 
 CANONICAL_COMPILE_REJECTION_PREFIX = "canonical_compile_"
 
-# The compiler reports these before it reads any rule and names the policy
-# document in place of a rule, so a rejection for one of them carries no rule id.
-CANONICAL_COMPILE_DOCUMENT_CODES = frozenset(
-    {"invalid_policy_spec", "invalid_policy_rules", "unsupported_policy_budgets"}
-)
-
-# A rule the canonical compiler cannot turn into enforcement rows rejects the
-# whole bundle, so the device keeps the policy it already had. The reason code
-# alone names neither the rule nor what about it is unenforceable, which leaves
-# an administrator with a published policy that never applies and nothing to
-# act on. Each compile code carries the one sentence that says what Guard can
-# enforce instead; the rule's own id travels beside the reason in the stored
-# rejection.
-_CANONICAL_COMPILE_REMEDIATION = {
-    "unsupported_policy_match": (
-        "Guard enforces match on artifacts, exact commands, harnesses, publishers, tools and workspaces; "
-        "other match fields, such as packages, domains or paths, are not enforced on this device. Tools "
-        "cannot be combined with artifacts or publishers, and an exact command cannot be combined with "
-        "artifacts, tools or publishers."
-    ),
-    "invalid_policy_match_selector": "Every match field needs at least one non-empty value.",
-    "unsupported_policy_effect": "Guard enforces allow, block and review rules.",
-    "unsupported_exact_command_review": (
-        "Guard cannot ask for review on an exact command; it enforces only allow and block there. Block "
-        "the command, or ask for review on its tool instead."
-    ),
-    "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
-    "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
-    "command_expression_requires_guard_3_1_runtime": (
-        "This device enforces a command pattern only on an allow rule, so a block or review rule with a "
-        "command expression stays unapplied. Match the exact command instead, which Guard enforces under "
-        "every spelling. A tool match is not a "
-        "substitute: it covers every call to that tool, not only this command, so widen the rule only as "
-        "a deliberate policy decision."
-    ),
-    "command_pattern_allow_single_condition": (
-        "A command pattern allows with one condition. Write every limit the command must meet into that one "
-        "pattern; use separate rules only for commands that are each acceptable on their own."
-    ),
-    "command_pattern_allow_case_sensitive": "A command pattern must match case-sensitively.",
-    "command_pattern_allow_operator": (
-        "A command pattern matches with exact, startsWith or glob. Contains, endsWith and regex are not "
-        "enforced on this device."
-    ),
-    "command_pattern_allow_wildcard": (
-        "A command pattern's only wildcard is *. Escape ? and [ with a backslash to match them literally."
-    ),
-    "command_pattern_allow_literal_head": (
-        "A command pattern keeps the program and the word after it as plain literal words, with no wildcard, "
-        "quote, escape or expansion, so it cannot allow every use of a program."
-    ),
-    "command_pattern_allow_program_literal": "A command pattern must start with a literal program name.",
-    "command_pattern_allow_wrapper": (
-        "A command pattern cannot start with a program that runs another one, such as env, sudo, xargs or npx. "
-        "Allow the exact command instead."
-    ),
-    "command_pattern_allow_interpreter_option": (
-        "A command pattern cannot follow an interpreter with an option such as -c, -e or /c, which would "
-        "allow any script. Name the script file, or allow the exact command."
-    ),
-    "command_pattern_allow_runner": (
-        "A command pattern cannot follow a tool with the subcommand that runs a program or code it is given, "
-        "such as npm exec, deno eval, uv run or git submodule, or start such a tool with an option, such as "
-        "npm --silent or git -c. After npm run, name the script, as in npm run test *. "
-        "Otherwise allow the exact command."
-    ),
-    "policy_compilation_limit": (
-        "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "
-        "fewer tools, artifacts, harnesses, publishers and workspaces per rule."
-    ),
-}
-
-_POLICY_BUNDLE_TRUST_REMEDIATION_REASONS = frozenset(
-    {
-        "missing_signature",
-        "missing_signing_key_id",
-        "signing_key_fingerprint_mismatch",
-        "signing_key_not_current",
-        "signing_key_purpose_mismatch",
-        "signing_key_revoked",
-        "signing_key_workspace_mismatch",
-        "trusted_key_unavailable",
-        "unsupported_signature_algorithm",
-        "untrusted_signing_key",
-    }
-)
-_POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS = frozenset(
-    {
-        "bundle_signature_invalid",
-        "invalid_signature_encoding",
-        "invalid_verifier",
-    }
-)
-_POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS = frozenset(
-    {
-        "bundle_hash_mismatch",
-        "invalid_bundle_hash",
-        "invalid_payload_hash",
-        "payload_hash_mismatch",
-    }
-)
-_POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS = frozenset(
-    {
-        "invalid_acknowledgements",
-        "invalid_cloud_exceptions",
-        "invalid_policy_bundle",
-        "invalid_policy_defaults",
-        "invalid_receipt_redaction_level",
-        "invalid_rollout_state",
-        "invalid_rules",
-        "missing_required_field",
-    }
-)
-_POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS = frozenset({"invalid_workspace_id", "wrong_workspace"})
-_POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS = frozenset(
-    {"bundle_expired", "bundle_not_yet_valid", "invalid_expires_at", "invalid_issued_at"}
-)
-_POLICY_BUNDLE_VERSION_REMEDIATION_REASONS = frozenset(
-    {
-        "invalid_bundle_version",
-        "invalid_min_daemon_version",
-        "unsupported_contract_version",
-        "unsupported_daemon_version",
-    }
+# The resident cannot write the record of its own outage, so that one sentence
+# stays here for the record stored when it does not answer.
+_NATIVE_UNAVAILABLE_MESSAGE = (
+    "The policy bundle was not applied because the Guard native runtime could not be reached. "
+    "Check that Guard is healthy, then sync again."
 )
 
 
@@ -242,67 +124,39 @@ def policy_bundle_is_version_downgrade(
     return _flag("is_downgrade", request, otherwise=True)
 
 
+def policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
+    """Return the stored record of why a bundle was not applied.
+
+    Rust writes the record: the reason, the sentence telling an administrator
+    what to do, and the rule that refused to compile. Without the resident the
+    record keeps the reason alone. The outage record is written here without
+    asking, since that reason means the resident just failed to answer.
+    """
+
+    resolved = reason or "invalid_policy_bundle"
+    if resolved == NATIVE_UNAVAILABLE_REJECTION:
+        # The resident just failed to answer; asking it again would wait out a second timeout.
+        return {"reason": resolved, "message": _NATIVE_UNAVAILABLE_MESSAGE}
+    try:
+        record = native_policy_bundle("rejection_payload", {"reason": reason, "rule_id": rule_id})
+    except PolicyBundleNativeError:
+        record = {}
+    if (
+        isinstance(record.get("reason"), str)
+        and isinstance(record.get("message", ""), str)
+        and isinstance(record.get("ruleId", ""), str)
+    ):
+        return dict(record)
+    return {"reason": resolved}
+
+
 def policy_bundle_rejection_message(reason: str | None) -> str | None:
-    if reason is not None and reason.startswith(CANONICAL_COMPILE_REJECTION_PREFIX):
-        code = reason[len(CANONICAL_COMPILE_REJECTION_PREFIX) :]
-        detail = _CANONICAL_COMPILE_REMEDIATION.get(code)
-        subject = "policy" if code in CANONICAL_COMPILE_DOCUMENT_CODES else "rule"
-        return (
-            "The policy bundle was not applied because "
-            + ("its policy" if subject == "policy" else "one of its rules")
-            + " cannot be enforced on this device. "
-            + (f"{detail} " if detail else "")
-            + f"Change the {subject} in Guard Cloud and publish again; this device keeps the policy it already had."
-        )
-    if reason == "inactive_rollout_state":
-        return (
-            "The authenticated policy bundle is not active for local enforcement. "
-            "Approve or publish the rollout in Guard Cloud, then sync again."
-        )
-    if reason == NATIVE_UNAVAILABLE_REJECTION:
-        return (
-            "The policy bundle was not applied because the Guard native runtime could not be reached. "
-            "Check that Guard is healthy, then sync again."
-        )
-    if reason in _POLICY_BUNDLE_TRUST_REMEDIATION_REASONS | _POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS:
-        return (
-            "The policy bundle was not applied because its signing authority could not be verified. "
-            "Sync again after the workspace policy signing key is provisioned or rotated."
-        )
-    if reason in _POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS:
-        return (
-            "The policy bundle was not applied because its integrity checks failed. "
-            "Sync again to fetch a complete policy bundle; if the error persists, contact your workspace administrator."
-        )
-    if reason in _POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS:
-        return (
-            "The policy bundle was not applied because its schema or required fields are invalid. "
-            "Sync again to fetch a complete policy bundle; if the error persists, contact your workspace administrator."
-        )
-    if reason in _POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS:
-        return (
-            "The policy bundle was not applied because it does not match the connected workspace. "
-            "Reconnect Guard to the intended workspace. Sync again after the workspace connection is confirmed."
-        )
-    if reason in _POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS:
-        return (
-            "The policy bundle was not applied because its validity period is not current. "
-            "Check the system clock. Sync again to fetch the current workspace policy."
-        )
-    if reason == "bundle_version_downgrade":
-        return (
-            "The policy bundle was not applied because it is older than, or conflicts with, "
-            "the policy this device already accepted. This device keeps the policy it already had. "
-            "Publish the policy again in Guard Cloud so it gets a newer version, then sync again. "
-            "If a newer publish is also rejected, the policy record on this device may be damaged; "
-            "contact your workspace administrator."
-        )
-    if reason in _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS:
-        return (
-            "The policy bundle was not applied because its contract or daemon version is incompatible. "
-            "Update Guard to a supported version if required. Sync again to fetch the current workspace policy."
-        )
-    return None
+    """Return the remediation sentence stored with ``reason``, if any."""
+
+    if reason is None:
+        return None
+    message = policy_bundle_rejection_payload(reason).get("message")
+    return message if isinstance(message, str) else None
 
 
 non_empty_string = _non_empty_string

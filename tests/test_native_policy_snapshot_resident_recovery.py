@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
+import codex_plugin_scanner.guard.hook_review.hook_policy_admission as admission
 from codex_plugin_scanner.guard.hook_review.hook_worker_readiness import prepare_workspace_policy
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.native_policy_snapshot_resident_recovery import (
@@ -437,25 +437,51 @@ def test_wait_gives_up_when_the_failures_repeat_midway(tmp_path: Path) -> None:
 
 
 def _daemon_with(publisher: object) -> SimpleNamespace:
-    return SimpleNamespace(hook_worker=SimpleNamespace(policy_snapshot_publisher=publisher))
+    return SimpleNamespace(
+        hook_worker=SimpleNamespace(policy_snapshot_publisher=publisher, guard_home=Path("guard-home"))
+    )
 
 
-def test_not_ready_reason_sends_the_user_to_repair_once_failures_repeat() -> None:
-    reason = _native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK)))
+def test_not_ready_reason_keeps_the_local_resident_down_fast_path(monkeypatch) -> None:
+    monkeypatch.setattr(
+        admission,
+        "native_policy_not_ready_reason",
+        lambda *args, **kwargs: "delegated-reason-should-not-be-used",
+    )
+    reason = admission._native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK)))
 
-    assert "native_client_timed_out" in reason
-    assert "hol-guard repair" in reason
-    assert "Retry once more" in reason
+    assert reason == admission._NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
 
 
-def test_not_ready_reason_keeps_plain_retry_advice_for_a_first_failure() -> None:
-    reason = _native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=1)))
+def test_not_ready_reason_uses_the_resident_posture_before_local_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(
+        admission,
+        "native_policy_not_ready_reason",
+        lambda *args, **kwargs: "delegated-reason-should-be-used",
+    )
+    reason = admission._native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=1)))
+
+    assert reason == "delegated-reason-should-be-used"
+
+
+def test_not_ready_reason_keeps_plain_retry_advice_for_a_first_failure(monkeypatch) -> None:
+    reason = (
+        "HOL Guard could not prepare the native policy safely. native_client_timed_out. "
+        "This is usually temporary. Retry this action."
+    )
+    monkeypatch.setattr(admission, "native_policy_not_ready_reason", lambda *args, **kwargs: reason)
+    reason = admission._native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=1)))
 
     assert "Retry this action." in reason
     assert "hol-guard repair" not in reason
 
 
-def test_not_ready_reason_ignores_the_streak_for_other_failures() -> None:
+def test_not_ready_reason_ignores_the_streak_for_other_failures(monkeypatch) -> None:
     publisher = _StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK, last_error="native_policy_snapshot_ack_mismatch")
 
-    assert "hol-guard repair" not in _native_policy_not_ready_reason(_daemon_with(publisher))
+    reason = (
+        "HOL Guard could not prepare the native policy safely. native_policy_snapshot_ack_mismatch. "
+        "This is usually temporary. Retry this action."
+    )
+    monkeypatch.setattr(admission, "native_policy_not_ready_reason", lambda *args, **kwargs: reason)
+    assert "hol-guard repair" not in admission._native_policy_not_ready_reason(_daemon_with(publisher))

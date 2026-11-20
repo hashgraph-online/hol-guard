@@ -412,6 +412,14 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "The same rule as `bounded_read_target_with_brackets`: off Unix a rooted spelling holding `..` is refused outright, because Windows normalizes `..` lexically before the filesystem sees it, so the canonicalized path is not the proof of the spelling that it is on Unix. The non-Unix arm is the stricter one.",
+   "file": "rust/crates/guard-command/src/pretool/listing_metadata.rs",
+   "item": "fn plain_operand -- cfg! expression",
+   "cfg": "unix",
+   "body": "9f8991e701d1"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "This is the Windows arm doing the work and Unix taking the trivial answer. Windows drops a trailing dot or space when it creates a file, so `AGENTS.md.` lands on a protected name a literal screen would miss; such a target keeps its review. On Unix the trailing character is part of the name, so the literal screen already sees a different file.",
    "file": "rust/crates/guard-command/src/pretool/redirect_targets.rs",
    "item": "fn spelling_survives_the_filesystem(path: &std::path::Path) -> bool",
@@ -2350,9 +2358,9 @@
    "verdict": "other-platform",
    "note": "Unix reads `gethostname` and Windows reads the physical DNS host name `platform.node()` reports, each in its own arm; this one answers no host name on a platform Guard does not ship, so a device still on a generic label has no known name and the bundle's rows defer to the store.",
    "file": "rust/crates/guard-runtime/src/policy_bundle_store_identities.rs",
-   "item": "fn host_name() -> Option<String>",
+   "item": "pub(crate) fn host_name() -> Option<String>",
    "cfg": "not(any(unix, windows))",
-   "body": "6a7c0c4ecb3c"
+   "body": "47384d5657fa"
   },
   {
    "verdict": "windows-unsupported",

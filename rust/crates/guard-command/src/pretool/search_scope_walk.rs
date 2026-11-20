@@ -333,7 +333,7 @@ fn walk_scope_inner(
     }
     let mut pending = vec![PendingDirectory {
         path: root.to_path_buf(),
-        relative: String::new(),
+        relative: filter.base().to_owned(),
         depth: 0,
         tiers: Rc::new(tiers),
         beyond: false,

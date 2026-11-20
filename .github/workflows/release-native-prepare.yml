@@ -70,11 +70,11 @@ jobs:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       VERSION: ${{ inputs.version }}
       FAST_CODEGEN: ${{ inputs.fast_codegen == true }}
-      # Only the Windows alpha builds lower workspace opt-level: they are the
-      # slowest targets. Keep level 1 optimization because unoptimized
-      # workspace code bloats the runtime.
+      # Alpha binaries are GitHub prerelease assets and never enter PyPI. Use
+      # level 1 for every alpha target to reduce native publish compilation
+      # time while keeping the runtime optimized enough for release checks.
       # Dependencies keep the release profile either way.
-      ALPHA_WORKSPACE_OPT_LEVEL: ${{ endsWith(matrix.target, '-pc-windows-msvc') && '1' || '' }}
+      ALPHA_WORKSPACE_OPT_LEVEL: ${{ inputs.fast_codegen == true && '1' || '' }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}

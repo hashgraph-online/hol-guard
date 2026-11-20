@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.support.cloud_json_request_transport import use_runner_transport
 
 
 def _sha256(body: bytes) -> str:
@@ -266,7 +267,9 @@ def test_unmigrated_hermes_skill_keeps_primary_only_inventory_identity(tmp_path:
     assert "skillDirectoryIdentity" not in snapshot.items[0].metadata
 
 
-def test_primary_upload_uses_exact_skill_document_not_directory_identity(tmp_path: Path) -> None:
+def test_primary_upload_uses_exact_skill_document_not_directory_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     skill_path = tmp_path / ".gemini" / "skills" / "review" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     # Deliberately exceeds the 256 KiB analysis preview while remaining below
@@ -307,6 +310,7 @@ def test_primary_upload_uses_exact_skill_document_not_directory_identity(tmp_pat
         },
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth = upload_primary_content_sources(
         object(),
         runner,

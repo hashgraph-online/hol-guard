@@ -28,6 +28,7 @@ from tests.paseo_test_support import (
     read_receipt,
     receipt_path,
 )
+from tests.support import cloud_sync_transport
 
 
 @pytest.fixture
@@ -452,7 +453,7 @@ def test_cloud_sync_labels_paseo_inventory_with_its_own_agent_type(
     from codex_plugin_scanner.guard import aibom_cli
     from codex_plugin_scanner.guard.aibom_content_upload import empty_content_upload_summary
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
+    from codex_plugin_scanner.guard.runtime import runner_native_sync
 
     generated = "2026-09-11T00:00:00Z"
     local = GuardAgentInventorySnapshot("paseo:local", "paseo:agent", "paseo", generated)
@@ -483,9 +484,11 @@ def test_cloud_sync_labels_paseo_inventory_with_its_own_agent_type(
     monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", collect)
     monkeypatch.setattr(aibom_cli, "upload_primary_content_sources", upload)
     monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
-    monkeypatch.setattr(runner, "_guard_sync_request", request)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", request)
     monkeypatch.setattr(
-        runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {"accepted": len(snapshots), "rejected": 0}
+        cloud_sync_transport,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: {"accepted": len(snapshots), "rejected": 0},
     )
     summary = aibom_cli.sync_aibom_snapshots(
         store,

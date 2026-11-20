@@ -161,3 +161,18 @@ def test_frozen_bundle_rejects_added_inputs_and_symlinks(frozen):
     (directory / "linked").symlink_to(root / "pyproject.toml")
     with pytest.raises(ValueError, match="symlink"):
         build.prepare(root, source_archive=True)
+
+
+def test_bundle_source_sha_defaults_to_head_and_accepts_a_pinned_commit(modules, monkeypatch):
+    build = modules[0]
+    root = Path(__file__).parents[1]
+    monkeypatch.delenv("HOL_GUARD_BUNDLE_SOURCE_SHA", raising=False)
+    head = build._bundle_source_sha(root)
+    assert len(head) == 40
+
+    monkeypatch.setenv("HOL_GUARD_BUNDLE_SOURCE_SHA", "a" * 40)
+    assert build._bundle_source_sha(root) == "a" * 40
+
+    monkeypatch.setenv("HOL_GUARD_BUNDLE_SOURCE_SHA", "HEAD")
+    with pytest.raises(ValueError, match="full commit SHA"):
+        build._bundle_source_sha(root)

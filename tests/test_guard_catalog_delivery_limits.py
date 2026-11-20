@@ -38,6 +38,7 @@ from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import 
     load_generated_command_catalog_bytes,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support import cloud_sync_transport
 from tests.test_managed_controls_limits import _catalog_extension
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -323,7 +324,9 @@ def test_runtime_sync_sends_nothing_when_upload_exceeds_cloud_cap(
 ) -> None:
     oversized = _catalog_with_size(CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     monkeypatch.setattr(runner, "build_builtin_extension_catalog_wire", lambda **_kwargs: oversized)
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: pytest.fail("must not upload"))
+    monkeypatch.setattr(
+        cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: pytest.fail("must not upload")
+    )
     summary = runner._sync_extension_catalog_from_runtime_handshake(
         guard_home=tmp_path,
         auth_context={},

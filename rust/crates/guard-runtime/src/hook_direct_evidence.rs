@@ -451,16 +451,41 @@ pub(crate) fn drain(
         Some(source) => {
             let fatal = record::leftovers(queue, &request.guard_home, source, &mut paged);
             record::drop_settled(&mut paged, &request.guard_home);
+            // A plain relay record can be handed back after a detached write
+            // failed. Retry that write in Rust while the original queue entry
+            // remains unacknowledged. Any direct-hook record still present is
+            // likewise unfinished, so return an error and leave its cursor in
+            // place for the next poll instead of asking Python to record it.
+            let plain: Vec<Value> = paged
+                .iter()
+                .filter(|item| crate::mcp_relay_receipt::is_plain(&item.record))
+                .map(|item| item.record.clone())
+                .collect();
+            if !plain.is_empty() {
+                let unwritten = crate::mcp_relay_receipt::write(&request.guard_home, plain);
+                paged.retain(|item| {
+                    !crate::mcp_relay_receipt::is_plain(&item.record)
+                        || unwritten.iter().any(|record| record == &item.record)
+                });
+            }
+            if paged.iter().any(|item| {
+                crate::mcp_relay_receipt::is_plain(&item.record)
+                    || record::needs_work(item, &request.guard_home)
+            }) {
+                return Err("direct_hook_evidence_unhandled".to_owned());
+            }
             fatal
         }
         None => None,
     };
     drop(recording);
+    let sequences: Vec<u64> = paged.iter().map(|paged| paged.seq).collect();
     let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
     let mut page = json!({
         "schema": DRAIN_RESULT_SCHEMA,
         "epoch": queue.epoch,
         "records": records,
+        "sequences": sequences,
         "remaining": peeked.remaining,
         "through": peeked.through,
         "counters": queue.counters.snapshot(),

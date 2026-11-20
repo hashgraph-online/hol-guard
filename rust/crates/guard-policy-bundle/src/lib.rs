@@ -33,6 +33,9 @@ mod policy_bundle_op_validate;
 #[cfg(test)]
 mod policy_bundle_op_vectors_tests;
 mod policy_bundle_py;
+mod policy_bundle_rejection;
+#[cfg(test)]
+mod policy_bundle_rejection_tests;
 mod policy_bundle_time;
 mod policy_bundle_v1;
 mod policy_bundle_v1_rules;

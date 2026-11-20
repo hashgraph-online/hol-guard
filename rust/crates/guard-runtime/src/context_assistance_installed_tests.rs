@@ -58,6 +58,10 @@ fn installed_native_enrollment_activation_disable_and_cancel() {
     assert_eq!(choices["status"], "ok");
     assert_eq!(
         choices["payload"]["state"]["installation_options"][0]["runtime_id"],
+        "builtin"
+    );
+    assert_eq!(
+        choices["payload"]["state"]["installation_options"][1]["runtime_id"],
         "candidate-314"
     );
     assert!(!choices

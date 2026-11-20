@@ -102,7 +102,8 @@ fn actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication
     let settings = crate::guard_config_load::context_assistance_config(&fixture.home).unwrap();
     assert!(!settings.requested.enabled);
     assert!(settings.requested.runtime_id.is_empty());
-    assert_eq!(super::super::super::list(&fixture.home).unwrap().len(), 1);
+    // The built-in engine plus the one downloaded installation.
+    assert_eq!(super::super::super::list(&fixture.home).unwrap().len(), 2);
     assert_eq!(
         jobs.install_catalog(&fixture.home, request.clone(), &catalog)
             .unwrap()["phase"],
@@ -118,7 +119,8 @@ fn actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication
         .recover(&fixture.home, &request.job_id)
         .unwrap();
     assert_eq!(recovered["phase"], "ready");
-    assert_eq!(super::super::super::list(&fixture.home).unwrap().len(), 1);
+    // The built-in engine plus the one downloaded installation.
+    assert_eq!(super::super::super::list(&fixture.home).unwrap().len(), 2);
     println!(
         "GUARD_CIGAR_MANAGED_INSTALL_VERIFIED {}",
         json!({"build_id":request.build_id,"python":interpreter.facts.version,
@@ -291,7 +293,8 @@ fn actual_preparation_cancellation_keeps_current_cigar_running_and_preferences_u
         config_before
     );
     assert_eq!(service.status().unwrap()["generation"], ready["generation"]);
-    assert_eq!(super::super::super::list(&fixture.home).unwrap().len(), 1);
+    // The built-in engine plus the one downloaded installation.
+    assert_eq!(super::super::super::list(&fixture.home).unwrap().len(), 2);
     assert!(!fixture
         .home
         .join("context-assistance/installation-authority.json")

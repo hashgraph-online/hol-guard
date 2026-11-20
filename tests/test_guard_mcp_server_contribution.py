@@ -21,10 +21,13 @@ from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
+_AGENTIC_LINKEDIN = _FILESYSTEM.with_name("mcp.agentic-linkedin.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
+_LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _NJC_CHAIN_READS_URL = "https://njc-tx-explain.departmentofjazz.workers.dev/mcp"
 
 
@@ -37,6 +40,12 @@ def _filesystem_payload() -> dict[str, object]:
 def _tether_payload() -> dict[str, object]:
     """Read the authored Tether manifest so missing tools cannot hide behind fallback defaults."""
     payload = json.loads(_TETHER.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _agentic_linkedin_payload() -> dict[str, object]:
+    payload = json.loads(_AGENTIC_LINKEDIN.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -55,6 +64,12 @@ def _njc_chain_reads_payload() -> dict[str, object]:
 
 def _krusch_skylight_payload() -> dict[str, object]:
     payload = json.loads(_KRUSCH_SKYLIGHT.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _lienzo_ui_payload() -> dict[str, object]:
+    payload = json.loads(_LIENZO_UI.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -96,6 +111,29 @@ def test_rei_skills_tool_defaults_preserve_review_boundary() -> None:
     assert mcp_tool_state(payload, "unlisted_tool") == "review"
 
 
+def test_lienzo_ui_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed Lienzo UI launch on the exact npm release."""
+    payload = json.loads(_LIENZO_UI.read_text(encoding="utf-8"))
+    validate_mcp_contribution(payload, filename=_LIENZO_UI.name)
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "lienzo-ui-mcp@1.7.4",
+    }
+
+
+def test_lienzo_ui_export_and_its_hidden_alias_require_review() -> None:
+    """The server accepts exportar_unity for export_unity; both names must stay review-gated."""
+    payload = json.loads(_LIENZO_UI.read_text(encoding="utf-8"))
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    for name in ("export_unity", "exportar_unity"):
+        assert declared[name] == "review"
+        assert mcp_tool_state(payload, name) == "review"
+    assert mcp_tool_state(payload, "lienzo_info") == "allow"
+
+
 def test_tether_contribution_is_external_opt_in() -> None:
     """Keep Tether bound to its published package and explicit local opt-in."""
     payload = _tether_payload()
@@ -104,6 +142,62 @@ def test_tether_contribution_is_external_opt_in() -> None:
     assert payload["trustClass"] == "external"
     assert payload["activation"] == "opt-in"
     assert payload["launch"] == {"kind": "package-launcher", "command": "uvx", "package": "tether-memory"}
+
+
+def test_agentic_linkedin_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed agentic-linkedin launch on the exact npm version."""
+    payload = _agentic_linkedin_payload()
+    validate_mcp_contribution(payload, filename=_AGENTIC_LINKEDIN.name)
+    assert payload["id"] == "mcp.agentic-linkedin"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "agentic-linkedin@0.1.0",
+    }
+
+
+def test_agentic_linkedin_private_reads_require_review() -> None:
+    payload = _agentic_linkedin_payload()
+    defaults = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert defaults["get_posts"] == "review"
+    assert defaults["get_voice_profile"] == "review"
+    assert mcp_tool_state(payload, "get_posts") == "review"
+    assert mcp_tool_state(payload, "get_voice_profile") == "review"
+
+
+def test_agentic_linkedin_stays_inert_until_local_admin_enable() -> None:
+    """Keep LinkedIn tools inert until a local admin enables the external catalog entry."""
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "agentic-linkedin@0.1.0"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="agentic-linkedin",
+        tool_name="get_posts",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    catalog_id = "command.mcp-agentic-linkedin"
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    assert (
+        apply_contributed_mcp_decision(
+            _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),)),
+            artifact,
+            "allow",
+        )
+        is None
+    )
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED),))
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_tether_declares_every_memory_tool_with_inherited_policy() -> None:
@@ -240,6 +334,31 @@ def test_krusch_skylight_local_writes_require_review() -> None:
     for tool_name in ("skylight_status", "skylight_list_events", "skylight_pull_chores", "skylight_list_meals"):
         assert declared[tool_name] == "review"
         assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_lienzo_ui_stays_inert_until_local_admin_enable() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "lienzo-ui-mcp@1.7.4"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="lienzo-ui",
+        tool_name="exportar_unity",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    enabled = _AuthorityStore(
+        (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-lienzo-ui", ControlState.ENABLED),)
+    )
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_njc_chain_reads_paid_tools_require_review() -> None:

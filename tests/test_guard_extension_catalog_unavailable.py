@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard.runtime import extension_catalog_handshake
 from codex_plugin_scanner.guard.runtime.extension_catalog_pages import native_call, observed_view
 from codex_plugin_scanner.guard.runtime.extension_catalog_sync import ExtensionCatalogUnavailableError
+from tests.support import cloud_sync_transport
 
 SCHEMA = "guard-cloud-catalog-result.v2"
 SESSION = {
@@ -63,8 +64,8 @@ def test_evicted_view_downgrades_the_v2_transfer(monkeypatch, tmp_path: Path) ->
 
 
 def _patch_send(monkeypatch, runner) -> None:
-    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {})
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {})
 
 
 def test_eviction_before_the_first_page_downgrades(monkeypatch, tmp_path: Path) -> None:

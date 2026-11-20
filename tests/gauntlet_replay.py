@@ -62,6 +62,7 @@ FIXED = {
     "web_fetch": "WebFetch",
     "agent": "Agent",
     "edit": "edit",
+    "goal": "goal",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})

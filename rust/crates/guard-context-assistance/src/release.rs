@@ -34,6 +34,26 @@ impl RuntimeRelease {
             python_release: None,
         })
     }
+    /// The CIGAR engine compiled into this Guard executable.
+    pub fn builtin() -> Self {
+        let approval = crate::runtime::builtin_approval();
+        Self {
+            sdk_version: guard_cigar_native::CORE_VERSION.into(),
+            core_version: guard_cigar_native::CORE_VERSION.into(),
+            worker_protocol: guard_cigar_native::WORKER_PROTOCOL.into(),
+            broker_protocol: guard_cigar_native::BROKER_PROTOCOL.into(),
+            adapter_id: crate::runtime::BUILTIN_ADAPTER.into(),
+            adapter_revision: 1,
+            binding: None,
+            platform: Some(approval.platform),
+            package_tree_sha256: Some(approval.package_tree_sha256),
+            worker_sha256: Some(approval.worker_sha256),
+            python_release: None,
+        }
+    }
+    pub(crate) fn is_builtin(&self) -> bool {
+        self.adapter_id == crate::runtime::BUILTIN_ADAPTER
+    }
     pub fn catalog(release: &ResolvedRelease) -> Result<Self, RuntimeError> {
         guard_cigar_release::check_shipped_adapter(release.profile())
             .map_err(|_| RuntimeError::PackageMismatch)?;
@@ -64,6 +84,9 @@ impl RuntimeRelease {
         Ok(())
     }
     pub fn matches(&self, approval: &BundleApproval) -> bool {
+        if self.is_builtin() {
+            return *approval == crate::runtime::builtin_approval();
+        }
         let schema = match (self.binding.is_some(), approval.python_bundle.is_some()) {
             (true, true) => "guard-cigar-bundle-approval.v3",
             (true, false) => "guard-cigar-bundle-approval.v2",

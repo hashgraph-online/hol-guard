@@ -11,6 +11,45 @@ use guard_cigar_release::{legacy_candidate_profile, AdapterProfile, ReleaseBindi
 pub(crate) enum EvidenceProducerBinding {
     Catalog(Box<ReleaseBinding>),
     Enrolled(Box<EnrolledEvidenceBinding>),
+    Builtin(Box<BuiltinEvidenceBinding>),
+}
+/// Data written by the engine compiled into Guard. The engine release and
+/// protocols are the whole producer identity; there are no files to bind.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BuiltinEvidenceBinding {
+    pub schema: String,
+    pub core_version: String,
+    pub worker_protocol: String,
+    pub broker_protocol: String,
+    pub platform: String,
+    pub worker_sha256: String,
+}
+impl BuiltinEvidenceBinding {
+    pub(crate) const SCHEMA: &'static str = "guard-cigar-builtin-evidence-producer.v1";
+    fn validate(&self) -> Result<(), RuntimeError> {
+        let label = |value: &str| {
+            !value.is_empty()
+                && value.len() <= 128
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._+-:".contains(&b))
+        };
+        if self.schema != Self::SCHEMA
+            || ![
+                &self.core_version,
+                &self.worker_protocol,
+                &self.broker_protocol,
+                &self.platform,
+            ]
+            .iter()
+            .all(|value| label(value))
+            || !valid_key(&self.worker_sha256)
+        {
+            return Err(RuntimeError::StorageRepairRequired);
+        }
+        Ok(())
+    }
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -31,6 +70,7 @@ impl EvidenceProducerBinding {
                 .validate()
                 .map_err(|_| RuntimeError::StorageRepairRequired),
             Self::Enrolled(binding) => binding.validate(),
+            Self::Builtin(binding) => binding.validate(),
         }
     }
 }

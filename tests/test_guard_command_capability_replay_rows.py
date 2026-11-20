@@ -7,12 +7,12 @@ import pytest
 from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
+    COMMAND_REPLAY_STATE_KEY,
     CommandCapabilityError,
     authorize_command_job,
     mark_command_job_consumed,
 )
 from codex_plugin_scanner.guard.runtime.command_executors import COMMAND_OPERATION_SCHEMA_VERSIONS
-from codex_plugin_scanner.guard.runtime.command_replay_rows import replay_rows_naming
 from tests.test_guard_command_capability import _connected_store, _issue, _job
 
 
@@ -70,9 +70,22 @@ def test_a_job_question_ships_only_the_rows_naming_that_job(tmp_path: Path, monk
     assert shipped == [["job-2"], ["job-3"], []]
 
 
-def test_a_malformed_job_keeps_every_row_for_the_runtime_to_refuse() -> None:
+def test_a_malformed_job_keeps_every_row_for_the_runtime_to_refuse(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
     rows: list[dict[str, object]] = [{"jobId": "job-1", "idempotencyKey": "key-1"}, {"identityDigest": "sha256:x"}]
+    store.set_sync_payload(COMMAND_REPLAY_STATE_KEY, {"version": 1, "items": rows}, "2026-09-27T12:00:00+00:00")
 
-    assert replay_rows_naming(rows, ["job-1"]) == rows
-    assert replay_rows_naming(rows, {"id": " job-1 ", "idempotencyKey": 7}) == rows
-    assert replay_rows_naming(rows, {"id": "job-2", "idempotencyKey": "key-2"}) == [rows[1]]
+    def naming(subject: object) -> object:
+        return command_capability_module._ledger(store, "replay_rows", now="2026-09-27T12:00:00+00:00", subject=subject)
+
+    assert naming(["job-1"]) == rows
+    assert naming({"id": " job-1 ", "idempotencyKey": 7}) == rows
+    assert naming({"id": "job-2", "idempotencyKey": "key-2"}) == [rows[1]]
+
+
+def test_the_replay_lookup_receives_only_the_fields_it_filters_on() -> None:
+    job = {"id": "job-1", "idempotencyKey": "key-1", "payload": {"blob": "x" * 2_000_000}}
+
+    assert command_capability_module._replay_subject(job) == {"id": "job-1", "idempotencyKey": "key-1"}
+    assert command_capability_module._replay_subject({"payload": {}}) == {}
+    assert command_capability_module._replay_subject("not-a-job") == "not-a-job"

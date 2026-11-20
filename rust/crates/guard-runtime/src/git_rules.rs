@@ -6,7 +6,8 @@
 //!   before a commit or push (`--no-verify`, `HUSKY=0`, an empty
 //!   `core.hooksPath`);
 //! * `git_stage_all`: stage files by name, never the whole tree (`git add .`,
-//!   `git add -A`, `git commit -a`).
+//!   `git add -A`, `git stage -A` under Git's second name for the same
+//!   builtin, `git commit -a`).
 //!
 //! Every preset leaves both at `allow`, so nothing changes until the user
 //! sets one. A command that breaks a rule the user set is raised to that

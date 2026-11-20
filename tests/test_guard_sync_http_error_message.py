@@ -5,13 +5,13 @@ import socket
 import ssl
 import struct
 import threading
-import time
 import urllib.error
 import urllib.request
 
 import pytest
 import urllib3
 
+from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.runtime.runner import (
@@ -21,8 +21,6 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _guard_cloud_http_error_details,
     _refresh_guard_oauth_access_token_once,
     _sync_http_error_message,
-    _urlopen_json_with_timeout_retry,
-    _urlopen_with_timeout_retry,
 )
 
 
@@ -34,48 +32,6 @@ def _http_error(body: str, *, code: int = 500, reason: str = "Error") -> urllib.
         hdrs={},
         fp=io.BytesIO(body.encode("utf-8")),
     )
-
-
-def _record_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
-    """Record the retry waits this thread makes.
-
-    `runner.time` is the shared `time` module, so a thread another test left
-    running sleeps through the same patch. Its sleeps stay real and unrecorded.
-    """
-    slept: list[float] = []
-    real_sleep = time.sleep
-    caller = threading.get_ident()
-
-    def sleep(seconds: float) -> None:
-        if threading.get_ident() == caller:
-            slept.append(seconds)
-        else:
-            real_sleep(seconds)
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.time.sleep", sleep)
-    return slept
-
-
-class _JsonResponse:
-    def __init__(self, payload: dict[str, object] | None = None) -> None:
-        self.payload = payload or {"ok": True}
-
-    def __enter__(self) -> "_JsonResponse":
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        return None
-
-    def read(self) -> bytes:
-        return json.dumps(self.payload).encode("utf-8")
-
-
-class _EmptyResponse:
-    def __enter__(self) -> "_EmptyResponse":
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        return None
 
 
 def test_sync_http_error_message_reads_guard_cloud_err_field() -> None:
@@ -133,37 +89,6 @@ def test_sync_http_error_message_falls_back_to_raw_body() -> None:
 
 def test_sync_http_error_message_falls_back_to_http_reason() -> None:
     assert _sync_http_error_message(_http_error("", code=502, reason="Bad Gateway")) == "HTTP Error 502: Bad Gateway"
-
-
-def test_urlopen_retries_cloudflare_524_with_retry_after_header(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    attempts = 0
-
-    def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _EmptyResponse:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise urllib.error.HTTPError(
-                url="https://hol.org/api/guard/receipts/sync",
-                code=524,
-                msg="A Timeout Occurred",
-                hdrs={"Retry-After": "5"},
-                fp=io.BytesIO(b""),
-            )
-        return _EmptyResponse()
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    slept = _record_sleeps(monkeypatch)
-
-    _urlopen_with_timeout_retry(
-        request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),
-        timeout_seconds=20,
-        retry_timeout_seconds=120,
-    )
-
-    assert attempts == 2
-    assert slept == [5]
 
 
 def _serve_proxy_once(reply: bytes | None, *, close: bool, reset: bool = False) -> tuple[str, threading.Thread]:
@@ -243,12 +168,14 @@ def _refresh_with_urlopen_failure(monkeypatch: pytest.MonkeyPatch, reason: BaseE
 
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner._guard_runtime_was_upgraded", lambda: False)
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner._sign_guard_dpop_proof", lambda **_kwargs: "proof")
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.managed_urlopen", _raise)
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.network.managed_urlopen", _raise)
     _refresh_guard_oauth_access_token_once(
         token_endpoint="https://hol.org/api/guard/oauth/token",
         client_id="client",
         refresh_token="refresh",
-        dpop_key_material=object(),  # type: ignore[arg-type]
+        dpop_key_material=GuardDpopKeyMaterial(
+            algorithm="ES256", private_key_pem="unused", public_jwk={}, public_jwk_thumbprint=""
+        ),
     )
 
 
@@ -388,43 +315,3 @@ def test_an_unread_http_error_claims_no_verdict_the_runtime_never_gave(monkeypat
         False,
         "HTTP Error 403: Forbidden",
     )
-
-
-def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    attempts = 0
-    cloudflare_body = json.dumps(
-        {
-            "status": 502,
-            "cloudflare_error": True,
-            "retryable": True,
-            "retry_after": 60,
-        }
-    )
-
-    def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _JsonResponse:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise urllib.error.HTTPError(
-                url="https://hol.org/api/guard/receipts/sync",
-                code=502,
-                msg="Bad Gateway",
-                hdrs={},
-                fp=io.BytesIO(cloudflare_body.encode("utf-8")),
-            )
-        return _JsonResponse({"syncedAt": "2026-06-30T21:02:46Z"})
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    slept = _record_sleeps(monkeypatch)
-
-    payload = _urlopen_json_with_timeout_retry(
-        request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),
-        timeout_seconds=20,
-        retry_timeout_seconds=120,
-    )
-
-    assert payload == {"syncedAt": "2026-06-30T21:02:46Z"}
-    assert attempts == 2
-    assert slept == [60]

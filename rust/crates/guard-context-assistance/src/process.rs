@@ -2,6 +2,7 @@
 use crate::{RuntimeError, RuntimeSelection};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{
@@ -34,10 +35,17 @@ fn command(
     cancel: &AtomicBool,
 ) -> Result<Command, RuntimeError> {
     crate::private_python::check_selection(selection, None, Some(cancel))?;
-    let mut cmd = Command::new(&selection.python);
-    cmd.args(["-I", "-S", "-B", "-u", "-c", script])
-        .env_clear()
-        .current_dir(&selection.work_dir)
+    let mut cmd = isolated(&selection.python, &selection.work_dir);
+    cmd.args(["-I", "-S", "-B", "-u", "-c", script]);
+    Ok(cmd)
+}
+
+/// No inherited environment, a private working directory, piped stdio and its
+/// own process tree. Shared by the Python bridge and Guard's built-in one.
+fn isolated(program: &Path, work_dir: &Path) -> Command {
+    let mut cmd = Command::new(program);
+    cmd.env_clear()
+        .current_dir(work_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -56,7 +64,7 @@ fn command(
         }
         cmd.creation_flags(guard_runtime_windows_process::CHILD_TREE_CREATION_FLAGS);
     }
-    Ok(cmd)
+    cmd
 }
 
 /// A launched interpreter and every process it starts: a process group on
@@ -125,6 +133,29 @@ impl JsonProcess {
         }
         let mut cmd = command(selection, script, &cancel)?;
         cmd.arg(&selection.site_packages);
+        Self::start(cmd, cancel)
+    }
+
+    /// Start one of Guard's own CIGAR modes (`guard_cigar_native`) from the
+    /// Guard executable itself: no interpreter, package or script.
+    pub(crate) fn spawn_builtin(
+        program: &Path,
+        mode: &str,
+        work_dir: &Path,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<Self, RuntimeError> {
+        if cancel.load(Ordering::Acquire) {
+            return Err(RuntimeError::Cancelled);
+        }
+        if !program.is_absolute() || !work_dir.is_absolute() {
+            return Err(RuntimeError::LaunchFailed);
+        }
+        let mut cmd = isolated(program, work_dir);
+        cmd.arg(mode);
+        Self::start(cmd, cancel)
+    }
+
+    fn start(mut cmd: Command, cancel: Arc<AtomicBool>) -> Result<Self, RuntimeError> {
         let mut child = Tree::spawn(&mut cmd)?;
         let mut stdin = child.child.stdin.take().ok_or(RuntimeError::LaunchFailed)?;
         let stdout = child

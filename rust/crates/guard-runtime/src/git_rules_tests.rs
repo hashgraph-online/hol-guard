@@ -189,6 +189,68 @@ fn whole_tree_stages_are_found() {
     }
 }
 
+/// `git stage` is `git-add(1)` under the second name Git documents for it,
+/// so a user rule that asks for files staged by name has to read it. Matching
+/// the literal word `add` let the same whole-tree staging through unasked.
+#[test]
+fn the_second_name_for_add_stages_the_whole_tree() {
+    for command in [
+        "git stage -A",
+        "git stage .",
+        "git stage --all",
+        "git stage -u",
+        "git stage -- .",
+        "python3 -c 'import subprocess; subprocess.run([\"git\", \"stage\", \".\"])'",
+    ] {
+        assert!(
+            breaks(command, None).stage_all,
+            "missed whole-tree stage: {command}"
+        );
+    }
+    // The synonym stops where `git add` stops: naming files, or previewing
+    // the whole tree, breaks no rule.
+    for command in [
+        "git stage README.md",
+        "git stage docs/notes.md src/main.rs",
+        "git stage --dry-run -A",
+        "git stage -p",
+    ] {
+        assert_eq!(
+            breaks(command, None),
+            Breaks::default(),
+            "flagged: {command}"
+        );
+    }
+}
+
+#[test]
+fn a_script_too_long_to_read_is_screened_for_the_second_name() {
+    // Past the inline-code limit the reader gives up and the whole script is
+    // screened as text, so both spellings have to appear in that screen.
+    let padding = "pass  # ".repeat(2_200);
+    for tail in [
+        "git stage -A",
+        "git stage .",
+        "git stage -u",
+        "git stage --all",
+        // The dot can arrive as a pathspec rather than an option, and the
+        // text screen reads words, so that spelling needs its own entry.
+        "git add -- .",
+        "git stage -- .",
+    ] {
+        let command = format!("python3 -c 'import os\n{padding}os.system(\"{tail}\")'");
+        assert!(
+            command.len() > 16_384,
+            "script is short enough to read: {}",
+            command.len()
+        );
+        assert!(
+            breaks(&command, None).stage_all,
+            "missed long script: {tail}"
+        );
+    }
+}
+
 #[test]
 fn ordinary_git_work_breaks_no_rule() {
     for command in QUIET {

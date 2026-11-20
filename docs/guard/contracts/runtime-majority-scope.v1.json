@@ -383,6 +383,7 @@
           "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
           "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_reallow.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_capability_api.py"
         ]
       },
@@ -499,9 +500,13 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/resident_evidence_client.py",
-          "src/codex_plugin_scanner/guard/route_metrics.py"
+          "src/codex_plugin_scanner/guard/route_metrics.py",
+          "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
+          "src/codex_plugin_scanner/guard/resident_evidence_dispatch.py",
+          "src/codex_plugin_scanner/guard/evidence_drains/__init__.py",
+          "src/codex_plugin_scanner/guard/resident_route_counters.py"
         ],
-        "reason": "Reviewed generic transport facades: the resident owns evidence persistence and native route decisions, while these callers carry only bounded requests, acknowledgements, counters and sanitized route dimensions. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
+        "reason": "Reviewed generic evidence adapters: the resident owns evidence persistence and native route decisions, while these callers carry bounded requests, acknowledgements, counters, and sanitized route dimensions. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
       },
       {
         "path": "src/codex_plugin_scanner/guard/extension_runtime.py",
@@ -786,13 +791,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py",
-          "src/codex_plugin_scanner/guard/runtime/jsonc.py"
-        ],
-        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/durable_io.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity and repair writers, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."
@@ -808,6 +806,12 @@
           "src/codex_plugin_scanner/guard/cli/command_inspection_client.py"
         ],
         "reason": "Reviewed and retained in runtime scope: `command test` and `command explain` reach it lazily from cli/commands_dispatch_local. It is transport only -- it starts or waits for the daemon within a fixed warm-up budget and returns the daemon's inspection, or a typed unavailable answer when the daemon cannot answer. The native runtime still owns the classification; nothing here derives a verdict, and an outage is never reported as no_match."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/schemas/consumer_mode.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the schemas package loads it on first use of build_consumer_mode_contract, so the import graph counts it as lazy. Before, every Guard store import pulled it in eagerly through the package, and the daemon's worker host paid for the plugin scanner on each cold start. It runs the install-time scan and hands the result to the native runtime, which owns the guard-consumer.v2 contract; nothing here derives a verdict."
       }
     ],
     "tests": {
@@ -1113,18 +1117,6 @@
         "entry_points": [],
         "evidence": "continue_request_after_application is called only from runtime/command_executors.py (cloud-command-queue), harness_resume.py (imported only by command_executors.py and continuation_runtime_local.py) and continuation_runtime_local.py (imported only by the daemon approval routes and library_calls.py, which the daemon runs through desktop library-call). None of these is in the runtime closure. continuation_offer_payload stays counted; the Codex live completion is recorded by the native store. The report validates this reference closure on every run.",
         "reason": "Replay of an approved request after the approval is applied: claim lease, store continuation plan, persisted attempt and manual-retry notice. It runs from the cloud command queue and the local approval continuation route, after the hook call has already returned."
-      },
-      {
-        "id": "observed-mcp-tool-discovery-api",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/runtime/observed_mcp_tools.py",
-        "symbols": [
-          "MAX_OBSERVED_MCP_TOOLS",
-          "discover_observed_mcp_tools"
-        ],
-        "entry_points": [],
-        "evidence": "discover_observed_mcp_tools is called only from daemon/local_cli_api.py (dashboard-control-api); the native store groups the observed tools into connectors and it records them. ObservedMcpTool, observed_mcp_tool and the native MCP tool action builders stay counted. The report validates this reference closure on every run.",
-        "reason": "Discovery of MCP tools observed in recent receipts for the dashboard's local CLI and MCP listing. It reads receipts on request from the dashboard API and returns a list; it makes no decision."
       },
       {
         "id": "operator-cli-recognition-api",
@@ -1449,19 +1441,14 @@
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/policy_bundle_parser.py",
         "symbols": [
-          "_POLICY_BUNDLE_TRUST_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_VERSION_REMEDIATION_REASONS",
+          "_NATIVE_UNAVAILABLE_MESSAGE",
           "policy_bundle_daemon_version_supported",
+          "policy_bundle_rejection_payload",
           "policy_bundle_rejection_message"
         ],
         "entry_points": [],
         "reason": "The daemon version gate and rejection messages are used when Cloud sync accepts or rejects a policy bundle. Bundle parsing used at request time stays counted.",
-        "evidence": "rg -l 'policy_bundle_daemon_version_supported|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and daemon/server_control_sync.py (daemon-control-plane-routes) outside policy_bundle_parser.py."
+        "evidence": "rg -l 'policy_bundle_daemon_version_supported|policy_bundle_rejection_payload|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and routes/policy_sync_call.py (the daemon policy-sync route) outside policy_bundle_parser.py."
       },
       {
         "id": "package-audit-report-projection",

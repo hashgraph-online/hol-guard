@@ -16,6 +16,7 @@ from pathlib import Path
 from .branch_return_fixtures import branch_return_checks
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
+from .design_token_fixtures import add_design_token_documents
 from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
 from .extension_allow_fixtures import extension_allow_checks
@@ -29,7 +30,11 @@ from .output_cases import add_output_fixture
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
     LOCAL_BIN,
+    IGNORE_NEGATION_CONSUMED_IGLOB_CASE,
+    IGNORE_NEGATION_BROAD_GLOB_CASE,
+    IGNORE_NEGATION_PROTECTED_CASE,
     add_home_tools,
+    add_ignore_negation_template,
     add_main_shapes,
     add_worktree_venv,
     borrow_main_modules,
@@ -353,13 +358,21 @@ def create_fixture(
         # A linked worktree's .git is a pointer file, so it has no config to fingerprint.
         protected_names = (".env", "deletion-target/keep.txt")
     else:
+        # Blocked-command Gauntlet cases use this minimal checkout, not the
+        # realistic one. Seed their synthetic re-included hidden file here too
+        # so a non-Allow verdict cannot pass without exercising the file.
+        if scenario_id in {IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE, IGNORE_NEGATION_BROAD_GLOB_CASE}:
+            add_ignore_negation_template(workspace, scenario_id)
         add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
         add_git_allow_shape(workspace, environment, scenario_id)
         add_sibling_checkout(home, environment, scenario_id)
+        add_parent_credential_file(home, scenario_id)
     add_workspace_test_runner(workspace, scenario_id)
     add_output_fixture(workspace, scenario_id)
+    add_route_group_directory(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
+    add_design_token_documents(workspace, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
@@ -575,6 +588,12 @@ SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three atte
 SOURCED_INIT_CASE = "approved-retry-sourced-toolchain-init"
 # Git reads run after a cd into the checkout beside the project.
 SIBLING_GIT_READ_CASE = "git-read-after-sibling-climb"
+PARENT_CREDENTIAL_CASE = "predicate-credential-name-beside-the-project"
+PARENT_CREDENTIAL_FILE = "kubeconfig.yaml"
+# Inert synthetic cluster settings: no address, no token, nothing to reach.
+PARENT_CREDENTIAL_TEXT = (
+    "apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n"
+)
 TEMP_WORKTREE_CASE = "omp-native-git-worktree-temp-root-leaf"
 BENCH_SEARCH_CASE = "omp-native-rg-outside-checkout-test-vectors"
 BENCH_CHECKOUT = "bench-checkout"
@@ -614,6 +633,28 @@ def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
     subprocess.run(["git", "-C", str(cwd), *args], env=environment, check=True, capture_output=True, timeout=15)
 
 
+ROUTE_GROUP_CASE = "route-group-directory-reads"
+ROUTE_GROUP_DIRECTORY = "app/(group)/overview"
+ROUTE_GROUP_FILE = f"{ROUTE_GROUP_DIRECTORY}/page.tsx"
+ROUTE_GROUP_TEXT = "export default function Overview() {\n  return null;\n}\n"
+
+
+def add_route_group_directory(workspace: Path, scenario_id: str | None) -> None:
+    """Seed a route group: a directory whose own name holds parentheses.
+
+    Next.js spells a group of routes that way, so an agent working on such a
+    project changes into one before it reads anything. The parentheses are
+    part of the directory's name; only an unquoted one is shell syntax.
+    """
+    if scenario_id != ROUTE_GROUP_CASE:
+        return
+    target = workspace / ROUTE_GROUP_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(ROUTE_GROUP_TEXT, encoding="utf-8", newline="\n")
+    # The second listing names the sibling route, so it has to exist.
+    (workspace / "app/(group)/pricing").mkdir(parents=True, exist_ok=True)
+
+
 def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: str | None) -> None:
     """Make the plain fixture's sibling directory the checkout its Git-read case climbs into.
 
@@ -634,6 +675,22 @@ def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: s
         ("commit", "--quiet", "-m", "Synthetic sibling baseline"),
     ):
         _git(args, sibling, environment)
+
+
+def add_parent_credential_file(home: Path, scenario_id: str | None) -> None:
+    """Put a credential-named settings file beside the project this case climbs out of.
+
+    A deploy script asks whether the settings file next to its checkout is
+    there before it uses it. The answer is one bit about a path, which the
+    absolute spelling already gets; this case proves the parent component in
+    the relative spelling does not change the question. Only the realistic
+    home keeps files beside the project, and this case's oracle is not
+    ``native-tools``, so without this the probe answers for a path that is not
+    there and the case proves nothing.
+    """
+    if scenario_id != PARENT_CREDENTIAL_CASE:
+        return
+    (home / PARENT_CREDENTIAL_FILE).write_text(PARENT_CREDENTIAL_TEXT, encoding="utf-8", newline="\n")
 
 
 def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], scenario_id: str | None = None) -> Path:
@@ -729,9 +786,10 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "test_calc.py").write_text(CALC_TEST, encoding="utf-8", newline="\n")
     (main / ".agents/skills/x/SKILL.md").write_text("# Synthetic skill\nInert text.\n", encoding="utf-8")
     (main / "src/password-reset-email.tsx").write_text("export const mail = 1;\n", encoding="utf-8")
-    (main / "app/registry/[slug]").mkdir(parents=True)
-    (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
+    (main / "app/items/[slug]").mkdir(parents=True)
+    (main / "app/items/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
+    tracked = (*tracked, *add_ignore_negation_template(main, scenario_id))
     if scenario_id == BUN_TEST_CASE:
         (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")
         tracked = (*tracked, "calc.test.ts")

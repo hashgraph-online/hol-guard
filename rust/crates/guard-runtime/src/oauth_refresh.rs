@@ -19,33 +19,20 @@ use std::fs::{File, OpenOptions};
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use base64ct::{Base64, Base64UrlUnpadded, Encoding};
+use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_command::guard_sync_transport::{self as gst, OAuthRefreshOutcome, OAuthRefreshRequest};
 use guard_command::local_supply_chain::{SupplyChainStore, Timestamp};
 use guard_command::supply_chain_package_eval::EvalError;
 use serde_json::{Map, Value};
-use sha2::{Digest, Sha256};
 
+use crate::oauth_refresh_circuit as circuit;
 use crate::oauth_secret_authority;
+use crate::oauth_token_claims as token_claims;
 
 /// `runner.py:_OAUTH_INVALID_GRANT_MAX_ATTEMPTS` (:4112) — one edge-4xx retry.
 const INVALID_GRANT_MAX_ATTEMPTS: u32 = 2;
 /// `runner.py:_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS` (:4113).
 const INVALID_GRANT_RETRY_DELAY_SECONDS: f64 = 0.75;
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_STATE_KEY` (:4125).
-const CIRCUIT_STATE_KEY: &str = "guard_oauth_refresh_circuit";
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY` (:4133).
-const CIRCUIT_SALT_KEY: &str = "guard_oauth_refresh_circuit_fingerprint_salt";
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_ITERATIONS` (:4137).
-const CIRCUIT_FINGERPRINT_ITERATIONS: u32 = 600_000;
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV` (:4126).
-const BASE_BACKOFF_ENV: &str = "GUARD_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_SECONDS";
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV` (:4127).
-const MAX_BACKOFF_ENV: &str = "GUARD_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_SECONDS";
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS` (:4128).
-const BASE_BACKOFF_DEFAULT: f64 = 30.0;
-/// `runner.py:_OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS` (:4129).
-const MAX_BACKOFF_DEFAULT: f64 = 300.0;
 /// `runner.py` `_oauth_local_credentials_state_key` — the
 /// `oauth_local_credentials` sync payload.
 const CREDENTIALS_STATE_KEY: &str = "oauth_local_credentials";
@@ -89,10 +76,11 @@ const REAUTHORIZATION_REQUIRED: &str =
 
 /// The error a parked needs-reauthorization circuit reports. State written
 /// before `failure_kind` existed keeps the revoked-grant error.
-fn parked_reauthorization_message(state: &Value) -> &'static str {
-    match state.get("failure_kind").and_then(Value::as_str) {
-        Some("rejected") => REAUTHORIZATION_REQUIRED,
-        _ => RECONNECT_AFTER_REVOKED,
+fn parked_reauthorization_message(rejected: bool) -> &'static str {
+    if rejected {
+        REAUTHORIZATION_REQUIRED
+    } else {
+        RECONNECT_AFTER_REVOKED
     }
 }
 
@@ -114,273 +102,6 @@ fn now_unix() -> i64 {
 
 fn now_timestamp() -> Timestamp {
     Timestamp::from_unix_micros(now_unix() * 1_000_000)
-}
-
-fn circuit_backoff_seconds(env_key: &str, default: f64) -> f64 {
-    std::env::var(env_key)
-        .ok()
-        .and_then(|raw| raw.trim().parse::<f64>().ok())
-        .filter(|v| *v > 0.0)
-        .unwrap_or(default)
-}
-
-/// `runner.py:_oauth_refresh_circuit_salt` (:4140) — read or mint a persisted
-/// per-installation salt so two racing writers converge on the same fingerprint.
-fn circuit_salt(store: &dyn SupplyChainStore) -> Vec<u8> {
-    let encoded = store
-        .get_sync_payload(CIRCUIT_SALT_KEY)
-        .and_then(|p| p.get("salt").and_then(Value::as_str).map(str::to_owned));
-    if let Some(encoded) = encoded.as_deref() {
-        if let Ok(salt) = Base64::decode_vec(encoded) {
-            return salt;
-        }
-    }
-    let mut salt = [0u8; 32];
-    if getrandom::fill(&mut salt).is_err() {
-        // Deterministic fallback only when the OS RNG is unavailable; the
-        // fingerprint is a lookup key, not a credential, so a time+token mixed
-        // value keeps it usable without being reversible.
-        let mut seed = Sha256::new();
-        seed.update(now_unix().to_be_bytes());
-        seed.update(store.guard_home().to_string_lossy().as_bytes());
-        return seed.finalize().to_vec();
-    }
-    let mut payload = Map::new();
-    payload.insert(
-        "salt".to_owned(),
-        Value::String(Base64::encode_string(&salt)),
-    );
-    store.set_sync_payload(CIRCUIT_SALT_KEY, &Value::Object(payload));
-    // Two racing processes can both land here; converge on the winning write.
-    store
-        .get_sync_payload(CIRCUIT_SALT_KEY)
-        .and_then(|p| p.get("salt").and_then(Value::as_str).map(str::to_owned))
-        .and_then(|e| Base64::decode_vec(&e).ok())
-        .unwrap_or_else(|| salt.to_vec())
-}
-
-/// `runner.py:_oauth_refresh_circuit_fingerprint` (:4164) — PBKDF2-HMAC-SHA256,
-/// truncated to 32 hex chars; a non-reversible lookup key, not a credential.
-fn circuit_fingerprint(refresh_token: &str, salt: &[u8]) -> String {
-    let mut out = [0u8; 32];
-    pbkdf2::pbkdf2_hmac::<Sha256>(
-        refresh_token.as_bytes(),
-        salt,
-        CIRCUIT_FINGERPRINT_ITERATIONS,
-        &mut out,
-    );
-    hex::encode(out)[..32].to_owned()
-}
-
-fn load_circuit(store: &dyn SupplyChainStore) -> Value {
-    store
-        .get_sync_payload(CIRCUIT_STATE_KEY)
-        .unwrap_or(Value::Object(Map::new()))
-}
-
-fn save_circuit(store: &dyn SupplyChainStore, state: Value) {
-    store.set_sync_payload(CIRCUIT_STATE_KEY, &state);
-}
-
-fn clear_circuit(store: &dyn SupplyChainStore) {
-    save_circuit(store, Value::Object(Map::new()));
-}
-
-/// `runner.py:_oauth_refresh_circuit_check` (:4199) — fast-fail while a
-/// known-dead or rate-limited grant is parked. Clears when the stored refresh
-/// token no longer matches the fingerprint that failed (a peer re-paired).
-/// Returns `Err(Validation)` on dead-grant, `Ok(Some(wait_s))` on rate-limit
-/// backoff so the caller can surface a bounded wait.
-fn circuit_check(
-    store: &dyn SupplyChainStore,
-    refresh_token: &str,
-) -> Result<Option<f64>, EvalError> {
-    let state = load_circuit(store);
-    let fingerprint = state
-        .get("refresh_token_fingerprint")
-        .and_then(Value::as_str);
-    let Some(fingerprint) = fingerprint else {
-        return Ok(None);
-    };
-    if fingerprint != circuit_fingerprint(refresh_token, &circuit_salt(store)) {
-        clear_circuit(store);
-        return Ok(None);
-    }
-    let next_allowed = state
-        .get("next_refresh_allowed_at")
-        .and_then(Value::as_str)
-        .and_then(guard_command::local_supply_chain::parse_timestamp);
-    let now = now_timestamp();
-    let next_allowed_unix = next_allowed.map(|t| t.unix_seconds());
-    let now_unix_s = now.unix_seconds();
-    if next_allowed_unix.is_none() || next_allowed_unix.unwrap() <= now_unix_s {
-        return Ok(None);
-    }
-    if state
-        .get("needs_reauthorization")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return Err(EvalError::Validation(
-            parked_reauthorization_message(&state).to_owned(),
-        ));
-    }
-    let remaining = (next_allowed_unix.unwrap() - now_unix_s).max(1) as f64;
-    Ok(Some(remaining))
-}
-
-/// `runner.py:_oauth_refresh_circuit_record_dead_grant` (:4228) — flip the
-/// binding to needs-reauthorization and park refresh behind the bounded backoff.
-fn circuit_record_dead_grant(store: &dyn SupplyChainStore, refresh_token: &str) {
-    let fingerprint = circuit_fingerprint(refresh_token, &circuit_salt(store));
-    let mut state = load_circuit(store);
-    if state
-        .get("refresh_token_fingerprint")
-        .and_then(Value::as_str)
-        != Some(fingerprint.as_str())
-    {
-        state = Value::Object(Map::new());
-    }
-    let failures = state
-        .get("consecutive_failures")
-        .and_then(Value::as_i64)
-        .unwrap_or(0)
-        + 1;
-    let previous_backoff = state.get("backoff_seconds").and_then(Value::as_f64);
-    let backoff = if failures >= 2 {
-        previous_backoff
-            .map(|b| {
-                (b * 2.0).min(circuit_backoff_seconds(
-                    MAX_BACKOFF_ENV,
-                    MAX_BACKOFF_DEFAULT,
-                ))
-            })
-            .unwrap_or_else(|| circuit_backoff_seconds(BASE_BACKOFF_ENV, BASE_BACKOFF_DEFAULT))
-    } else {
-        circuit_backoff_seconds(BASE_BACKOFF_ENV, BASE_BACKOFF_DEFAULT)
-    };
-    let next_allowed = now_timestamp().add_seconds_f64(backoff).isoformat();
-    save_circuit(
-        store,
-        serde_json::json!({
-            "refresh_token_fingerprint": fingerprint,
-            "consecutive_failures": failures,
-            "needs_reauthorization": true,
-            "notice_sent": state.get("notice_sent").and_then(Value::as_bool).unwrap_or(false),
-            "backoff_seconds": backoff,
-            "next_refresh_allowed_at": next_allowed,
-        }),
-    );
-}
-
-/// `runner.py:_oauth_refresh_circuit_record_rate_limit` (:4278) — park refresh
-/// until the server-provided Retry-After elapses (bounded by the max backoff).
-fn circuit_record_rate_limit(store: &dyn SupplyChainStore, refresh_token: &str, retry_after: f64) {
-    let fingerprint = circuit_fingerprint(refresh_token, &circuit_salt(store));
-    let mut state = load_circuit(store);
-    if state
-        .get("refresh_token_fingerprint")
-        .and_then(Value::as_str)
-        != Some(fingerprint.as_str())
-    {
-        state = Value::Object(Map::new());
-    }
-    let bounded = retry_after.max(1.0).min(circuit_backoff_seconds(
-        MAX_BACKOFF_ENV,
-        MAX_BACKOFF_DEFAULT,
-    ));
-    let next_allowed = now_timestamp().add_seconds_f64(bounded).isoformat();
-    let mut parked = serde_json::json!({
-        "refresh_token_fingerprint": fingerprint,
-        "consecutive_failures": state.get("consecutive_failures").and_then(Value::as_i64).unwrap_or(0),
-        "needs_reauthorization": state.get("needs_reauthorization").and_then(Value::as_bool).unwrap_or(false),
-        "notice_sent": state.get("notice_sent").and_then(Value::as_bool).unwrap_or(false),
-        "backoff_seconds": bounded,
-        "next_refresh_allowed_at": next_allowed,
-    });
-    if let Some(kind) = state.get("failure_kind").filter(|kind| kind.is_string()) {
-        parked["failure_kind"] = kind.clone();
-    }
-    save_circuit(store, parked);
-}
-
-/// `runner.py:_oauth_refresh_circuit_record_success` — a successful refresh
-/// clears the parked backoff so the next expiry retries immediately.
-fn circuit_record_success(store: &dyn SupplyChainStore, refresh_token: &str) {
-    let fingerprint = circuit_fingerprint(refresh_token, &circuit_salt(store));
-    let state = load_circuit(store);
-    if state
-        .get("refresh_token_fingerprint")
-        .and_then(Value::as_str)
-        == Some(fingerprint.as_str())
-    {
-        clear_circuit(store);
-    }
-}
-
-/// `oauth_token_claims.py:oauth_binding_metadata` (:38) — recover the
-/// grant/machine/workspace/device binding from the fresh access token's claims.
-/// Returns `None` when the token's issuer disagrees with the stored issuer or
-/// any required claim is absent.
-fn binding_from_access_token(access_token: &str, issuer: &str) -> Option<Map<String, Value>> {
-    let claims = decode_jwt_claims(access_token)?;
-    let token_issuer = claims.get("iss").and_then(Value::as_str);
-    if let Some(t) = token_issuer {
-        if t.trim_end_matches('/') != issuer.trim_end_matches('/') {
-            return None;
-        }
-    }
-    let claim_str = |keys: &[&str]| -> Option<String> {
-        keys.iter()
-            .find_map(|k| claims.get(*k).and_then(Value::as_str))
-            .map(str::to_owned)
-    };
-    let grant_id = claim_str(&["grant", "grantId"]);
-    let machine_id = claim_str(&["machine", "machineId"]);
-    let workspace_id = claim_str(&["workspace", "workspaceId"]);
-    let device_id = claims
-        .get("device")
-        .and_then(|d| d.get("id").or_else(|| claims.get("deviceId")))
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| claim_str(&["deviceId"]));
-    if grant_id.is_none() || machine_id.is_none() || workspace_id.is_none() {
-        return None;
-    }
-    let mut binding = Map::new();
-    binding.insert("grant_id".into(), Value::String(grant_id.unwrap()));
-    binding.insert("machine_id".into(), Value::String(machine_id.unwrap()));
-    binding.insert("workspace_id".into(), Value::String(workspace_id.unwrap()));
-    if let Some(d) = device_id {
-        binding.insert("device_id".into(), Value::String(d));
-    }
-    Some(binding)
-}
-
-/// `runner.py:_oauth_refresh_binding` — prefer refreshed claims; otherwise
-/// retain stored credential fields and fill gaps from recovery.
-fn refresh_binding(
-    credentials: &Value,
-    recovered: &Map<String, Value>,
-    refreshed: bool,
-) -> Map<String, Value> {
-    let mut binding = Map::new();
-    for key in ["device_id", "grant_id", "machine_id", "workspace_id"] {
-        let value = if refreshed {
-            recovered.get(key).cloned()
-        } else {
-            credentials
-                .get(key)
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .map(Value::String)
-                .or_else(|| recovered.get(key).cloned())
-        };
-        if let Some(v) = value {
-            binding.insert(key.to_owned(), v);
-        }
-    }
-    binding
 }
 
 /// Decode the JWT payload segment into a claims map (no signature check — the
@@ -436,17 +157,21 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
             _ => return Err(EvalError::Validation(RECONNECT_AFTER_REVOKED.to_owned())),
         };
 
-    // `oauth_refresh_binding` — prefer refreshed claims, fall back to stored.
-    let recovered = access_token
-        .and_then(|t| binding_from_access_token(t, issuer))
-        .unwrap_or_else(|| {
-            credentials
-                .get("access_token")
-                .and_then(Value::as_str)
-                .and_then(|t| binding_from_access_token(t, issuer))
-                .unwrap_or_default()
-        });
-    let binding = refresh_binding(credentials, &recovered, access_token.is_some());
+    // Refreshed claims win; otherwise the saved fields stay and the saved
+    // token's claims only fill gaps when they agree with them.
+    let saved = credentials.as_object().cloned().unwrap_or_default();
+    let recovered = match access_token {
+        Some(token) => decode_jwt_claims(token)
+            .map(|claims| token_claims::binding(&claims, Some(issuer)))
+            .unwrap_or_default(),
+        None => saved
+            .get("access_token")
+            .and_then(Value::as_str)
+            .and_then(decode_jwt_claims)
+            .map(|claims| token_claims::binding_from_credentials(&claims, Some(issuer), &saved))
+            .unwrap_or_default(),
+    };
+    let binding = token_claims::refresh_binding(&saved, &recovered, access_token.is_some());
 
     let guard_home = store.guard_home().to_path_buf();
     let _credential_lock =
@@ -503,23 +228,7 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
         });
     payload.insert("credentials_ref".into(), Value::String(secret_ref.clone()));
     payload.insert("credentials_sha256".into(), Value::String(secret_hash));
-    for key in [
-        "grant_id",
-        "machine_id",
-        "device_id",
-        "workspace_id",
-        "supply_chain_plan_id",
-        "runtime_id",
-        "runtime_label",
-    ] {
-        if let Some(v) = binding
-            .get(key)
-            .cloned()
-            .or_else(|| credentials.get(key).cloned())
-        {
-            payload.insert(key.into(), v);
-        }
-    }
+    carry_binding_fields(&mut payload, &binding, credentials);
     carry_account_fields(
         &mut payload,
         credentials,
@@ -543,6 +252,26 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
         })?;
     store.set_sync_payload(CREDENTIALS_STATE_KEY, &Value::Object(payload));
     Ok(())
+}
+
+/// Put the binding and the saved runtime metadata on the rotated credential
+/// row. The binding already keeps the saved fields when no new access token
+/// arrived, so a new token's binding never falls back to the previous one.
+fn carry_binding_fields(
+    payload: &mut Map<String, Value>,
+    binding: &Map<String, Value>,
+    credentials: &Value,
+) {
+    for key in ["grant_id", "machine_id", "device_id", "workspace_id"] {
+        if let Some(v) = binding.get(key) {
+            payload.insert(key.into(), v.clone());
+        }
+    }
+    for key in ["supply_chain_plan_id", "runtime_id", "runtime_label"] {
+        if let Some(v) = credentials.get(key) {
+            payload.insert(key.into(), v.clone());
+        }
+    }
 }
 
 /// Put the account grant and profile on the rotated credential row. A refresh
@@ -587,6 +316,15 @@ pub(crate) struct RefreshedAuth {
     pub access_token: String,
 }
 
+/// The wait the circuit parks a rate limit for: the server's `Retry-After`
+/// when it is whole seconds (the circuit caps it at an hour), else the wait
+/// the exchange already settled on.
+fn rate_limit_seconds(header: Option<&str>, wait_seconds: f64) -> i64 {
+    header
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .unwrap_or(wait_seconds.ceil() as i64)
+}
+
 /// `runner.py:_refresh_guard_oauth_access_token` (:4350) — the circuit-checked,
 /// invalid-grant-retried, rotation-persisted refresh. Returns the fresh access
 /// token on success; `Err(Validation)` on dead grant or reauthorizable failure.
@@ -601,11 +339,24 @@ pub(crate) fn refresh_oauth_access_token(
 ) -> Result<RefreshedAuth, EvalError> {
     use EvalError;
 
-    // Circuit fast-fail before touching the endpoint.
-    if let Some(wait) = circuit_check(store, refresh_token)? {
-        return Err(EvalError::Validation(format!(
-            "Guard Cloud rate-limited the token refresh; retry in {wait:.0}s."
-        )));
+    // Circuit fast-fail before touching the endpoint. A circuit that cannot be
+    // read fails closed rather than letting every caller probe the endpoint.
+    let breaker = circuit::Circuit::new(store.guard_home(), circuit::Backoff::from_env());
+    match breaker
+        .check(refresh_token, now_timestamp())
+        .map_err(EvalError::Internal)?
+    {
+        circuit::Check::Open => {}
+        circuit::Check::Parked { rejected } => {
+            return Err(EvalError::Validation(
+                parked_reauthorization_message(rejected).to_owned(),
+            ))
+        }
+        circuit::Check::RateLimited { wait_seconds } => {
+            return Err(EvalError::Validation(format!(
+                "Guard Cloud rate-limited the token refresh; retry in {wait_seconds}s."
+            )))
+        }
     }
 
     // `runner.py:_SYNC_HTTP_TIMEOUT_SECONDS` (:799).
@@ -666,6 +417,7 @@ pub(crate) fn refresh_oauth_access_token(
                 access_token,
                 rotation_refresh_token,
                 access_token_expires_at,
+                ..
             } => {
                 let effective_refresh =
                     rotation_refresh_token.unwrap_or_else(|| attempt_refresh_token.clone());
@@ -678,7 +430,8 @@ pub(crate) fn refresh_oauth_access_token(
                     Some(&access_token),
                     access_token_expires_at.as_deref(),
                 )?;
-                circuit_record_success(store, &effective_refresh);
+                // Recording is best effort: the refresh already succeeded.
+                let _ = breaker.clear(now_timestamp());
                 return Ok(RefreshedAuth { access_token });
             }
             OAuthRefreshOutcome::NonceChallenge(challenge) => {
@@ -689,8 +442,15 @@ pub(crate) fn refresh_oauth_access_token(
                 nonce_retry_count += 1;
                 continue; // same attempt — re-sign with the challenge nonce
             }
-            OAuthRefreshOutcome::RateLimited(retry_after) => {
-                circuit_record_rate_limit(store, &attempt_refresh_token, retry_after);
+            OAuthRefreshOutcome::RateLimited {
+                wait_seconds: retry_after,
+                retry_after: header,
+            } => {
+                let _ = breaker.record_rate_limit(
+                    &attempt_refresh_token,
+                    rate_limit_seconds(header.as_deref(), retry_after),
+                    now_timestamp(),
+                );
                 return Err(EvalError::Validation(format!(
                     "Guard Cloud rate-limited the token refresh; retry in {retry_after:.0}s."
                 )));
@@ -727,18 +487,46 @@ pub(crate) fn refresh_oauth_access_token(
                     gst::OAUTH_REFRESH_UNREACHABLE
                 )))
             }
-            OAuthRefreshOutcome::Failed(reason) => return Err(failed_refresh_error(reason)),
+            OAuthRefreshOutcome::Rejected(reason)
+            | OAuthRefreshOutcome::Unusable(reason)
+            | OAuthRefreshOutcome::Failed(reason) => return Err(failed_refresh_error(reason)),
         }
     }
     // Second invalid_grant post-rotation = genuinely revoked: record the
     // breaker and demand reauthorization.
-    circuit_record_dead_grant(store, &attempt_refresh_token);
+    let _ = breaker.record_dead_grant(&attempt_refresh_token, circuit::REVOKED, now_timestamp());
     Err(EvalError::Validation(RECONNECT_AFTER_REVOKED.to_owned()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rotated_row_keeps_only_the_computed_binding() {
+        let saved = serde_json::json!({
+            "grant_id": "grant-old",
+            "machine_id": "machine-old",
+            "device_id": "device-old",
+            "workspace_id": "workspace-old",
+            "runtime_id": "runtime-1",
+        });
+        let mut binding = Map::new();
+        binding.insert("grant_id".into(), Value::String("grant-new".into()));
+        let mut payload = Map::new();
+        carry_binding_fields(&mut payload, &binding, &saved);
+        assert_eq!(
+            payload.get("grant_id"),
+            Some(&Value::String("grant-new".into()))
+        );
+        for key in ["machine_id", "device_id", "workspace_id"] {
+            assert!(payload.get(key).is_none(), "{key}");
+        }
+        assert_eq!(
+            payload.get("runtime_id"),
+            Some(&Value::String("runtime-1".into()))
+        );
+    }
 
     #[test]
     fn a_rotation_keeps_the_saved_account_grant_and_profile() {
@@ -787,24 +575,24 @@ mod tests {
     }
 
     #[test]
-    fn parked_rejected_circuit_reports_reauthorization() {
-        let state = serde_json::json!({"needs_reauthorization": true, "failure_kind": "rejected"});
+    fn a_rate_limit_parks_for_the_server_retry_after() {
+        assert_eq!(rate_limit_seconds(Some("1800"), 120.0), 1800);
+        assert_eq!(rate_limit_seconds(Some(" 45 "), 120.0), 45);
         assert_eq!(
-            parked_reauthorization_message(&state),
-            REAUTHORIZATION_REQUIRED
+            rate_limit_seconds(Some("Wed, 21 Oct 2015 07:28:00 GMT"), 120.0),
+            120
         );
+        assert_eq!(rate_limit_seconds(None, 12.5), 13);
     }
 
     #[test]
-    fn parked_circuit_without_failure_kind_reports_revoked_grant() {
-        let state = serde_json::json!({"needs_reauthorization": true});
+    fn parked_circuit_reports_the_message_for_its_failure_kind() {
         assert_eq!(
-            parked_reauthorization_message(&state),
-            RECONNECT_AFTER_REVOKED
+            parked_reauthorization_message(true),
+            REAUTHORIZATION_REQUIRED
         );
-        let revoked = serde_json::json!({"needs_reauthorization": true, "failure_kind": "revoked"});
         assert_eq!(
-            parked_reauthorization_message(&revoked),
+            parked_reauthorization_message(false),
             RECONNECT_AFTER_REVOKED
         );
     }

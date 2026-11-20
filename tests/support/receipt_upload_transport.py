@@ -1,7 +1,7 @@
 """Carry the receipt upload over urllib in unit tests.
 
 The native ``cloud-event-sync`` command uploads the receipts itself, so a test
-that fakes ``urllib`` or ``runner._urlopen_json_with_timeout_retry`` would
+that fakes ``urllib`` or ``cloud_sync_transport._urlopen_json_with_timeout_retry`` would
 otherwise never see those requests. Most such tests check what the runner does
 with Cloud's answer (the policy bundle, advisories, the summary), not the
 upload. This double selects, batches and posts the receipts the way the
@@ -186,13 +186,16 @@ def _save_cursor(store: object, rowid: int | None, synced_at: str) -> None:
 
 def _post(store: object, auth: dict[str, object], body: bytes, *, refresh: bool) -> tuple[dict[str, object], bool]:
     from codex_plugin_scanner.guard.runtime import runner
+    from tests.support import cloud_sync_transport
 
     def send(context: Mapping[str, object]) -> object:
         url = runner._sync.normalized_receipts_sync_url(
             runner._validate_guard_sync_url(runner._auth_context_sync_url(context))
         )
-        request = runner._guard_sync_request(context, request_url=url, method="POST", data=body, extra_headers=None)
-        return runner._urlopen_json_with_timeout_retry(
+        request = cloud_sync_transport._guard_sync_request(
+            context, request_url=url, method="POST", data=body, extra_headers=None
+        )
+        return cloud_sync_transport._urlopen_json_with_timeout_retry(
             request=request,
             timeout_seconds=runner._SYNC_HTTP_TIMEOUT_SECONDS,
             retry_timeout_seconds=runner._SYNC_HTTP_RETRY_TIMEOUT_SECONDS,

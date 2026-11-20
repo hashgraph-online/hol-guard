@@ -19,13 +19,15 @@ from pathlib import Path
 
 HOOK_BYPASS_CASE = "git-rules-hook-bypass-stopped"
 STAGE_ALL_CASE = "git-rules-stage-all-stopped"
+SECOND_NAME_STAGE_ALL_CASE = "git-rules-stage-all-second-name-stopped"
 NAMED_STAGE_CASE = "git-rules-named-stage-quiet"
-STOPPED_CASES = frozenset({HOOK_BYPASS_CASE, STAGE_ALL_CASE})
+STOPPED_CASES = frozenset({HOOK_BYPASS_CASE, STAGE_ALL_CASE, SECOND_NAME_STAGE_ALL_CASE})
 GIT_RULES_CASES = STOPPED_CASES | {NAMED_STAGE_CASE}
 
 GIT_RULES_BLOCK_REASONS: dict[str, frozenset[str]] = {
     HOOK_BYPASS_CASE: frozenset({"native_git_hook_bypass"}),
     STAGE_ALL_CASE: frozenset({"native_git_stage_all"}),
+    SECOND_NAME_STAGE_ALL_CASE: frozenset({"native_git_stage_all"}),
 }
 RULES_CONFIG = '\n[risk_actions]\ngit_hook_bypass = "review"\ngit_stage_all = "review"\n'
 README_LINE = "Retries back off for five seconds.\n"
@@ -60,7 +62,7 @@ def git_rules_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == HOOK_BYPASS_CASE:
         subjects = _git(workspace, "log", "--format=%s")
         return {NOT_COMMITTED_CHECK: subjects is not None and BYPASS_SUBJECT not in subjects.splitlines()}
-    if scenario_id == STAGE_ALL_CASE:
+    if scenario_id in (STAGE_ALL_CASE, SECOND_NAME_STAGE_ALL_CASE):
         return {NOTHING_STAGED_CHECK: _git(workspace, "diff", "--cached", "--name-only") == ""}
     if scenario_id == NAMED_STAGE_CASE:
         subject = _git(workspace, "log", "-1", "--format=%s")
@@ -78,6 +80,7 @@ def git_rules_required_checks(scenario_id: str) -> set[str]:
     return {
         HOOK_BYPASS_CASE: {NOT_COMMITTED_CHECK},
         STAGE_ALL_CASE: {NOTHING_STAGED_CHECK},
+        SECOND_NAME_STAGE_ALL_CASE: {NOTHING_STAGED_CHECK},
         NAMED_STAGE_CASE: {NAMED_COMMIT_CHECK},
     }.get(scenario_id, set())
 
