@@ -5,24 +5,13 @@ import { parseContextAssistanceStatus } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import type { ContextProof } from "./workspaces-api";
 
-export type CigarUpdatePreferences = {
-  mode: "manual" | "notify" | "prepare";
-  allow_preview: boolean;
-  retain_last_good: boolean;
-  pinned_build?: string;
-};
 export type CigarVersionsRequest =
-  | { action: "releases" | "catalog" | "interpreters" | "jobs" | "preferences" }
+  | { action: "jobs" }
   | { action: "job" | "cancel"; job_id: string }
-  | { action: "refresh_catalog"; job_id: string }
-  | { action: "import_catalog"; signed_catalog: string }
-  | { action: "setup_interpreter"; job_id: string; build_id: string }
-  | { action: "install"; job_id: string; build_id: string; interpreter_id: string }
   | { action: "prepare_switch"; job_id: string; target_runtime_id: string; expected_generation: string }
   | { action: "prepare_rollback"; job_id: string; expected_generation: string }
   | { action: "commit"; job_id: string; expected_generation: string; reconnect: boolean }
-  | { action: "recover"; job_id: string; expected_generation?: string }
-  | { action: "set_preferences"; expected_revision: string; preferences: CigarUpdatePreferences };
+  | { action: "recover"; job_id: string; expected_generation?: string };
 
 export type CigarVersionsReply = {
   state: ContextAssistanceStatus;
@@ -30,11 +19,8 @@ export type CigarVersionsReply = {
 };
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
-const readRoutes = {
-  releases: "/v1/context-assistance/versions", catalog: "/v1/context-assistance/catalog",
-  interpreters: "/v1/context-assistance/interpreters", jobs: "/v1/context-assistance/jobs",
-} as const;
-const noProof = new Set(["releases", "catalog", "interpreters", "jobs", "job", "cancel", "preferences"]);
+const readRoutes = { jobs: "/v1/context-assistance/jobs" } as const;
+const noProof = new Set(["jobs", "job", "cancel"]);
 
 export function parseCigarVersionsReply(value: unknown): CigarVersionsReply {
   if (!object(value) || value.schema !== "guard-cigar-versions-result.v1" || !object(value.result)) {
@@ -48,7 +34,7 @@ function errorMessage(code: string, status: number): string {
   if (status === 401) return "Reconnect to the local Guard session, then refresh CIGAR updates.";
   if (status === 403) return "Guard needs your approval before this change.";
   if (code.endsWith("outcome_unknown")) return "Guard may have accepted this operation. Refresh jobs before retrying.";
-  if (code.endsWith("preferences_conflict") || code.endsWith("selection_conflict") || code.endsWith("context_stale")) {
+  if (code.endsWith("selection_conflict") || code.endsWith("context_stale")) {
     return "CIGAR settings changed. Refresh the current selection and jobs before trying again.";
   }
   if (code.endsWith("_busy") || code.endsWith("cleanup_pending")) return "Another CIGAR operation is finishing. Refresh jobs after it completes.";

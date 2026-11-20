@@ -23,7 +23,6 @@ export type ContextSettingsControlsProps = {
   onChange: (value: GuardContextAssistanceConfig) => void;
   onRefresh: () => void;
   onChooseRuntime: () => void;
-  onManageVersions?: () => void;
   onControl: (action: ContextControlAction) => void;
   /** Settings that sit right under the status card, ahead of the form. */
   lean?: ReactNode;
@@ -114,7 +113,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
               disabled={editingDisabled || (!value.enabled && !selected)}
               onChange={(enabled) => props.onChange({ ...value, enabled })} />
             <CigarRuntimeSelection value={value} status={status} installations={installations} disabled={disabled}
-              onManage={props.onManageVersions} onRefresh={props.onChooseRuntime}
+              onRefresh={props.onChooseRuntime}
               onRestore={() => { if (status) props.onChange({ ...value, runtime_id: status.preferences.runtime_id,
                 enabled: value.enabled && Boolean(status.preferences.runtime_id) }); }} />
           </SettingsFormSection>

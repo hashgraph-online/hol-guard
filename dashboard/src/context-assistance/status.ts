@@ -132,7 +132,7 @@ export function parseContextAssistanceStatus(value: unknown): ContextAssistanceS
 export function contextStatusCopy(status: ContextAssistanceStatus): { label: string; detail: string } {
   if (status.job) return status.job.phase === "cancelling"
     ? { label: "Stopping", detail: "Cancelling the pending runtime check." }
-    : { label: "Checking runtime", detail: "Guard is verifying Python, CIGAR and its worker in the background." };
+    : { label: "Checking runtime", detail: "Guard is checking CIGAR and its worker in the background." };
   if (status.effective_enabled) return {
     label: "Ready", detail: "The local CIGAR runtime is ready. Context uses only the sources and app access you authorize.",
   };
@@ -155,9 +155,7 @@ export function contextStatusCopy(status: ContextAssistanceStatus): { label: str
   const code = status.diagnostic ?? "runtime_not_verified";
   const detail = code === "policy_restricted"
       ? "Your preference is saved. Organization or workspace policy currently prevents context assistance. You can still turn it off."
-    : code.startsWith("python_")
-      ? "Choose a verified final CPython 3.14 runtime. Other Python versions cannot run this feature."
-      : code.includes("managed") || code.includes("configuration")
+    : code.includes("managed") || code.includes("configuration")
         ? "Local or managed settings currently restrict context assistance. Review this machine's settings."
         : code === "runtime_not_verified"
           ? "Your preference is saved. Review the selected runtime and any policy restrictions before starting CIGAR."

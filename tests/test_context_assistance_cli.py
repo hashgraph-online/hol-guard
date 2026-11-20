@@ -126,7 +126,8 @@ def test_human_output_reports_pending_instead_of_claiming_activation(
     assert commands_router.run_guard_command(args, output_stream=output) == 0
     assert "checking" in output.getvalue()
     assert "Active: False" in output.getvalue()
-    assert "CPython 3.14" in output.getvalue()
+    assert "engine built into Guard" in output.getvalue()
+    assert "CPython" not in output.getvalue()
 
 
 def test_human_output_lists_the_built_in_engine_without_a_python_version(
@@ -145,7 +146,8 @@ def test_human_output_lists_the_built_in_engine_without_a_python_version(
     output = io.StringIO()
     assert commands_router.run_guard_command(args, output_stream=output) == 0
     assert "builtin: Built into Guard · darwin-arm64 · guard_builtin" in output.getvalue()
-    assert "catalog: Python 3.14.0 · darwin-arm64 · guard_qualified" in output.getvalue()
+    assert "catalog:" not in output.getvalue(), "an old Python engine is never offered"
+    assert "Python 3.14" not in output.getvalue()
 
 
 @pytest.mark.parametrize(

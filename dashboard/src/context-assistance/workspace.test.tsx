@@ -88,8 +88,7 @@ const idle = (plan: CigarOneClick["plan"], run: CigarOneClick["run"] = { phase: 
   plan, loadError: null, run, busy: run.phase === "running", start: () => {}, confirm: () => {}, cancelProof: () => {},
   dismiss: () => {}, stop: () => {}, refresh: async () => {},
 });
-const install: CigarSetupPlan = { kind: "run", runtime_id: null, build_id: "b", interpreter_id: null, python_build_id: "p",
-  stages: ["python", "download", "check", "start"], approval: true };
+const install: CigarSetupPlan = { kind: "run", runtime_id: "builtin", stages: ["check", "start"], approval: true };
 const base: CigarWorkspaceProps = {
   status: off, installations: registered, loading: false, busy: false, disabled: false,
   dirty: false, error: null, setup: idle(install), controls: <p>Runtime controls</p>, access: <p>Workspace access</p>,
@@ -137,7 +136,7 @@ assert.doesNotMatch(sharingHome, noFiles);
 assert.doesNotMatch(sharingHome, />Let CIGAR read project files</);
 assert.doesNotMatch(render({ status: withFiles(true, false) }), promise, "one switch alone must not promise project files");
 assert.doesNotMatch(render({ status: withFiles(false, true) }), promise, "one switch alone must not promise project files");
-assert.match(render({ status: saved, setup: idle({ ...install, build_id: null, python_build_id: null, runtime_id: "r", stages: ["start"], approval: false }) }), />Not started</);
+assert.match(render({ status: saved, setup: idle({ ...install, runtime_id: "r", stages: ["start"], approval: false }) }), />Not started</);
 const resting = render({ status: { ...saved, diagnostic: "runtime_resting" }, setup: idle(install) });
 assert.match(resting, />Resting</);
 assert.match(resting, /CIGAR is on and waking up/, "a resting opt-in never asks to be turned on again");
@@ -147,19 +146,19 @@ const blocked = render({ setup: idle({ kind: "blocked", block: { title: "Waiting
 assert.match(blocked, /Waiting for Guard&#x27;s safety check/);
 assert.match(blocked, /<button type="button" class="cigar-button cigar-button-primary cigar-button-solid" disabled="">Turn on CIGAR/,
   "a blocked plan explains itself and never starts work");
-const running = render({ setup: idle(install, { phase: "running", stages: install.kind === "run" ? install.stages : [], stage: "download" }) });
+const running = render({ setup: idle(install, { phase: "running", stages: install.kind === "run" ? install.stages : [], stage: "start" }) });
 assert.match(running, />Stop setup</);
 assert.match(running, /data-state="done"/);
 assert.match(running, /data-state="active"/);
 assert.match(running, />Working</);
-assert.match(running, /Downloading CIGAR… step 2 of/);
-const runningWithOff = render({ stopAvailable: true, setup: idle(install, { phase: "running", stages: install.kind === "run" ? install.stages : [], stage: "download" }) });
+assert.match(running, /Starting up… step 2 of 2/);
+const runningWithOff = render({ stopAvailable: true, setup: idle(install, { phase: "running", stages: install.kind === "run" ? install.stages : [], stage: "start" }) });
 assert.match(runningWithOff, />Stop setup</);
 assert.match(runningWithOff, />Turn off CIGAR</, "the global off switch stays available while setup runs");
 assert.doesNotMatch(running, />Turn off CIGAR</, "no saved or running CIGAR means no off switch to show");
-const failed = render({ setup: idle(install, { phase: "failed", stages: ["python", "download", "check", "start"], stage: "check", message: "Fingerprint mismatch." }) });
+const failed = render({ setup: idle(install, { phase: "failed", stages: ["check", "start"], stage: "check", message: "The safety check failed." }) });
 assert.match(failed, />Try again</);
-assert.match(failed, /Fingerprint mismatch\./);
+assert.match(failed, /The safety check failed\./);
 assert.match(render({ status: null, error: "Service unavailable", stopAvailable: true }), />Turn off CIGAR</,
   "loss of status must not remove the saved preference's off switch");
 assert.match(render({ status: null, error: "Service unavailable" }), /role="alert"/);
@@ -182,7 +181,8 @@ const guide = renderToStaticMarkup(<CigarGuide onSelect={() => {}} />);
 assert.match(guide, /CIGAR in one minute/);
 assert.match(guide, /build a to-do app/);
 assert.match(guide, /Do I need to install anything\?/);
-assert.match(guide, /Guard never installs a version it has not checked/);
+assert.match(guide, /built into it, which needs no Python and no download/);
+assert.doesNotMatch(guide, /Choose a version|never installs a version/);
 assert.match(guide, /CIGAR makes no promise about it/);
 assert.match(guide, /Do I have to add my projects\?/);
 assert.doesNotMatch(guide, /compile|scoped|grant a workspace/i, "the guide avoids implementation jargon");

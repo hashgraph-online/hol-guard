@@ -4,18 +4,10 @@ import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, em
 import { chooseMenuOption } from "./select-menu";
 
 const ready = JSON.parse(readFileSync(new URL("../src/context-assistance/fixtures/intent-state.json", import.meta.url), "utf8")).native_test.ready_observation;
-const catalog = JSON.parse(readFileSync(new URL("../../integrations/cigar/release-catalog.v1.json", import.meta.url), "utf8"));
-const updatePreferences = { mode: "manual", allow_preview: false, retain_last_good: true };
-const updateSettings = { schema: "guard-cigar-update-preferences.v1", requested: updatePreferences, effective: updatePreferences,
-  revision: "sha256:" + "a".repeat(64), diagnostic: null, locked_settings: [],
-  capabilities: { modes: ["manual", "notify"], automatic_preparation: false, automatic_selection: false, retention_reduction: false } };
-const releases = { schema: "guard-cigar-releases.v1", host_platform: "darwin-arm64", builds: catalog.builds, interpreter_builds: catalog.interpreters,
-  catalog: { source: "bundled", fresh_for_preparation: true, diagnostic: null, trust_configured: false, trust_diagnostic: null,
-    remote_feed_configured: false, feed_diagnostic: null, activation_granted: false } };
-const installation = { runtime_id: ready.preferences.runtime_id, qualification: "local_candidate", python_version: [3, 14, 7], platform: "darwin-arm64", worker_fingerprint: ready.runtime.worker_fingerprint };
+const installation = { runtime_id: ready.preferences.runtime_id, qualification: "guard_builtin", builtin: true, python_version: null, platform: "darwin-arm64", worker_fingerprint: ready.runtime.worker_fingerprint };
 
 type Call = { path: string; method: string; body: any };
-const readOnlyActions = new Set(["preferences", "list"]);
+const readOnlyActions = new Set(["list"]);
 const writes = (calls: Call[]) => calls.filter((call) => call.method === "POST"
   && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings") && call.path !== "/v1/context-assistance/folders"
   && !readOnlyActions.has(call.body?.input?.action));
@@ -62,10 +54,7 @@ async function fixture(page: Page, registered = true, savedEnabled = false, docu
           diagnostic: settings.settings.context_assistance.enabled ? "runtime_not_verified" : null };
       }
       result = settings;
-    } else if (path === "/v1/context-assistance/versions" && request.method() === "GET") result = versions(releases);
-    else if (path === "/v1/context-assistance/interpreters") result = versions({ interpreters: [] });
-    else if (path === "/v1/context-assistance/jobs") result = versions({ jobs: [] });
-    else if (body?.input?.action === "preferences") result = versions(updateSettings);
+    } else if (path === "/v1/context-assistance/jobs") result = versions({ jobs: [] });
     else if (path === "/v1/context-assistance/installations") result = { ...status, installation_options: registered ? [installation] : [] };
     else if (path === "/v1/context-assistance") result = status;
     else if (path === "/v1/context-assistance/activate") {

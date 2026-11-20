@@ -28,7 +28,7 @@ from codex_plugin_scanner.guard.native_resident_client import (
 from tests import omp_bound_bash_package_source as package_fixture
 from tests import omp_bound_bash_sdk_source as sdk_source
 from tests.bash_http_registry import local_registry
-from tests.context_pi_sdk_support import assert_context_execution, cli_bootstrap, prepare_store
+from tests.context_pi_sdk_support import cli_bootstrap, prepare_store
 from tests.omp_bound_bash_lifecycle import assert_sdk_host_death_cancels, pause_native_execute_source
 from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE, ENVIRONMENT_NAMES
 
@@ -72,8 +72,6 @@ def test_pinned_sdk_bash_tool_delivers_consent_and_preserves_execution_cwd(
     duration,
     harness,
     http_registry,
-    *,
-    cigar_execution=False,
 ):
     del native_context_digest
     native_post = duration.startswith("native-post-")
@@ -128,14 +126,7 @@ def test_pinned_sdk_bash_tool_delivers_consent_and_preserves_execution_cwd(
     monkeypatch.setenv("LANG", "C")
     monkeypatch.setenv("PATH", f"{execution_cwd}:/usr/bin:/bin:{Path(bun).parent}")
     session_cwd = workspace if harness == "omp" else execution_cwd
-    store = prepare_store(
-        guard,
-        duration,
-        cigar_execution=cigar_execution,
-        binary=status.identity.path,
-        workspace=session_cwd,
-        app=harness,
-    )
+    store = prepare_store(guard, duration)
     command = f"/bin/bash {shlex.quote(str(script))} dry"
     original_input = {"command": command, "timeout": 45}
     if harness == "omp":
@@ -487,8 +478,4 @@ pi.on("tool_call", async (event, ctx) => {
         refused("fresh-operation", "native_bash_consent_required")
         assert report.read_text() == "preserve SDK report"
     finally:
-        try:
-            if cigar_execution and sys.exc_info()[0] is None:
-                assert_context_execution(guard)
-        finally:
-            assert close_native_residents(guard_home=guard)
+        assert close_native_residents(guard_home=guard)

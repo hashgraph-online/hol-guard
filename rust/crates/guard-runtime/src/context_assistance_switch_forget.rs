@@ -25,7 +25,7 @@ impl DataRemoval {
         }
     }
     pub(crate) fn acquire(home: &Path) -> Result<Self, RuntimeError> {
-        let lease = preparation::lifecycle_lease(home).map_err(data_error)?;
+        let lease = lifecycle::lease(home).map_err(data_error)?;
         let home = fs::canonicalize(home).map_err(|_| RuntimeError::StorageRepairRequired)?;
         let lock = WriteLock::acquire(&home).map_err(|_| RuntimeError::Busy)?;
         let intent = match lock

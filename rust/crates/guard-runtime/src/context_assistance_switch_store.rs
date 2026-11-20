@@ -131,7 +131,7 @@ fn decode(home: &Path, raw: &[u8], key: &[u8; 32]) -> Result<SelectionRecord, St
 }
 impl Owner {
     pub(crate) fn acquire(home: &Path) -> Result<Self, String> {
-        let lease = preparation::lifecycle_lease(home)?;
+        let lease = lifecycle::lease(home)?;
         let home = fs::canonicalize(home).map_err(|_| error("home_invalid"))?;
         let lock = WriteLock::acquire(&home).map_err(storage_error)?;
         let raw = lock

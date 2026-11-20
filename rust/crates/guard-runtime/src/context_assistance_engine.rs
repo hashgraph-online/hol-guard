@@ -24,10 +24,6 @@ mod proposals;
 #[path = "context_assistance_engine_upgrade.rs"]
 mod upgrade;
 pub(crate) use upgrade::UpgradeBoundary;
-#[cfg(all(test, target_os = "macos"))]
-pub(crate) use upgrade::{
-    upgrade_admit, upgrade_memory_summary, upgrade_reviewed_summary, UpgradeFixture,
-};
 
 #[path = "context_assistance_engine_actions.rs"]
 mod actions;
