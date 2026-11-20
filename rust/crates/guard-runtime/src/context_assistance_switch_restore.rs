@@ -86,7 +86,7 @@ impl Owner {
         if config.runtime_id != t.from.runtime.installation_id {
             return Err(error("switch_selection_conflict"));
         }
-        activation::verify_selected(&self.home, &t.from, installation, runtime, config)
+        activation::verify_selected(&self.home, &t.from, installation, runtime, config, false)
     }
     pub(crate) fn finish_restore(
         &mut self,

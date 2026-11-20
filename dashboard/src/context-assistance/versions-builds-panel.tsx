@@ -111,7 +111,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
     </section>
     <section className="space-y-3" aria-labelledby={id + "-python"}>
       <div><h3 id={id + "-python"} className={versionHeading}>Python for CIGAR</h3>
-        <p className={versionLead}>CIGAR runs on its own private copy of Python. Your system Python is never touched.</p></div>
+        <p className={versionLead}>The engine built into Guard needs no Python. Downloaded CIGAR builds run on their own private copy of Python, and your system Python is never touched.</p></div>
       {!catalog.interpreter_builds.length ? <p className="text-sm text-brand-dark/65">No private Python builds are listed.</p> : null}
       {hostPython.length ? <ul className={versionList}>{hostPython.map(pythonRow)}</ul> : null}
       {otherPython.length ? <details className="group">

@@ -133,8 +133,8 @@ def run_context_command(
         if not state["installation_options"]:
             print("No verified runtimes are enrolled.", file=output)
     print(
-        "Requires a verified final CPython 3.14 runtime and a qualified CIGAR build. "
-        "Choose preferences in Protection → Context assistance.",
+        "The built-in engine needs no Python. Downloaded CIGAR builds need a verified final "
+        "CPython 3.14 runtime and a qualified build. Choose preferences in Protection → Context assistance.",
         file=output,
     )
     return 0

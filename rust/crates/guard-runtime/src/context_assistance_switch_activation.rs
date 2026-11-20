@@ -37,7 +37,13 @@ pub(crate) fn prepare_activation(
     } else {
         return Err(error("switch_selection_conflict"));
     };
-    let selection = verify_selected(home, &selected, installation, runtime, config)?;
+    // An updated built-in engine may replace the saved one only when no switch
+    // is in flight; an unfinished switch keeps the strict identity check.
+    let settled = record
+        .transaction
+        .as_ref()
+        .is_none_or(|t| t.phase.terminal());
+    let selection = verify_selected(home, &selected, installation, runtime, config, settled)?;
     let text = crate::guard_config_update::read_home_config(home).map_err(storage_error)?;
     let current = crate::guard_config_load::context_assistance_config(home)
         .map_err(|_| error("configuration_unavailable"))?;
@@ -104,6 +110,7 @@ pub(super) fn verify_selected(
     installation: &Installation,
     runtime: &VerifiedRuntime,
     config: &ContextAssistanceConfig,
+    allow_builtin_upgrade: bool,
 ) -> Result<ActivationSelection, String> {
     if matches!(selected.data, SelectionData::Memory) && config.storage.mode != StorageMode::Memory
     {
@@ -111,7 +118,7 @@ pub(super) fn verify_selected(
     }
     let (measured, producer) =
         installation.measured_selection(home, runtime, selected.data.clone())?;
-    if &measured != selected && !builtin_upgrade(selected, &measured) {
+    if &measured != selected && !(allow_builtin_upgrade && builtin_upgrade(selected, &measured)) {
         return Err(error("switch_installation_changed"));
     }
     let generation = if let Some(id) = selected.data.generation_id() {

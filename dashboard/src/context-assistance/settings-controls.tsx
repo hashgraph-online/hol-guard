@@ -85,7 +85,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
               <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75" role="status" aria-live="polite">
                 {availabilityText(props.loading, statusCopy)}
               </p>
-              <p className={caption}>CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR.</p>
+              <p className={caption}>CIGAR is built into Guard and needs no Python. Guard gets it ready when you click Turn on CIGAR.</p>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">

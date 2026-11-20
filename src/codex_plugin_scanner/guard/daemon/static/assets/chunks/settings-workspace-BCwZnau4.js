@@ -4143,7 +4143,7 @@ function ContextSettingsControls(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: titleId, className: "text-lg font-semibold tracking-[-0.01em] text-brand-dark", children: runtime ? "CIGAR " + runtime.package_version : "CIGAR" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[62ch] text-sm leading-6 text-brand-dark/75", role: "status", "aria-live": "polite", children: availabilityText(props.loading, statusCopy) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$2, children: "CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: caption$2, children: "CIGAR is built into Guard and needs no Python. Guard gets it ready when you click Turn on CIGAR." })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
@@ -6253,7 +6253,7 @@ const CIGAR_TUTORIALS = [
         expect: "The status at the top says Ready.",
         target: "overview",
         action: "Go to Home",
-        tip: "CIGAR uses its own copy of Python. The Python you already use is left alone."
+        tip: "CIGAR is built into Guard and needs no Python. The Python you already use is left alone."
       },
       {
         title: "Let it read project files",
@@ -6415,7 +6415,7 @@ function CigarGuide({ onSelect, walkthroughs }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-faq-heading", children: "Common questions" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Do I need to install anything?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. The Turn on CIGAR button gets everything ready: Guard sets up its own copy of Python, downloads the CIGAR version it checked for this computer, confirms the download is the real one and starts it. The Python you already use is left alone." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. The Turn on CIGAR button gets everything ready: Guard starts the CIGAR engine built into it, which needs no Python and no download. The Python you already use is left alone." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "If the button says it is waiting for Guard's safety check, a new CIGAR exists but Guard has not finished checking it. Guard never installs a version it has not checked." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("versions"), children: [
           "Choose a version in Updates",
@@ -8046,7 +8046,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", "aria-labelledby": id2 + "-python", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: id2 + "-python", className: versionHeading, children: "Python for CIGAR" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "CIGAR runs on its own private copy of Python. Your system Python is never touched." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "The engine built into Guard needs no Python. Downloaded CIGAR builds run on their own private copy of Python, and your system Python is never touched." })
       ] }),
       !catalog.interpreter_builds.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/65", children: "No private Python builds are listed." }) : null,
       hostPython.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: versionList, children: hostPython.map(pythonRow) }) : null,

@@ -32,7 +32,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
         title: "Turn on CIGAR", description: "One click. Guard gets everything ready, checks it and starts it.",
         instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
         expect: "The status at the top says Ready.", target: "overview", action: "Go to Home",
-        tip: "CIGAR uses its own copy of Python. The Python you already use is left alone.",
+        tip: "CIGAR is built into Guard and needs no Python. The Python you already use is left alone.",
       },
       {
         title: "Let it read project files", description: "Prompts only get files once CIGAR may read them.",
