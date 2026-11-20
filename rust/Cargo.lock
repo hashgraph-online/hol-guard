@@ -324,33 +324,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cigar-context"
-version = "0.14.2"
-source = "git+https://github.com/hashgraph-online/hol-cigar?rev=d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce#d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce"
-dependencies = [
- "base64 0.22.1",
- "cigar-windows-ipc",
- "getrandom 0.4.3",
- "hmac 0.13.0",
- "regex-automata",
- "rusqlite",
- "rustix",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "tiktoken-rs",
- "zeroize",
-]
-
-[[package]]
-name = "cigar-windows-ipc"
-version = "0.9.4"
-source = "git+https://github.com/hashgraph-online/hol-cigar?rev=d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce#d2f42a48f1fae4ebd88c886dc8ebdeaec05783ce"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -844,7 +817,7 @@ dependencies = [
 name = "guard-cigar-native"
 version = "0.1.0"
 dependencies = [
- "cigar-context",
+ "hol-cigar",
  "serde_json",
 ]
 
@@ -1270,6 +1243,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
+]
+
+[[package]]
+name = "hol-cigar"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1e953915cefa162e3fe8190d32b95581099e05cfaafa4d10b2291b90b5f15be"
+dependencies = [
+ "base64 0.22.1",
+ "getrandom 0.4.3",
+ "hmac 0.13.0",
+ "hol-cigar-windows-ipc",
+ "regex-automata",
+ "rusqlite",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tiktoken-rs",
+ "zeroize",
+]
+
+[[package]]
+name = "hol-cigar-windows-ipc"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ffd70891543a403534e9fef87915eac807e1a3488e6290cf53dcbf54994e37c"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -7,7 +7,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-cigar-context = { version = "0.14.2", features = ["bpe", "broker", "broker-persistence"] }
+cigar-context = { package = "hol-cigar", version = "0.14.2", features = ["bpe", "broker", "broker-persistence"] }
 serde_json.workspace = true
 
 [lints]

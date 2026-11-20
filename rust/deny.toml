@@ -110,4 +110,4 @@ skip = [
 # on a branch someone can move after review.
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = ["https://github.com/hashgraph-online/hol-cigar"]
+allow-git = []
