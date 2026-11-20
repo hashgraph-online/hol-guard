@@ -22,12 +22,13 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use crate::command_capability_op::{envelope_digest, sign_envelope, verify_signed_envelope};
+use crate::command_queue_repair::queue_repair;
 use crate::sync_state_ledger::{
     delete_payload, read_payload, write_payload, LedgerCodes, SyncStateLedger,
 };
 
 pub(crate) const COMMAND: &str = "command-state";
-pub(crate) const FEATURE: &str = "native-command-state-v2";
+pub(crate) const FEATURE: &str = "native-command-state-v3";
 const SCHEMA: &str = "command-state.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 
@@ -60,9 +61,9 @@ const GRANT_IDENTITY_FIELDS: [&str; 9] = [
     "payloadDigest",
 ];
 
-const INVALID: &str = "command_state_request_invalid";
-const UNAVAILABLE: &str = "command_state_unavailable";
-const UNREADABLE: &str = "command_state_unreadable";
+pub(crate) const INVALID: &str = "command_state_request_invalid";
+pub(crate) const UNAVAILABLE: &str = "command_state_unavailable";
+pub(crate) const UNREADABLE: &str = "command_state_unreadable";
 const BUSY: &str = "command_state_busy";
 
 #[derive(Debug, Deserialize)]
@@ -102,6 +103,10 @@ pub(crate) struct Request {
     /// `issue`: the signed capability envelope to install.
     #[serde(default)]
     capability: Option<Map<String, Value>>,
+    /// `queue_repair`: the queue lane's state row. The main worker's row when
+    /// absent.
+    #[serde(default)]
+    state_key: Option<String>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -151,6 +156,10 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
         "clear" if !ledger.store_exists() => Ok(Value::Null),
         "clear" => ledger.transact(clear),
         "issue" => ledger.transact(|tx| issue(tx, request)),
+        "queue_repair" if !ledger.store_exists() => Ok(json!({"repaired": []})),
+        "queue_repair" => {
+            ledger.transact(|tx| queue_repair(tx, request.state_key.as_deref(), &request.now))
+        }
         _ => Err(INVALID.to_owned()),
     }
 }
@@ -448,3 +457,7 @@ mod tests;
 #[cfg(test)]
 #[path = "command_state_replay_tests.rs"]
 mod replay_tests;
+
+#[cfg(test)]
+#[path = "command_queue_repair_tests.rs"]
+mod queue_repair_tests;

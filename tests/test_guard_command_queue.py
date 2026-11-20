@@ -1777,29 +1777,6 @@ def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, mon
     assert payload["supported_operations"] == list(command_executors.SUPPORTED_COMMAND_OPERATIONS)
 
 
-def test_doctor_repair_clears_malformed_command_queue_state(tmp_path: Path, capsys) -> None:
-    guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
-    store.set_sync_payload(
-        command_queue.COMMAND_QUEUE_STATE_KEY,
-        {"state": "result_pending", "active_job": "bad", "pending_result": {"job": "bad"}},
-        "2026-06-13T00:00:00+00:00",
-    )
-
-    rc = main(["guard", "doctor", "--guard-home", str(guard_home), "--repair", "--json"])
-
-    assert rc == 0
-    payload = json.loads(capsys.readouterr().out)
-    repair = payload["command_queue"]["repair"]
-    assert repair["repaired_count"] == 2
-    assert sorted(repair["repaired"]) == ["active_job", "pending_result"]
-    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
-    assert isinstance(state, dict)
-    assert state["state"] == "idle"
-    assert "active_job" not in state
-    assert "pending_result" not in state
-
-
 def test_executor_rejects_duplicate_package_managers(tmp_path: Path) -> None:
     result = _execute_command(
         tmp_path, {"operation": "guard.packageShims.install", "payload": {"managers": ["npm", "npm"]}}
