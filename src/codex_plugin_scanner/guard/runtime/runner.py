@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import errno
 import hashlib
 import importlib.metadata
@@ -1684,110 +1683,47 @@ class _GuardOAuthRefreshRejectedError(GuardSyncAuthorizationExpiredError):
     """The token endpoint rejected the refresh request with an error other than invalid_grant."""
 
 
-_OAUTH_REFRESH_CIRCUIT_STATE_KEY = "guard_oauth_refresh_circuit"
-_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_SECONDS"
-_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_SECONDS"
-_OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS = 30.0
-_OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS = 300.0
 _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED = "revoked"
 _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED = "rejected"
-_OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS = 3600.0
 
 
-_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY = "guard_oauth_refresh_circuit_fingerprint_salt"
-# OWASP-recommended PBKDF2-HMAC-SHA256 work factor; the fingerprint only needs
-# non-reversibility and determinism, but a strong work factor defeats offline
-# brute force against the truncated digest if state ever leaks.
-_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_ITERATIONS = 600_000
+def _oauth_refresh_circuit(store: GuardStore, call: Mapping[str, object]) -> dict[str, object]:
+    """Run one call against the native refresh circuit."""
+    from .cloud_bundle_sync import cloud_oauth_refresh_circuit
+
+    return cloud_oauth_refresh_circuit(Path(store.guard_home), call)
 
 
-def _oauth_refresh_circuit_salt(store: GuardStore) -> bytes:
-    payload = store.get_sync_payload(_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY)
-    encoded = _optional_string(payload.get("salt")) if isinstance(payload, dict) else None
-    if encoded:
-        try:
-            return base64.b64decode(encoded.encode("ascii"), validate=True)
-        except ValueError:
-            pass
-    salt = os.urandom(32)
-    store.set_sync_payload(
-        _OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY,
-        {"salt": base64.b64encode(salt).decode("ascii")},
-        _now(),
-    )
-    # Two racing processes can both land here; converging on whatever the
-    # winning write stored keeps every caller's fingerprints consistent.
-    persisted = store.get_sync_payload(_OAUTH_REFRESH_CIRCUIT_FINGERPRINT_SALT_KEY)
-    persisted_encoded = _optional_string(persisted.get("salt")) if isinstance(persisted, dict) else None
-    if persisted_encoded:
-        try:
-            return base64.b64decode(persisted_encoded.encode("ascii"), validate=True)
-        except ValueError:
-            pass
-    return salt
-
-
-def _oauth_refresh_circuit_fingerprint(refresh_token: str, salt: bytes) -> str:
-    """Deterministic, non-reversible fingerprint for circuit-state matching.
-
-    PBKDF2-HMAC-SHA256 with a persisted per-installation salt; truncation to
-    32 hex chars (128 bits) is a lookup key, not a credential, so truncation
-    is safe while the work factor keeps brute-force recovery impractical.
-    """
-    return hashlib.pbkdf2_hmac(
-        "sha256",
-        refresh_token.encode("utf-8"),
-        salt,
-        _OAUTH_REFRESH_CIRCUIT_FINGERPRINT_ITERATIONS,
-    ).hex()[:32]
-
-
-def _oauth_refresh_circuit_backoff_seconds(env_key: str, default: float) -> float:
-    raw = os.environ.get(env_key, "").strip()
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
-def _load_oauth_refresh_circuit(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(_OAUTH_REFRESH_CIRCUIT_STATE_KEY)
-    return payload if isinstance(payload, dict) else {}
-
-
-def _save_oauth_refresh_circuit(store: GuardStore, state: Mapping[str, object]) -> None:
-    store.set_sync_payload(_OAUTH_REFRESH_CIRCUIT_STATE_KEY, dict(state), _now())
-
-
-def _oauth_refresh_circuit_check(
-    *,
-    store: GuardStore,
-    refresh_token: str,
-    now: datetime,
-) -> None:
+def _oauth_refresh_circuit_check(*, store: GuardStore, refresh_token: str) -> None:
     """Fast-fail refresh while a known-dead or rate-limited grant is in backoff.
 
     Stops every sync/poll caller from hammering the token endpoint once the
-    grant proved invalid. Clears automatically when the stored refresh token no
-    longer matches the fingerprint that failed (a peer process re-paired), and
-    lets one probe through each time the backoff window elapses.
+    grant proved invalid. The native circuit clears itself when the stored
+    refresh token no longer matches the one that failed (a peer process
+    re-paired), and lets one probe through each time the backoff elapses.
+    A circuit that cannot be read fails closed with a retryable error.
     """
-    state = _load_oauth_refresh_circuit(store)
-    fingerprint = _optional_string(state.get("refresh_token_fingerprint"))
-    if fingerprint is None:
+    try:
+        answer = _oauth_refresh_circuit(store, {"op": "check", "refreshToken": refresh_token})
+    except RuntimeError as error:
+        raise GuardSyncNotAvailableError(
+            "Guard could not read its sign-in refresh state. Try again shortly.",
+            retryable=True,
+        ) from error
+    state = answer.get("state")
+    if state == "open":
         return
-    if fingerprint != _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store)):
-        _oauth_refresh_circuit_clear(store)
-        return
-    next_allowed = _parse_iso_timestamp(str(state.get("next_refresh_allowed_at") or ""))
-    if next_allowed is None or next_allowed <= now:
-        return
-    if bool(state.get("needs_reauthorization")):
-        if state.get("failure_kind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
+    if state == "parked":
+        if answer.get("failureKind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
-    raise _GuardOAuthRefreshRateLimitedError(max(1, int((next_allowed - now).total_seconds())))
+    wait = answer.get("retryAfterSeconds")
+    if state == "rate_limited" and isinstance(wait, int) and not isinstance(wait, bool):
+        raise _GuardOAuthRefreshRateLimitedError(max(1, wait))
+    raise GuardSyncNotAvailableError(
+        "Guard could not read its sign-in refresh state. Try again shortly.",
+        retryable=True,
+    )
 
 
 def _oauth_refresh_circuit_record_dead_grant(
@@ -1795,7 +1731,6 @@ def _oauth_refresh_circuit_record_dead_grant(
     store: GuardStore,
     refresh_token: str,
     issuer: str,
-    now: datetime,
     failure_kind: str = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED,
 ) -> None:
     """Mark the grant permanently invalid and schedule the next probe.
@@ -1807,44 +1742,22 @@ def _oauth_refresh_circuit_record_dead_grant(
     so the fast-fail keeps their reauthorization error instead of the revoked
     one, which would let sign-in cleanup wipe credentials after one bad 400.
     A rejection sends the notice only once the next probe is rejected too.
+    The caller's own error propagates even when the circuit cannot record.
     """
-    fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
-    state = _load_oauth_refresh_circuit(store)
-    if _optional_string(state.get("refresh_token_fingerprint")) != fingerprint:
-        state = {}
-    previous_failures = state.get("consecutive_failures")
-    failures = previous_failures + 1 if isinstance(previous_failures, int) else 1
-    previous_backoff = state.get("backoff_seconds")
-    backoff = (
-        min(
-            _oauth_refresh_circuit_backoff_seconds(
-                _OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV,
-                _OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS,
-            ),
-            previous_backoff * 2,
+    try:
+        answer = _oauth_refresh_circuit(
+            store,
+            {"op": "record_dead_grant", "refreshToken": refresh_token, "failureKind": failure_kind},
         )
-        if isinstance(previous_backoff, (int, float)) and previous_backoff > 0
-        else _oauth_refresh_circuit_backoff_seconds(
-            _OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV,
-            _OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS,
-        )
-    )
-    notice_sent = bool(state.get("notice_sent"))
-    if not notice_sent and (failure_kind != _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED or failures > 1):
-        notice_sent = _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint)
-    _save_oauth_refresh_circuit(
-        store,
-        {
-            "refresh_token_fingerprint": fingerprint,
-            "consecutive_failures": failures,
-            "needs_reauthorization": True,
-            "failure_kind": failure_kind,
-            "notice_sent": notice_sent,
-            "backoff_seconds": backoff,
-            "next_refresh_allowed_at": (now + timedelta(seconds=backoff)).isoformat(),
-            "last_error_at": now.isoformat(),
-        },
-    )
+    except RuntimeError:
+        return
+    fingerprint = _optional_string(answer.get("fingerprint"))
+    if fingerprint is None or answer.get("noticeDue") is not True:
+        return
+    if not _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint):
+        return
+    with suppress(RuntimeError):
+        _oauth_refresh_circuit(store, {"op": "notice_sent", "fingerprint": fingerprint})
 
 
 def _oauth_refresh_circuit_record_rate_limit(
@@ -1852,40 +1765,22 @@ def _oauth_refresh_circuit_record_rate_limit(
     store: GuardStore,
     refresh_token: str,
     retry_after_seconds: int,
-    now: datetime,
 ) -> None:
     """Park refresh attempts until the server-provided Retry-After elapses."""
-    fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
-    state = _load_oauth_refresh_circuit(store)
-    if _optional_string(state.get("refresh_token_fingerprint")) != fingerprint:
-        state = {}
-    bounded_retry_after = max(
-        1,
-        min(
-            int(retry_after_seconds),
-            int(_OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS),
-        ),
-    )
-    _save_oauth_refresh_circuit(
-        store,
-        {
-            "refresh_token_fingerprint": fingerprint,
-            "consecutive_failures": state.get("consecutive_failures")
-            if isinstance(state.get("consecutive_failures"), int)
-            else 0,
-            "needs_reauthorization": bool(state.get("needs_reauthorization")),
-            **({"failure_kind": state["failure_kind"]} if isinstance(state.get("failure_kind"), str) else {}),
-            "notice_sent": bool(state.get("notice_sent")),
-            "backoff_seconds": bounded_retry_after,
-            "next_refresh_allowed_at": (now + timedelta(seconds=bounded_retry_after)).isoformat(),
-            "last_error_at": now.isoformat(),
-        },
-    )
+    with suppress(RuntimeError):
+        _oauth_refresh_circuit(
+            store,
+            {
+                "op": "record_rate_limit",
+                "refreshToken": refresh_token,
+                "retryAfterSeconds": int(retry_after_seconds),
+            },
+        )
 
 
 def _oauth_refresh_circuit_clear(store: GuardStore) -> None:
-    if _load_oauth_refresh_circuit(store):
-        _save_oauth_refresh_circuit(store, {"cleared_at": _now()})
+    with suppress(RuntimeError):
+        _oauth_refresh_circuit(store, {"op": "clear"})
 
 
 def _notify_oauth_reauthorization_required(*, issuer: str, fingerprint: str) -> bool:
@@ -2143,11 +2038,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         effective_credentials_ref["value"] = reloaded_credentials
         return reloaded_refresh_token, _oauth_dpop_key_material(reloaded_credentials)
 
-    _oauth_refresh_circuit_check(
-        store=store,
-        refresh_token=refresh_token,
-        now=datetime.now(timezone.utc),
-    )
+    _oauth_refresh_circuit_check(store=store, refresh_token=refresh_token)
     try:
         refreshed = _refresh_guard_oauth_access_token(
             token_endpoint=oauth_client.token_endpoint,
@@ -2164,7 +2055,6 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             store=store,
             refresh_token=failed_refresh_token,
             retry_after_seconds=error.retry_after_seconds,
-            now=datetime.now(timezone.utc),
         )
         raise
     except GuardSyncAuthorizationExpiredError as error:
@@ -2181,7 +2071,6 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             store=store,
             refresh_token=failed_refresh_token,
             issuer=issuer,
-            now=datetime.now(timezone.utc),
             failure_kind=failure_kind,
         )
         raise
