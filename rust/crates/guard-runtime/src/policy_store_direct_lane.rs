@@ -348,6 +348,13 @@ impl PolicySnapshotStore {
             return None;
         }
         self.admit_binding_lease(&binding, deadline).ok()?;
+        if binding
+            .inputs
+            .iter()
+            .any(|input| observe_input(&input.path) != input.stat)
+        {
+            return None;
+        }
         Some(binding.structured_output_config.clone())
     }
 
