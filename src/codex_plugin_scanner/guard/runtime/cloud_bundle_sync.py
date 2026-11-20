@@ -28,6 +28,7 @@ CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
 CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
 CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v4"
 CLOUD_OAUTH_REFRESH_FEATURE = "cloud-oauth-refresh-v1"
+CLOUD_OAUTH_REFRESH_CIRCUIT_FEATURE = "cloud-oauth-refresh-circuit-v1"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
@@ -119,6 +120,30 @@ def cloud_oauth_refresh(call: Mapping[str, object]) -> dict[str, object]:
     )
     if not isinstance(answer, dict) or not isinstance(answer.get("outcome"), str):
         raise RuntimeError("The Guard native runtime did not answer the Guard OAuth token refresh.")
+    return answer
+
+
+def cloud_oauth_refresh_circuit(guard_home: Path, call: Mapping[str, object]) -> dict[str, object]:
+    """Read or record the Guard OAuth refresh circuit natively.
+
+    ``call`` names an ``op``: ``check``, ``record_dead_grant``,
+    ``record_rate_limit``, ``notice_sent`` or ``clear``, with the
+    ``refreshToken``, ``failureKind``, ``retryAfterSeconds`` or
+    ``fingerprint`` it needs. The circuit is local state; no request leaves
+    the machine.
+    """
+
+    answer = run_native_cloud_sync(
+        CLOUD_EVENT_SYNC_COMMAND,
+        CLOUD_OAUTH_REFRESH_CIRCUIT_FEATURE,
+        guard_home,
+        "oauth_refresh_circuit",
+        auth_context=None,
+        subject="Guard OAuth refresh circuit",
+        extra={"oauthRefreshCircuit": dict(call)},
+    )
+    if not isinstance(answer, dict):
+        raise RuntimeError("The Guard native runtime did not answer the Guard OAuth refresh circuit.")
     return answer
 
 
