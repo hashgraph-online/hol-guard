@@ -329,6 +329,8 @@ def sync_aibom_snapshots(
                 "content_upload": content_upload_summary,
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            if isinstance(error, RuntimeError):
+                raise
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
         batches_sent += 1
         events_sent += len(batch)

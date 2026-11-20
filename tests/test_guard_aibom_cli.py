@@ -1033,7 +1033,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
                 fp=None,
             )
         if failure_kind == "native":
-            raise RuntimeError("Guard Cloud request did not finish.")
+            raise runner.GuardSyncNotConfiguredError("Guard Cloud is not connected.")
         raise OSError("network unavailable")
 
     monkeypatch.setattr(aibom_cli, "_batch_inventory_events", plan_mixed_snapshots)
@@ -1041,7 +1041,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", fail_valid_batch)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as raised:
         sync_aibom_snapshots(
             store,
             HarnessContext(
@@ -1056,6 +1056,8 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
             },
         )
 
+    if failure_kind == "native":
+        assert isinstance(raised.value, runner.GuardSyncNotConfiguredError)
     summary = store.get_sync_payload("aibom_sync_summary")
     assert isinstance(summary, dict)
     assert summary.get("synced") is False
