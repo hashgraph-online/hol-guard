@@ -156,19 +156,6 @@ class PolicySourceFenceWait:
             _record_event(self._store, event)
 
 
-def record_direct_fence_wait(store: object, waited_ms: object) -> None:
-    """Record a direct-lane fence wait through the resident window state."""
-
-    if isinstance(waited_ms, bool) or not isinstance(waited_ms, int) or waited_ms <= 0:
-        return
-    guard_home = _guard_home(store)
-    if guard_home is None:
-        return
-    event = record_policy_fence_window(guard_home, action="absorb_direct", waited_ms=waited_ms)
-    if event:
-        _record_event(store, event)
-
-
 __all__ = [
     "POLICY_SOURCE_FENCE_ERRORS",
     "POLICY_SOURCE_FENCE_WINDOW_EVENT",
@@ -177,5 +164,4 @@ __all__ = [
     "PolicySourceFenceWait",
     "fence_wait_until",
     "policy_update_pending_reason",
-    "record_direct_fence_wait",
 ]
