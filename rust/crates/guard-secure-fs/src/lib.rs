@@ -13,6 +13,7 @@ use std::os::unix::fs::MetadataExt;
 
 mod credential_path;
 pub mod credential_store_names;
+mod design_token_name;
 mod secure_open;
 mod source_path;
 

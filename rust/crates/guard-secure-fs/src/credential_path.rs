@@ -4,7 +4,7 @@
 use super::{
     is_source_code_extension, sensitive_external_filename, win32_name, EXTERNAL_SENSITIVE_PARTS,
 };
-use crate::source_path::design_system_token;
+use crate::design_token_name::design_system_token;
 use std::path::Path;
 
 pub fn credential_named_path(path: &Path) -> bool {
