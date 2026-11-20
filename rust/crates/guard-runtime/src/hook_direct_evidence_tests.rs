@@ -360,6 +360,17 @@ fn only_a_hook_record_that_leaves_the_daemon_nothing_is_settled() {
     for record in &finished {
         assert!(settled(record, false), "{record}");
     }
+    let receiptless = json!({
+        "harness": "codex",
+        "event": "PreToolUse",
+        "receipt": null,
+    });
+    let receiptless_page = Paged {
+        seq: 1,
+        record: receiptless,
+        activity: false,
+    };
+    assert!(super::record::settled(&receiptless_page, false));
     let codex = edited(&|record| {
         record.insert("harness".into(), json!("codex"));
     });
