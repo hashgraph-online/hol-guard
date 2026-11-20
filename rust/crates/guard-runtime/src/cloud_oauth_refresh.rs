@@ -93,16 +93,26 @@ pub(crate) fn refresh(call: &RefreshCall) -> Result<Value, SyncError> {
                 if Some(challenge.as_str()) == nonce.as_deref()
                     || nonce_retries >= MAX_NONCE_RETRIES
                 {
-                    json!({"outcome": "dead_grant"})
+                    // A nonce handshake that never settles is a refusal of this
+                    // exchange, not proof that the grant was revoked.
+                    reason(
+                        "rejected",
+                        "Guard Cloud kept asking for a new DPoP nonce.".to_owned(),
+                    )
                 } else {
                     nonce = Some(challenge);
                     nonce_retries += 1;
                     continue;
                 }
             }
-            OAuthRefreshOutcome::RateLimited(retry_after) => {
-                json!({"outcome": "rate_limited", "retryAfterSeconds": retry_after})
-            }
+            OAuthRefreshOutcome::RateLimited {
+                wait_seconds,
+                retry_after,
+            } => json!({
+                "outcome": "rate_limited",
+                "retryAfterSeconds": wait_seconds,
+                "retryAfter": retry_after,
+            }),
             OAuthRefreshOutcome::DeadGrant => json!({"outcome": "dead_grant"}),
             OAuthRefreshOutcome::Rejected(why) => reason("rejected", why),
             OAuthRefreshOutcome::Unusable(why) => reason("unusable", why),

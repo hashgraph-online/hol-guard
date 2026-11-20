@@ -105,11 +105,17 @@ def cloud_oauth_refresh_over_urllib(call: Mapping[str, object]) -> dict[str, obj
                 nonce_retries += 1
                 continue
             if error.code == 429:
-                return {"outcome": "rate_limited", "retryAfterSeconds": parse_retry_after_header(error)}
+                return {
+                    "outcome": "rate_limited",
+                    "retryAfterSeconds": min(parse_retry_after_header(error), 120),
+                    "retryAfter": error.headers.get("Retry-After") if error.headers else None,
+                }
             if error.code in {400, 401, 403}:
                 if _invalid_grant(payload):
                     return {"outcome": "dead_grant"}
                 return {"outcome": "rejected", "reason": _error_reason(error)}
+            if error.code in {502, 503, 504}:
+                return {"outcome": "unreachable", "reason": _error_reason(error)}
             return {"outcome": "failed", "reason": _error_reason(error)}
         except OSError as error:
             if runner._is_guard_cloud_unreachable_error(error):

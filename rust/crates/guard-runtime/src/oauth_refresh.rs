@@ -690,7 +690,10 @@ pub(crate) fn refresh_oauth_access_token(
                 nonce_retry_count += 1;
                 continue; // same attempt — re-sign with the challenge nonce
             }
-            OAuthRefreshOutcome::RateLimited(retry_after) => {
+            OAuthRefreshOutcome::RateLimited {
+                wait_seconds: retry_after,
+                ..
+            } => {
                 circuit_record_rate_limit(store, &attempt_refresh_token, retry_after);
                 return Err(EvalError::Validation(format!(
                     "Guard Cloud rate-limited the token refresh; retry in {retry_after:.0}s."

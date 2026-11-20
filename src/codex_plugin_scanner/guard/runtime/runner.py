@@ -125,6 +125,7 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
+from .sync_retry_delay import parse_retry_after_value
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
 )
@@ -1573,10 +1574,15 @@ def _refreshed_oauth_payload(answer: dict[str, object]) -> dict[str, object]:
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         return payload
     if outcome == "rate_limited":
+        # The header as sent keeps an HTTP date and a long wait; the runner's
+        # rate-limit circuit applies its own bound.
+        header = answer.get("retryAfter")
+        if isinstance(header, str) and header.strip():
+            raise _GuardOAuthRefreshRateLimitedError(parse_retry_after_value(header.strip()))
         retry_after = answer.get("retryAfterSeconds")
-        seconds = 0
+        seconds = 60
         if isinstance(retry_after, int | float) and not isinstance(retry_after, bool):
-            seconds = math.ceil(retry_after)
+            seconds = max(1, math.ceil(retry_after))
         raise _GuardOAuthRefreshRateLimitedError(seconds)
     if outcome == "dead_grant":
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())

@@ -1187,8 +1187,13 @@ pub enum OAuthRefreshOutcome {
     },
     /// The endpoint issued a `DPoP-Nonce`; retry with it (bounded by caller).
     NonceChallenge(String),
-    /// 429 — carry the bounded Retry-After hint; the caller owns the sleep.
-    RateLimited(f64),
+    /// 429 — the bounded numeric Retry-After hint, and the header as sent
+    /// (an HTTP date or a wait longer than the bound) for a caller that keeps
+    /// its own limit. The caller owns the sleep.
+    RateLimited {
+        wait_seconds: f64,
+        retry_after: Option<String>,
+    },
     /// `invalid_grant` / consumed-or-revoked — the grant is dead; caller must
     /// record the dead-grant breaker and demand reauthorization.
     DeadGrant,
@@ -1428,7 +1433,10 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             }
             if status == 429 {
                 let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS).min(120.0);
-                return OAuthRefreshOutcome::RateLimited(wait);
+                return OAuthRefreshOutcome::RateLimited {
+                    wait_seconds: wait,
+                    retry_after: http_header_value(&headers, "Retry-After").map(str::to_owned),
+                };
             }
             if matches!(status, 400 | 401 | 403) {
                 if invalid_grant_oauth_payload(&body) {
