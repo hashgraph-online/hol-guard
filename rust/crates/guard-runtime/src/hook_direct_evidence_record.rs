@@ -232,7 +232,8 @@ pub(super) fn leftovers(
             // well instead of handing the page to a Python recorder.
             if paged.activity
                 && !activity_recorded
-                && (paged.record.get("receipt").is_none()
+                && (!flagged(&paged.record, RECEIPT_VALID)
+                    || !paged.record.get("receipt").is_some_and(Value::is_object)
                     || flagged(&paged.record, DIRECT_RECEIPT_RECORDED))
                 && crate::edge_receipt::submit_activity(writer, &paged.record)
             {
