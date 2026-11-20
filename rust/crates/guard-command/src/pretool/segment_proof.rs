@@ -159,6 +159,8 @@ fn segment_proofs(
                     | "echo"
                     | "printf"
                     | "which"
+                    | "whence"
+                    | "where"
                     | "whoami"
                     | "uname"
                     | "date"
@@ -481,8 +483,11 @@ pub(super) fn exact_safe_segment_with_context(
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
         "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
-        "type" | "command" => {
-            super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
+        // `whence` and `where` are zsh's spelling of `which`. Both print where
+        // a name resolves and run nothing, and `lookup_reads` already models
+        // their flags, so they belong on the same proof as `which` above.
+        "type" | "command" | "whence" | "where" => {
+            super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
         }
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
         "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
