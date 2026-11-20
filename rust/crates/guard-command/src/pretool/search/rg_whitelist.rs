@@ -16,7 +16,7 @@
 //! skips links and hidden directories other than benign ones, which `rg`
 //! does not enter, and prunes directories a plain ignore rule names unless
 //! some negation re-includes that name.
-use super::super::search_scope_filter::{Override, SearchFilter};
+use super::super::search_scope_filter::SearchFilter;
 use super::tree;
 use super::ReadContext;
 use std::io::Read;
@@ -170,34 +170,13 @@ pub(super) fn roots_proven(roots: &[&str], globs: &[&str], context: ReadContext<
     })
 }
 
-/// Whether the search's `-g` inclusions can select `path`, or anything below
-/// it when it is a directory. Without inclusions every entry is selected.
-///
-/// A path the walk cannot describe, or an entry it cannot stat, counts as
-/// selected: the question then falls back to the negation screen itself.
-fn selected_by_globs(filter: Option<&SearchFilter>, root: &Path, path: &Path) -> bool {
-    let Some(filter) = filter else {
-        return true;
-    };
-    let (Some(name), Ok(relative)) = (
-        path.file_name().and_then(std::ffi::OsStr::to_str),
-        path.strip_prefix(root),
-    ) else {
-        return true;
-    };
-    let Some(components) = relative
-        .iter()
-        .map(std::ffi::OsStr::to_str)
-        .collect::<Option<Vec<&str>>>()
-    else {
-        return true;
-    };
-    let directory = std::fs::symlink_metadata(path).map_or(true, |metadata| metadata.is_dir());
-    !matches!(
-        filter.override_for(name, &components.join("/"), directory),
-        Override::Skipped
-    )
-}
+#[path = "rg_whitelist_globs.rs"]
+mod globs;
+#[path = "rg_whitelist_negations.rs"]
+mod negations_source;
+
+use globs::selected_by_globs;
+use negations_source::ignore_rules;
 
 /// True when no ignore file `rg` honors for a search of `root` can
 /// re-include a hidden entry. A root that is not a directory has no walk.
@@ -436,102 +415,6 @@ fn walk(
         }
     }
     Some((pruned, hidden))
-}
-
-/// Records the negations in one ignore file and returns the plain rules
-/// that prune directories, relative to `base`. A missing file has no rules;
-/// an unreadable or oversized one fails.
-fn ignore_rules(
-    path: &Path,
-    base: &Path,
-    git: bool,
-    negations: &mut Negations,
-) -> Option<Vec<Rule>> {
-    let Some(lines) = ignore_lines(path)? else {
-        return Some(Vec::new());
-    };
-    let mut rules = Vec::new();
-    for line in &lines {
-        let line = line.trim_end();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some(pattern) = line.strip_prefix('!') {
-            record_negation(pattern, base, negations);
-            continue;
-        }
-        let line = line.strip_suffix('/').unwrap_or(line);
-        let line = line.strip_prefix("**/").unwrap_or(line);
-        // A slash at the start or in the middle anchors the rule to the
-        // ignore file's directory.
-        let (relative, anchored) = match line.strip_prefix('/') {
-            Some(relative) => (relative, true),
-            None => (line, line.contains('/')),
-        };
-        if !relative.split('/').all(plain_name) {
-            continue;
-        }
-        let target = if anchored {
-            Target::Path(base.join(relative))
-        } else {
-            Target::Name(relative.to_owned())
-        };
-        rules.push(Rule { target, git });
-    }
-    Some(rules)
-}
-
-/// Records a negated pattern, with the directory its ignore file applies to
-/// and whether each component could name a hidden secret. An escape or empty
-/// component matches anything.
-fn record_negation(pattern: &str, base: &Path, negations: &mut Negations) {
-    let pattern = pattern.strip_suffix('/').unwrap_or(pattern);
-    // Git anchors a pattern to its ignore file's directory as soon as it
-    // carries a slash anywhere but the end, so only a bare name re-includes
-    // entries deeper down. `**` is the exception: it stands for any run of
-    // directories, so `!**/.env` and `!src/**/.env` re-include that name
-    // however deep it sits, and the anchored reading would miss it.
-    let anchored = (pattern.starts_with('/') || pattern.contains('/'))
-        && !pattern.split('/').any(|component| component.contains("**"));
-    let pattern = pattern.strip_prefix('/').unwrap_or(pattern);
-    let mut components = Vec::new();
-    let spelled: Vec<&str> = pattern.split('/').collect();
-    for (index, component) in spelled.iter().copied().enumerate() {
-        if component.is_empty() || component.contains('\\') {
-            negations.all.push("*".to_owned());
-            components.push(("*".to_owned(), true));
-            continue;
-        }
-        // A `**` that a name follows stands for the run of directories above
-        // that name, which is pushed here in its own turn, and names no entry
-        // itself. Pushed as a pattern it would match every pruned directory,
-        // so `dist/` beside `!**/notes.md` would read as a re-included
-        // `dist`. A trailing `**` is the opposite: `!**` re-includes every
-        // entry there is, pruned directories among them, so it keeps the
-        // pattern that matches them.
-        if component != "**" || index + 1 == spelled.len() {
-            negations.all.push(component.to_owned());
-        }
-        let screened = !super::sensitive_path_argument(component)
-            && !super::glob_can_select_sensitive_path(component);
-        // A wildcard such as `.c[a]rgo` can re-include a whole hidden
-        // directory, so it counts whenever it matches a hidden name.
-        let harmless = plain_name(component)
-            && (!component.starts_with('.') || (screened && benign_hidden(component)));
-        components.push((component.to_owned(), !harmless));
-    }
-    // A `**` pattern is held by its last component at any depth, which
-    // re-includes at least what Git does: `!src/**/.env` holds every `.env`
-    // below the ignore file rather than only the ones below `src`.
-    if !anchored && components.len() > 1 {
-        let last = components.pop().expect("components is not empty");
-        components = vec![last];
-    }
-    negations.risky.push(Risk {
-        base: base.to_path_buf(),
-        components,
-        anywhere: !anchored,
-    });
 }
 
 fn benign_hidden(name: &str) -> bool {

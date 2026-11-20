@@ -666,6 +666,8 @@
       "src/pretool/search/rg.rs",
       "src/pretool/search/rg_whitelist.rs",
       "src/pretool/search/rg_whitelist_file.rs",
+      "src/pretool/search/rg_whitelist_globs.rs",
+      "src/pretool/search/rg_whitelist_negations.rs",
       "src/pretool/search/roots.rs",
       "src/pretool/search/sibling.rs",
       "src/pretool/search/sibling/negations.rs",
