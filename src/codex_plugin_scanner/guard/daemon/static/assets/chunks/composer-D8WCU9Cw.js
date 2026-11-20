@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports, bh as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder, K as HiMiniLockClosed } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-bBGraC2U.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-CRKVu82y.js";
 import { g as goalOf, p as parseCommand, b as blockedPaths, w as workText, M as MAX_BLOCKED } from "./work-DPWaZlHI.js";
 import "./swarm-handoff-BIqKreGh.js";
 const pendingLaunches = /* @__PURE__ */ new Map();
