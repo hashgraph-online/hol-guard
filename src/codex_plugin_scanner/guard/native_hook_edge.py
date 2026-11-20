@@ -261,19 +261,15 @@ def review_raw_hook_native(
     event_key = event.strip().lower().replace("_", "").replace("-", "")
     required_features = {_EDGE_FEATURE, _CLIENT_FEATURE, _RESPONSE_FEATURE, _SELF_CHECK_FEATURE}
     normalized_harness = harness.strip().lower().replace("_", "-")
-    if (
-        event_key
-        in {
-            "posttool",
-            "posttooluse",
-            "posttoolcall",
-            "aftershellexecution",
-            "afterreadfile",
-            "afterwritefile",
-            "aftermcpexecution",
-        }
-        and normalized_harness in {"pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"}
-    ):
+    if event_key in {
+        "posttool",
+        "posttooluse",
+        "posttoolcall",
+        "aftershellexecution",
+        "afterreadfile",
+        "afterwritefile",
+        "aftermcpexecution",
+    } and normalized_harness in {"pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"}:
         # The resident resolves the managed structured-output view from its
         # authenticated direct-lane binding. Older residents without that
         # binding capability cannot be trusted with this hook path.
