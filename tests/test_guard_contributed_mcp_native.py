@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.mcp_contribution_loader import load_mcp_contribution_payloads
+from tests.mcp_contribution_loader import catalog_id_for_mcp_id, load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
@@ -90,7 +90,7 @@ def test_resident_matches_the_recorded_expectations_for_every_bundled_package(
     assert sorted(native_batch) == sorted(case_batch)
     mismatches: list[str] = []
     for mcp_id, command, package, tool, state in native_batch:
-        catalog_id = "command." + mcp_id.replace(".", "-")
+        catalog_id = catalog_id_for_mcp_id(mcp_id)
         layer = _layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED, lockdown=lockdown)
         store = _AuthorityStore((layer,))
         artifact = _artifact(_identity(command, package), tool)
