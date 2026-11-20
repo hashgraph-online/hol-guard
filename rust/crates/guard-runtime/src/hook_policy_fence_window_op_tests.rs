@@ -23,10 +23,15 @@ fn resident_persists_completed_windows_once_after_write_contention() {
             .unwrap();
     connection
         .execute_batch(
-            "create table guard_events (event_name text, payload_json text, occurred_at text);
-             begin immediate;",
+            "create table guard_events (event_name text, payload_json text, occurred_at text);",
         )
         .unwrap();
+    let gate = std::fs::File::create_new(
+        dir.path()
+            .join(crate::hook_evidence_store_gate::STORAGE_GATE_FILE_NAME),
+    )
+    .unwrap();
+    fs2::FileExt::try_lock_exclusive(&gate).unwrap();
     let mut enter = request(guard_home, "enter");
     enter.persist_events = true;
     evaluate(&enter).unwrap();
@@ -34,6 +39,12 @@ fn resident_persists_completed_windows_once_after_write_contention() {
     leave.persist_events = true;
     leave.request_id.clone_from(&enter.request_id);
     leave.admitted = Some(false);
+    assert_eq!(
+        evaluate(&leave).unwrap_err(),
+        "hook_policy_fence_window_write_failed"
+    );
+    fs2::FileExt::unlock(&gate).unwrap();
+    connection.execute_batch("begin immediate;").unwrap();
     assert_eq!(
         evaluate(&leave).unwrap_err(),
         "hook_policy_fence_window_write_failed"
