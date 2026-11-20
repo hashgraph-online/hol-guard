@@ -80,6 +80,10 @@ def write_org_repos(org: Path, home: Path) -> None:
             _write(repository / ".gitignore", "node_modules/\n")
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
+        if name == "billing-api":
+            # Untracked, gitignored synthetic secret for rg glob override controls.
+            # Plain source globs cannot reach it; an explicit -g "**" can.
+            _write(repository / ".env", "TOKEN=SYNTHETIC_MARKER_ONLY\n")
         if name == "service-api":
             _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
