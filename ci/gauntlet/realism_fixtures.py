@@ -396,6 +396,7 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
 # template beside them, as most application repositories do.
 IGNORE_NEGATION_CASE = "omp-native-rg-include-glob-env-template"
 IGNORE_NEGATION_PROTECTED_CASE = "omp-native-rg-explicit-root-hidden-glob-protected"
+IGNORE_NEGATION_CONSUMED_IGLOB_CASE = "omp-native-rg-consumed-iglob-hidden-protected"
 IGNORE_NEGATION_RULES = ".env*\n!.env.example\n"
 ENV_TEMPLATE = "API_BASE_URL=http://127.0.0.1:3000\nFEATURE_ROUTE_TIMEOUT_MS=2000\n"
 
@@ -408,7 +409,7 @@ def add_ignore_negation_template(main: Path, scenario_id: str | None) -> tuple[s
     leaving it in the shared fixture would change what unrelated search cases
     prove.
     """
-    if scenario_id == IGNORE_NEGATION_PROTECTED_CASE:
+    if scenario_id in {IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE}:
         # The explicit src operand does not change rg's cwd glob base.
         # Only synthetic values: no credential or external destination.
         _write(main / "src/.gitignore", "!.env.test.ts\n")
