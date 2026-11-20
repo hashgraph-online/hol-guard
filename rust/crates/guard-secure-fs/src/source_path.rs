@@ -77,10 +77,46 @@ pub fn sensitive_external_filename(path: &Path) -> bool {
     {
         return true;
     }
-    stem.replace(['-', '.'], "_")
-        .split('_')
-        .any(|token| !token.is_empty() && EXTERNAL_SENSITIVE_PARTS.contains(&token))
+    let joined = stem.replace(['-', '.'], "_");
+    let words: Vec<&str> = joined.split('_').filter(|word| !word.is_empty()).collect();
+    words.iter().any(|word| match *word {
+        "token" | "tokens" => !design_system_words(&words),
+        other => EXTERNAL_SENSITIVE_PARTS.contains(&other),
+    })
 }
+
+/// Whether the words around a `token` name a design system rather than a
+/// credential.
+///
+/// A design token is a named style value -- a colour, a spacing step, a type
+/// ramp -- and the files that carry them are ordinary project content:
+/// `color-tokens.json`, `theme-token-drift.md`, `design_tokens.yaml`. The
+/// word on its own still marks a credential, so `github-token.txt` and
+/// `refresh_token.json` keep their review; only a name that also says which
+/// part of a design system it describes is read this way.
+///
+/// `credential_directory` reads a directory's words the same way, so
+/// `color-tokens/` and `design-tokens/` agree.
+pub(crate) fn design_system_words(words: &[&str]) -> bool {
+    words.iter().any(|word| DESIGN_SYSTEM_WORDS.contains(word))
+}
+
+/// Parts of a design system a token file is named for.
+const DESIGN_SYSTEM_WORDS: [&str; 13] = [
+    "brand",
+    "color",
+    "colors",
+    "colour",
+    "colours",
+    "design",
+    "palette",
+    "spacing",
+    "style",
+    "styles",
+    "theme",
+    "themes",
+    "typography",
+];
 
 /// Code syntax eligible for source inspection. Data formats such as JSON,
 /// TOML, YAML, and Markdown still require credential-name and glob checks.

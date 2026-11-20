@@ -361,6 +361,7 @@ def create_fixture(
     add_output_fixture(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
+    add_design_token_documents(workspace, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
@@ -619,6 +620,34 @@ def write_bench_checkout(checkout: Path, environment: dict[str, str]) -> None:
 
 def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
     subprocess.run(["git", "-C", str(cwd), *args], env=environment, check=True, capture_output=True, timeout=15)
+
+
+DESIGN_TOKEN_CASE = "design-token-document-reads"
+DESIGN_TOKEN_DIRECTORY = "docs/design"
+DESIGN_TOKEN_FILES = {
+    "color-tokens.md": "# Color tokens\n\n- `--surface-raised`: #f7f7f8\n- `--text-muted`: #6b7280\n",
+    "spacing-token-drift.generated.md": "# Spacing token drift\n\n- `space-2`: 8px (was 6px)\n",
+}
+
+
+def add_design_token_documents(workspace: Path, scenario_id: str | None) -> None:
+    """Seed a design system's token documents.
+
+    A design token is a named style value -- a colour, a spacing step -- so a
+    file named for one carries styles rather than credentials. The word
+    `token` in such a name used to mark the whole directory as sensitive, and
+    every recursive search that reached it asked for review.
+
+    They land after the baseline commit and stay untracked: a tracked file is
+    already proven by the checkout that holds it, so the credential-name
+    screen this case exercises is never reached for one.
+    """
+    if scenario_id != DESIGN_TOKEN_CASE:
+        return
+    directory = workspace / DESIGN_TOKEN_DIRECTORY
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, text in DESIGN_TOKEN_FILES.items():
+        (directory / name).write_text(text, encoding="utf-8", newline="\n")
 
 
 def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: str | None) -> None:
