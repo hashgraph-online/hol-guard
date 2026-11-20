@@ -7921,7 +7921,8 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
       buildId
     );
   });
-  const looseRows = data.installations.filter((item) => !matched.has(item.runtime_id)).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+  const loose = data.installations.filter((item) => !matched.has(item.runtime_id));
+  const installedRow = (item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
     Row$1,
     {
       titleId: id2 + "-installed-" + item.runtime_id,
@@ -7944,7 +7945,9 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
       action: prepareSelection(item)
     },
     item.runtime_id
-  ));
+  );
+  const builtinRows = loose.filter((item) => item.builtin === true).map(installedRow);
+  const looseRows = loose.filter((item) => item.builtin !== true).map(installedRow);
   const pythonRow = (build) => {
     const reason = cigarPythonBlock(catalog, build), present = data.interpreters.some((p) => p.build_id === build.build_id);
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -8016,6 +8019,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
         ] })
       ] }),
       !catalog.builds.length && !data.installations.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65", children: "No CIGAR versions are listed yet." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: versionList, children: [
+        builtinRows,
         buildRows,
         looseRows
       ] }),

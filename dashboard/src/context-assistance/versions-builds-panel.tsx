@@ -64,11 +64,15 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
         onClick={() => { if (interpreter) onAction({ input: { action: "install", job_id: cigarVersionJobId(), build_id: buildId, interpreter_id: interpreter.interpreter_id },
           title: "Prepare this CIGAR version", detail: "Guard downloads and checks this version next to the one you have. Nothing changes until you switch." }); }}>Get this version</button>} />;
   });
-  const looseRows = data.installations.filter((item) => !matched.has(item.runtime_id)).map((item) => <Row key={item.runtime_id}
+  const loose = data.installations.filter((item) => !matched.has(item.runtime_id));
+  const installedRow = (item: (typeof loose)[number]) => <Row key={item.runtime_id}
     titleId={id + "-installed-" + item.runtime_id} title={"CIGAR " + (item.sdk_version ?? "registered bundle")} tags={inUseTag(item)}
     meta={<>Core {item.core_version ?? "not reported"} · {runtimeHostLabel(item.python_version)} · {runtimeOwnerLabel(item)} · {installationLabel(item.qualification)}</>}
     extra={<p className="break-all font-mono text-xs text-brand-dark/50">Build: {item.build_id ?? "legacy registration"}</p>}
-    action={prepareSelection(item)} />);
+    action={prepareSelection(item)} />;
+  // The built-in engine needs no download or Python, so it is listed first.
+  const builtinRows = loose.filter((item) => item.builtin === true).map(installedRow);
+  const looseRows = loose.filter((item) => item.builtin !== true).map(installedRow);
 
   const pythonRow = (build: CigarInterpreterBuild) => {
     const reason = cigarPythonBlock(catalog, build), present = data.interpreters.some((p) => p.build_id === build.build_id);
@@ -96,7 +100,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
             placeholder="No Python set up yet" options={pythonOptions} onChange={setPython} /></div>
       </div>
       {!catalog.builds.length && !data.installations.length ? <p className="rounded-2xl border border-dashed border-brand-dark/15 p-5 text-sm text-brand-dark/65">No CIGAR versions are listed yet.</p>
-        : <ul className={versionList}>{buildRows}{looseRows}</ul>}
+        : <ul className={versionList}>{builtinRows}{buildRows}{looseRows}</ul>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {selectedId ? <button type="button" className={versionButton} disabled={selectionBlocked}
           onClick={() => { if (status) onAction({ input: { action: "prepare_rollback", job_id: cigarVersionJobId(), expected_generation: status.generation },
