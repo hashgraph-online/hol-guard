@@ -24,6 +24,7 @@ _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _AGENTIC_LINKEDIN = _FILESYSTEM.with_name("mcp.agentic-linkedin.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_WEBCRAWL = _FILESYSTEM.with_name("mcp.webcrawl.json")
 _LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
@@ -78,6 +79,57 @@ def _rei_skills_payload() -> dict[str, object]:
     payload = json.loads(_REI_SKILLS.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _webcrawl_payload() -> dict[str, object]:
+    payload = json.loads(_WEBCRAWL.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_webcrawl_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed webcrawl launch on the exact npm version."""
+    payload = _webcrawl_payload()
+    validate_mcp_contribution(payload, filename=_WEBCRAWL.name)
+    assert payload["id"] == "mcp.webcrawl"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "@webcrawl/mcp@1.4.5",
+    }
+
+
+def test_webcrawl_unlisted_tools_require_review_once_locally_enabled() -> None:
+    payload = _webcrawl_payload()
+    assert mcp_tool_state(payload, "web_monitor") == "review"
+    assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
+    assert mcp_tool_state(payload, "web_parse_status") == "inherit"
+
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "@webcrawl/mcp@1.4.5"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="webcrawl",
+        tool_name="unlisted_future_tool",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    catalog_id = "command.mcp-webcrawl"
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    cloud_only = _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),))
+    assert apply_contributed_mcp_decision(cloud_only, artifact, "allow") is None
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED),))
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_rei_skills_launch_package_is_version_pinned() -> None:
