@@ -9,12 +9,10 @@ import stat
 from pathlib import Path
 from typing import cast
 
-from .jsonc import loads_jsonc
-
 _MAX_MANIFEST_JSON_BYTES = 16 * 1024 * 1024
 
 
-def read_json_with_integrity(path: Path, *, allow_jsonc: bool = False) -> tuple[dict[str, object] | None, str | None]:
+def read_json_with_integrity(path: Path) -> tuple[dict[str, object] | None, str | None]:
     """Read a JSON manifest via a verified descriptor; return payload and sha256 digest.
 
     The descriptor is opened without following symlinks, the file must stay a
@@ -51,11 +49,7 @@ def read_json_with_integrity(path: Path, *, allow_jsonc: bool = False) -> tuple[
     try:
         encoded = bytes(content)
         decoded = encoded.decode("utf-8")
-        payload = (
-            loads_jsonc(decoded, object_pairs_hook=_unique_json_pairs)
-            if allow_jsonc
-            else cast(object, json.loads(decoded, object_pairs_hook=_unique_json_pairs))
-        )
+        payload = cast(object, json.loads(decoded, object_pairs_hook=_unique_json_pairs))
     except (UnicodeDecodeError, ValueError):
         return None, None
     return object_mapping(payload), f"sha256:{hashlib.sha256(encoded).hexdigest()}"

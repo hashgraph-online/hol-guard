@@ -790,10 +790,9 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py",
-          "src/codex_plugin_scanner/guard/runtime/jsonc.py"
+          "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
+        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported this at load, so it counted as eager. It is now reached lazily: package_evidence_common reads a package manifest through a verified descriptor for the contained Node tool lane. It runs while Guard prepares a contained run, so it stays counted as runtime. The bounded JSONC decoder it once carried is gone; the Rust guard-command jsonc module owns JSONC parsing."
       },
       {
         "path": [
