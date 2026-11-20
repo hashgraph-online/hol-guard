@@ -24,7 +24,10 @@ claude-code --dry-run`) prints a **Claude Code settings** panel with:
 - with `--workspace`, a line saying the project's `.claude` directory is not written;
 - every settings file Claude Code reads, highest precedence first, with Guard's file marked;
 - that headless `claude -p` and Remote Control sessions, which run on this machine, read the same file,
-  and that cloud sessions (Claude Code on the web) do not;
+  that cloud sessions (Claude Code on the web) do not, that sessions started with `--bare` or with
+  setting sources that leave out `user` skip Guard's hooks, and that background sessions
+  (`claude --bg`) run them but are not qualified with Guard (see
+  [Claude Code session modes](claude-code-sessions.md));
 - the undo command, `hol-guard uninstall claude-code`, and what it removes. When the install used `--home` or `--guard-home`, the printed command carries the same options, so it undoes this install and not another one;
 - a warning for each setting that would stop Claude Code running Guard's hooks (see
   [Settings that turn Guard's hooks off](#settings-that-turn-guards-hooks-off)). Install reads only the
@@ -94,8 +97,9 @@ events, so a missing `UserPromptSubmit` or `Stop` handler is not reported. Run `
 
 - removes Guard's handlers from `SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`,
   `UserPromptSubmit`, `Notification` and `Stop`, and from the retired events;
-- writes each of those events back, as an empty list when no other handler is left. It does this even
-  for an event that was not in the file before;
+- keeps every other handler on those events, and removes an event Guard's removal leaves empty, so
+  the file holds no empty list the user never had. When no event is left, it removes the `hooks`
+  object as well;
 - does nothing to the file when it has no `hooks` object, or when it cannot be read as a JSON object.
   The second case leaves any Guard entries in place; `hooks remove --all` reports them;
 - removes the launcher shim and marks the install inactive.
@@ -138,3 +142,6 @@ on the same machine.
 
 A project's own hooks run alongside Guard's. They do not replace them. The workspace hook scan reviews
 hook commands it finds in the project's `.claude/settings.json` and `.claude/settings.local.json`.
+
+Sessions started with `--bare`, or with setting sources that leave out `user`, never load Guard's
+hooks. See [Claude Code session modes](./claude-code-sessions.md) for each way of starting Claude Code.

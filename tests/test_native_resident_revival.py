@@ -17,6 +17,7 @@ from typing import Any, cast
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as client_module
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard import native_resident_revival as revival
 from codex_plugin_scanner.guard import native_resident_watchdog as watchdog
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate as lifecycle_gate
@@ -53,7 +54,7 @@ def _fake_clients(monkeypatch: pytest.MonkeyPatch, responses: list[bytes]) -> li
             del deadline_monotonic
             return True
 
-    monkeypatch.setattr(client_module, "_PersistentNativeClient", Client)
+    monkeypatch.setattr(pool_module, "_PersistentNativeClient", Client)
     return clients
 
 

@@ -47,7 +47,7 @@ _observed: dict[tuple[str, str], tuple[int, str | None]] = {}
 def observe_workspace_runtimes(store: Any, root: Path, *, home_dir: Path | None = None) -> dict[str, object]:
     """The runtime posture of the tools configured for ``root``, read locally."""
 
-    from .adapters.harness_mcp_discovery import configured_harness_detections
+    from .mcp_discovery_client import configured_harness_detections
     from .runtime_advisory_bundle import BUNDLE_UNREADABLE, cached_advisory_bundle
     from .runtime_posture import build_runtime_posture
 

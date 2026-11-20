@@ -146,7 +146,13 @@ _AI_TOOL_STATES = {
 
 def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict[str, object]]:
     from .cloud_actions_health import redact_home
-    from .cloud_actions_host_config import SUPPORTED_AI_TOOLS, bridge_entry, plan_host_config, settings_path
+    from .cloud_actions_host_config import (
+        SUPPORTED_AI_TOOLS,
+        HostConfigNativeUnavailableError,
+        bridge_entry,
+        plan_host_config,
+        settings_path,
+    )
     from .commands_dispatch_cloud_actions_ai_tools import settings_guard_home
 
     explicit_home = getattr(args, "home", None)
@@ -154,7 +160,11 @@ def _ai_tool_states(args: argparse.Namespace, url: str | None) -> dict[str, dict
     guard_home = settings_guard_home(args)
     states: dict[str, dict[str, object]] = {}
     for ai_tool in SUPPORTED_AI_TOOLS:
-        path = settings_path(ai_tool, home=home, environ=None if explicit_home else os.environ)
+        try:
+            path = settings_path(ai_tool, home=home, environ=None if explicit_home else os.environ)
+        except HostConfigNativeUnavailableError:
+            states[ai_tool] = {"settings_file": None, "state": "native_unavailable"}
+            continue
         entry: dict[str, object] = {"settings_file": redact_home(str(path), str(home))}
         if url is None:
             entry["state"] = "not_checked"

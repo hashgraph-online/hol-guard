@@ -24,8 +24,8 @@ def run_desktop_bootstrap_cli(*, output_stream: TextIO | None = None) -> int:
 
     from pathlib import Path
 
-    from ..adapters.base import HarnessContext
     from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
     from ..synced_policy import synced_policy_payload
     from .commands_dispatch_desktop import _run_guard_desktop_command

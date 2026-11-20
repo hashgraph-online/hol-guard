@@ -8,8 +8,11 @@ pub(crate) use super::stderr_merge::without_stderr_merge;
 
 #[path = "segment_proof_cwd.rs"]
 mod cwd;
+pub(in crate::pretool) use cwd::verified_leading_cd_target;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
+#[path = "jq_filter_text.rs"]
+mod jq_filter_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
     git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
@@ -76,22 +79,29 @@ fn segment_proofs(
     alone: bool,
 ) -> Vec<usize> {
     let cwd = verified_cwd_compound_context(model, context);
+    // A cwd transition changes the meaning of subsequent relative operands.
+    // When the transition is not proven -- a `;` after the `cd` leaves the
+    // rest running in the starting directory if the `cd` failed -- no later
+    // operand can be read against either directory. A step that names no path
+    // at all reads the same in both, so judged alone it keeps its proof while
+    // everything beside it loses one.
+    let unproven_cd_transition = cwd.is_none()
+        && model
+            .segments
+            .iter()
+            .any(|segment| segment.executable.as_deref() == Some("cd"));
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
         // Per-segment sleep proofs must not add up past the whole-command bound.
         || !super::safe_scalar::bounded_total_sleep(model)
-        // A cwd transition changes the meaning of subsequent relative operands.
-        || (cwd.is_none()
-            && model
-                .segments
-                .iter()
-                .any(|segment| segment.executable.as_deref() == Some("cd")))
+        || (unproven_cd_transition && !alone)
     {
         return Vec::new();
     }
     let proof_context = crate::pretool::PathContext {
         literal_words: &[],
+        guard_home: context.guard_home,
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
@@ -106,7 +116,11 @@ fn segment_proofs(
         openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
-        cwd: cwd.as_deref().or(context.cwd),
+        cwd: if unproven_cd_transition {
+            None
+        } else {
+            cwd.as_deref().or(context.cwd)
+        },
     };
     let segment_benign: Vec<bool> = model
         .segments
@@ -267,7 +281,28 @@ fn segment_proofs(
             // which is proven only when that directory is verified.
             let path_context_verified =
                 || safe_reads::verified_path_context(proof_context.home_dir, proof_context.cwd);
+            // Reads nothing the working directory decides, so an unproven
+            // `cd` before it leaves its answer unchanged. An empty argument
+            // list is not enough: a build tool with no arguments still acts
+            // on whichever directory it runs in.
+            let cwd_independent = stdin_filter
+                || matches!(
+                    basename,
+                    "pwd"
+                        | "true"
+                        | "exit"
+                        | "break"
+                        | "continue"
+                        | "echo"
+                        | "printf"
+                        | "whoami"
+                        | "uname"
+                        | "date"
+                        | "sleep"
+                        | "uptime"
+                );
             let covered = benign
+                && (!unproven_cd_transition || cwd_independent)
                 && (ls_has_explicit_target || (alone && path_context_verified()))
                 && (!requires_path_context || path_context_verified())
                 // Judged alone, a file step needs no proven predecessor unless
@@ -395,10 +430,8 @@ pub(super) fn exact_safe_segment_with_context(
     let output_templates = super::kubectl_reads::output_template_positions(segment);
     let sensitive_text = secret_namespace
         .map(|index| github_metadata_text::without_namespace(segment, index))
-        .or_else(|| {
-            (!output_templates.is_empty())
-                .then(|| super::kubectl_reads::without_output_templates(segment, &output_templates))
-        });
+        .or_else(|| super::kubectl_reads::without_templates(segment, &output_templates))
+        .or_else(|| jq_filter.and_then(|index| jq_filter_text::without_jq_filter(segment, index)));
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))

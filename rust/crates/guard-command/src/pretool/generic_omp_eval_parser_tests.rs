@@ -1,4 +1,4 @@
-use super::{parse_program, parse_python};
+use super::{parse_program, parse_python, uses_earlier_cell_draft};
 
 #[test]
 fn python_read_lines_are_parsed_as_reads() {
@@ -139,4 +139,72 @@ fn literal_sh_is_parsed_as_one_shell_call() {
     }
     let calls = parse_program("await tool.bash({command: 'git status'})").unwrap();
     assert!(!calls[0].shell_helper);
+}
+
+#[test]
+fn a_commit_draft_is_one_commit_call_in_its_repository() {
+    let calls = parse_program(
+        "const d = await commit.draft({ agents: 'self', repo: '../report' }); await d.take(['a.js']); print(d); return await d.commit('Add report', {body: ['x'], fixes: 3});",
+    )
+    .unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].tool, "commit");
+    assert_eq!(
+        calls[0].args,
+        vec![("cwd".to_owned(), super::Lit::Str("../report".to_owned()))]
+    );
+    assert!(
+        parse_program("const d = await commit.draft(); return await d;")
+            .unwrap()
+            .iter()
+            .all(|call| call.args.is_empty())
+    );
+    for code in [
+        // `amend` rewrites a commit that already exists.
+        "const d = await commit.draft(); await d.commit('x', {amend: true});",
+        "const d = await commit.draft(); await d.commit('x', {amend: false});",
+        // Arguments are literals only.
+        "const p = 'a'; const d = await commit.draft(); await d.take(p);",
+        "const d = await commit.draft({ repo: `../${'x'}` });",
+        "const d = await commit.draft({ repo: '' });",
+        "const d = await commit.draft({ repo: '..', repo: '/' });",
+        "const d = await commit.draft('..');",
+        // Only the documented methods, on a name bound to an awaited draft.
+        "const d = await commit.draft(); await d.reset();",
+        "const d = await commit.draft(); await d['commit']('x');",
+        "const d = commit.draft();",
+        "await commit.draft().commit('x');",
+        "const d = await commit.draft(); const d2 = d.take; await d2();",
+        // A name bound again stops being the draft.
+        "let d = await commit.draft(); let d = 1; await d.take('a');",
+        "const commit = 1;",
+    ] {
+        assert!(parse_program(code).is_none(), "{code}");
+    }
+}
+
+#[test]
+fn draft_methods_on_an_unbound_name_are_an_earlier_cell_draft() {
+    for code in [
+        "await d.show();",
+        "await d.take('docs/a.md'); print(d);",
+        "await draft.commit('docs: x', ['- y']);",
+        "return typeof d.commit;",
+    ] {
+        assert!(parse_program(code).is_none(), "{code}");
+        assert!(uses_earlier_cell_draft(code), "{code}");
+    }
+    for code in [
+        "const d = await commit.draft(); await d.show();",
+        "const d = {show() {}}; await d.show();",
+        "let d = 1; await d.show();",
+        "await d.push('x');",
+        "await d.commit('x', {amend: true});",
+        "await d.show(); sh(`rm -rf ${x}`);",
+        "await commit.show();",
+        "await a.b.show();",
+        "",
+    ] {
+        assert!(!uses_earlier_cell_draft(code), "{code}");
+    }
 }

@@ -33,7 +33,7 @@ fn probe_request(text: &str) -> bool {
 }
 
 /// `transition_hook_probe(payload)`: the probe's operation and request ids.
-fn probe(payload: &PyVal) -> Option<(&str, &str)> {
+pub(super) fn probe(payload: &PyVal) -> Option<(&str, &str)> {
     let probe = payload.get(PROBE_FIELD)?;
     let entries = probe.as_dict()?;
     let keys = ["schema", "operation_id", "request_id"];

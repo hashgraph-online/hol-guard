@@ -419,10 +419,11 @@ def _workspace_from_harness_detection(
     home_override_explicit: bool = False,
 ) -> Path | None:
     try:
-        adapter = get_adapter(harness)
+        resolve_harness(harness)
     except ValueError:
         return None
-    detection = adapter.detect(
+    detection = harness_detect(
+        harness,
         HarnessContext(
             home_dir=(home_dir or Path.home()).resolve(),
             workspace_dir=cwd,

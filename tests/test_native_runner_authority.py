@@ -242,8 +242,11 @@ def test_timeout_seconds_widens_the_bounded_deadline(monkeypatch: pytest.MonkeyP
     assert native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=8.0) == {}
     assert budgets == [5000, 8000]
     assert deadlines[1] > deadlines[0]
-    native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=60.0)
-    assert budgets[-1] == resident._MAX_DEADLINE_BUDGET_MS
+    native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=20.0)
+    assert budgets[-1] == 20_000
+    assert deadlines[-1] > 9.0
+    native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=600.0)
+    assert budgets[-1] == module._MAX_BUDGET_MS
 
 
 def test_oversized_request_is_refused_before_the_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

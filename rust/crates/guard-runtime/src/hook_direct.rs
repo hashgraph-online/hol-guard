@@ -359,6 +359,13 @@ fn answer(
     if binding.evidence_drain != Some(true) {
         return Err(HookDirectDefer::EvidenceUndrained);
     }
+    // The resident owns the direct evidence write. A binding that advertises
+    // a drain without the daemon's store source would hand records back to a
+    // Python fallback, so refuse the lane until the native writer contract is
+    // complete.
+    if policy_store.direct_lane_writer_source().is_none() {
+        return Err(HookDirectDefer::EvidenceUndrained);
+    }
     // Cursor's route probe and the sink it rewrote a call into are answered
     // without evidence: the daemon records neither.
     let cursor_probe = match cursor_route {
@@ -626,6 +633,8 @@ pub(crate) mod claude_prompt_text;
 pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
 pub(crate) mod cursor;
+#[path = "hook_direct_cursor_route.rs"]
+pub(crate) mod cursor_route;
 #[path = "hook_direct_defer.rs"]
 mod defer;
 pub(crate) use defer::HookDirectDefer;

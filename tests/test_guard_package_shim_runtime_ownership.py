@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import shims as guard_shims_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import install_guard_shim, install_package_shims, package_shim_status
 
 
@@ -81,9 +81,11 @@ def test_harness_shim_does_not_persist_appimage_mount_runtime(
 
 def test_appimage_harness_shim_executes_durable_official_cli(
     tmp_path: Path,
+    durable_tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    home_dir = tmp_path / "home"
+    # The official CLI is only chosen outside a temporary root.
+    home_dir = durable_tmp_path / "home"
     guard_home = home_dir / ".hol-guard"
     workspace_dir = tmp_path / "workspace"
     capture_path = tmp_path / "args.txt"

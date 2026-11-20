@@ -32,10 +32,32 @@ mod parser;
 mod pure;
 #[path = "generic_omp_eval_tokens.rs"]
 mod tokens;
-use parser::{parse_program, parse_python, Call, Lit};
+use parser::{parse_program, parse_python, uses_earlier_cell_draft, Call, Lit};
+
+/// The command an Oh My Pi `commit` draft stands for. The prelude reads the
+/// worktree and writes objects, an index of its own and the branch ref, so it
+/// may start what `git add` and `git commit` start: clean filters, an
+/// fsmonitor, hooks and a signing program. The message is a placeholder; the
+/// real one is literal text that runs nothing.
+const COMMIT_PRELUDE_COMMAND: &str = "git add -A && git commit -m 'omp eval commit'";
 
 /// Map one literal call onto the equivalent standalone tool payload.
 fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
+    if call.tool == "commit" {
+        // The draft's repository runs Git the way a `bash` call in that
+        // directory would, so the `bash` tool's own `cwd` proof resolves it.
+        let mut input = Map::new();
+        input.insert("command".to_owned(), json!(COMMIT_PRELUDE_COMMAND));
+        for (key, lit) in &call.args {
+            match (key.as_str(), lit) {
+                ("cwd", Lit::Str(repo)) if context.harness == "omp" => {
+                    input.insert("cwd".to_owned(), json!(repo));
+                }
+                _ => return None,
+            }
+        }
+        return Some(json!({"tool_name": "bash", "tool_input": Value::Object(input)}));
+    }
     let mut input = Map::new();
     for (key, lit) in &call.args {
         let allowed_string = match call.tool.as_str() {
@@ -51,7 +73,7 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
                 input.insert(key.clone(), Value::String(text.clone()));
             }
             Lit::Str(text) if allowed_string.contains(&key.as_str()) => {
-                if call.sdk_read_helper && text.contains(':') {
+                if call.sdk_read_helper && text.contains(':') && !text.starts_with("xd://") {
                     let path = std::path::Path::new(text);
                     let candidate = if path.is_absolute() {
                         path.to_path_buf()
@@ -135,6 +157,21 @@ pub(super) fn evaluate_browser(
     ))
 }
 
+/// The review reason for a JavaScript cell that calls draft methods on a name
+/// an earlier cell bound. Each cell is judged alone, so the review stays; the
+/// reason names the one-cell form Guard can check. `None` for anything else,
+/// which keeps the ordinary eval review reason.
+pub(super) fn earlier_cell_draft_reason(payload: &Value) -> Option<&'static str> {
+    let input = strict_tool_input(payload)?;
+    let code = input.get("code")?.as_str()?;
+    (input.get("language")?.as_str()? == "js"
+        && parse_program(code).is_none()
+        && uses_earlier_cell_draft(code))
+    .then_some(EARLIER_CELL_DRAFT_REASON)
+}
+
+const EARLIER_CELL_DRAFT_REASON: &str = "HOL Guard requires review because this eval cell uses a commit draft made in an earlier cell, and Guard checks each cell on its own, so it cannot confirm the name still holds that draft. Make the draft and use it in the same cell instead, for example: const d = await commit.draft(); await d.take('path/to/file'); await d.commit('subject', ['body line']). Guard checks that cell as one local git commit.";
+
 pub(super) fn evaluate(
     payload: &Value,
     signals: &GenericSignals,
@@ -191,6 +228,9 @@ pub(super) fn evaluate(
             saw_unmodeled_call = true;
             continue;
         };
+        // The `commit` prelude runs Git in the harness process, where no
+        // sandbox can reach it, so it is judged without containment.
+        let _in_process = (call.tool == "commit").then(crate::pretool::in_process_scope::scope);
         // The entry point a direct call takes, so the bridged call gets the
         // same `cwd` resolution and compound re-judging as that call.
         let result = crate::pretool::generic::evaluate_pre_tool_envelope_with_execution_context(
@@ -218,9 +258,12 @@ pub(super) fn evaluate(
     if saw_unmodeled_call {
         return None;
     }
+    if let Some(verdict) = draft_only_verdict(&evaluated, context) {
+        return verdict;
+    }
     let mut ran_shell = false;
     for (call, result) in evaluated {
-        ran_shell |= call.tool == "bash";
+        ran_shell |= matches!(call.tool.as_str(), "bash" | "commit");
         if result.action.sensitive_target {
             return None;
         }
@@ -233,7 +276,10 @@ pub(super) fn evaluate(
             // of several calls keeps the fall-through: no single verdict
             // speaks for it. Containment is the inner call's own hook to
             // arrange, so a sandbox verdict keeps the fall-through too.
+            // A `commit` draft beside other calls has no single verdict
+            // either; a program of drafts alone was answered above.
             return (calls.len() == 1
+                && call.tool != "commit"
                 && matches!(result.minimum_action.as_str(), "review" | "block"))
             .then_some(result);
         }
@@ -249,6 +295,100 @@ pub(super) fn evaluate(
         "native_omp_eval_bounded_tools",
         "The Rust authority parsed this eval as literal Oh My Pi tool calls and proved each one allowed, or contained, on its own.",
     ))
+}
+
+/// The verdict for a program made only of `commit` drafts, when Git's own
+/// rules do not allow every draft. The command extensions judge each draft as
+/// the Git write it runs, so the program carries the strongest of those
+/// verdicts and its reason, as a direct `git commit` would, not the review for
+/// an unknown program. Its approval is bound to the drafts' repositories, not
+/// to the program text, by [`omp_eval_commit_drafts`]. `None` leaves the
+/// ordinary path to answer, and `Some(None)` sends the program to the
+/// unknown-program review: a sensitive target, or a containment verdict the
+/// harness process cannot take.
+fn draft_only_verdict(
+    evaluated: &[(&Call, PreToolResultV1)],
+    context: &OmpContext<'_>,
+) -> Option<Option<PreToolResultV1>> {
+    if evaluated.is_empty() || evaluated.iter().any(|(call, _)| call.tool != "commit") {
+        return None;
+    }
+    let (_, strongest) = evaluated
+        .iter()
+        .max_by_key(|(_, result)| verdict_rank(&result.minimum_action))?;
+    if strongest.minimum_action == "allow" {
+        return None;
+    }
+    if evaluated
+        .iter()
+        .any(|(_, result)| result.action.sensitive_target)
+        || !matches!(
+            strongest.minimum_action.as_str(),
+            "review" | "require-reapproval" | "block"
+        )
+    {
+        return Some(None);
+    }
+    let mut verdict = strongest.clone();
+    verdict.action = generic_action(
+        context.harness,
+        context.event,
+        PreToolActionTypeV1::Command,
+        PreToolOperationV1::Execute,
+        true,
+        false,
+    );
+    Some(Some(verdict))
+}
+
+fn verdict_rank(action: &str) -> u8 {
+    match action {
+        "allow" => 0,
+        "warn" => 1,
+        "review" => 2,
+        "require-reapproval" => 3,
+        "sandbox-required" => 4,
+        _ => 5,
+    }
+}
+
+/// The repositories an Oh My Pi eval commits to, when the program is nothing
+/// but literal `commit` drafts: `""` for the session's repository, else the
+/// `repo` option as written. A draft's subject, body and file selection are
+/// literal text Git stores and runs nothing, so an approval for such a program
+/// is bound to these repositories and holds for the next draft there.
+/// `None` for any other tool or program.
+pub fn omp_eval_commit_drafts(
+    harness: &str,
+    tool_name: &str,
+    tool_input: &Value,
+) -> Option<Vec<String>> {
+    if harness != "omp" || tool_name != "eval" {
+        return None;
+    }
+    let input = tool_input.as_object()?;
+    let modeled = input.iter().all(|(key, value)| match key.as_str() {
+        "code" | "language" => value.is_string(),
+        "title" => value.is_string() || value.is_null(),
+        "reset" => value.is_boolean() || value.is_null(),
+        "timeout" => value.is_number() || value.is_null(),
+        _ => false,
+    });
+    if !modeled || input.get("language")?.as_str()? != "js" {
+        return None;
+    }
+    let calls = parse_program(input.get("code")?.as_str()?)?;
+    if calls.is_empty() || calls.iter().any(|call| call.tool != "commit") {
+        return None;
+    }
+    calls
+        .iter()
+        .map(|call| match call.args.as_slice() {
+            [] => Some(String::new()),
+            [(key, Lit::Str(repo))] if key == "cwd" => Some(repo.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// What stops an `sh()` call outright. The eval shell bridge raises no hook

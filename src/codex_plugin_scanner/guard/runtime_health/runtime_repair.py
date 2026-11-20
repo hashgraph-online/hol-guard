@@ -9,13 +9,14 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
-from ..adapters.cursor import rebind_stale_cursor_hooks
+from ..cursor_hook_ops import rebind_stale_cursor_hooks
 from ..native_daemon_manage import (
     GuardDaemonStartLockTimeoutError,
     _guard_daemon_state_matches_current_runtime,
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
+    record_daemon_repair,
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
@@ -115,6 +116,7 @@ def repair_guard_daemon_runtime(
     trusted_home = (home_dir or Path.home()).expanduser().resolve(strict=True)
     if not trusted_home.is_dir():
         raise RuntimeError("Guard daemon requires a user home directory.")
+    record_daemon_repair(guard_home)
     started = time.monotonic()
     deadline = None if lock_timeout_seconds is None else started + max(lock_timeout_seconds, 0.0)
     with ExitStack() as held:

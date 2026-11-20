@@ -179,6 +179,7 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             Ok(token) if store.decided(Some(token))? => {
                 let saved = saved_response(context, &store, &result, token)?;
                 if let Some(response) = saved {
+                    admit_if_accepted(context, &response);
                     parsed["harness_response"] = response;
                     return Ok(parsed);
                 }
@@ -198,13 +199,18 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
         for key in ["decision", "minimum_action", "policy_action"] {
             allowed.insert(key.to_owned(), json!("allow"));
         }
-        parsed["harness_response"] =
+        let response =
             render(context.harness, &allowed, "accepted").ok_or(HookDirectDefer::SavedDecision)?;
+        admit_if_accepted(context, &response);
+        parsed["harness_response"] = response;
         return Ok(parsed);
     }
     let (response, notice) = match consume::answer(context, &result, &exact, receipt, &artifact_id)?
     {
-        Some(response) => (response, None),
+        Some(response) => {
+            admit_if_accepted(context, &response);
+            (response, None)
+        }
         None => review_queue::answer(context, &result, receipt, &exact, &token)?,
     };
     parsed["harness_response"] = response;
@@ -396,6 +402,23 @@ fn saved_verdict(
 
 /// The rendered verdict marked with its reuse status, or `None` when the
 /// daemon's render request could exceed its size limit.
+/// Records the approval witness for a call this hook lets through on the
+/// user's answer, so its `PostToolUse` honors the same approval
+/// (`native_admitted_call`).
+fn admit_if_accepted(context: &Context<'_>, response: &Value) {
+    if response
+        .get("approval_reuse_status")
+        .and_then(Value::as_str)
+        == Some("accepted")
+    {
+        crate::native_admitted_call::record_for_hook(
+            context.guard_home,
+            context.harness,
+            context.payload,
+        );
+    }
+}
+
 pub(crate) fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
     let encoded = serde_json::to_vec(verdict).ok()?.len() + harness.len();
     if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {

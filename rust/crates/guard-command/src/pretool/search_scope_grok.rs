@@ -4,7 +4,7 @@ use super::super::search_pattern_clearance::PatternClearance;
 use super::super::search_scope_filter::SearchFilter;
 use super::super::search_scope_glob::expand_braces;
 use super::{content_search_scope_proven, filtered_content_search_scope_proven, grep_input};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// True when a Grok `Grep` directory search cannot reach a sensitive file.
 ///
@@ -21,9 +21,17 @@ pub(in crate::pretool) fn grok_grep_directory_scope_proven(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    let Some(input) = grep_input(payload, true) else {
-        return false;
-    };
+    grep_input(payload, true).is_some_and(|input| unignored_grep_scope_proven(input, home_dir, cwd))
+}
+
+/// The search of a ripgrep-built `Grep` tool that may open hidden and ignored
+/// files, given its input with Claude's keys. Grok's tool and Cursor's both
+/// search this way.
+pub(super) fn unignored_grep_scope_proven(
+    input: &Map<String, Value>,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     let target = match input.get("path") {
         None => ".",
         Some(Value::String(path)) if !path.is_empty() => path.as_str(),

@@ -34,6 +34,8 @@ struct Request {
     payload: Map<String, Value>,
     purpose: String,
     key_hex: Option<String>,
+    #[serde(default)]
+    key_home: Option<String>,
     key_id: Option<String>,
     #[serde(default)]
     signed_at: Option<String>,
@@ -58,12 +60,23 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if request.schema != SCHEMA {
         return Err(invalid());
     }
-    let key = match request.key_hex.as_deref() {
-        Some(text) if text.len() <= MAX_KEY_BYTES * 2 => {
-            Some(hex::decode(text).map_err(|_| invalid())?)
+    let key = match (request.key_hex.as_deref(), request.key_home.as_deref()) {
+        (Some(text), None) if text.len() <= MAX_KEY_BYTES * 2 => Some(zeroize::Zeroizing::new(
+            hex::decode(text).map_err(|_| invalid())?,
+        )),
+        (Some(_), _) => return Err(invalid()),
+        // The Codex hook key, read here so the caller never holds it. A key
+        // that is unreadable or has another id signs nothing and verifies
+        // as no key.
+        (None, Some(home)) => {
+            let key_id = request.key_id.as_deref().ok_or_else(invalid)?;
+            match crate::codex_hook_key::read_matching(home, Some(key_id), None) {
+                Ok(held) => Some(held.key),
+                Err(reason) if request.op == "sign" => return Err(reason.to_owned()),
+                Err(_) => None,
+            }
         }
-        Some(_) => return Err(invalid()),
-        None => None,
+        (None, None) => None,
     };
     let payload = Value::Object(request.payload);
     let answer = match (
@@ -74,9 +87,14 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         request.integrity,
     ) {
         ("sign", Some(key), Some(key_id), Some(signed_at), None) => {
-            let fields =
-                sign_local_authority_payload(&payload, &key, &key_id, &request.purpose, &signed_at)
-                    .map_err(str::to_owned)?;
+            let fields = sign_local_authority_payload(
+                &payload,
+                key.as_slice(),
+                &key_id,
+                &request.purpose,
+                &signed_at,
+            )
+            .map_err(str::to_owned)?;
             json!({
                 "integrity_version": fields.integrity_version,
                 "payload_hash": fields.payload_hash,
@@ -88,7 +106,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         ("verify", key, key_id, None, Some(integrity)) => verify(
             &payload,
             &integrity,
-            key.as_deref(),
+            key.as_ref().map(|key| key.as_slice()),
             key_id.as_deref(),
             &request.purpose,
         ),

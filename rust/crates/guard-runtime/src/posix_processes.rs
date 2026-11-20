@@ -136,6 +136,19 @@ pub(crate) fn command_line(pid: i64, timeout: Duration) -> Option<String> {
     command_of(&host, pid)
 }
 
+/// `ps -axo pid=,ppid=,comm=` from the trusted `ps` within `timeout`: every
+/// process with its parent and executable name, or `None` when it cannot be
+/// read.
+pub(crate) fn parent_table(timeout: Duration) -> Option<String> {
+    let host = Host {
+        ps: trusted_ps_path(),
+        proc_root: None,
+        timeout,
+        output_limit: OUTPUT_LIMIT_BYTES,
+    };
+    ps(&host, &["-axo", "pid=,ppid=,comm="])
+}
+
 fn command_of(host: &Host, pid: i64) -> Option<String> {
     ps(host, &["-p", &pid.to_string(), "-o", "command="])
         .map(|output| py_strip(&output).to_owned())

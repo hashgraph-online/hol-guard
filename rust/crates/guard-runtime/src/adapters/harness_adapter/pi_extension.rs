@@ -4,8 +4,9 @@
 //!
 //! Requests that render the extension carry `runtime`, the facts only the
 //! Guard process holds: `installing_cli` (its own `hol-guard` entry points),
-//! `native_hook_runtime` and, on Windows, `windows` with the interpreter,
-//! package root, contained sink argv, request root and `taskkill` path.
+//! and, on Windows, `windows` with the contained sink argv, request root and
+//! `taskkill` path. The interpreter, package root and native hook runtime
+//! come from the caller stamp.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +15,7 @@ use serde_json::{json, Map, Value};
 
 use super::desktop_core;
 use super::kimi::expand_user;
-use super::{path_text, which, Ctx, Failure, Step};
+use super::{caller, path_text, proxy_launch, which, Ctx, Failure, Step};
 use crate::guard_store_json::py_repr_str;
 
 pub(super) const EXTENSION_NAME: &str = "hol-guard.ts";
@@ -22,6 +23,9 @@ const REMOTE_PREFIXES: [&str; 5] = ["npm:", "git:", "http://", "https://", "ssh:
 const MAX_EXTENSION_BYTES: u64 = 2_000_000;
 /// The daemon compatibility the extension's readiness check expects.
 const COMPATIBILITY_VERSION: i64 = 2;
+const PI_HOOK_BRIDGE_FEATURE: &str = "pi-hook-bridge-v1";
+/// `fetch` keeps every Pi hook on the extension's own daemon request.
+const PI_HOOK_BRIDGE_SWITCH: &str = "HOL_GUARD_PI_HOOK_BRIDGE";
 const DESKTOP_RUNTIME_OWNER: &str = "HOL_GUARD_DESKTOP_RUNTIME_OWNER";
 
 fn guard_args(ctx: &Ctx, harness: &str) -> Vec<String> {
@@ -37,6 +41,15 @@ fn guard_args(ctx: &Ctx, harness: &str) -> Vec<String> {
         args.extend(["--home".to_owned(), path_text(&ctx.home)]);
     }
     args
+}
+
+/// `pi_native_hook_runtime`: the native runtime the extension spawns for each
+/// hook. Windows and the `fetch` switch keep every hook on the daemon request.
+fn native_hook_runtime(ctx: &Ctx) -> Step<Option<String>> {
+    if ctx.windows || ctx.env(PI_HOOK_BRIDGE_SWITCH) == Some("fetch") {
+        return Ok(None);
+    }
+    proxy_launch::bridge(ctx, PI_HOOK_BRIDGE_FEATURE, Some(&ctx.guard_home))
 }
 
 /// The process facts the Guard process sent.
@@ -108,12 +121,11 @@ fn windows_cli_bootstrap(package_root: &str, guard_home: &str, harness: &str) ->
          _windows_job=assign_current_process_to_windows_hook_job() if os.name=='nt' else None;\
          sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;\
          sys.stderr.flush() if _windows_job is not None else None;from pathlib import Path;\
-         from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text;\
-         from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;\
+         from codex_plugin_scanner.guard.bounded_cli_hook_bridge import main_from_argv;\
          argv=json.loads(sys.argv[1]);config={{'python_executable':sys.executable,\
          'package_root':{root},'guard_home':{home},\
          'cli_args':argv,'harness':{harness},'timeout_seconds':0.75}};\
-         raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))",
+         raise SystemExit(main_from_argv([json.dumps(config)]))",
         root = py_repr_str(package_root),
         home = py_repr_str(guard_home),
         harness = py_repr_str(harness),
@@ -167,8 +179,8 @@ fn render_request(
                 .and_then(Value::as_str)
                 .ok_or(Failure::Invalid)
         };
-        let python = field("python")?;
-        let root = field("package_root")?;
+        let python = caller::executable(ctx)?;
+        let root = caller::package_root(ctx)?;
         request["cli_command"] = json!(python);
         request["cli_args"] = json!([
             "-I",
@@ -210,11 +222,7 @@ fn render_request(
     };
     request["recovery_accepts_failure_kind"] = json!(true);
     if variant == "active" {
-        request["native_hook_runtime"] = runtime
-            .0
-            .get("native_hook_runtime")
-            .cloned()
-            .unwrap_or(Value::Null);
+        request["native_hook_runtime"] = json!(native_hook_runtime(ctx)?);
         request["contained_sink_command"] = sink;
         request["contained_request_root"] = json!(request_root);
     }

@@ -17,7 +17,7 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-const CONTRACT: &str = include_str!(
+pub(crate) const CONTRACT: &str = include_str!(
     "../../../../src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
 );
 pub(crate) const SCHEMA: &str = "hol-guard.harness-protection-contracts.v1";

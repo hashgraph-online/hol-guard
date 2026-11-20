@@ -43,7 +43,7 @@ const PROBE_FIELD: &str = "cursor_route_probe";
 const BEFORE_SHELL: &str = "beforeShellExecution";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
 const SINK_VERB: &str = "execute-contained-test";
-const ROUTED_REASON: &str = "native_contained_execution_routed";
+pub(super) const ROUTED_REASON: &str = "native_contained_execution_routed";
 /// The sink rewrite reads a Claude-shaped receipt (policy fields beside
 /// `hookSpecificOutput`). Cursor's own rendering has neither, so the probe
 /// renders the verdict in ZCode's shape; the hook copies only the rewritten

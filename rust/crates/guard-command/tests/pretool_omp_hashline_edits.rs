@@ -154,31 +154,45 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         let result = evaluate("omp", &input);
         assert_eq!(result.minimum_action, "review", "{input}: {result:?}");
     }
-    // A decorated header names no file Guard can prove. The edit keeps its
-    // review, so a person can still approve it, and the reason tells the
+    // A header with a bad tag names no file Guard can prove. The edit keeps
+    // its review, so a person can still approve it, and the reason tells the
     // agent how to write a header Guard can prove.
+    let input = patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]);
+    let result = evaluate("omp", &input);
+    assert_eq!(
+        (result.minimum_action.as_str(), result.reason_code.as_str()),
+        ("review", "native_file_write_review"),
+        "{input}"
+    );
+    assert!(
+        result.reason.contains("`[src/a.ts#NOPE]`") && result.reason.contains("[src/app.py#1A2B]"),
+        "{}",
+        result.reason
+    );
+    // Oh My Pi reads these headers as tagged paths to files that do not
+    // exist, so the edit cannot apply. Guard stops it at once and shows the
+    // agent the header it can prove, instead of holding it for review. The
+    // first is an edit a model sent with its reasoning leaked into the header.
     for (input, shown) in [
         (
-            patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[*** Update File: src/a.ts#0AC4]`",
+            patch(&["[tool/analysis code] JSImport to=functions.edit commentary  { \"input\": \"[src/a.ts#D5E8]\nPUT 1.=1:\n+x\n"]),
+            "`[tool/analysis code] JSImport",
         ),
         (
             patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
             "`[FILE: src/a.ts#0AC4]`",
         ),
+        // Oh My Pi unquotes before it drops the noise, so it opens a file
+        // whose name keeps the quotes.
         (
-            patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[*** Begin Patch] [src/a.ts#0AC4]`",
-        ),
-        (
-            patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
-            "`[src/a.ts#NOPE]`",
+            patch(&["[*** Update File: \"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Update File: \"src/a.ts\"#0AC4]`",
         ),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(
             (result.minimum_action.as_str(), result.reason_code.as_str()),
-            ("review", "native_file_write_review"),
+            ("block", "native_missing_path"),
             "{input}"
         );
         assert!(
@@ -186,6 +200,39 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "{}",
             result.reason
         );
+    }
+    // Oh My Pi 18.8 and later unwrap bracketed patch markers and drop
+    // `***`/`Update File:` noise before opening the path, so these edit
+    // src/a.ts and get the same proof as the plain header. The first two
+    // are headers models sent in benchmark sessions.
+    for input in [
+        patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        "*** Begin Patch\n[*** Begin Patch [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n"
+            .to_owned(),
+        patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        format!("[*** Begin Patch]\n{put_a}"),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(result.minimum_action, "allow", "{input} {result:?}");
+    }
+    // Unwrapping keeps the protected-path checks: the header below names
+    // `.git/hooks/pre-commit` once the marker is gone.
+    for input in [
+        patch(&["[*** Abort [.git/hooks/pre-commit#0AC4]\nPUT >$:\n+x\n"]),
+        patch(&["[*** Update File: .env#0AC4]\nPUT >$:\n+EXTRA=1\n"]),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_ne!(result.minimum_action, "allow", "{input} {result:?}");
+    }
+    // Oh My Pi resolves `..` before it opens a path, so these may apply even
+    // though `ghost` does not exist. They keep their review rather than
+    // being stopped as a missing file.
+    for input in [
+        patch(&["[*** Update File: ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+        patch(&["[ghost/../src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(result.minimum_action, "review", "{input} {result:?}");
     }
     // Only Oh My Pi's edit tool takes a hashline patch.
     let result = evaluate("claude-code", &patch(&[put_a]));
@@ -273,28 +320,28 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         })),
         ("block".to_owned(), "native_missing_path".to_owned())
     );
-    // A decorated header and its copies keep the review, and the reason still
-    // shows the agent the plain header.
-    let result = evaluate_pre_tool_envelope_with_context(
-        "omp",
-        "PreToolUse",
-        &json!({"tool_name": "edit", "tool_input": {
-            "input": patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "path": "*** Update File: src/a.ts",
-            "paths": ["*** Update File: src/a.ts"],
-        }}),
-        None,
-        None,
-        root.to_str(),
-        workspace.to_str(),
-    );
-    assert_eq!(result.minimum_action, "review", "{result:?}");
-    assert!(
-        result.reason.contains("`[*** Update File: src/a.ts#0AC4]`")
-            && result.reason.contains("[src/app.py#1A2B]"),
-        "{}",
-        result.reason
-    );
+    // Oh My Pi copies the path it will open, so a decorated header comes
+    // with the plain path and keeps the proof. A raw copy of the decorated
+    // header is not what Oh My Pi sends and keeps the review.
+    for (copy, want) in [
+        ("src/a.ts", "allow"),
+        ("*** Update File: src/a.ts", "review"),
+    ] {
+        let result = evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": {
+                "input": patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+                "path": copy,
+                "paths": [copy],
+            }}),
+            None,
+            None,
+            root.to_str(),
+            workspace.to_str(),
+        );
+        assert_eq!(result.minimum_action, want, "{copy}: {result:?}");
+    }
     // Fields that are not an exact copy of the headers keep the review.
     for tool_input in [
         json!({"input": patch(&[put_a]), "path": ".env", "paths": ["src/a.ts"]}),
@@ -393,4 +440,51 @@ fn edits_without_a_file_header_name_no_file() {
             "{input}"
         );
     }
+}
+
+// Edits Oh My Pi models sent with a tool error or their reasoning in place
+// of the first header. Oh My Pi rejects each without writing, so Guard
+// blocks it with how to write the header instead of asking for approval.
+#[test]
+fn edits_whose_first_header_cannot_be_read_are_blocked() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/omp-hashline-fixtures")
+        .join(format!(
+            "unreadable-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+    std::fs::create_dir_all(&root).unwrap();
+    let _cleanup = fixture::FixtureCleanup(root.clone());
+    let workspace = fixture::canonical_spelling(&root).join("project");
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join("src/a.py"), "a = 1\n").unwrap();
+    let evaluate = |input: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": {"input": input}}),
+            None,
+            None,
+            root.to_str(),
+            workspace.to_str(),
+        )
+    };
+    for header in [
+        "[assistant/analysis code] *** Begin Patch [tool_error] Invalid input: expected header line, got: '[src/a.py#D7FC]",
+        "[{\"?\":\"\"}*** End Patch?]We need proper tool syntax. [path#8A65]",
+        "[tool_error] Tool input must be provided as a plain string, not JSON.",
+        "[{\"path\":\"src/a.py\",\"line_start\":1,\"content\":\"a = 2\"}] then write it",
+    ] {
+        let result = evaluate(&patch(&[&format!("{header}\nPUT 1.=1:\n+a = 2\n")]));
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_omp_edit_header_unreadable"),
+            "{header}"
+        );
+        assert!(result.reason.contains("[src/app.py#1A2B]"), "{}", result.reason);
+    }
+    let fine = evaluate(&patch(&["[src/a.py#0AC4]\nPUT 1.=1:\n+a = 2\n"]));
+    assert_eq!(fine.minimum_action, "allow", "{}", fine.reason_code);
 }

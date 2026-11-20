@@ -146,21 +146,19 @@ def _state_counts(value: object) -> dict[str, int] | None:
 def fetch_policy_delivery(store: GuardStore) -> dict[str, object]:
     """Read ``/api/guard/policy/delivery``; return ``{"available": False, "reason": ...}`` on any failure."""
 
+    from .runtime import cloud_bundle_sync
     from .runtime.runner import (
         GuardSyncAuthorizationExpiredError,
         GuardSyncNotConfiguredError,
-        _guard_sync_request,
         _resolve_guard_sync_auth_context,
-        _urlopen_json_with_timeout_retry,
     )
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
         request_url = normalized_policy_delivery_url(str(auth_context["sync_url"]))
-        request = _guard_sync_request(
-            auth_context, request_url=request_url, method="GET", data=None, extra_headers=None
+        response = cloud_bundle_sync.cloud_json_request(
+            auth_context, url=request_url, body=None, timeout_seconds=15, retry_timeout_seconds=20
         )
-        response = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=15, retry_timeout_seconds=20)
     except (GuardSyncNotConfiguredError, GuardSyncAuthorizationExpiredError):
         return {"available": False, "reason": "not_signed_in"}
     except urllib.error.HTTPError as error:

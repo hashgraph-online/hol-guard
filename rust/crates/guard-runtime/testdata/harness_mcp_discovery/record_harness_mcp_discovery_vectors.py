@@ -23,8 +23,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from codex_plugin_scanner.guard.adapters import harness_mcp_discovery as discovery
-from codex_plugin_scanner.guard.adapters.contracts import display_name_for
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
+from codex_plugin_scanner.guard.setup_contracts import display_name_for
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import extension_runtime
+from codex_plugin_scanner.guard import extension_runtime
 from codex_plugin_scanner.guard.hook_execution_environment import _DEFAULT_EQUIVALENT_PAGER
 from tests.pi_extension_support import managed_extension_source
 

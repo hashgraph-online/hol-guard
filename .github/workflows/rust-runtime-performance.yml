@@ -11,6 +11,12 @@ on:
       - "scripts/native_slo_adapter.py"
       - "scripts/native_slo_contract.py"
       - "scripts/stress_guard_daemon.py"
+      - "scripts/check_guard_daemon_burst.py"
+      - "scripts/check_guard_daemon_chaos.py"
+      - "scripts/guard_daemon_chaos_starts.py"
+      - "scripts/guard_daemon_chaos_runtime.py"
+      - "src/codex_plugin_scanner/guard/cli/desktop_library_call.py"
+      - "src/codex_plugin_scanner/guard/native_daemon_manage.py"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "src/codex_plugin_scanner/guard/native_resident_client.py"
       - "src/codex_plugin_scanner/guard/native_resident_stream.py"
@@ -28,6 +34,12 @@ on:
       - "scripts/native_slo_adapter.py"
       - "scripts/native_slo_contract.py"
       - "scripts/stress_guard_daemon.py"
+      - "scripts/check_guard_daemon_burst.py"
+      - "scripts/check_guard_daemon_chaos.py"
+      - "scripts/guard_daemon_chaos_starts.py"
+      - "scripts/guard_daemon_chaos_runtime.py"
+      - "src/codex_plugin_scanner/guard/cli/desktop_library_call.py"
+      - "src/codex_plugin_scanner/guard/native_daemon_manage.py"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "src/codex_plugin_scanner/guard/native_resident_client.py"
       - "src/codex_plugin_scanner/guard/native_resident_stream.py"
@@ -98,12 +110,34 @@ jobs:
             --cold-iterations 3 \
             --json native-performance.json \
             --enforce
+      - name: Keep the daemon responsive under a burst of hooks
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync python scripts/check_guard_daemon_burst.py \
+            --hooks 1000 \
+            --json daemon-burst.json
+      - name: Recover from injected daemon faults
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync python scripts/check_guard_daemon_chaos.py \
+            --runtime "$HOL_GUARD_NATIVE_BINARY" \
+            --json daemon-chaos.json
       - name: Publish aggregate benchmark evidence
         if: always()
-        run: test ! -f native-performance.json || cat native-performance.json
+        run: |
+          test ! -f native-performance.json || cat native-performance.json
+          test ! -f daemon-burst.json || cat daemon-burst.json
+          test ! -f daemon-chaos.json || cat daemon-chaos.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: hol-guard-native-performance
-          path: native-performance.json
+          path: |
+            native-performance.json
+            daemon-burst.json
+            daemon-chaos.json
           if-no-files-found: warn

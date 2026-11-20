@@ -8,17 +8,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.aibom_content_upload import (
     primary_content_sources_from_artifacts,
     upload_primary_content_sources,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import (
     extract_aibom_metadata_extensions,
     inventory_snapshot_from_detection,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.support.cloud_json_request_transport import use_runner_transport
 
 
 def _sha256(body: bytes) -> str:
@@ -157,8 +158,8 @@ def test_unchanged_incomplete_skill_has_stable_snapshot_identity(tmp_path: Path)
         pytest.skip(f"symlink creation unavailable: {exc}")
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard")
 
-    first_detection = get_adapter("gemini").detect(context)
-    second_detection = get_adapter("gemini").detect(context)
+    first_detection = harness_ops.detect("gemini", context)
+    second_detection = harness_ops.detect("gemini", context)
     first = inventory_snapshot_from_detection(
         first_detection,
         generated_at="2026-07-19T00:00:00Z",
@@ -188,7 +189,7 @@ def test_symlinked_primary_is_nonreusable_and_not_uploadable(tmp_path: Path) -> 
         pytest.skip(f"symlink creation unavailable: {exc}")
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard")
 
-    detection = get_adapter("gemini").detect(context)
+    detection = harness_ops.detect("gemini", context)
     snapshot = inventory_snapshot_from_detection(
         detection,
         generated_at="2026-07-19T00:00:00Z",
@@ -266,7 +267,9 @@ def test_unmigrated_hermes_skill_keeps_primary_only_inventory_identity(tmp_path:
     assert "skillDirectoryIdentity" not in snapshot.items[0].metadata
 
 
-def test_primary_upload_uses_exact_skill_document_not_directory_identity(tmp_path: Path) -> None:
+def test_primary_upload_uses_exact_skill_document_not_directory_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     skill_path = tmp_path / ".gemini" / "skills" / "review" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     # Deliberately exceeds the 256 KiB analysis preview while remaining below
@@ -307,6 +310,7 @@ def test_primary_upload_uses_exact_skill_document_not_directory_identity(tmp_pat
         },
     )
 
+    use_runner_transport(monkeypatch, runner)
     summary, _auth = upload_primary_content_sources(
         object(),
         runner,

@@ -16,15 +16,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .artifact_native_fields import artifact_native_fields as _artifact_wire
 from .models import GuardArtifact, HarnessDetection
 from .native_path_anchor import anchor_to_process_directory
 from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-from .skill_directory_identity import (
-    discover_skill_documents,
-    inspect_skill_directory,
-    skill_directory_identity_metadata,
-)
 
 INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "agent",
@@ -45,16 +39,6 @@ INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "policy",
     "secret_reference",
     "network_endpoint",
-)
-
-_CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
-_CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
-
-# Harnesses that natively discover skills from the shared ``.agents/skills``
-# workspace directory; keep in sync with ``WORKSPACE_SKILL_HARNESSES`` in the
-# resident's ``aibom_discovery.rs``. Only the portable skill walk reads this.
-_WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
-    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp", "muse"}
 )
 
 
@@ -153,7 +137,20 @@ def native_adapter_detection_with_warnings(
 ) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
     """Run a native adapter-detection kind and return artifacts, found paths and warnings."""
 
-    payload = _native(kind, request)
+    return detection_from_payload(_native(kind, request))
+
+
+def native_adapter_detection_payload(kind: str, request: Mapping[str, Any]) -> dict[str, Any]:
+    """The raw answer of a native adapter-detection kind, for a caller that may be asked again."""
+
+    return _native(kind, request)
+
+
+def detection_from_payload(
+    payload: Mapping[str, Any],
+) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
+    """Artifacts, found paths and warnings from a native adapter-detection answer."""
+
     found_paths = payload.get("found_paths")
     if not isinstance(found_paths, list) or not all(isinstance(path, str) for path in found_paths):
         raise NativeAibomError("native_runner_authority_result_invalid")
@@ -170,81 +167,8 @@ def _artifacts_from_payload(payload: Mapping[str, Any]) -> tuple[GuardArtifact, 
     return tuple(_artifact_from_wire(item) for item in items)
 
 
-def _needs_portable_walk() -> bool:
-    """Whether the resident's unix file-descriptor skill walk cannot serve this host."""
-
-    return os.name == "nt"
-
-
-def _portable_skill_artifacts(
-    harness: str,
-    *,
-    scope_dir: Path,
-    skill_roots: tuple[str, ...],
-    scope: str,
-) -> list[dict[str, object]]:
-    """Finished skill artifacts for roots the resident cannot walk itself."""
-
-    artifacts: list[GuardArtifact] = []
-    for relative_root in skill_roots:
-        skill_root = scope_dir / relative_root
-        discovery = discover_skill_documents(skill_root)
-        for skill_md in discovery.documents:
-            skill_dir = skill_md.parent
-            relative_id = skill_dir.relative_to(skill_root).as_posix()
-            identity = inspect_skill_directory(skill_md, scope_root=scope_dir)
-            metadata: dict[str, object] = {
-                "enabled": True,
-                "skill_root": relative_root,
-                **skill_directory_identity_metadata(identity, version_label=relative_id or skill_dir.name),
-            }
-            artifacts.append(
-                GuardArtifact(
-                    artifact_id=f"{harness}:{scope}:skill:{relative_root}:{relative_id or skill_dir.name}",
-                    name=relative_id or skill_dir.name,
-                    harness=harness,
-                    artifact_type="skill",
-                    source_scope=scope,
-                    config_path=str(skill_md),
-                    metadata=metadata,
-                )
-            )
-        for issue in discovery.issues:
-            relative_id = f".guard-discovery/{issue.issue_id}"
-            metadata = {
-                "enabled": True,
-                "skill_root": relative_root,
-                **skill_directory_identity_metadata(issue.identity, version_label=relative_id),
-            }
-            artifacts.append(
-                GuardArtifact(
-                    artifact_id=f"{harness}:{scope}:skill-discovery:{relative_root}:{issue.issue_id}",
-                    name="Incomplete skill discovery",
-                    harness=harness,
-                    artifact_type="skill",
-                    source_scope=scope,
-                    config_path=str(issue.path),
-                    metadata=metadata,
-                )
-            )
-    return [_artifact_wire(artifact) for artifact in artifacts]
-
-
 def _workspace_request(harness: str, workspace_dir: Path) -> dict[str, object]:
-    request: dict[str, object] = {"harness": harness, "workspace_dir": anchor_to_process_directory(workspace_dir)}
-    if harness in _WORKSPACE_CODEX_SKILL_HARNESSES and _needs_portable_walk():
-        try:
-            resolved = workspace_dir.resolve()
-        except OSError:
-            return request
-        if resolved.is_dir():
-            request["skills"] = _portable_skill_artifacts(
-                harness,
-                scope_dir=resolved,
-                skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
-                scope="project",
-            )
-    return request
+    return {"harness": harness, "workspace_dir": anchor_to_process_directory(workspace_dir)}
 
 
 def discover_shared_workspace_aibom_artifacts(
@@ -271,20 +195,6 @@ def discover_codex_skill_artifacts(
         "workspace_dir": None if workspace_dir is None else anchor_to_process_directory(workspace_dir),
         "user_home": None if user_home == "~" else user_home,
     }
-    if workspace_dir is not None and _needs_portable_walk():
-        request["project_skills"] = _portable_skill_artifacts(
-            harness,
-            scope_dir=workspace_dir,
-            skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
-            scope="project",
-        )
-    if _needs_portable_walk():
-        request["global_skills"] = _portable_skill_artifacts(
-            harness,
-            scope_dir=home_dir,
-            skill_roots=_CODEX_HOME_SKILL_ROOTS,
-            scope="global",
-        )
     return _artifacts_from_payload(_native("aibom_codex_skills", request))
 
 

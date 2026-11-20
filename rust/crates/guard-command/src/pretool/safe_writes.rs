@@ -9,7 +9,7 @@ mod mkdir_targets;
 #[path = "plan_note_writes.rs"]
 mod plan_notes;
 #[path = "write_target_screens.rs"]
-mod screens;
+pub(super) mod screens;
 #[path = "temporary_directories.rs"]
 mod temporary_directories;
 use super::read_paths::{
@@ -75,6 +75,7 @@ pub(super) fn bounded_native_temporary_write_target(
         value,
         super::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,

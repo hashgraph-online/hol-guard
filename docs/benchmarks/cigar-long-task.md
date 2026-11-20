@@ -437,3 +437,26 @@ Every session passed in both arms. Codex and Oh My Pi save 52–76% of cost in a
 ### Replay: CIGAR never changes a Guard decision
 
 `rust/crates/guard-runtime/src/policy_store_cigar_replay_tests.rs` sends one recorded session per harness (Claude Code, Codex as `Bash` and as `exec_command`, Oh My Pi) through the real hook edge twice: once in a Guard home with CIGAR's project context on, once with CIGAR off for every app. The session is a prompt and 14 commands: ten agents ran in the rig (reads, greps, test runs, `git diff`, in-place edits with `perl -pi` and `find -exec sed -i`, a commit) and four Guard must still stop (reading `~/.ssh/id_rsa`, `curl | sh`, `rm -rf ~/`, a force push). Every command must get the same decision, minimum action, reason code, reason and harness reply both times, and Codex's `exec_command` replies must match its `Bash` replies. The test also checks that the CIGAR home really adds a note to the prompt and the other does not, and that the commands get more than one kind of verdict. With a deliberate change that adds a field to tool replies when CIGAR is on, the test fails on the first command.
+
+### Mixed prompts (replay, no model calls)
+
+`benchmarks/cigar/scripts/mixed.py` sends 100 everyday prompts from `benchmarks/cigar/references/mixed_prompts.json` through the cigar arm's prompt hook, one fresh session each, against pristine copies of tomli, cachetools, sortedcontainers and click (25 each). 56 prompts need no code (follow-up questions, plans, documents, chat, chores, vague asks); 44 do (explain, pasted trace or log, rename, fix, test, review), each with the files a good note names. A note "carries code" when it has a mapped range (`path:12-30`) or a pasted excerpt (`path (lines 1-112)`). Baseline on 2026-11-16, the rig's 3.59.0 wheel (main after #7853):
+
+| prompts | count | silent | right | wrong | average note size (chars) |
+|---|---|---|---|---|---|
+| no code needed | 56 | 11 | | 45 | 3,623 |
+| code needed | 44 | 3 | 38 | 3 | 2,402 |
+
+Wrong-note rate: 48 of 86 notes that carry code (55.8%). Only 11 of 56 prompts that need no code get no code. 38 of the 45 wrong notes on those prompts are the excerpt form: when no range matches well, CIGAR pastes a whole document, changelog or README (7–8k characters for "push this branch and open a PR", "so is it fixed?" and "are the actual risky calls fixed?"). The other 7 are ranges into unrelated code (a PRD request mapped to `_parser.py`, "what did you change in the last step?" mapped to click's terminal UI files). Coding prompts are mostly fine: 38 of 44 name a right file.
+
+### Preview 3.60.0a121 (2026-11-18)
+
+Results for the 3.60.0a121 preview, the short-reply instruction test and the two hold fixes measured on it are in [cigar-a121-preview.md](cigar-a121-preview.md).
+
+Results for the 3.61.0a1 and 3.61.0a2 previews, including the Oh My Pi edit-header fix, are in [cigar-3-61-preview.md](cigar-3-61-preview.md).
+
+## General-savings measurements (2026-11-16)
+
+Step-by-step workflow anatomy, harness coverage, used and wrong notes, note build time under load,
+probes, the swarm set and the commit-replay set are in
+[cigar-general-savings.md](cigar-general-savings.md).

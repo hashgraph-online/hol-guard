@@ -36,17 +36,18 @@ use guard_contracts::{
     ConnectorSetupContextRequestV1, LocalCliHookRequestV1, CONNECTOR_SETUP_CONTEXT_REQUEST_SCHEMA,
     LOCAL_CLI_HOOK_REQUEST_SCHEMA,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use super::super::consume::{repair_store_permissions, storage_gate};
 use super::super::query::pre_tool_command;
 use super::super::review_request::expanded_home;
 use super::super::{Context, HookDirectDefer};
-use crate::blocked_request_mode::connector_setup_reason;
-use crate::guard_store_connector_context::{scrub_context_text, MAX_LABEL_CHARS};
+use crate::blocked_request_mode::connector_setup_reason_for;
+use crate::connector_setup::ALLOWED_EARLIER_VERSION;
 use crate::local_cli_hook_contained::Refined;
 use crate::local_store_read::STORE_FILE_NAME;
 use hint::{observed_risk_classes, setup_hint};
+use paths::{label, launch_path, pathlib_name, pathlib_normal};
 
 /// `_CONNECTOR_FIELDS` (`local_cli_hook.py`).
 const CONNECTOR_FIELDS: [&str; 5] = [
@@ -89,6 +90,7 @@ pub(crate) struct Connector {
     name: String,
     surface: String,
     queue_group_id: String,
+    allowed_earlier_version: bool,
 }
 
 impl Connector {
@@ -96,7 +98,13 @@ impl Connector {
     /// string, a local surface, and a group under the connector's identity.
     pub(crate) fn parse(value: &Value) -> Option<Self> {
         let fields = value.as_object()?;
-        if fields.len() != CONNECTOR_FIELDS.len() {
+        // The earlier-allow flag is present only when set, and only as `true`.
+        let allowed_earlier_version = match fields.get(ALLOWED_EARLIER_VERSION) {
+            None => false,
+            Some(Value::Bool(true)) => true,
+            Some(_) => return None,
+        };
+        if fields.len() != CONNECTOR_FIELDS.len() + usize::from(allowed_earlier_version) {
             return None;
         }
         let text = |key: &str| -> Option<String> {
@@ -111,6 +119,7 @@ impl Connector {
             name: text("name")?,
             surface: text("surface")?,
             queue_group_id: text("queue_group_id")?,
+            allowed_earlier_version,
         };
         let group = format!("connector:{}:", connector.identity_hash);
         (LOCAL_SURFACES.contains(&connector.surface.as_str())
@@ -141,12 +150,13 @@ impl Connector {
         if self.is_local() && !bound && exact {
             return None;
         }
-        Some(connector_setup_reason(
+        Some(connector_setup_reason_for(
             &self.display_name(),
             &self.surface,
             ask && (bound || exact),
             &[],
             bound,
+            self.allowed_earlier_version,
         ))
     }
 
@@ -165,13 +175,17 @@ impl Connector {
     /// The connector as the lookup named it, which [`Connector::parse`]
     /// reads back.
     pub(crate) fn to_value(&self) -> Value {
-        json!({
+        let mut value = json!({
             "cli_id": self.cli_id,
             "identity_hash": self.identity_hash,
             "name": self.name,
             "surface": self.surface,
             "queue_group_id": self.queue_group_id,
-        })
+        });
+        if self.allowed_earlier_version {
+            value[ALLOWED_EARLIER_VERSION] = Value::Bool(true);
+        }
+        value
     }
 }
 
@@ -189,14 +203,20 @@ fn safe_name(name: &str) -> bool {
 /// connector: the longest any local connector yields for these flags, so a
 /// review whose render fits it fits the real one.
 pub(super) fn longest_reason(ask: bool, bound: bool, exact: bool) -> Option<String> {
-    Connector {
-        cli_id: String::new(),
-        identity_hash: String::new(),
-        name: "@".repeat(MAX_NAME_CHARS),
-        surface: LONGEST_SURFACE.to_owned(),
-        queue_group_id: String::new(),
-    }
-    .reason(ask, bound, exact)
+    [false, true]
+        .into_iter()
+        .filter_map(|allowed_earlier_version| {
+            Connector {
+                cli_id: String::new(),
+                identity_hash: String::new(),
+                name: "@".repeat(MAX_NAME_CHARS),
+                surface: LONGEST_SURFACE.to_owned(),
+                queue_group_id: String::new(),
+                allowed_earlier_version,
+            }
+            .reason(ask, bound, exact)
+        })
+        .max_by_key(String::len)
 }
 
 /// Whether the agent text links the queued row: only when the user's
@@ -464,79 +484,12 @@ pub(crate) fn first_blocked_cause(reason_code: Option<&str>) -> Option<&'static 
     }
 }
 
-/// `launch_path`: the `PATH` the hook stamped from the agent's environment.
-fn launch_path(payload: &Map<String, Value>) -> Option<&str> {
-    payload
-        .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD)?
-        .get("path")?
-        .as_str()
-        .filter(|path| !path.is_empty() && !path.contains('\0'))
-}
-
-/// `scrub_connector_context_text(value, limit=MAX_LABEL_CHARS)`, the scrub
-/// the daemon applies before it sends a label. Only printable ASCII is
-/// scrubbed here, where Python's and the resident's character classes agree;
-/// any other label defers.
-fn label(text: &str) -> Result<Option<String>, HookDirectDefer> {
-    if !text.chars().all(|item| (' '..='~').contains(&item)) {
-        return Err(HookDirectDefer::ReviewQueue);
-    }
-    Ok(scrub_context_text(text, MAX_LABEL_CHARS))
-}
-
-/// Whether `str(Path(path)) == path`: an absolute path with no empty or `.`
-/// component and no trailing separator.
-#[cfg(not(windows))]
-fn pathlib_normal(path: &str) -> bool {
-    path == "/"
-        || path
-            .strip_prefix('/')
-            .is_some_and(|rest| rest.split('/').all(|part| !part.is_empty() && part != "."))
-}
-
-/// Whether `str(Path(path)) == path` for a drive-letter path: `X:\` and
-/// components with no empty or `.` one. A UNC, verbatim or `/` spelling is
-/// not reproduced.
-#[cfg(windows)]
-fn pathlib_normal(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    if bytes.len() < 3
-        || !bytes[0].is_ascii_alphabetic()
-        || bytes[1] != b':'
-        || bytes[2] != b'\\'
-        || path.contains('/')
-    {
-        return false;
-    }
-    let rest = &path[3..];
-    rest.is_empty() || rest.split('\\').all(|part| !part.is_empty() && part != ".")
-}
-
-/// `Path(path).name` for a path [`pathlib_normal`] accepts.
-fn pathlib_name(path: &str) -> &str {
-    let separator = if cfg!(windows) { '\\' } else { '/' };
-    path.rsplit(separator).next().unwrap_or_default()
-}
-
-/// The connector-setup hint for a connector-setup review the daemon queues
-/// itself, as `extension_review_hint` answers it: the connector `_setup_connector`
-/// accepts and the risk classes the paused evidence observed. A connector this
-/// lane would not accept, or evidence whose risk classes the resident cannot
-/// read, answers no hint.
-pub(crate) fn queued_setup_hint(connector: &Value, paused: &Object) -> Option<Value> {
-    let connector = Connector::parse(connector)?;
-    let risk_classes = observed_risk_classes(paused).ok()?;
-    Some(setup_hint(&connector, &risk_classes)).filter(|hint| !hint.is_null())
-}
-
-/// `validated_connector_setup_hint`: a stored connector setup hint, shape
-/// checked and rebuilt, or `None`.
-pub(crate) fn validated_setup_hint(value: &Value) -> Option<Value> {
-    hint::validated_setup_hint(value)
-}
-
 #[path = "hook_direct_review_connector_hint.rs"]
 mod hint;
+pub(crate) use hint::{queued_setup_hint, validated_setup_hint};
+
+#[path = "hook_direct_review_connector_paths.rs"]
+mod paths;
 
 #[cfg(test)]
 #[path = "hook_direct_review_connector_tests.rs"]

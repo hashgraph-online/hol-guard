@@ -1,34 +1,41 @@
-"""Preserve observed competing configuration writes during Codex rollback."""
+"""Preserve observed competing configuration writes during Codex rollback.
+
+The resident reads the identities and the bytes; see
+``rust/crates/guard-runtime/src/transition_files/publication_io.rs``.
+"""
 
 from __future__ import annotations
 
+import base64
 import os
-import stat
 from pathlib import Path
-
-from .codex_hook_file_integrity import CodexHookIntegrityError
-
-
-def _conflict() -> CodexHookIntegrityError:
-    return CodexHookIntegrityError(
-        "codex_hook_rollback_conflict",
-        "codex_hook_rollback_conflict: Codex publication needs recovery; Guard preserved the recovery record "
-        + "and current files.",
-    )
+from typing import Any
 
 
-def _state(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
-    return metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns
+def _publication(op: str, path: Path, **fields: Any) -> object:
+    from .native_transition_files import publication
+
+    target = os.path.abspath(path.expanduser())
+    return publication(op, Path(target), path=target, **fields)
+
+
+def _identity(value: object) -> tuple[int, int, int, int, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or len(value) != 5 or not all(type(part) is int for part in value):
+        from .codex_hook_file_integrity import CodexHookIntegrityError
+
+        raise CodexHookIntegrityError("codex_hook_rollback_conflict", "codex_hook_rollback_conflict")
+    return (value[0], value[1], value[2], value[3], value[4])
 
 
 def rollback_file_identity(path: Path) -> tuple[int, int, int, int, int] | None:
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
-        return None
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-        raise _conflict()
-    return _state(metadata)
+    """``(st_dev, st_ino, st_size, st_mtime_ns, st_ctime_ns)`` of a single-link regular file."""
+    return _identity(_publication("identity", path))
+
+
+def _encoded(value: bytes | None) -> str | None:
+    return None if value is None else base64.b64encode(value).decode("ascii")
 
 
 def require_unchanged_config_for_rollback(
@@ -40,40 +47,11 @@ def require_unchanged_config_for_rollback(
     written_identity: tuple[int, int, int, int, int] | None,
 ) -> None:
     """Check under the lifecycle lock; this does not fence non-cooperating writers."""
-    try:
-        before = path.lstat()
-    except FileNotFoundError:
-        if original is None and written_identity is None:
-            return
-        raise _conflict() from None
-    except OSError as error:
-        raise _conflict() from error
-    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-        raise _conflict()
-    limit = max(len(original or b""), len(written))
-    if before.st_size > limit:
-        raise _conflict()
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-        try:
-            with os.fdopen(descriptor, "rb") as handle:
-                descriptor = -1
-                opened = os.fstat(handle.fileno())
-                if _state(opened) != _state(before):
-                    raise _conflict()
-                current = handle.read(limit + 1)
-                after = os.fstat(handle.fileno())
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        if _state(after) != _state(opened) or _state(path.lstat()) != _state(after):
-            raise _conflict()
-    except OSError as error:
-        raise _conflict() from error
-    identity = _state(after)
-    if not (
-        (original is not None and current == original and identity == original_identity)
-        or (written_identity is not None and current == written and identity == written_identity)
-    ):
-        raise _conflict()
+    _publication(
+        "rollback_check",
+        path,
+        original=_encoded(original),
+        written=_encoded(written),
+        original_identity=list(original_identity) if original_identity is not None else None,
+        written_identity=list(written_identity) if written_identity is not None else None,
+    )

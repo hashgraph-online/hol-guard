@@ -1,11 +1,11 @@
 import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
-import { blockScopeChoiceWithDuration, scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
+import { scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
 import { retryWindowText } from "./approval-retry-guidance";
 import type { DecisionScope } from "./guard-types";
 
-type ReviewScopeControlsProps = {
+export type ReviewScopeControlsProps = {
   commonScopeOptions: ApprovalScopeChoice[];
   broaderScopeOptions: ApprovalScopeChoice[];
   advancedScopeOptions: ApprovalScopeChoice[];
@@ -15,8 +15,6 @@ type ReviewScopeControlsProps = {
   exactActionPersistenceEligible: boolean;
   versionBoundScript?: boolean;
   rememberExactAction: boolean;
-  /** The exact-action block will be saved rather than lapse. */
-  persistExactBlock?: boolean;
   /** One-time approvals of this request never let the agent's next call through. */
   oneTimeRetryBlocked?: boolean;
   /** Minutes a one-time approval stays usable for a retry. */
@@ -26,12 +24,14 @@ type ReviewScopeControlsProps = {
   onAllowScopeChange: (scope: DecisionScope) => void;
   onBlockScopeChange: (scope: DecisionScope) => void;
   onRememberExactActionChange: (checked: boolean) => void;
+  /** Drop the heading and outer spacing, for controls that sit inside another disclosure. */
+  bare?: boolean;
 };
 
 export function ReviewScopeControls(props: ReviewScopeControlsProps) {
   return (
-    <div className="mt-6 space-y-2">
-      <SectionLabel>Approval scope</SectionLabel>
+    <div className={props.bare === true ? "space-y-2" : "mt-6 space-y-2"}>
+      {props.bare !== true && <SectionLabel>Approval scope</SectionLabel>}
       {!props.hasAllowScope && (
         <p className="text-sm text-brand-attention" role="status">
           {props.oneTimeRetryBlocked
@@ -39,16 +39,18 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
             : "This action cannot be approved under its current Guard policy."}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
-        {props.commonScopeOptions.map((choice) => (
-          <ScopeChoiceButton
-            key={choice.value}
-            choice={scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible)}
-            checked={props.allowScope === choice.value}
-            onScopeChange={props.onAllowScopeChange}
-          />
-        ))}
-      </div>
+      {props.commonScopeOptions.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
+          {props.commonScopeOptions.map((choice) => (
+            <ScopeChoiceButton
+              key={choice.value}
+              choice={scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible)}
+              checked={props.allowScope === choice.value}
+              onScopeChange={props.onAllowScopeChange}
+            />
+          ))}
+        </div>
+      )}
       {props.exactActionPersistenceEligible && props.allowScope === "artifact" && (
         <ExactActionPersistenceChoice
           checked={props.rememberExactAction}
@@ -116,7 +118,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
             {props.blockScopeOptions.map((choice) => (
               <ScopeChoiceButton
                 key={choice.value}
-                choice={blockScopeChoiceWithDuration(choice, props.persistExactBlock === true)}
+                choice={choice}
                 checked={props.blockScope === choice.value}
                 onScopeChange={props.onBlockScopeChange}
               />
@@ -208,26 +210,7 @@ function ScopeChoiceButton(props: {
     >
       <p className="text-sm font-medium text-brand-dark">{props.choice.label}</p>
       <p className="mt-0.5 text-xs text-muted-foreground">{props.choice.description}</p>
-      {showsScopeTerms(props.choice, props.checked) && <ScopeTerms choice={props.choice} />}
     </button>
-  );
-}
-
-/** Broader scopes always state their terms; the exact-action default states them once picked. */
-export function showsScopeTerms(choice: ApprovalScopeChoice, checked: boolean): boolean {
-  return choice.value !== "artifact" || checked;
-}
-
-function ScopeTerms(props: { choice: ApprovalScopeChoice }) {
-  return (
-    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-brand-dark/70">
-      <dt className="font-semibold">Applies to</dt>
-      <dd>{props.choice.appliesTo}</dd>
-      <dt className="font-semibold">Expires</dt>
-      <dd>{props.choice.expiry}</dd>
-      <dt className="font-semibold">Policy</dt>
-      <dd>{props.choice.policyImpact}</dd>
-    </dl>
   );
 }
 

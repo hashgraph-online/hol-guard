@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -32,13 +34,13 @@ def _write_json(path: Path, payload: object) -> None:
 
 class TestKimiAdapterIdentity:
     def test_harness_identifier_is_kimi(self) -> None:
-        assert get_adapter("kimi").harness == "kimi"
+        assert harness_ops.canonical_harness("kimi") == "kimi"
 
     def test_executable_is_kimi(self) -> None:
-        assert get_adapter("kimi").executable == "kimi"
+        assert harness_ops.executable_of("kimi") == "kimi"
 
     def test_approval_tier_is_approval_center(self) -> None:
-        assert get_adapter("kimi").approval_flow()["tier"] == "approval-center"
+        assert harness_ops.approval_flow("kimi")["tier"] == "approval-center"
 
 
 class TestKimiPolicyPath:
@@ -46,18 +48,18 @@ class TestKimiPolicyPath:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
         expected = ctx.workspace_dir / ".kimi-code" / "config.toml"
-        assert get_adapter("kimi").policy_path(ctx) == expected
+        assert harness_ops.policy_path("kimi", ctx) == expected
 
     def test_policy_path_falls_back_to_home_without_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         expected = (tmp_path / "home") / ".kimi-code" / "config.toml"
-        assert get_adapter("kimi").policy_path(ctx) == expected
+        assert harness_ops.policy_path("kimi", ctx) == expected
 
 
 class TestKimiDetectEmptyConfig:
     def test_empty_dir_returns_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert result.harness == "kimi"
         assert result.artifacts == ()
         assert result.config_paths == ()
@@ -65,7 +67,7 @@ class TestKimiDetectEmptyConfig:
     def test_empty_config_toml_yields_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_toml(ctx.home_dir / ".kimi-code" / "config.toml", "")
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert result.artifacts == ()
         assert str(ctx.home_dir / ".kimi-code" / "config.toml") in result.config_paths
 
@@ -82,7 +84,7 @@ command = "bash hook.sh"
 timeout = 10
 """,
         )
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert len(hook_artifacts) == 1
         assert hook_artifacts[0].artifact_id == "kimi:global:hook:pretooluse:0"
@@ -99,7 +101,7 @@ event = "UserPromptSubmit"
 command = "bash prompt-hook.sh"
 """,
         )
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert hook_artifacts[0].artifact_id == "kimi:global:hook:userpromptsubmit:0"
 
@@ -116,7 +118,7 @@ event = "PostToolUse"
 command = "b.sh"
 """,
         )
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         hook_ids = {a.artifact_id for a in result.artifacts if a.artifact_type == "hook"}
         assert "kimi:global:hook:pretooluse:0" in hook_ids
         assert "kimi:global:hook:posttooluse:1" in hook_ids
@@ -131,13 +133,13 @@ event = "PreToolUse"
 command = "ws.sh"
 """,
         )
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert any(a.source_scope == "project" for a in result.artifacts)
 
     def test_invalid_toml_is_skipped_gracefully(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_toml(ctx.home_dir / ".kimi-code" / "config.toml", "not valid toml [[")
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         assert result.artifacts == ()
 
 
@@ -148,7 +150,7 @@ class TestKimiDetectMCP:
             ctx.home_dir / ".kimi-code" / "mcp.json",
             {"mcpServers": {"my-server": {"command": "node", "args": ["server.js"]}}},
         )
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         ids = [a.artifact_id for a in result.artifacts]
         assert "kimi:global:mcp:my-server" in ids
 
@@ -158,7 +160,7 @@ class TestKimiDetectMCP:
             ctx.home_dir / ".kimi-code" / "mcp.json",
             {"mcpServers": {"remote": {"url": "http://localhost:8080/mcp"}}},
         )
-        result = get_adapter("kimi").detect(ctx)
+        result = harness_ops.detect("kimi", ctx)
         art = result.artifacts[0]
         assert art.transport == "http"
         assert art.url == "http://localhost:8080/mcp"
@@ -167,7 +169,7 @@ class TestKimiDetectMCP:
 class TestKimiInstallUninstall:
     def test_install_writes_managed_hooks(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        manifest = get_adapter("kimi").install(ctx)
+        manifest = harness_support.install("kimi", ctx)
         assert manifest["harness"] == "kimi"
         assert manifest["active"] is True
         config_path = Path(str(manifest["config_path"]))
@@ -181,9 +183,8 @@ class TestKimiInstallUninstall:
 
     def test_uninstall_removes_managed_hooks(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        adapter = get_adapter("kimi")
-        adapter.install(ctx)
-        manifest = adapter.uninstall(ctx)
+        harness_support.install("kimi", ctx)
+        manifest = harness_support.uninstall("kimi", ctx)
         assert manifest["active"] is False
         config_path = Path(str(manifest["config_path"]))
         text = config_path.read_text(encoding="utf-8")
@@ -200,16 +201,15 @@ event = "PostToolUse"
 command = "user-format.sh"
 """,
         )
-        get_adapter("kimi").install(ctx)
+        harness_support.install("kimi", ctx)
         text = config_path.read_text(encoding="utf-8")
         assert "user-format.sh" in text
         assert "BEGIN HOL GUARD MANAGED HOOKS" in text
 
     def test_install_idempotent(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        adapter = get_adapter("kimi")
-        adapter.install(ctx)
-        adapter.install(ctx)
+        harness_support.install("kimi", ctx)
+        harness_support.install("kimi", ctx)
         config_path = ctx.home_dir / ".kimi-code" / "config.toml"
         text = config_path.read_text(encoding="utf-8")
         assert text.count("BEGIN HOL GUARD MANAGED HOOKS") == 1
@@ -234,20 +234,23 @@ class TestKimiHookQuoting:
             workspace_dir=workspace_dir,
             guard_home=tmp_path / "guard-home",
         )
-        parts = tuple(get_adapter("kimi")._hook_argv(ctx))  # pyright: ignore[reportAttributeAccessIssue]
+        parts = tuple(harness_ops.hook_argv("kimi", ctx))  # pyright: ignore[reportAttributeAccessIssue]
         windows_cmd = _shell_command(parts, windows=True)
-        # The workspace path with '&' must live inside the quoted -c argument,
-        # not be exposed as a cmd.exe metacharacter. list2cmdline quotes the
-        # entire -c argument because it contains spaces.
-        assert ' -c "' in windows_cmd
+        # The workspace path with '&' must live inside the quoted config
+        # argument, not be exposed as a cmd.exe metacharacter. list2cmdline
+        # quotes the whole config because it contains spaces.
+        assert ' bounded-hook-bridge "' in windows_cmd
         assert windows_cmd.endswith('"')
         assert "workspace & tools" in windows_cmd
+        assert windows_cmd.count("workspace & tools") == windows_cmd.split('bounded-hook-bridge "', 1)[1].count(
+            "workspace & tools"
+        )
 
 
 class TestKimiLaunchCommand:
     def test_launch_command_passes_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
-        command = get_adapter("kimi").launch_command(ctx, ["--version"])
+        command = harness_ops.launch_command("kimi", ctx, ["--version"])
         assert "kimi" in command[0]
         assert "--version" in command
 

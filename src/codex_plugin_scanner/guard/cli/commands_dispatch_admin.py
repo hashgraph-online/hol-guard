@@ -28,8 +28,8 @@ if TYPE_CHECKING:
     )
 
 
-from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
+from ..command_probes import without_command_probes
 from ..harness_version_api import compatibility_or_unknown
 from ..native_aibom_summaries import NativeAibomSummariesError
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
@@ -321,7 +321,7 @@ def _run_guard_doctor_command(
             stream.write(render_runtime_status(section))
         return 0
     if getattr(args, "harnesses", False):
-        from ..adapters.contracts import HARNESS_CONTRACTS
+        from ..setup_contracts import HARNESS_CONTRACTS
 
         contracts_payload = [
             {
@@ -344,12 +344,12 @@ def _run_guard_doctor_command(
         )
         return 0
     if args.harness:
-        adapter = get_adapter(args.harness)
-        payload: dict[str, object] = adapter.diagnostics(context)
+        harness = resolve_harness(args.harness)
+        payload: dict[str, object] = harness_diagnostics(harness, context)
         payload["runtime_readiness"] = doctor_runtime_readiness(payload)
         # The native runtime decides the per-event proof states; a failure
         # reports version_unknown, never a proven state.
-        payload["version_compatibility"] = compatibility_or_unknown(adapter.harness, context)
+        payload["version_compatibility"] = compatibility_or_unknown(harness, context)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":
@@ -359,7 +359,7 @@ def _run_guard_doctor_command(
         with without_command_probes():
             for detection in detect_all(context):
                 item = detection.to_dict()
-                diagnostics = get_adapter(detection.harness).diagnostics(context)
+                diagnostics = harness_diagnostics(detection.harness, context)
                 item["setup_status"] = diagnostics.get("setup_status")
                 item["warnings"] = diagnostics.get("warnings", [])
                 item["runtime_readiness"] = doctor_runtime_readiness(diagnostics)

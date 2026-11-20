@@ -77,6 +77,7 @@ from .mcp_relay_evidence_drain import (
     _NOTICE_KEYS,
     _RELAY_HARNESSES,
     _SAFE_ALTERNATIVE_SOURCE,
+    McpEvidenceWriteResult,
     _decision,
     _ordered_params,
     _queued_approval,
@@ -131,7 +132,7 @@ def is_mcp_relay_package_evidence(record: object) -> bool:
     return isinstance(record, Mapping) and record.get("kind") == MCP_PACKAGE_CALL_EVIDENCE_KIND
 
 
-def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: object) -> bool:
+def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: object) -> bool | McpEvidenceWriteResult:
     """Record one relayed package call as the proxy records it."""
 
     from ..mcp_tool_calls import allow_tool_call, block_tool_call
@@ -190,6 +191,7 @@ def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: o
     facts = _package_facts(package, forwarded=forwarded)
     if facts is None:
         return False
+    committed = False
     try:
         identity = _decode(record["identity"], expect_hash=True, token=True)
         decision = _decision(record["decision"])
@@ -242,12 +244,14 @@ def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: o
                 policy_workspace=facts[_POLICY_WORKSPACE_KEY],
                 **recorded,
             )
+            committed = True
         else:
             # A package block: no risk categories and no policy
             # workspace, as the proxy writes it. A queued request is recorded
             # by `_queue_approval_center_response` instead, which projects the
             # call with its artifact and so does carry risk categories.
             block_tool_call(**recorded)
+            committed = True
         if queued is not None:
             # After the receipt, as the proxy raises it: the request is
             # written and the call is already blocked on it, so the notice
@@ -271,10 +275,14 @@ def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: o
                 scanner_evidence=scanner_evidence,
                 redaction_level=redaction_level,
             )
+    except ValueError:
+        # Decode and validation failures are permanent for this record. They
+        # must not block later evidence behind a retryable write failure.
+        return False
     except Exception:
         # A record the proxy could not have written is dropped, never guessed.
-        return False
-    return True
+        return McpEvidenceWriteResult(False, committed)
+    return McpEvidenceWriteResult(True, True)
 
 
 def _observed_notices(observed: object) -> tuple[dict[str, Any], ...] | None:

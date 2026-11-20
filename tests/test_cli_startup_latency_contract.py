@@ -366,7 +366,7 @@ def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
 
 
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -380,7 +380,7 @@ def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
 
 
 def test_resolve_targets_keeps_single_harness_contract(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",

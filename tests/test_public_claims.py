@@ -170,3 +170,12 @@ def test_a_negation_wrapped_inside_a_blockquote_still_governs_the_claim():
     text = "> Guard does not\n> provide complete protection.\n"
 
     assert public_claims.check_markdown("synthetic.md", text) == []
+
+
+def test_agent_skill_text_and_the_answers_page_are_public():
+    pages = {page.relative_to(REPO_ROOT).as_posix() for page in public_claims.public_markdown(REPO_ROOT)}
+    assert {
+        "HOL_GUARD_ANSWERS.md",
+        ".factory/skills/hol-guard/SKILL.md",
+        ".factory/droids/hol-guard-runner.md",
+    } <= pages

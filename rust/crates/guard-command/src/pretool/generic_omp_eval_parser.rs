@@ -34,9 +34,16 @@ struct Parser {
     raw_templates: Vec<bool>,
     pos: usize,
     declared: HashSet<String>,
+    /// Names bound to a draft of Oh My Pi's `commit` prelude.
+    drafts: HashSet<String>,
     calls: Vec<Call>,
 }
 
+#[path = "generic_omp_eval_parser_builtins.rs"]
+mod builtins;
+#[path = "generic_omp_eval_parser_commit.rs"]
+mod commit;
+pub(super) use commit::uses_earlier_cell_draft;
 #[path = "generic_omp_eval_parser_vocabulary.rs"]
 mod vocabulary;
 use vocabulary::{PURE_METHODS, RESERVED};
@@ -116,7 +123,20 @@ impl Parser {
                     names.push(self.binding_name()?);
                 }
                 self.eat('=')?;
+                if let [name] = names.as_slice() {
+                    if self.draft_ahead() {
+                        self.pos += 2;
+                        self.commit_draft()?;
+                        self.drafts.insert(name.clone());
+                        self.declared.insert(name.clone());
+                        return Some(());
+                    }
+                }
                 self.value(0)?;
+                // A name bound again no longer holds the draft.
+                for name in &names {
+                    self.drafts.remove(name);
+                }
                 self.declared.extend(names);
                 Some(())
             }
@@ -175,14 +195,9 @@ impl Parser {
                 "read" => self.read_helper()?,
                 "sh" => self.shell_helper()?,
                 "Promise" => self.promise_all(depth)?,
-                "JSON" => {
-                    self.eat('.')?;
-                    self.eat_ident("stringify")?;
-                    self.eat('(')?;
-                    self.value(depth + 1)?;
-                    self.eat(')')?;
-                }
+                "JSON" | "typeof" | "Object" => self.builtin(&word, depth)?,
                 "true" | "false" | "null" => {}
+                name if self.drafts.contains(name) => self.draft_use()?,
                 name if self.declared.contains(name) => {}
                 _ => return None,
             },
@@ -276,6 +291,8 @@ impl Parser {
             Token::Ident(word) if word == "read" => self.read_helper(),
             Token::Ident(word) if word == "sh" => self.shell_helper(),
             Token::Ident(word) if word == "Promise" => self.promise_all(depth),
+            Token::Ident(word) if word == "commit" => self.commit_draft(),
+            Token::Ident(word) if self.drafts.contains(&word) => self.draft_use(),
             Token::Punct('(') => {
                 self.value(depth + 1)?;
                 self.eat(')')
@@ -400,6 +417,7 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
         raw_templates: lexed.raw_templates,
         pos: 0,
         declared: HashSet::new(),
+        drafts: HashSet::new(),
         calls: Vec::new(),
     };
     parser.program()?;
@@ -411,8 +429,11 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
 /// Windows separators, so spellings the standalone tool would interpret
 /// differently are rejected.
 fn read_helper_call(path: String) -> Option<Call> {
+    // `xd://` names Oh My Pi's own tool documentation; the helper hands any
+    // URL to the `read` tool, whose own proof judges it.
+    let device_doc = path.starts_with("xd://");
     if path.starts_with('~')
-        || path.contains("://")
+        || (path.contains("://") && !device_doc)
         || path.contains(['\\', '$'])
         || path.trim() != path
         || path.chars().any(char::is_control)

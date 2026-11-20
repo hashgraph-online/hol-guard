@@ -10,7 +10,7 @@
 
 use std::io;
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -32,8 +32,14 @@ pub(crate) mod standalone;
 use reads::{NativeReads, Outcome};
 
 /// Connections served at once; further connections wait in the listen
-/// backlog until one closes.
-const MAX_ACTIVE_CONNECTIONS: usize = 256;
+/// backlog until one closes. Sized for a burst of thousands of hooks: each
+/// connection is bounded by its hook's deadline and the review scheduler
+/// sheds what it cannot admit at once, so the slots turn over quickly and a
+/// health check or approval is not left behind a full house in the backlog.
+const MAX_ACTIVE_CONNECTIONS: usize = 1024;
+/// The listen backlog asked for; the system may cap it lower.
+#[cfg(unix)]
+const LISTEN_BACKLOG: i32 = 1024;
 // A connection thread may answer from the store, whose page projections need
 // a deep stack.
 const CONNECTION_THREAD_STACK: usize = 2 * 1024 * 1024;
@@ -43,23 +49,20 @@ const HANDSHAKE_WAIT: Duration = Duration::from_secs(2);
 
 struct Slots {
     active: Mutex<usize>,
-    freed: Condvar,
     limit: usize,
 }
 
 impl Slots {
-    fn acquire(&self) {
+    fn try_acquire(&self) -> bool {
         let mut active = self
             .active
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        while *active >= self.limit {
-            active = self
-                .freed
-                .wait(active)
-                .unwrap_or_else(|poison| poison.into_inner());
+        if *active >= self.limit {
+            return false;
         }
         *active += 1;
+        true
     }
 
     fn release(&self) {
@@ -68,9 +71,10 @@ impl Slots {
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         *active = active.saturating_sub(1);
-        self.freed.notify_one();
     }
 }
+
+const OVERLOAD_RESPONSE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 16\r\nConnection: close\r\nRetry-After: 1\r\n\r\ndaemon overload\n";
 
 /// The Guard package version the launcher named, which outbound requests
 /// identify themselves with; the runtime's own version until it is set.
@@ -84,12 +88,14 @@ fn set_package_version(version: &str) {
 
 /// `hol-guard/<package version>`, the User-Agent of every outbound request.
 pub(crate) fn user_agent() -> String {
-    format!(
-        "hol-guard/{}",
-        PACKAGE_VERSION
-            .get()
-            .map_or(crate::PACKAGE_VERSION, String::as_str)
-    )
+    format!("hol-guard/{}", package_version())
+}
+
+/// The Guard package version the launcher named, or the runtime's own.
+pub(crate) fn package_version() -> &'static str {
+    PACKAGE_VERSION
+        .get()
+        .map_or(crate::PACKAGE_VERSION, String::as_str)
 }
 
 fn serve(
@@ -100,19 +106,16 @@ fn serve(
 ) -> io::Result<()> {
     let slots = Arc::new(Slots {
         active: Mutex::new(0),
-        freed: Condvar::new(),
         limit: limit.max(1),
     });
     let mut consecutive_errors = 0usize;
     loop {
-        slots.acquire();
         let client = match listener.accept() {
             Ok((client, _)) => {
                 consecutive_errors = 0;
                 client
             }
             Err(error) => {
-                slots.release();
                 consecutive_errors += 1;
                 if accept_error_is_transient(&error) && consecutive_errors <= 64 {
                     thread::sleep(Duration::from_millis(10));
@@ -121,6 +124,10 @@ fn serve(
                 return Err(error);
             }
         };
+        if !slots.try_acquire() {
+            reject_overloaded(client, stalled_write);
+            continue;
+        }
         let relay_slots = Arc::clone(&slots);
         let connection_reads = Arc::clone(&native_reads);
         let spawned = thread::Builder::new()
@@ -137,6 +144,36 @@ fn serve(
         }
     }
 }
+
+fn reject_overloaded(mut client: TcpStream, stalled_write: Duration) {
+    let timeout = stalled_write.min(Duration::from_millis(25));
+    let _ = client.set_write_timeout(Some(timeout));
+    let _ = std::io::Write::write_all(&mut client, OVERLOAD_RESPONSE);
+    let _ = client.shutdown(Shutdown::Write);
+    let _ = client.set_nonblocking(true);
+    let mut sink = [0u8; 4096];
+    for _ in 0..16 {
+        match std::io::Read::read(&mut client, &mut sink) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+    }
+    let _ = client.shutdown(Shutdown::Read);
+}
+
+/// Asks for a deeper listen backlog than the standard library's 128, so a
+/// burst of connects waits to be accepted instead of timing out. Calling
+/// `listen` again on a listening socket only changes its backlog.
+#[cfg(unix)]
+fn widen_backlog(listener: &TcpListener) {
+    use nix::sys::socket::{listen, Backlog};
+    if let Ok(backlog) = Backlog::new(LISTEN_BACKLOG) {
+        let _ = listen(listener, backlog);
+    }
+}
+
+#[cfg(not(unix))]
+fn widen_backlog(_listener: &TcpListener) {}
 
 fn accept_error_is_transient(error: &io::Error) -> bool {
     matches!(
@@ -177,5 +214,30 @@ fn serve_connection(client: TcpStream, stalled_write: Duration, native_reads: &N
     if let Outcome::Relay(read_ahead) = reads::answer(&client, &config, native_reads, stalled_write)
     {
         replay::replay(&client, &config, read_ahead, stalled_write);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_edge_capacity_sheds_without_blocking_the_accept_loop() {
+        let slots = Slots {
+            active: Mutex::new(0),
+            limit: 1,
+        };
+        assert!(slots.try_acquire());
+        assert!(!slots.try_acquire());
+        slots.release();
+        assert!(slots.try_acquire());
+    }
+
+    #[test]
+    fn overload_response_is_recognizable_to_hook_bridges() {
+        let response = std::str::from_utf8(OVERLOAD_RESPONSE).expect("static response is utf8");
+        assert!(response.contains("503 Service Unavailable"));
+        assert!(response.contains("Retry-After: 1"));
+        assert!(response.ends_with("daemon overload\n"));
     }
 }

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _context(tmp_path: Path, *, workspace: bool = True, override: str | None = None) -> HarnessContext:
@@ -30,7 +30,7 @@ def _context(tmp_path: Path, *, workspace: bool = True, override: str | None = N
 def _refusal(context: HarnessContext) -> str:
     """The reason the native runtime gives for not launching Grok."""
     with pytest.raises(OSError) as refused:
-        get_adapter("grok").launch_command(context, [])
+        harness_ops.launch_command("grok", context, [])
     return str(refused.value)
 
 
@@ -125,7 +125,7 @@ def test_launch_environment_removes_code_loader_variables_and_workspace_path(
         "SAFE_SETTING": "preserved",
     }
 
-    environment = get_adapter("grok").prepare_launch_environment(context, inherited)
+    environment = harness_ops.prepare_launch_environment("grok", context, inherited)
 
     assert str(workspace_bin) not in environment["PATH"]
     assert "NODE_OPTIONS" not in environment
@@ -146,7 +146,7 @@ def test_detect_reports_config_but_never_probes_untrusted_path(
     candidate = _write_executable(context.workspace_dir / "bin" / "grok")
     monkeypatch.setenv("PATH", str(candidate.parent))
 
-    detection = get_adapter("grok").detect(context)
+    detection = harness_ops.detect("grok", context)
 
     assert detection.installed is True
     assert detection.command_available is False

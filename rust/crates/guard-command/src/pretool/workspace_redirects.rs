@@ -40,23 +40,26 @@ enum Quote {
 /// substitution, a computed or home-relative target, a descriptor above 2, a
 /// herestring, or a heredoc fed to anything else.
 pub(crate) fn project(raw: &str) -> Option<String> {
-    project_scan(raw).map(|(projected, _, _)| projected)
+    project_scan(raw).and_then(|(projected, _, _, entered)| (!entered).then_some(projected))
 }
 
 /// [`project`], and whether any removed redirect names a file other than
 /// `/dev/null`, which no link in the workspace can retarget.
 pub(crate) fn project_naming_files(raw: &str) -> Option<(String, bool)> {
-    project_scan(raw).map(|(projected, _, names_files)| (projected, names_files))
+    project_scan(raw).and_then(|(projected, _, names_files, entered)| {
+        (!entered).then_some((projected, names_files))
+    })
 }
 
 /// [`project`] with, for each byte of the projection, the index of the raw
 /// character it came from. Bytes the projection inserts take the index of the
 /// redirect they replace.
 fn project_mapped(raw: &str) -> Option<(String, Vec<usize>)> {
-    project_scan(raw).map(|(projected, map, _)| (projected, map))
+    project_scan(raw).map(|(projected, map, _, _)| (projected, map))
 }
 
-fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
+/// The last field: Python after a leading `cd`, which only `contained` takes.
+fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool, bool)> {
     let chars: Vec<char> = raw.chars().collect();
     let mut out = String::with_capacity(raw.len());
     let mut map: Vec<usize> = Vec::with_capacity(raw.len());
@@ -152,11 +155,12 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     // projection unmodelled, which cost a redirect beside it the workspace
     // route the same command keeps without the redirect.
     let projected = crate::pretool::script_content::foreground_job(projected).unwrap_or(projected);
-    if wide && !crate::pretool::script_content::fed::python_alone(projected) {
+    let entered = wide && !crate::pretool::script_content::fed::python_alone(projected);
+    if entered && !cd::python_after_cd(projected) {
         return None;
     }
     let map = map[lead..lead + projected.len()].to_vec();
-    Some((projected.to_owned(), map, names_files))
+    Some((projected.to_owned(), map, names_files, entered))
 }
 
 /// The shape the projected command earns, with a bootstrapped `git init`
@@ -239,7 +243,10 @@ pub(super) fn contained(
     // single command, or a chain whose only write is its first step's,
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
-    let stripped = project(command)?;
+    let (stripped, _, names_files, entered) = project_scan(command)?;
+    if entered && !cd::enters_cwd(&stripped, context) {
+        return None;
+    }
     // Removing an input redirect drops the program it feeds, so a program
     // that needs the network or a credential store, itself or through a
     // local module it imports, or opens a system file the sandbox still lets
@@ -284,16 +291,14 @@ pub(super) fn contained(
     let single = direct.is_none();
     let runs_directly = direct
         .is_some_and(|projection| projection.bounded_writes && projection.git_chain.is_none());
+    // File-free redirects need no sandbox, so keep the extension Allow.
     let allowed = projected.minimum_action == "allow"
         && !projected.action.sensitive_target
         && !runs_directly
+        && names_files
         && stays_offline(&projected_text, single);
-    // macOS claims package, Node tool and pytest commands with narrower
-    // profiles before the workspace route runs. The redirect disqualifies
-    // those, so the workspace sandbox takes the command once it passes that
-    // route's gate.
-    // A trailing `2>&1` before bounded output filters is not such a redirect:
-    // the narrower sink peels it itself, so that command keeps its profile.
+    // The workspace route handles redirects that disqualify narrower profiles.
+    // Bounded output filters peel `2>&1` themselves and retain their profile.
     let home = context.home_dir.map(Path::new);
     let narrower = super::redirect_projection::redirected_profile(&projected.reason_code)
         && projected.minimum_action == "sandbox-required"
@@ -318,7 +323,7 @@ pub(super) fn contained(
     let raw = super::evaluate_envelope(
         harness,
         event,
-        payload,
+        &cd::reviewed_payload(payload, command, entered),
         None,
         deadline,
         context,
@@ -422,9 +427,12 @@ fn remove_redirect(
     }
     if chars.get(index) == Some(&'&') {
         // A descriptor copy between stdout and stderr moves no file data.
+        // The `)` that closes a subshell ends the copy as a blank does:
+        // `(npm test 2>&1 || true)` copies the descriptor inside the group.
+        let after = chars.get(index + 2);
         if input
             || !matches!(chars.get(index + 1), Some('1' | '2'))
-            || !boundary(chars.get(index + 2))
+            || !(boundary(after) || after == Some(&')'))
         {
             return None;
         }
@@ -482,6 +490,8 @@ fn literal_target(target: &str) -> bool {
             .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:".contains(value))
 }
 
+#[path = "workspace_redirects_cd.rs"]
+mod cd;
 #[cfg(test)]
 #[path = "workspace_redirects_tests.rs"]
 mod tests;

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shim_refresh import ShimRefreshResult
 from codex_plugin_scanner.guard.shims import package_shim_status
 

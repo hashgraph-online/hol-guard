@@ -67,7 +67,16 @@ fn routes_name_their_library_calls() {
     assert_eq!(name, "route.harness_action");
     assert_eq!(args["harness"], "codex");
     assert_eq!(args["action"], "repair");
+    // Yanez Pulse setup runs one library call with its action.
+    for action in ["enroll", "confirm", "poll", "disable", "recover"] {
+        let path = format!("/v1/approval-gate/pulse/{action}");
+        let (name, args) = route(&path).unwrap_or_else(|| unreachable!());
+        assert_eq!(name, "route.approval_gate_pulse");
+        assert_eq!(args["action"], action);
+    }
     for path in [
+        "/v1/approval-gate/pulse/other",
+        "/v1/approval-gate/pulse/",
         "/v1/harnesses/codex",
         "/v1/policy",
         "/v1/requests/r-1/approve",
@@ -136,6 +145,7 @@ fn daemon_handlers_run_behind_one_call() {
     for path in [
         "/v1/context-assistance/workspace-grant",
         "/v1/context-assistance/codex-lean",
+        "/v1/context-assistance/codex-short-replies",
         "/v1/harness-versions/acknowledge",
         "/v1/supply-chain/workspace-assessments",
         "/v1/supply-chain/workspace-assessments/pause",

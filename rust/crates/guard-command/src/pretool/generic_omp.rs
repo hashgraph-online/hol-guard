@@ -7,6 +7,9 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+pub use eval::omp_eval_commit_drafts;
+#[path = "generic_omp_goal.rs"]
+mod goal;
 #[path = "generic_omp_grep_glob.rs"]
 mod grep_glob;
 #[path = "generic_omp_host_refs.rs"]
@@ -21,6 +24,7 @@ mod yield_report;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result};
 use crate::native_command_controls::CompiledNativeCommandControls;
+use goal::{goal_input, goal_state};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 pub(super) use host_refs::host_reference_reason;
 use listing_proof::{listing, search_targets, walk_inside_session};
@@ -100,6 +104,7 @@ pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
     };
     let known_tool = match signals.tool_name.as_deref() {
         Some("task" | "wait" | "todo" | "todo_write") => true,
+        Some("goal") => goal_input(input),
         Some("learn") => learn_input(input),
         _ => false,
     };
@@ -177,6 +182,7 @@ pub(super) fn evaluate(
                 .is_empty()
                 .then(|| delegation_result(tool, context))
         }
+        "goal" => goal_state(payload, signals, context),
         "eval" => eval::evaluate(payload, signals, context),
         "edit" => todo_shaped_edit(payload, signals, context),
         "glob" | "find" | "ls" => listing(payload, signals, context),
@@ -262,6 +268,12 @@ fn delegation_result(tool: &str, context: &OmpContext<'_>) -> PreToolResultV1 {
 }
 
 /// The one tool input object. Alternate spellings must agree with it.
+/// The review reason for an eval cell that reuses a `commit` draft made in an
+/// earlier cell, if this is one.
+pub(super) fn earlier_cell_draft_reason(payload: &Value) -> Option<&'static str> {
+    eval::earlier_cell_draft_reason(payload)
+}
+
 pub(super) fn strict_tool_input(payload: &Value) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
     let input = root.get("tool_input")?.as_object()?;

@@ -49,13 +49,19 @@ impl Env<'_> {
     }
 
     pub(super) fn add_event(&self, name: &str, payload: &Value) {
+        let _ = self.add_event_checked(name, payload);
+    }
+
+    pub(super) fn add_event_checked(&self, name: &str, payload: &Value) -> bool {
         let Some(text) = dumps_default(payload) else {
-            return;
+            return false;
         };
-        let _ = self.connection.execute(
+        self.connection
+            .execute(
             "insert into guard_events (event_name, payload_json, occurred_at) values (?1, ?2, ?3)",
             params![name, text, self.now],
-        );
+        )
+        .is_ok()
     }
 
     pub(super) fn record_failure(
@@ -312,8 +318,7 @@ impl Env<'_> {
     pub(super) fn store_index(&self, family: &Family, owner: &str, keys: &[String]) -> bool {
         let index_key = format!("{}{owner}", family.index_prefix);
         if keys.is_empty() {
-            self.delete(&index_key);
-            return true;
+            return self.delete(&index_key);
         }
         let mut payload = Object::new();
         payload.insert(family.owner_field.to_owned(), json!(owner));

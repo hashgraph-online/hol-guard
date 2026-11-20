@@ -314,7 +314,16 @@ pub(crate) fn owned_by_current_user(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|metadata| metadata.uid() == nix::unistd::getuid().as_raw())
 }
 
-#[cfg(not(unix))]
+/// Windows hook-workspace ownership must match the caller's SID exactly.
+/// LocalSystem/Administrators also own shared directories, so the broader
+/// mutability-oriented owner check cannot prove this workspace is ours.
+/// Other callers of that broader check retain their existing semantics.
+#[cfg(windows)]
+pub(crate) fn owned_by_current_user(path: &Path) -> bool {
+    guard_runtime_windows_process::owned_exactly_by_current_user(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn owned_by_current_user(_path: &Path) -> bool {
     false
 }

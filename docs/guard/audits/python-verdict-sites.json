@@ -18,34 +18,14 @@
   "unparsed_templates": [],
   "sites": [
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
-      "func": "_observe_payload",
-      "root": "hook",
-      "reading": "acknowledges-observation",
+      "file": "src/codex_plugin_scanner/guard/approvals.py",
+      "func": "_save_package_decision",
+      "root": "none",
+      "reading": "records-approval",
       "actions": [
         "allow"
       ],
-      "note": "The reply to an observation event, which reports activity that already finished; failure_payload only routes here when hook_event_pauses_when_unavailable is false, so nothing is being authorized."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
-      "func": "_pause_payload",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "The reply to an event that pauses when review cannot finish."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
-      "func": "_deny_event",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "The bridge's deny rendering for each Claude event shape."
+      "note": "Files the package-key half of the user's Always allow; written only when the resident's resolution plan names a package decision."
     },
     {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
@@ -149,16 +129,6 @@
         "allow"
       ],
       "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
-      "func": "_probe_response",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "The edge's own route: a probe the native edge does not route to the sink gets the plain allow the resident would have answered, and the shell call itself is still judged at execution."
     },
     {
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
@@ -521,17 +491,6 @@
         "allow"
       ],
       "note": "Files the receipt for an app action the user already ran from the dashboard; the stored decision labels history and no hook reads it."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
-      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_decide",
-      "root": "hook",
-      "reading": "acknowledges-observation",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "The standalone Grok client's own fail-safe when no native runtime answers: a prompt blocks, a tool or permission event denies, and a lifecycle or completed-tool event is acknowledged, matching the shared failure_payload contract. The allow is only ever the acknowledgement branch."
     }
   ]
 }

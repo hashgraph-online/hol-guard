@@ -36,7 +36,12 @@ GUARD_COMMAND_MARKERS = ("hol-guard", "hol_guard", "guard-command", "codex_plugi
 #: have no gate at all, and that notice says in so many words that it does not
 #: block the command, so matching on wording turned every unrelated install
 #: failure into "this host has a gate".
-GATE_REASONS = ("approval_gate_required", "approval_gate_totp_required", "lifecycle_gate")
+GATE_REASONS = (
+    "approval_gate_required",
+    "approval_gate_interactive_required",
+    "approval_gate_totp_required",
+    "lifecycle_gate",
+)
 
 
 class GateBlockedError(RuntimeError):

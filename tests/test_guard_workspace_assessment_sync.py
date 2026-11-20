@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime import fleet_posture_runtimes as fleet_r
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import workspace_assessment_sync as sync
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.receipt_upload_transport import RECEIPT_SYNC_BATCH_SIZE
 from tests.test_runner_sync_payload import _add_receipts, _install_transport, store  # noqa: F401
 from tests.workspace_fix_support import admit_worktree
 
@@ -241,7 +242,7 @@ def test_summary_rides_on_the_first_batch_and_commits_after_delivery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     assessed(store)
-    _add_receipts(store, guard_runner_module._RECEIPT_SYNC_BATCH_SIZE + 1)
+    _add_receipts(store, RECEIPT_SYNC_BATCH_SIZE + 1)
     bodies = _install_transport(monkeypatch)
 
     guard_runner_module.sync_receipts(store)
@@ -372,7 +373,7 @@ def test_whole_request_stays_within_budget_when_the_summary_shares_it(
     built = sync.build_workspace_assessment_sync(store, now=NOW)
     assert built is not None
     budget = len(json.dumps(built.payload).encode()) // 2
-    monkeypatch.setattr(guard_runner_module, "_WORKSPACE_ASSESSMENT_REQUEST_BYTES", budget)
+    monkeypatch.setattr(sync, "MAX_REQUEST_BYTES", budget)
 
     guard_runner_module.sync_receipts(store)
 
@@ -408,7 +409,7 @@ def test_summary_waits_for_a_later_batch_when_the_first_cannot_fit_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     assessed(store)
-    _add_receipts(store, guard_runner_module._RECEIPT_SYNC_BATCH_SIZE + 1)
+    _add_receipts(store, RECEIPT_SYNC_BATCH_SIZE + 1)
     bodies = _install_transport(monkeypatch)
     real_fit = sync.fit_workspace_assessment_to_request
     calls: list[int] = []
@@ -417,7 +418,7 @@ def test_summary_waits_for_a_later_batch_when_the_first_cannot_fit_it(
         calls.append(max_bytes)
         return None if len(calls) == 1 else real_fit(built, max_bytes)
 
-    monkeypatch.setattr(guard_runner_module, "fit_workspace_assessment_to_request", first_batch_too_full)
+    monkeypatch.setattr(sync, "fit_workspace_assessment_to_request", first_batch_too_full)
 
     guard_runner_module.sync_receipts(store)
 

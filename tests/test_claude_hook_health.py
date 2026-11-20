@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 @pytest.fixture(autouse=True)
@@ -24,30 +25,29 @@ def _claude_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
 
-def _installed(tmp_path: Path) -> tuple[ClaudeCodeHarnessAdapter, HarnessContext, Path]:
+def _installed(tmp_path: Path) -> tuple[HarnessContext, Path]:
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = ClaudeCodeHarnessAdapter()
-    adapter.install(context)
-    return adapter, context, home / ".claude" / "settings.json"
+    harness_support.install("claude-code", context)
+    return context, home / ".claude" / "settings.json"
 
 
 def test_intact_hooks_report_active(tmp_path: Path) -> None:
-    adapter, context, _settings = _installed(tmp_path)
+    context, _settings = _installed(tmp_path)
 
-    diagnostics = adapter.diagnostics(context)
+    diagnostics = harness_ops.diagnostics("claude-code", context)
 
     assert diagnostics["setup_status"] == "active"
 
 
 def test_stripped_hooks_with_launcher_shim_report_broken(tmp_path: Path) -> None:
-    adapter, context, settings_path = _installed(tmp_path)
+    context, settings_path = _installed(tmp_path)
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     settings["hooks"] = {}
     settings_path.write_text(json.dumps(settings), encoding="utf-8")
 
-    diagnostics = adapter.diagnostics(context)
+    diagnostics = harness_ops.diagnostics("claude-code", context)
 
     assert diagnostics["setup_status"] == "broken"
     warnings = str(diagnostics["warnings"])
@@ -56,38 +56,38 @@ def test_stripped_hooks_with_launcher_shim_report_broken(tmp_path: Path) -> None
 
 
 def test_only_pretooluse_removed_is_broken_and_user_hooks_do_not_count(tmp_path: Path) -> None:
-    adapter, context, settings_path = _installed(tmp_path)
+    context, settings_path = _installed(tmp_path)
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     settings["hooks"]["PreToolUse"] = [
         {"matcher": "Bash", "hooks": [{"type": "command", "command": "/usr/local/bin/my-audit-hook"}]}
     ]
     settings_path.write_text(json.dumps(settings), encoding="utf-8")
 
-    diagnostics = adapter.diagnostics(context)
+    diagnostics = harness_ops.diagnostics("claude-code", context)
 
     assert diagnostics["setup_status"] == "broken"
     assert "PermissionRequest" not in str(diagnostics["warnings"])
 
 
 def test_narrowed_matcher_keeps_the_handler_but_reports_broken(tmp_path: Path) -> None:
-    adapter, context, settings_path = _installed(tmp_path)
+    context, settings_path = _installed(tmp_path)
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     for entry in settings["hooks"]["PreToolUse"]:
         if isinstance(entry, dict) and entry.get("matcher"):
             entry["matcher"] = "Read"
     settings_path.write_text(json.dumps(settings), encoding="utf-8")
 
-    diagnostics = adapter.diagnostics(context)
+    diagnostics = harness_ops.diagnostics("claude-code", context)
 
     assert diagnostics["setup_status"] == "broken"
     assert "PreToolUse" in str(diagnostics["warnings"])
 
 
 def test_reinstall_restores_active_status(tmp_path: Path) -> None:
-    adapter, context, settings_path = _installed(tmp_path)
+    context, settings_path = _installed(tmp_path)
     settings_path.write_text("{}", encoding="utf-8")
-    assert adapter.diagnostics(context)["setup_status"] == "broken"
+    assert harness_ops.diagnostics("claude-code", context)["setup_status"] == "broken"
 
-    adapter.install(context)
+    harness_support.install("claude-code", context)
 
-    assert adapter.diagnostics(context)["setup_status"] == "active"
+    assert harness_ops.diagnostics("claude-code", context)["setup_status"] == "active"

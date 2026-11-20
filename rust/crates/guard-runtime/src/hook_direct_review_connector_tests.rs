@@ -1,4 +1,5 @@
 use super::*;
+use crate::blocked_request_mode::connector_setup_reason;
 
 const HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const CLI_ID: &str = "local-cli.acme@1+x";
@@ -269,6 +270,45 @@ fn the_agent_sees_the_setup_reason_the_daemon_writes() {
         .reason(true, true, true)
         .unwrap()
         .starts_with("HOL Guard has not been set up for `acme` (MCP server) on this device."));
+}
+
+#[test]
+fn a_changed_file_the_user_allowed_says_so_instead_of_not_set_up() {
+    let mut value = connector_value("cli");
+    value[ALLOWED_EARLIER_VERSION] = json!(true);
+    let changed = Connector::parse(&value).expect("a changed connector");
+    assert_eq!(changed.to_value(), value);
+    let text = changed.reason(true, true, true).unwrap();
+    assert!(
+        text.starts_with(
+            "HOL Guard has not been set up for this version of `acme` (local CLI) on this \
+             device: the user allowed an earlier version, and the file has changed since. \
+             It is waiting for the user to approve it"
+        ),
+        "{text}"
+    );
+    // A connector never set up keeps its wording.
+    assert!(connector("cli")
+        .reason(true, true, true)
+        .unwrap()
+        .starts_with("HOL Guard has not been set up for `acme` (local CLI) on this device."));
+    // The default-mode text stays an unlinked setup reason for the renderers.
+    let unlinked = changed.reason(false, false, false).unwrap();
+    assert!(crate::blocked_request_mode::is_unlinked_connector_setup_reason(&unlinked));
+    // The render budget covers the longer wording.
+    for (ask, bound, exact) in [
+        (true, true, true),
+        (false, false, false),
+        (true, false, false),
+    ] {
+        let longest = longest_reason(ask, bound, exact).unwrap();
+        assert!(longest.contains("earlier version"), "{longest}");
+    }
+    // Only `true` is a valid flag; any other value is not the lookup's shape.
+    for flag in [json!(false), json!("true"), json!(1)] {
+        value[ALLOWED_EARLIER_VERSION] = flag;
+        assert_eq!(Connector::parse(&value), None);
+    }
 }
 
 #[test]

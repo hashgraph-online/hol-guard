@@ -272,9 +272,10 @@ def test_handler_post_records_the_reply_each_handler_writes(tmp_path: Path) -> N
 
 
 def test_handler_post_keeps_the_no_store_header(tmp_path: Path) -> None:
-    answer = _handler_post(tmp_path, "/v1/context-assistance/codex-lean", {"enabled": "yes"})
-    assert answer["ok"]["status"] == 400  # type: ignore[index]
-    assert answer["ok"]["no_store"] is True  # type: ignore[index]
+    for path in ("/v1/context-assistance/codex-lean", "/v1/context-assistance/codex-short-replies"):
+        answer = _handler_post(tmp_path, path, {"enabled": "yes"})
+        assert answer["ok"]["status"] == 400, path  # type: ignore[index]
+        assert answer["ok"]["no_store"] is True, path  # type: ignore[index]
 
 
 def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
@@ -310,6 +311,9 @@ def test_settings_calls_answer_without_a_daemon(tmp_path: Path) -> None:
     assert setup["status"] == 400  # type: ignore[index]
     channel = _call(tmp_path, "route.update_channel", {"payload": {"update_channel": "nightly-unknown"}})["ok"]
     assert channel["status"] == 400 and channel["body"]["error"] == "invalid_update_channel"  # type: ignore[index]
+    # A Guard home outside the home folder never touches the Codex config there.
+    short = _call(tmp_path, "route.codex_short_replies_ensure", {"payload": {}})["ok"]
+    assert short["status"] == 200 and short["body"] == {"state": "skipped"}  # type: ignore[index]
 
 
 def test_policy_sync_refuses_a_request_without_a_bundle(tmp_path: Path) -> None:
@@ -332,9 +336,16 @@ def test_control_library_steps_read_the_daemon_state(tmp_path: Path) -> None:
 
 
 def test_native_daemon_worker_passes_are_not_library_calls(tmp_path: Path) -> None:
-    # The native daemon runs the heartbeat, the idle hold and storage
-    # maintenance itself.
-    for name in ("worker.idle_holds", "worker.maintain_activity", "worker.runtime_heartbeat"):
+    # The native daemon runs the heartbeat, the idle hold, storage
+    # maintenance, the one-file extraction sweep and the sync-profile lookup
+    # behind the idle hold itself.
+    for name in (
+        "worker.cloud_workspace",
+        "worker.idle_holds",
+        "worker.maintain_activity",
+        "worker.onefile_reclaim",
+        "worker.runtime_heartbeat",
+    ):
         assert _call(tmp_path, name, {})["error"]["message"] == "unknown_call"  # type: ignore[index]
 
 
@@ -344,13 +355,11 @@ def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> 
     assert reconciled["ok"]["repaired_harnesses"] == []  # type: ignore[index]
 
 
-def test_worker_aibom_and_onefile_passes_answer(tmp_path: Path) -> None:
+def test_worker_aibom_pass_answers(tmp_path: Path) -> None:
     aibom = _call(tmp_path, "worker.aibom_inventory", {})
     assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]
     payload = GuardStore(tmp_path).get_sync_payload("aibom_inventory_daemon")
     assert isinstance(payload, dict) and payload["status"] == "missing_workspace_context"
-    assert _call(tmp_path, "worker.onefile_reclaim", {})["ok"] == {"ok": True, "skipped": True}
-    assert _call(tmp_path, "worker.cloud_workspace", {})["ok"] == {"ok": True, "workspace_id": None}
 
 
 def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:

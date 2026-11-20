@@ -197,7 +197,7 @@ def test_cli_native_authority_leaves_the_resident_writer_running(
             return None
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.NativeHookEvidenceWriter",
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.ResidentEvidenceClient",
         _Writer,
     )
     monkeypatch.setattr(

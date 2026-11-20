@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..native_runner_authority import native_runner_authority
 from .fleet_posture_common import (
@@ -47,14 +47,14 @@ from .fleet_posture_tools import (
 )
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 
 @dataclass(frozen=True)
 class FleetPostureSettings:
-    """Inputs the builder needs besides the store and the adapter list."""
+    """Inputs the builder needs besides the store and the harness list."""
 
     context: HarnessContext
     guard_config: GuardConfig | None = None
@@ -150,7 +150,7 @@ def policy_section(store: GuardStore, acknowledgement: Mapping[str, object] | No
 
 def build_fleet_posture_state(
     store: GuardStore,
-    adapters: Iterable[Any],
+    harnesses: Iterable[str],
     settings: FleetPostureSettings,
     *,
     acknowledgement: Mapping[str, object] | None = None,
@@ -179,14 +179,13 @@ def build_fleet_posture_state(
     rows = projected_rows(fleet_inventory_rows(store))
     diagnostics_cache = DiagnosticsCache(store, now=now, ttl_seconds=settings.diagnostics_ttl_seconds)
     tools: list[dict[str, object]] = []
-    for adapter in adapters:
-        harness = getattr(adapter, "harness", "")
+    for harness in harnesses:
         if harness not in HARNESS_IDS:
             continue
-        diagnostics = diagnostics_cache.lookup(adapter, settings.context)
+        diagnostics = diagnostics_cache.lookup(harness, settings.context)
         if diagnostics is None:
             continue
-        tools.append(tool_row(adapter=adapter, diagnostics=diagnostics, store=store, config=config))
+        tools.append(tool_row(harness=harness, diagnostics=diagnostics, store=store, config=config))
     diagnostics_cache.save()
 
     # Runtime identities are detail: a minimal report leaves them out.

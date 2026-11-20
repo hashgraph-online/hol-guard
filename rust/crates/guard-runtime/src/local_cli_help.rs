@@ -1,10 +1,9 @@
 //! `local_cli_help` — the first-level commands a CLI's `--help` output names.
 //!
-//! A port of `runtime/local_cli_help.parse_cli_help_text` and its helpers. The
-//! probing half of that module (running the program, bounding its output,
-//! recursing into nested commands) stays in Python; only the parse is here,
+//! A port of `runtime/local_cli_help.parse_cli_help_text` and its helpers,
 //! beside [`crate::local_cli_identify`], which already derives the CLI identity
-//! these commands hang from.
+//! these commands hang from. Running the program and recursing into nested
+//! commands is [`crate::local_cli_discover`].
 //!
 //! A CLI whose help names no subcommands still has variations: its options.
 //! [`options`] reads those, from the help text or, for a script whose help
@@ -32,7 +31,7 @@ use crate::package_authority_op::request_digest_with_limit;
 #[path = "local_cli_help_options.rs"]
 mod options;
 pub(crate) use options::is_option_name;
-use options::HelpHandler;
+pub(crate) use options::HelpHandler;
 
 /// Read the commands a `--help` text names, for the resident's Python caller.
 pub(crate) fn evaluate_local_cli_help_parse_request(
@@ -103,6 +102,37 @@ pub(crate) fn mcp_source_facts(
 ) -> (bool, Option<String>, Vec<String>) {
     let facts = options::script_facts(text, invocation);
     (facts.mcp_server, facts.entry_point, facts.imports)
+}
+
+/// The commands one `--help` output names, as the resident's parse op reads them.
+pub(crate) fn help_commands(
+    text: &str,
+    parent_id: Option<&str>,
+    invocation: &[String],
+) -> Vec<LocalCliCommand> {
+    commands_and_variations(text, parent_id, invocation, false)
+}
+
+/// What a script's source names and says about `--help`, as the resident's
+/// source-first read reports it.
+pub(crate) struct SourceRead {
+    pub(crate) commands: Vec<LocalCliCommand>,
+    pub(crate) help: HelpHandler,
+    pub(crate) imports: Vec<String>,
+}
+
+pub(crate) fn source_read(text: &str, invocation: &[String]) -> SourceRead {
+    let commands = commands_and_variations(text, None, invocation, true);
+    let facts = options::script_facts(text, invocation);
+    let mut help = facts.help;
+    if help == HelpHandler::Framework && options::dispatches_by_hand(text, invocation) {
+        help = HelpHandler::Script;
+    }
+    SourceRead {
+        commands,
+        help,
+        imports: facts.imports,
+    }
 }
 
 /// The subcommands a help text names, or, when it names none, the options

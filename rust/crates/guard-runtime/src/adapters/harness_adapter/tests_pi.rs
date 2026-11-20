@@ -9,7 +9,7 @@ use super::super::{describe, pi, Ctx};
 use super::{after, shim, Home};
 
 fn runtime() -> Value {
-    json!({"installing_cli": [], "native_hook_runtime": null, "windows": null})
+    json!({"installing_cli": [], "windows": null})
 }
 
 fn apply(files: &[Value]) {

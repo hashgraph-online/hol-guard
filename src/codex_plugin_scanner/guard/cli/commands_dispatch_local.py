@@ -806,7 +806,7 @@ def _run_guard_install_command(
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair
     if not bool(getattr(args, "dry_run", False)):
-        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+        from ..mcp_discovery_client import observe_configured_mcp_servers
 
         observe_configured_mcp_servers(store, context=context, seen_at=_now())
         from .install_daemon_prewarm import prewarm_after_install

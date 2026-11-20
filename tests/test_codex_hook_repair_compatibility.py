@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 def _command(config: dict[str, object], name: str) -> list[str]:
@@ -39,13 +39,13 @@ def test_repair_keeps_an_open_codex_session_authenticated(
     )
     context.workspace_dir.mkdir(parents=True)
     monkeypatch.setattr(codex_adapter, "_post_tool_hook_timeout_seconds", lambda _context: 35)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     old_bridge_command = codex_adapter._hook_command_parts(context)
-    old_config_json = old_bridge_command[3]
+    old_config_json = old_bridge_command[-1]
     old_config = json.loads(old_config_json)
 
     monkeypatch.setattr(codex_adapter, "_post_tool_hook_timeout_seconds", lambda _context: 65)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 
     trusted = _validate(old_config, old_config_json)
     assert trusted.cwd == Path(str(old_config["manifest_path"])).parent.resolve(strict=True)

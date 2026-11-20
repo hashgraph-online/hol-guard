@@ -42,6 +42,7 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     assert set(by_id) == {
         "approved-retry-marker-command",
         "approved-retry-identical-command",
+        "approved-retry-waited-command",
         "approved-retry-env-prefixed-command",
         "approved-retry-reworded-command",
         "approved-retry-unbindable-command",
@@ -53,6 +54,7 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
         "approved-retry-sourced-toolchain-init",
         "approved-retry-identical-file-read",
         "relayed-approval-link-held-command",
+        "relayed-desktop-approval-link-held-command",
     }
     ordinary = [scenario for scenario in scenarios if scenario.oracle == "approved-retry"]
     lifecycle = [scenario for scenario in scenarios if scenario.oracle == BASH_LIFECYCLE_ORACLE]
@@ -81,6 +83,10 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     # The reworded case must leave the wording to the model, so naming a command
     # for it would defeat the lane.
     assert by_id["approved-retry-identical-command"].commands == ("ls -la",)
+    # The waited case follows Guard's own `approvals wait` instruction before its
+    # retry, so a review of that instruction or of the approved call's output
+    # under `subprocess_action: review` shows up as a second approval.
+    assert by_id["approved-retry-waited-command"].commands == ("ls -1",)
     assert by_id["approved-retry-unbindable-command"].commands == ("git status --short",)
     assert by_id["approved-retry-env-prefixed-command"].commands == ("LC_ALL=C ls -la",)
     assert by_id["approved-retry-reworded-command"].commands == ()

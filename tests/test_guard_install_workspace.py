@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_support_workspace, update_commands
 from codex_plugin_scanner.guard.cli.commands import (
     _resolve_default_install_workspace,
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
@@ -48,18 +48,17 @@ def test_workspace_detection_uses_selected_home_and_explicit_marker(
     guard_home = tmp_path / "guard-home"
     seen: list[HarnessContext] = []
 
-    class _Adapter:
-        def detect(self, context: HarnessContext) -> HarnessDetection:
-            seen.append(context)
-            return HarnessDetection(
-                harness="codex",
-                installed=True,
-                command_available=False,
-                config_paths=(str(cwd / ".codex" / "config.toml"),),
-                artifacts=(),
-            )
+    def detect(_harness: str, context: HarnessContext) -> HarnessDetection:
+        seen.append(context)
+        return HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=False,
+            config_paths=(str(cwd / ".codex" / "config.toml"),),
+            artifacts=(),
+        )
 
-    monkeypatch.setattr(commands_support_workspace, "get_adapter", lambda _harness: _Adapter())
+    monkeypatch.setattr(commands_support_workspace, "harness_detect", detect)
     monkeypatch.chdir(cwd)
     monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
 
@@ -87,17 +86,16 @@ def test_workspace_detection_rejects_config_paths_outside_current_project(
     candidate_home.mkdir()
     guard_home = tmp_path / "guard-home"
 
-    class _Adapter:
-        def detect(self, context: HarnessContext) -> HarnessDetection:
-            return HarnessDetection(
-                harness="codex",
-                installed=True,
-                command_available=False,
-                config_paths=(str(context.home_dir / ".codex" / "config.toml"),),
-                artifacts=(),
-            )
+    def detect(_harness: str, context: HarnessContext) -> HarnessDetection:
+        return HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=False,
+            config_paths=(str(context.home_dir / ".codex" / "config.toml"),),
+            artifacts=(),
+        )
 
-    monkeypatch.setattr(commands_support_workspace, "get_adapter", lambda _harness: _Adapter())
+    monkeypatch.setattr(commands_support_workspace, "harness_detect", detect)
     monkeypatch.chdir(cwd)
     monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
 

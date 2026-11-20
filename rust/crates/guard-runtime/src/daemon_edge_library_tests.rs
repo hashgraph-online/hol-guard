@@ -65,3 +65,119 @@ fn a_host_that_says_anything_else_is_not_ready() {
     read_host_start(&mut flood.as_bytes(), home.path(), Some(sender));
     assert!(receiver.try_recv().is_err());
 }
+
+/// A resident that died since the last call must not cost the next hook its
+/// answer: the call starts the replacement and is served by it.
+#[test]
+fn a_call_that_finds_its_resident_gone_is_served_by_a_replacement() {
+    let home = tempfile::tempdir().unwrap();
+    let marker = home.path().join("started");
+    // The first launch exits at once; any later launch answers one call.
+    let script = format!(
+        "if [ -e '{marker}' ]; then read line; printf '%s\\n' '{{\"id\":1,\"ok\":\"served\"}}'; read line; else : > '{marker}'; fi",
+        marker = marker.display()
+    );
+    let guard_home = home.path().join("guard-home").display().to_string();
+    let handshake = json!({
+        "schema": crate::daemon_edge::reads::HANDSHAKE_SCHEMA,
+        "auth_token": "library-test-value",
+        "guard_home": guard_home,
+        "store_path": home.path().join("guard.db").display().to_string(),
+        "source": "default",
+        "busy_timeout_ms": 2000,
+        "cli_command": ["/bin/sh", "-c", script, "sh"],
+    });
+    let config = ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap();
+
+    let dead = Arc::new(start_resident(&config).unwrap());
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while dead.pending.lock().unwrap().is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "first child never exited"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    residents()
+        .lock()
+        .unwrap()
+        .insert(guard_home.clone(), Arc::clone(&dead));
+
+    let answer = call_resident_within(&config, "hook.warm", json!({}), Duration::from_secs(10));
+    assert_eq!(answer, Ok(json!("served")));
+
+    if let Some(resident) = residents().lock().unwrap().remove(&guard_home) {
+        resident.stop();
+    }
+}
+
+/// A resident that has stopped reading its input must not hold callers past
+/// their own deadline. A burst of large calls fills the pipe; each caller
+/// still gives up on time instead of waiting in a write that never ends.
+#[test]
+fn callers_keep_their_deadline_when_the_resident_stops_reading() {
+    let home = tempfile::tempdir().unwrap();
+    let guard_home = home.path().join("guard-home").display().to_string();
+    let handshake = json!({
+        "schema": crate::daemon_edge::reads::HANDSHAKE_SCHEMA,
+        "auth_token": "library-test-value",
+        "guard_home": guard_home,
+        "store_path": home.path().join("guard.db").display().to_string(),
+        "source": "default",
+        "busy_timeout_ms": 2000,
+        "cli_command": ["/bin/sh", "-c", "sleep 30", "sh"],
+    });
+    let config = Arc::new(ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap());
+    let filler = "x".repeat(256 * 1024);
+    let started = std::time::Instant::now();
+    let callers: Vec<_> = (0..16)
+        .map(|_| {
+            let config = Arc::clone(&config);
+            let filler = filler.clone();
+            thread::spawn(move || {
+                call_resident_within(
+                    &config,
+                    "hook.review",
+                    json!({ "payload": filler }),
+                    Duration::from_millis(500),
+                )
+            })
+        })
+        .collect();
+    let (finished, done) = mpsc::channel();
+    thread::spawn(move || {
+        let answers: Vec<_> = callers
+            .into_iter()
+            .map(|caller| caller.join().unwrap())
+            .collect();
+        let _ = finished.send(answers);
+    });
+    let answers = done
+        .recv_timeout(Duration::from_secs(10))
+        .expect("callers stayed blocked writing to a resident that never reads");
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(answers
+        .iter()
+        .all(|answer| answer == &Err(CallError::NoAnswer)));
+
+    if let Some(resident) = residents().lock().unwrap().remove(&guard_home) {
+        resident.stop();
+    }
+}
+
+#[test]
+fn a_call_line_names_its_deadline_before_its_arguments() {
+    let line = request_line(
+        7,
+        Duration::from_millis(1500),
+        "hook.review",
+        &json!({"a": 1}),
+    )
+    .unwrap();
+    assert_eq!(
+        line,
+        b"{\"id\":7,\"expires_in_ms\":1500,\"call\":\"hook.review\",\"args\":{\"a\":1}}\n"
+    );
+    let decoded: Value = serde_json::from_slice(&line).unwrap();
+    assert_eq!(decoded["call"], "hook.review");
+}

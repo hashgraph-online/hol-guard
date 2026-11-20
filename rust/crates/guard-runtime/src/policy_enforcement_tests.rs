@@ -10,45 +10,6 @@ use guard_policy_snapshot::{
 use serde_json::{json, Map};
 use std::collections::BTreeMap;
 
-#[test]
-fn test_containment_never_overrides_installed_policy_denies() {
-    let payload = json!({"tool_name":"bash","tool_input":{"command":"python3 -m pytest -q"}});
-    let result = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
-        "omp",
-        "PreToolUse",
-        &payload,
-        None,
-        None,
-        Some("/home/tester"),
-        Some("/home/tester/project"),
-    );
-    let expected_floor = if cfg!(windows) || guard_command::pretool::workspace_sandbox_available() {
-        "sandbox-required"
-    } else {
-        "review"
-    };
-    let expected_reason = result.reason_code.clone();
-    assert_eq!(result.minimum_action, expected_floor);
-    let ordinary =
-        apply_pre_tool_policy(&snapshot(policy("allow")), &payload, result.clone()).unwrap();
-    assert_eq!(ordinary.minimum_action, expected_floor);
-    assert_eq!(ordinary.decision, "deny");
-    assert_eq!(ordinary.reason_code, expected_reason);
-    let blocked =
-        apply_pre_tool_policy(&snapshot(policy("block")), &payload, result.clone()).unwrap();
-    assert_eq!(blocked.minimum_action, "block");
-    assert_ne!(
-        blocked.reason_code,
-        "native_pytest_readonly_containment_required"
-    );
-    let mut harness_denied = policy("allow");
-    harness_denied
-        .harness_actions
-        .insert("omp".into(), "block".into());
-    let blocked = apply_pre_tool_policy(&snapshot(harness_denied), &payload, result).unwrap();
-    assert_eq!(blocked.minimum_action, "block");
-}
-
 fn apply_pre_tool_policy(
     snapshot: &PolicySnapshotV3,
     payload: &Value,
@@ -146,8 +107,14 @@ fn post_request(payload: Value) -> NativeHookRequestV1 {
 #[path = "policy_enforcement_observed_mcp_tests.rs"]
 mod observed_mcp;
 
+#[path = "policy_enforcement_containment_floor_tests.rs"]
+mod containment_floor;
+
 #[path = "policy_enforcement_codex_budget_tests.rs"]
 mod codex_budget;
+
+#[path = "policy_enforcement_omp_goal_tests.rs"]
+mod omp_goal;
 
 pub(super) fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
@@ -480,13 +447,14 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
         "native_prompt_risk_classes_invalid"
     );
 }
-
 #[path = "policy_enforcement_floor_cause_tests.rs"]
 mod floor_cause;
 #[path = "policy_enforcement_github_tests.rs"]
 mod github_tests;
 #[path = "policy_enforcement_observe_tests.rs"]
 mod observe_tests;
+#[path = "policy_enforcement_omp_eval_commit_output_tests.rs"]
+mod omp_eval_commit_output_tests;
 #[path = "policy_enforcement_omp_eval_output_tests.rs"]
 mod omp_eval_output_tests;
 #[path = "policy_enforcement_omp_github_output_tests.rs"]

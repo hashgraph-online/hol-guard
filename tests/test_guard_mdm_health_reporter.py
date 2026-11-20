@@ -321,6 +321,35 @@ def test_delivery_diagnostics_preserve_structured_http_context_without_echoing_c
     assert "customer_secret_value" not in reason
 
 
+def test_delivery_diagnostics_keep_the_native_unavailable_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UnavailableTransport:
+        def register_key(self, _payload: bytes) -> None:
+            return None
+
+        def deliver_lease(self, _outbox: HealthLeaseOutbox) -> HealthLeaseAck:
+            raise OSError("health_lease_delivery_unavailable")
+
+        def poll_challenge(self, **_kwargs: object) -> None:
+            pytest.fail("challenge polling must not run after failed delivery")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.mdm.health_reporter.build_machine_health_key_registration",
+        lambda *_args, **_kwargs: b"registration",
+    )
+    result = run_machine_health_cadence(
+        paths=_paths(tmp_path),
+        system_name="Darwin",
+        policy_loader=lambda **_kwargs: _policy(),
+        lease_issuer=lambda *_args, **_kwargs: _outbox(),
+        transport=UnavailableTransport(),
+    )
+
+    metrics = cast(dict[str, object], result["metrics"])
+    assert metrics["rejectionReason"] == "health_lease_delivery_unavailable"
+
+
 def test_delivery_diagnostics_reject_arbitrary_health_prefixed_exception(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

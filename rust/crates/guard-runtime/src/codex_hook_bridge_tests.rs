@@ -11,8 +11,8 @@ use super::*;
 use crate::claude_hook_bridge_fixture::{spawn_daemon, write_private, Exchange, GuardHome};
 
 const VECTORS: &str = include_str!("../testdata/codex_hook_bridge/vectors.json");
-/// Windows config arguments from `encode_hook_config_argument(windows=True)`
-/// and the text `decode_bridge_config_argument` returns for each (`null`
+/// Windows config arguments in the unpadded base64url form the Windows launch
+/// argv carries, and the text `decode_bridge_config_argument` returns for each (`null`
 /// where Python refuses the argument).
 const BASE64URL_CONFIGS: &str =
     include_str!("../testdata/codex_hook_bridge/base64url_configs.json");
@@ -268,6 +268,32 @@ fn inline_browser_wait_stays_within_the_consumer_limit() {
         data[BROWSER_WAIT_PROCESS_KEY]["pid"],
         json!(std::process::id())
     );
+}
+
+/// The daemon checks Git helpers against the environment Codex runs the
+/// command in, so a model-supplied environment is replaced on every event.
+#[test]
+fn every_event_carries_the_bridge_environment_not_the_model_one() {
+    let pairs = timeouts(&[
+        ("PreToolUse", 10),
+        ("PostToolUse", 10),
+        ("UserPromptSubmit", 10),
+    ]);
+    for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit"] {
+        let raw = json!({
+            "hook_event_name": event,
+            "tool_input": {"command": "git status"},
+            "guard_execution_environment": {"path": "/model-supplied"},
+        })
+        .to_string();
+        let data: Value =
+            serde_json::from_str(&prepare(&raw, &pairs).expect("prepared").data).unwrap();
+        let environment = &data["guard_execution_environment"];
+        assert_ne!(environment["path"], json!("/model-supplied"), "{event}");
+        let digest = environment["environment_digest"].as_str().unwrap();
+        assert_eq!(digest.len(), 64, "{event}");
+        assert_eq!(data["tool_input"], json!({"command": "git status"}));
+    }
 }
 
 #[test]

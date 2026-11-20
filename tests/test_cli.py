@@ -26,7 +26,7 @@ def test_internal_bounded_hook_dispatches_before_argument_parser(monkeypatch: py
     observed: list[str] = []
     monkeypatch.setattr("sys.frozen", True, raising=False)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.main_from_argv",
+        "codex_plugin_scanner.guard.bounded_cli_hook_bridge.main_from_argv",
         lambda argv: observed.extend(argv) or 7,
     )
 

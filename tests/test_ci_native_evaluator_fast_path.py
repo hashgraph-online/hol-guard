@@ -26,6 +26,13 @@ def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> N
         "Upload native command evaluators"
     )
     assert "Upload matching native command projections" in names
+    identity = next(step for step in producer if step.get("id") == "identity")
+    build = next(
+        step for step in producer if step.get("name") == "Build native command evaluators once for pytest shards"
+    )
+    assert "sync_repo_version.py --check" in identity["run"]
+    assert build["env"]["HOL_GUARD_PACKAGE_VERSION"] == "${{ steps.identity.outputs.version }}"
+    assert build["env"]["HOL_GUARD_BUILD_SHA"] == "${{ steps.identity.outputs.source_sha }}"
 
     # Public catalogs must be regenerated from the staged trust bindings before
     # they are uploaded. All consumers must receive the same verified artifacts.
@@ -96,3 +103,26 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     required = jobs["required"]
     assert "native-gates" in required["needs"]
     assert '"native-gates"' in required["steps"][0]["run"]
+
+
+def test_dashboard_wheel_consumes_verified_linux_evaluator_artifacts() -> None:
+    jobs = _jobs()
+    job = jobs["dashboard-integration-wheel"]
+    assert "native-command-evaluators" in job["needs"]
+    assert "needs.native-command-evaluators.result == 'success'" in job["if"]
+    downloads = [
+        step.get("with", {}).get("name")
+        for step in job["steps"]
+        if step.get("uses", "").startswith("actions/download-artifact@")
+    ]
+    assert "pytest-native-command-evaluators" in downloads
+    assert not any("cargo build" in step.get("run", "") for step in job["steps"])
+
+
+def test_dashboard_wheel_names_the_cached_runtime_build_sha() -> None:
+    job = _jobs()["dashboard-integration-wheel"]
+    identity = next(step["run"] for step in job["steps"] if step.get("name") == "Resolve wheel identity")
+    assert "capabilities --json | jq -r '.build_sha'" in identity
+    assert "git rev-parse HEAD" not in identity
+    seal = next(step["run"] for step in job["steps"] if step.get("name") == "Seal the native wheel")
+    assert 'HOL_GUARD_BUNDLE_SOURCE_SHA="$SOURCE_SHA" uv build --wheel' in seal

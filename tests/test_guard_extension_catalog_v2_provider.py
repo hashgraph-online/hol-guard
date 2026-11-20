@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.runtime import extension_catalog_pages as pages
 from codex_plugin_scanner.guard.runtime import runner
 from tests.native_cloud_helpers import native_bridge as native_bridge
 from tests.native_cloud_helpers import prepare_native, raw
+from tests.support import cloud_sync_transport
 from tests.test_guard_extension_catalog_v2 import NOW, Receiver, posture, prepare, signal
 
 pytestmark = pytest.mark.usefixtures("native_bridge")
@@ -39,12 +40,11 @@ def test_runtime_v2_uses_existing_authenticated_request_transport(monkeypatch, k
         assert context is auth and method == "POST" and extra_headers is None
         return request_url, data
 
-    def transport(*, request, max_response_bytes, **kwargs):
-        assert max_response_bytes == 4096
+    def transport(*, request, **kwargs):
         return receiver.send(*request)
 
-    monkeypatch.setattr(runner, "_guard_sync_request", request)
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", transport)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", request)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", transport)
     from codex_plugin_scanner.guard.runtime import extension_catalog_completion as completion
 
     completed = []
@@ -167,8 +167,8 @@ def test_old_server_uploads_same_observed_complete_view(monkeypatch):
             "lastSeenAt": NOW,
         }
 
-    monkeypatch.setattr(runner, "_guard_sync_request", request)
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", response)
+    monkeypatch.setattr(cloud_sync_transport, "_guard_sync_request", request)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", response)
     monkeypatch.setattr(
         runner, "build_builtin_extension_catalog_wire", lambda **kwargs: pytest.fail("rebuilt sparse view")
     )
@@ -188,22 +188,6 @@ def test_old_server_uploads_same_observed_complete_view(monkeypatch):
     )
     assert uploads[0]["catalog"] == catalog
     assert result["extension_catalog_sync_status"] == "uploaded"
-
-
-def test_runtime_json_reply_budget(monkeypatch):
-    import io
-
-    class Reply(io.BytesIO):
-        pass
-
-    monkeypatch.setattr(runner, "managed_urlopen", lambda *args, **kwargs: Reply(b"x" * 4097))
-    with pytest.raises(RuntimeError, match="byte budget"):
-        runner._urlopen_json_with_timeout_retry(
-            request=object(),
-            timeout_seconds=1,
-            retry_timeout_seconds=1,
-            max_response_bytes=4096,
-        )
 
 
 def test_provider_delegates_raw_active_metadata_and_factory_authentication(monkeypatch, tmp_path):

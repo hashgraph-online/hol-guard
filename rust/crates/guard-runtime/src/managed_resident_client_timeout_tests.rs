@@ -164,3 +164,17 @@ fn a_hook_edge_settling_a_custom_rule_keeps_the_rule_allowance() {
         Duration::from_millis(750)
     );
 }
+
+#[test]
+fn a_runner_authority_probe_keeps_its_widened_budget() {
+    // Kinds that run a hook canary or a CLI probe may ask for up to a
+    // minute; the nine-second default abandoned them mid-probe.
+    assert_eq!(
+        client_timeout(br#"{"operation":"runner_authority","deadline_budget_ms":30000}"#),
+        Duration::from_secs(30)
+    );
+    assert_eq!(
+        client_timeout(br#"{"operation":"runner_authority","deadline_budget_ms":90000}"#),
+        Duration::from_secs(60)
+    );
+}

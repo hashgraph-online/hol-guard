@@ -6,6 +6,8 @@ export type Agent = {
   started_at_ms: number; updated_at_ms: number; detail: string;
   activity: string | null;
   revision: number; queued: number; context_calls: number; input_tokens: number; output_tokens: number;
+  /** Project paths this agent's file tools may not open. Older Guard leaves it out. */
+  blocked?: string[];
   controls: { message: boolean; steer: boolean; interrupt: boolean; stop: boolean };
 };
 export type Adapter = { id: string; label: string; installed: boolean; launch_supported: boolean; detail: string };
@@ -15,5 +17,5 @@ export type SwarmSnapshot = {
   agents: Agent[]; adapters: Adapter[];
 };
 export type SwarmEvent = { sequence: number; at_ms: number; kind: string; text: string };
-export type LaunchDraft = { request_id: string; epoch: string; harness: string; workspace: string; task: string; model: string | null };
+export type LaunchDraft = { request_id: string; epoch: string; harness: string; workspace: string; task: string; model: string | null; blocked?: string[] };
 export type AgentAction = "message" | "interrupt" | "stop";

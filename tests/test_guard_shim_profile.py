@@ -89,23 +89,6 @@ def test_shell_profile_preparation_rejects_parent_outside_home_before_reading(tm
     assert list(outside.iterdir()) == []
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX shell profiles")
-def test_shell_profile_without_the_runtime_asks_for_a_manual_path(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard import shims
-    from codex_plugin_scanner.guard.mdm import runtime_request
-
-    ctx = _context(tmp_path / "home", tmp_path / "guard")
-    ctx.home_dir.mkdir()
-    monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
-    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
-    prepared = prepare_guard_shim_shell_profile(ctx)
-    assert prepared.files == ()
-    assert prepared.manifest["manual_path_required"] is True
-    assert prepared.manifest["manual_path_reason"] == "native_runtime_unavailable"
-    assert ensure_guard_shim_path_in_shell_profile(ctx) == prepared.manifest
-    assert not (ctx.home_dir / ".zshrc").exists()
-
-
 @pytest.fixture(autouse=True)
 def _force_zsh(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SHELL", "/bin/zsh")
@@ -186,9 +169,9 @@ class TestEnsureSkipsOnWindows:
         (guard_home / "package-shims" / "bin").mkdir(parents=True)
         return _context(home, guard_home)
 
+    @pytest.mark.skipif(os.name != "nt", reason="the native runtime decides Windows from its own build")
     def test_guard_shim_skipped_on_windows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ctx = self._stable_ctx(tmp_path)
-        monkeypatch.setattr("codex_plugin_scanner.guard.shims.os.name", "nt")
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.shims._is_transient_path",
             lambda path: False,

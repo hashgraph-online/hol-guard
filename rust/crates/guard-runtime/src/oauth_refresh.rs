@@ -520,19 +520,12 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
             payload.insert(key.into(), v);
         }
     }
-    if let Some(ent) = package_firewall_entitlement {
-        for key in [
-            "supply_chain_entitlement_expires_at",
-            "supply_chain_firewall",
-        ] {
-            if let Some(v) = ent.get(key).cloned() {
-                payload.insert(key.into(), v);
-            }
-        }
-    }
-    if let Some(profile) = cloud_user_profile {
-        payload.insert("cloud_user_profile".into(), profile.clone());
-    }
+    carry_account_fields(
+        &mut payload,
+        credentials,
+        package_firewall_entitlement,
+        cloud_user_profile,
+    );
 
     let mut secret_store =
         crate::encrypted_secret_store::EncryptedFileSecretStore::new(&guard_home);
@@ -550,6 +543,35 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
         })?;
     store.set_sync_payload(CREDENTIALS_STATE_KEY, &Value::Object(payload));
     Ok(())
+}
+
+/// Put the account grant and profile on the rotated credential row. A refresh
+/// that brings none keeps the saved ones, so a paid account does not lose its
+/// entitlement expiry on rotation.
+fn carry_account_fields(
+    payload: &mut Map<String, Value>,
+    credentials: &Value,
+    package_firewall_entitlement: Option<&Value>,
+    cloud_user_profile: Option<&Value>,
+) {
+    for key in [
+        "supply_chain_entitlement_expires_at",
+        "supply_chain_firewall",
+    ] {
+        if let Some(v) = package_firewall_entitlement
+            .and_then(|ent| ent.get(key))
+            .or_else(|| credentials.get(key))
+            .filter(|v| !v.is_null())
+        {
+            payload.insert(key.into(), v.clone());
+        }
+    }
+    if let Some(profile) = cloud_user_profile
+        .or_else(|| credentials.get("cloud_user_profile"))
+        .filter(|v| !v.is_null())
+    {
+        payload.insert("cloud_user_profile".into(), profile.clone());
+    }
 }
 
 /// Canonical sorted-compact JSON — `json.dumps(payload, sort_keys=True,
@@ -644,6 +666,7 @@ pub(crate) fn refresh_oauth_access_token(
                 access_token,
                 rotation_refresh_token,
                 access_token_expires_at,
+                ..
             } => {
                 let effective_refresh =
                     rotation_refresh_token.unwrap_or_else(|| attempt_refresh_token.clone());
@@ -667,7 +690,10 @@ pub(crate) fn refresh_oauth_access_token(
                 nonce_retry_count += 1;
                 continue; // same attempt — re-sign with the challenge nonce
             }
-            OAuthRefreshOutcome::RateLimited(retry_after) => {
+            OAuthRefreshOutcome::RateLimited {
+                wait_seconds: retry_after,
+                ..
+            } => {
                 circuit_record_rate_limit(store, &attempt_refresh_token, retry_after);
                 return Err(EvalError::Validation(format!(
                     "Guard Cloud rate-limited the token refresh; retry in {retry_after:.0}s."
@@ -699,7 +725,15 @@ pub(crate) fn refresh_oauth_access_token(
                 }
                 continue;
             }
-            OAuthRefreshOutcome::Failed(reason) => return Err(failed_refresh_error(reason)),
+            OAuthRefreshOutcome::Unreachable(reason) => {
+                return Err(EvalError::Internal(format!(
+                    "{} {reason}",
+                    gst::OAUTH_REFRESH_UNREACHABLE
+                )))
+            }
+            OAuthRefreshOutcome::Rejected(reason)
+            | OAuthRefreshOutcome::Unusable(reason)
+            | OAuthRefreshOutcome::Failed(reason) => return Err(failed_refresh_error(reason)),
         }
     }
     // Second invalid_grant post-rotation = genuinely revoked: record the
@@ -711,6 +745,37 @@ pub(crate) fn refresh_oauth_access_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rotation_keeps_the_saved_account_grant_and_profile() {
+        let saved = serde_json::json!({
+            "supply_chain_firewall": true,
+            "supply_chain_entitlement_expires_at": "2026-12-01T00:00:00Z",
+            "cloud_user_profile": {"name": "synthetic"},
+        });
+        let mut payload = Map::new();
+        carry_account_fields(&mut payload, &saved, None, None);
+        assert_eq!(
+            payload.get("supply_chain_firewall"),
+            Some(&Value::Bool(true))
+        );
+        assert_eq!(
+            payload.get("supply_chain_entitlement_expires_at"),
+            saved.get("supply_chain_entitlement_expires_at")
+        );
+        assert_eq!(
+            payload.get("cloud_user_profile"),
+            saved.get("cloud_user_profile")
+        );
+
+        let granted = serde_json::json!({"supply_chain_firewall": false});
+        let mut payload = Map::new();
+        carry_account_fields(&mut payload, &saved, Some(&granted), None);
+        assert_eq!(
+            payload.get("supply_chain_firewall"),
+            Some(&Value::Bool(false))
+        );
+    }
 
     #[test]
     fn a_refresh_blocked_by_cloudflare_is_not_reported_as_a_revoked_sign_in() {

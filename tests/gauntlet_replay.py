@@ -29,6 +29,9 @@ from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
+# Keep focused regressions separate from the pre-existing legacy corpus.
+OMP_BROWSER_REPLAY = json.loads((FIXTURES / "gauntlet_replay_omp_browser.json").read_text(encoding="utf-8"))
+REPLAY_DOCUMENT["cases"].extend(OMP_BROWSER_REPLAY["cases"])
 GATE_DOCUMENT = json.loads((FIXTURES / "benign_false_positive_gate.json").read_text(encoding="utf-8"))
 
 # Tool names each harness really sends, by the case's abstract tool family. Pi names its built-ins
@@ -44,7 +47,7 @@ SHELL = {
 }
 READ = {"zcode": "Read", "claude-code": "Read", "omp": "read", "pi": "read", "cursor": "Read"}
 GLOB = {"claude-code": "Glob", "omp": "glob"}
-GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep"}
+GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep", "cursor": "Grep"}
 WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write", "cursor": "Write"}
 FIXED = {
     "eval": "eval",
@@ -59,6 +62,7 @@ FIXED = {
     "web_fetch": "WebFetch",
     "agent": "Agent",
     "edit": "edit",
+    "goal": "goal",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
@@ -193,9 +197,17 @@ def payload_input(case: ReplayCase, resolved: dict[str, object]) -> dict[str, ob
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
+    if case.harness == "cursor" and case.tool == "grep":
+        resolved = cursor_grep_input(resolved)
     if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
+
+
+def cursor_grep_input(resolved: dict[str, object]) -> dict[str, object]:
+    """Cursor's hook names the folder a Grep searches ``file_path``."""
+    folder = {"file_path": resolved["path"]} if "path" in resolved else {}
+    return {**{key: value for key, value in resolved.items() if key != "path"}, **folder}
 
 
 def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, object]:
@@ -204,11 +216,11 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
     Cursor reports shell calls as beforeShellExecution and reads as beforeReadFile.
     The script forwards both as PreToolUse, keeping the raw command or path beside tool_input.
     A beforeReadFile event also carries the file's full text as ``content``.
-    A Write call reaches preToolUse unchanged, so it gains no fields.
+    A Write or Grep call reaches preToolUse unchanged, so it gains no fields.
     """
     tool_input = payload["tool_input"]
     assert isinstance(tool_input, dict)
-    if tool == "write":
+    if tool in {"write", "grep"}:
         return {}
     if tool == "read":
         file_path = str(tool_input["file_path"])

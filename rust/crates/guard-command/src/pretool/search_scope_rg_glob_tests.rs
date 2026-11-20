@@ -1,6 +1,7 @@
 //! `rg -g` inclusions that hold a `/`. ripgrep matches such a glob against
-//! the path from the search root, and an inclusion overrides both the hidden
-//! and the ignore rules, so the walk models it against that same path.
+//! the path it prints, which it builds from the search target as typed, and
+//! an inclusion overrides both the hidden and the ignore rules, so the walk
+//! models it against that same path.
 
 use super::{fixture, write};
 
@@ -135,4 +136,49 @@ fn an_inclusion_that_selects_git_does_not_outrank_the_metadata_check() {
         "[remote \"origin\"]\n\turl = https://example.test/x.git\n",
     );
     assert!(proven(&project, &["**/*"], &home));
+}
+
+#[test]
+fn the_walk_renders_entries_under_the_target_as_it_was_typed() {
+    let working = std::path::Path::new("/project");
+    // A filesystem that ignores case resolves a typed `src` to a canonical
+    // `Src`. ripgrep prints `src/app.ts`, so the walk must render that too.
+    let base = crate::pretool::search_scope_glob::glob_match_base(
+        "src",
+        &working.join("Src"),
+        true,
+        Some(working),
+    );
+    assert_eq!(base.as_deref(), Some("src"));
+    let typed = crate::pretool::search_scope_glob::glob_match_base(
+        "./src/./app",
+        &working.join("src/app"),
+        true,
+        Some(working),
+    );
+    assert_eq!(typed.as_deref(), Some("src/app"));
+    // An absolute target is measured from the directory ripgrep matches
+    // against, and one outside it carries no such path.
+    let absolute = crate::pretool::search_scope_glob::glob_match_base(
+        "/project/src",
+        &working.join("src"),
+        true,
+        Some(working),
+    );
+    assert_eq!(absolute.as_deref(), Some("src"));
+    let outside = crate::pretool::search_scope_glob::glob_match_base(
+        "/elsewhere/src",
+        std::path::Path::new("/elsewhere/src"),
+        true,
+        Some(working),
+    );
+    assert_eq!(outside, None);
+    // A glob with no `/` matches a name, so the walk needs no prefix.
+    let plain = crate::pretool::search_scope_glob::glob_match_base(
+        "src",
+        &working.join("Src"),
+        false,
+        Some(working),
+    );
+    assert_eq!(plain.as_deref(), Some(""));
 }

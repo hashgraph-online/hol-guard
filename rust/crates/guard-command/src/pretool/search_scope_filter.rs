@@ -53,6 +53,7 @@ pub(super) enum Override {
     Undecided,
 }
 
+#[derive(Clone)]
 pub(super) struct SearchFilter {
     include: Vec<String>,
     exclude: Vec<String>,
@@ -60,6 +61,9 @@ pub(super) struct SearchFilter {
     /// An inclusion that holds a `/` matches the path a walk reaches an
     /// entry by, not its name, so the walk must offer that path.
     path_shaped: bool,
+    /// The search root's own path from the directory those paths are
+    /// matched against, empty when the two are the same directory.
+    base: String,
 }
 
 impl SearchFilter {
@@ -70,6 +74,7 @@ impl SearchFilter {
             exclude: Vec::new(),
             types: &[],
             path_shaped: false,
+            base: String::new(),
         };
         if let Some(kind) = input.get("type") {
             let kind = kind.as_str()?;
@@ -122,7 +127,15 @@ impl SearchFilter {
         let mut include = Vec::new();
         let mut path_shaped = false;
         for glob in globs {
-            if glob.starts_with('!') || glob.contains('\\') || !single_width_wildcards_absent(glob)
+            // A comment-shaped glob can be ignored, and some ripgrep
+            // versions trim trailing whitespace before matching. The
+            // bounded matcher does neither, so these inputs cannot narrow
+            // a hidden-file proof across supported ripgrep versions.
+            if glob.starts_with('!')
+                || glob.starts_with('#')
+                || glob.trim_end() != *glob
+                || glob.contains('\\')
+                || !single_width_wildcards_absent(glob)
             {
                 return None;
             }
@@ -156,7 +169,23 @@ impl SearchFilter {
             exclude: Vec::new(),
             types: &[],
             path_shaped,
+            base: String::new(),
         })
+    }
+
+    /// A copy whose walk renders every entry under `base`, the search
+    /// root's own path from the directory ripgrep matches a path-shaped
+    /// inclusion against. Empty when the two are the same directory.
+    pub(super) fn rooted_at(&self, base: String) -> Self {
+        Self {
+            base,
+            ..self.clone()
+        }
+    }
+
+    /// Where a walk of the search root starts its paths.
+    pub(super) fn base(&self) -> &str {
+        &self.base
     }
 
     /// Apply glob overrides to one entry. `relative` is the entry's path
@@ -230,6 +259,11 @@ impl SearchFilter {
             };
             glob_matches(pattern, text).unwrap_or(true)
         })
+    }
+
+    /// The inclusion patterns, as this filter models them.
+    pub(super) fn inclusions(&self) -> &[String] {
+        &self.include
     }
 
     pub(super) fn type_allows(&self, name: &str) -> bool {

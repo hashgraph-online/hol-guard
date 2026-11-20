@@ -1,9 +1,8 @@
 //! Copilot's install and uninstall plans, under the lifecycle locks.
 //!
-//! `install_detection` answers the detection Python derives the managed
-//! servers from, a digest of every file it read, and the proxy argv of each
-//! Guard entry an MCP config already holds, so Python can relaunch it.
-//! `prepare_install` refuses when the digest moved and plans the backup,
+//! `install_detection` answers the detection and a digest of every file it
+//! read. `prepare_install` refuses when the digest moved, chooses the managed
+//! and skipped MCP servers from the same snapshot, and plans the backup,
 //! config and signed state of each MCP config, the CLI config's inline hooks
 //! and the workspace hook file.
 
@@ -13,18 +12,21 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::copilot::{
-    config_path, detect_sources, digest_path, global_mcp_path, hook_dir_files, hook_entry,
-    hook_path, inline_hooks, parse_object, plan_hooks, scope_for, sources, target_mcp_paths,
-    workspace_mcp_paths,
+    config_path, detect_sources, digest_path, global_mcp_path, hook_argvs, hook_dir_files,
+    hook_entry, hook_path, inline_hooks, parse_object, plan_hooks, scope_for, sources,
+    target_mcp_paths, workspace_mcp_paths,
 };
-use super::copilot_mcp::{apply_plan, managed_servers, parsed_field, plan_servers, plan_targets};
+use super::copilot_mcp::{apply_plan, plan_targets};
 use super::copilot_state::{self as state, Held};
 use super::copilot_uninstall;
 use super::files::{self, Change, Doc, Object};
+use super::managed_servers;
 use super::{path_text, Ctx, Failure, Spec, Step};
 use crate::pyjson::{self, PyVal};
 
 const KEY_FILE: &str = "adapter-state.key";
+/// The proxy subcommand each managed Copilot server launches through.
+const PROXY: &str = "copilot-mcp-proxy";
 
 pub(super) fn dispatch(
     spec: &Spec,
@@ -39,9 +41,11 @@ pub(super) fn dispatch(
         },
         "prepare_install" => match rebind_refusal(ctx, fields)? {
             Some(reason) => transition_error(reason),
-            None => prepare_install(ctx, fields),
+            None => prepare_install(spec, ctx, fields),
         },
-        "uninstall" => copilot_uninstall::uninstall(ctx, fields),
+        // The uninstall writes its restores under the locks, so the plan the
+        // generic `apply_uninstall` executes after the shims go is empty.
+        "prepare_uninstall" => copilot_uninstall::uninstall(spec, ctx),
         "finish_uninstall" => copilot_uninstall::finish_uninstall(ctx, fields),
         _ => Err(Failure::Invalid),
     }
@@ -135,45 +139,11 @@ fn install_detection(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     let snapshot = Snapshot::take(ctx)?;
     let listing = snapshot.hook_listing(ctx);
     let mut answer = detect_sources(spec, ctx, &sources(ctx, &listing), Some(&snapshot.contents))?;
-    let targets = target_mcp_paths(ctx)
-        .into_iter()
-        .map(|path| {
-            Ok((
-                path.clone(),
-                snapshot.object(&path, "The Copilot MCP config")?,
-            ))
-        })
-        .collect::<Step<Vec<_>>>()?;
-    let (plans, _) = plan_targets(ctx, &targets, &[])?;
-    let mut refresh = Vec::new();
-    for ((_, payload), plan) in targets.iter().zip(&plans) {
-        let servers = plan_servers(plan, payload)?;
-        let mut rows = Vec::new();
-        for row in plan["refresh"].as_array().ok_or(Failure::Invalid)? {
-            let index = row[0]
-                .as_u64()
-                .map(|index| index as usize)
-                .ok_or(Failure::Invalid)?;
-            let config = servers
-                .get(index)
-                .and_then(|(_, config)| config.as_dict())
-                .ok_or(Failure::Invalid)?;
-            let env = ["env", "environment"]
-                .iter()
-                .find_map(|key| {
-                    config
-                        .iter()
-                        .find(|(name, _)| name == key)
-                        .filter(|(_, value)| value.as_dict().is_some())
-                })
-                .map_or(Some(json!({})), |(_, env)| env.to_json())
-                .ok_or(Failure::Invalid)?;
-            rows.push(json!([row[1], env]));
-        }
-        refresh.push(Value::Array(rows));
+    // A malformed MCP config refuses the install before anything is planned.
+    for path in target_mcp_paths(ctx) {
+        snapshot.object(&path, "The Copilot MCP config")?;
     }
     answer["digest"] = json!(snapshot.digest);
-    answer["refresh"] = Value::Array(refresh);
     Ok(answer)
 }
 
@@ -230,7 +200,7 @@ fn rebind_refusal(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Option<&'stati
 }
 
 /// `prepare_install`: every file of the install, planned under the locks.
-fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let create_key = create_key(fields)?;
     let _locks = install_locks(ctx)?;
     let targets = target_mcp_paths(ctx);
@@ -250,16 +220,24 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         }
         _ => None,
     };
-    let config_argv = fields.get("config_argv").ok_or(Failure::Invalid)?;
-    let workspace_argv = fields.get("workspace_argv").unwrap_or(&Value::Null);
+    let (config_argv, workspace_argv) = hook_argvs(spec, ctx)?;
     let (config_plan, workspace_plan) = plan_hooks(
-        fields,
-        (hooks.as_slice(), config_argv),
+        ctx,
+        (hooks.as_slice(), &config_argv),
         workspace_payload
             .as_ref()
-            .map(|payload| (payload, workspace_argv)),
+            .map(|payload| (payload, &workspace_argv)),
     )?;
-    let managed = managed_servers(fields)?;
+    let listing = snapshot.hook_listing(ctx);
+    let detected = detect_sources(spec, ctx, &sources(ctx, &listing), Some(&snapshot.contents))?;
+    let artifacts = managed_servers::detected(ctx, super::copilot::HARNESS, &detected)?;
+    let managed = managed_servers::managed(ctx, &artifacts, PROXY)?;
+    let skipped = PyVal::List(
+        managed_servers::skipped(&artifacts)?
+            .into_iter()
+            .map(files::text)
+            .collect(),
+    );
     let root = ctx.workspace.clone().unwrap_or_else(|| ctx.home.clone());
     let mut gathered = Vec::new();
     for target in &targets {
@@ -276,18 +254,8 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         ));
     }
     let (plans, notes) = plan_targets(ctx, &gathered, &managed)?;
-    let refresh = parsed_field(fields, "refresh")?;
-    let refresh = refresh
-        .as_list()
-        .filter(|rows| rows.len() == targets.len())
-        .ok_or(Failure::Invalid)?;
-    for ((_, payload), (plan, launches)) in gathered.iter_mut().zip(plans.iter().zip(refresh)) {
-        apply_plan(
-            plan,
-            payload,
-            &managed,
-            launches.as_list().ok_or(Failure::Invalid)?,
-        )?;
+    for ((_, payload), plan) in gathered.iter_mut().zip(&plans) {
+        apply_plan(ctx, plan, payload, &managed)?;
     }
     let mut changes = Vec::new();
     let (mut backups, mut states) = (Vec::new(), Vec::new());
@@ -333,7 +301,14 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         backups.push(files::path_value(&backup));
         states.push(files::path_value(&state_path));
     }
-    let hook_env = parsed_field(fields, "hook_env")?;
+    // `merge_guard_launcher_env()`: the hook keeps the caller's import path
+    // and native bindings.
+    let hook_env = PyVal::Dict(
+        super::proxy_launch::launcher_env(ctx, &[])
+            .into_iter()
+            .map(|(key, value)| (key, PyVal::Str(value)))
+            .collect(),
+    );
     config_plan.install(&mut hooks, &hook_entry(ctx, &config_plan, &hook_env));
     config_payload.set("hooks", PyVal::Dict(hooks));
     changes.push(change(
@@ -382,7 +357,6 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let shim = files::shim_manifest(fields)?;
     let mut all_notes = notes;
     all_notes.extend(files::shim_notes(&shim));
-    let skipped = parsed_field(fields, "skipped")?;
     let mut doc = Doc::default();
     doc.set("harness", files::text(super::copilot::HARNESS))
         .set("active", PyVal::Bool(true))

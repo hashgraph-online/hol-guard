@@ -154,6 +154,7 @@ class GuardMCPServer:
         origin via the pure registry parser.
         """
         try:
+            from ..approval_hook_copy import live_approval_review_url
             from ..native_daemon_manage import read_approval_center_locator
         except Exception:
             return None
@@ -166,7 +167,8 @@ class GuardMCPServer:
                 origin = parse_loopback_origin(locator.approval_url_base)
                 if origin is None:
                     return None
-                return f"{origin}/requests/{request_id}"
+                # The agent hands this link to the user, so it opens signed in.
+                return live_approval_review_url(f"{origin}/requests/{request_id}", guard_home=self.guard_home)
             except Exception:
                 logger.warning("Failed to build approval URL for request %s", request_id, exc_info=True)
                 return None

@@ -18,6 +18,7 @@
 //! `PATHEXT` and the current directory join the lookup.
 
 use crate::CanonicalCommandV1;
+#[cfg(unix)]
 use std::path::{Component, Path};
 
 /// `model` reparsed with each path-spelled executable that is exactly the

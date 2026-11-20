@@ -49,6 +49,16 @@ worktree of the same repository.
 Only terminal verdicts are excluded. `block`, `sandbox-required` and `allow`
 are not reviews, so there is nothing to approve.
 
+The dashboard card for an MCP tool call shows the two choices as plain cards,
+"Just this once" (Allow once) and "Always allow this call" (Always allow),
+without the scope picker. Always allow still sends the request's scope
+contract (`scope_contract_version` and `scope_contract_digest`) and
+`persist_policy: true`, and it binds the call's arguments, so the same tool
+with new inputs asks again. Wider scopes and the blocking rules stay one click
+away under "More choices". A request that is not exact-action eligible, has no
+artifact scope, is Watch-only, or carries `retry_cannot_reuse_approval` gets
+the full decision controls instead.
+
 A prompt has no execution binding, so a review held at the prompt could offer
 neither choice. When a prompt's only risks are ones a later tool call carries
 out (reading local secrets, sending data out, deleting files, running a
@@ -72,12 +82,10 @@ recommendation whenever the exact action is offered, and the dashboard follows
 it. Broader choices (this project, this source, this app, everywhere) stay
 available but are never preselected.
 
-Every choice states three things on the card:
-
-- **Applies to**: the action and the place the decision covers.
-- **Expires**: one identical retry for Allow once; for a saved decision, until
-  the user removes it or the action itself changes.
-- **Policy**: whether anything is saved, and where it applies.
+Each choice is a label and one plain sentence. The card does not add a terms
+table (applies to, expires, policy) under a choice: a person deciding in a few
+seconds reads the label and the sentence, and the sentence says whether
+anything is saved and where it applies.
 
 Choosing a broader scope does not widen what the decision approves. A saved
 allow at any scope still answers only the action whose hash it was saved
@@ -117,6 +125,10 @@ falls back to `native-command-hash-v1`. That hash covers:
 - for any other tool, its whole input as it was sent, including a `command`
   field and any other field, even when the input is not an object (empty only
   when the tool takes none)
+- for an Oh My Pi `eval` made only of `commit` prelude drafts, the
+  repositories the drafts commit to instead of the program text. A draft's
+  subject, body and file selection are literal text that runs nothing, so
+  Always allow holds for the next draft in that repository
 
 Changing any of these produces a new command, and Guard asks again.
 
@@ -137,6 +149,8 @@ Changing any of these produces a new command, and Guard asks again.
 | Gathering of local tool-grant evidence on a native tool request, and the receipt `approval_source` label (a label of who approved; it never narrows the choices offered) | `rust/crates/guard-runtime/src/hook_artifact_compose_policy_tail.rs` (`local_eligibility_required`, `approval_source`) |
 | PreToolUse floor on a native command (a review or require-reapproval floor stays that tier and keeps both choices; a sandbox-required floor keeps that tier instead of collapsing to a block, while the containment rewrite stays routed from the edge result; an allowed local CLI grant never settles below a require-reapproval floor; no pre-tool review, or no local CLI grant answer, is the host outage response, never a floor or action the transport picks) | `rust/crates/guard-runtime/src/hook_decision_pretool_floor.rs` (`pretool_floor`), answered through the resident `hook_decide` operation; the local CLI grant step is `rust/crates/guard-runtime/src/local_cli_grant_op.rs` (`decide_allowed_launch`), reached from `src/codex_plugin_scanner/guard/local_cli_hook.py` (`_native_local_cli_hook_reply`) through `rust/crates/guard-runtime/src/local_cli_hook_op.rs` (`evaluate_local_cli_hook_request`) |
 | Containment routing of a native PreToolUse answer (a review that is not routed keeps its card with both choices; only a sandbox-required answer goes to the contained sink; an outside-roots review an allowed local CLI covers is lifted to allow by the edge's custom rule, as that CLI's Always allow would, and otherwise keeps the review; whether the sink takes a receipt is answered per harness and host, and a host with no sink for the profile, Windows included, keeps the receipt and says so instead of allowing; no resident answer is the host outage response, never a route the transport picks) | `rust/crates/guard-runtime/src/hook_decision_containment_route.rs` (`containment_route`, `containment_sink`; `edge_route` stamps the same route on the PreToolUse edge so no second round trip is needed) and `rust/crates/guard-runtime/src/hook_decision_containment_rewrite.rs` (`containment_rewrite`: the resident writes the private request snapshot and quotes the sink command, and a call it cannot snapshot keeps its receipt; `rust/crates/guard-runtime/src/edge_containment.rs` answers the same rewrite on the edge, after its self-check, when the daemon's envelope carries `containment_sink`, and marks it `containment_rewrite`; a sink route in a workspace without that mark is the host outage response, never a second resident call), held to the routed shape by `src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py` through `src/codex_plugin_scanner/guard/native_hook_containment_route.py` |
+| PostToolUse output of a call admitted on an approval (the PreToolUse that lets a reviewed call through on Allow once or Always allow records a witness keyed by the harness's own call id and the tool name; the PostToolUse with the same call id and tool reads it back, even when the host presents the executed input differently, and only then does a policy floor that already sent the call to review, such as `subprocess_action: review`, stop holding the output. A secret or sensitive-output verdict and a block floor are never lowered; a harness with no proven call id gets no witness) | `rust/crates/guard-runtime/src/native_admitted_call.rs` (`record_for_hook`, `admitted_for_post`), written from `rust/crates/guard-runtime/src/hook_direct_saved_decision.rs` (`admit_if_accepted`) and `src/codex_plugin_scanner/guard/hook_review/hook_native_review_binding.py` (`admit_accepted_call`), read in `rust/crates/guard-runtime/src/policy_enforcement_post.rs` (`apply_post_tool_policy_with_witness`) |
+| Guard's own wait for a review (`hol-guard approvals wait`, `approvals retry-hint` or a listing, on the hook's own Guard home) is not held by the subprocess floor, so the instruction a review card gives can be followed under `subprocess_action: review` | `rust/crates/guard-command/src/pretool/guard_home_option.rs` (`guard_approval_inspection_command`), applied in `rust/crates/guard-runtime/src/policy_enforcement.rs` (`apply_pre_tool_policy_with_inspection`) |
 | Review card choices | `dashboard/src/approval-retry-guidance.ts`, `dashboard/src/review-decision-card.tsx` |
 
 ## Regression tests
@@ -164,6 +178,8 @@ Changing any of these produces a new command, and Guard asks again.
 - `rust/crates/guard-runtime/src/hook_decision_pretool_floor_tests.rs` (`a_malformed_answer_is_rejected_not_floored`) and `tests/test_guard_native_local_cli_identity.py` (`test_no_resident_answer_for_the_local_cli_step_is_the_host_outage`)
 - `rust/crates/guard-runtime/src/hook_decision_containment_route_tests.rs` (`a_review_keeps_allow_once_and_always_allow`, `a_host_with_no_sink_says_so`, `the_edge_carries_the_route_the_query_answers`)
 - `tests/test_containment_route_wire.py` (`test_a_review_keeps_allow_once_and_always_allow`, `test_a_malformed_route_is_an_outage_not_a_route`, `test_a_host_without_a_sink_keeps_the_receipt_and_says_so`)
+- `rust/crates/guard-runtime/src/native_admitted_call_tests.rs` and `rust/crates/guard-runtime/src/policy_enforcement_admitted_call_tests.rs` (`approved_call_output_is_not_held_again_by_the_subprocess_floor`, `approval_witness_never_releases_secret_output_or_a_block_floor`, `own_approval_wait_passes_the_subprocess_floor`)
+- `ci/gauntlet/approval_retry.json` (`approved-retry-waited-command`)
 - `dashboard/src/approval-retry-ux.test.ts`, `dashboard/e2e/approval-scope-ui.spec.ts`
 
 If one of these fails after a change, fix the change. Do not relax the test.

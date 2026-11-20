@@ -20,6 +20,11 @@ use crate::copilot_detect::universal_newlines;
 use crate::hook_removal_prune::write_indented;
 use crate::pyjson::{self, PyVal, SurrogateMapped};
 
+#[path = "files_object.rs"]
+mod object;
+
+pub(crate) use object::Object;
+
 const MAX_SNAPSHOT: u64 = 4 * 1024 * 1024;
 
 #[cfg(unix)]
@@ -281,102 +286,6 @@ pub(crate) fn render(value: &PyVal) -> Step<String> {
     String::from_utf8(out).map_err(|_| Failure::Invalid)
 }
 
-/// A JSON object read with each lone surrogate escape mapped, so a rewrite
-/// keeps it the way CPython's `json.loads`/`json.dumps` round trip does.
-#[derive(Default)]
-pub(crate) struct Object {
-    pub(crate) entries: Vec<(String, PyVal)>,
-    mapped: bool,
-}
-
-impl Object {
-    /// The object in `text`: `None` when it is not JSON (or holds a lone
-    /// surrogate escape beside a character it maps onto), `Some(Err)` when
-    /// it is JSON but not an object.
-    pub(crate) fn parse(text: &str) -> Option<Result<Self, ()>> {
-        let parsed = crate::pyjson::parse_mapping_lone_surrogates(text).ok()?;
-        if parsed.mapped && parsed.collision {
-            return None;
-        }
-        Some(match parsed.value {
-            PyVal::Dict(entries) => Ok(Self {
-                entries,
-                mapped: parsed.mapped,
-            }),
-            _ => Err(()),
-        })
-    }
-
-    /// `payload[key] = value`, keeping an existing key's position.
-    pub(crate) fn set(&mut self, key: &str, value: PyVal) {
-        let mut doc = Doc(std::mem::take(&mut self.entries));
-        doc.set(key, value);
-        self.entries = doc.0;
-    }
-
-    /// Whether a lone surrogate escape was mapped on the way in.
-    pub(crate) fn mapped(&self) -> bool {
-        self.mapped
-    }
-
-    /// `json.dumps(payload, indent=2)`.
-    pub(crate) fn render(&self) -> Step<String> {
-        let value = PyVal::Dict(self.entries.clone());
-        if self.mapped {
-            render_restoring_surrogates(&value)
-        } else {
-            render(&value)
-        }
-    }
-}
-
-/// [`render`] for a value read with `pyjson::parse_mapping_lone_surrogates`:
-/// each mapped character goes back out as the lone `\uXXXX` escape CPython
-/// kept, so a rewrite leaves it as the user saved it.
-fn render_restoring_surrogates(value: &PyVal) -> Step<String> {
-    let rendered = render(value)?;
-    let mut out = String::with_capacity(rendered.len());
-    let mut rest = rendered.as_str();
-    while let Some(at) = rest.find('\\') {
-        out.push_str(&rest[..at]);
-        let tail = &rest[at..];
-        let step = match mapped_surrogate(tail) {
-            Some(code) => {
-                out.push_str(&format!("\\u{code:04x}"));
-                12
-            }
-            None => {
-                out.push_str(&tail[..2]);
-                2
-            }
-        };
-        rest = &tail[step..];
-    }
-    out.push_str(rest);
-    Ok(out)
-}
-
-/// The lone surrogate a `\uHIGH\uLOW` pair escape at the start of `tail`
-/// stands for, when it encodes a character in the mapped range.
-fn mapped_surrogate(tail: &str) -> Option<u32> {
-    let unit = |start: usize| {
-        let escape = tail.get(start..start + 6)?;
-        let digits = escape.strip_prefix("\\u")?;
-        digits
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-            .then(|| u32::from_str_radix(digits, 16).ok())
-            .flatten()
-    };
-    let (high, low) = (unit(0)?, unit(6)?);
-    if !(0xd800..0xdc00).contains(&high) || !(0xdc00..0xe000).contains(&low) {
-        return None;
-    }
-    let code = 0x1_0000 + ((high - 0xd800) << 10) + (low - 0xdc00);
-    let offset = code.checked_sub(crate::pyjson::SURROGATE_PLANE_BASE)?;
-    (offset < 0x800).then_some(0xd800 + offset)
-}
-
 /// The shim manifest Python prepared or removed, as a JSON object string.
 pub(crate) fn shim_manifest(fields: &serde_json::Map<String, Value>) -> Step<Vec<(String, PyVal)>> {
     let raw = fields
@@ -436,15 +345,19 @@ pub(crate) fn finished(
     fields: &serde_json::Map<String, Value>,
 ) -> Step<Value> {
     let shim = shim_manifest(fields)?;
-    let notes = fields
-        .get("finish")
-        .and_then(|finish| finish.get("notes"))
+    let finish = fields.get("finish").ok_or(Failure::Invalid)?;
+    let notes = finish
+        .get("notes")
         .and_then(Value::as_array)
         .ok_or(Failure::Invalid)?
         .iter()
         .map(|note| note.as_str().map(text).ok_or(Failure::Invalid))
         .collect::<Step<Vec<_>>>()?;
-    manifest_answer(adapter_result(harness, false, config_path, &shim, notes))
+    let mut manifest = adapter_result(harness, false, config_path, &shim, notes);
+    if finish.get("cleanup_incomplete") == Some(&Value::Bool(true)) {
+        manifest.set("cleanup_incomplete", PyVal::Bool(true));
+    }
+    manifest_answer(manifest)
 }
 
 /// The saved config a backup envelope holds, as `restore_from_backup` reads it.

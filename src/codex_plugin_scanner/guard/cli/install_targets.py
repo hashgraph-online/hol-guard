@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
-from ..consumer import detect_all
+from ..harness_context import HarnessContext
+from ..native_detected import detected_harnesses
+from ..native_harness_client import canonical_harness as resolve_harness
 from ..store import GuardStore
 
 
@@ -25,7 +25,7 @@ def _resolve_targets(
     if requested and not install_all:
         targets: list[str] = []
         for item in requested:
-            canonical = get_adapter(item).harness
+            canonical = resolve_harness(item)
             if canonical not in targets:
                 targets.append(canonical)
         return targets
@@ -33,14 +33,7 @@ def _resolve_targets(
         action = "install" if command == "install" else "uninstall"
         suffix = " or --self" if command == "uninstall" else ""
         raise ValueError(f"Guard {action} requires a harness or --all{suffix}.")
-    detected = {
-        detection.harness
-        for detection in detect_all(context)
-        if detection.installed
-        or detection.command_available
-        or len(detection.config_paths) > 0
-        or len(detection.artifacts) > 0
-    }
+    detected = set(detected_harnesses(context))
     if command == "uninstall":
         detected.update(
             str(item.get("harness"))

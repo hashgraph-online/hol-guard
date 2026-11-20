@@ -9,13 +9,13 @@ from shutil import which
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
-    discover_harness_mcp_servers,
-    persist_discovered_harness_mcp_servers,
-)
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.local_clis.local_cli_mcp_store import stored_mcp_recognition
+from codex_plugin_scanner.guard.mcp_discovery_client import (
+    discover_harness_mcp_servers,
+    persist_discovered_harness_mcp_servers,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import probe_stdio_mcp_server

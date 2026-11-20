@@ -1,0 +1,311 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-stack",
+  "version": "1.3.1",
+  "name": "KruschStack Unified Control Plane MCP",
+  "description": "Unified local SQLite control plane MCP server (kruschdev/krusch-stack v1.3.1) for memory, Git AST graphs, OS page trees, UI templates, Turn-0 grounding, sealed bricks, and 2PC diff staging. Read-only inspections (including krusch_context_health: read-only SELECT and file-hash checks, zero DB writes) inherit policy; krusch_tool_call is blocked so deferred calls cannot bypass per-tool rules; writes, embeddings (krusch_context_retrieve), sandboxes, and 2PC require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-stack"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/how-krusch-stack-stacks-up.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-stack"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "local-sqlite-write",
+    "local-file-write",
+    "external-command-execution",
+    "external-embedding-request",
+    "external-cloud-workspace-write"
+  ],
+  "tools": [
+    {
+      "name": "krusch_context_retrieve",
+      "state": "review"
+    },
+    {
+      "name": "krusch_context_health",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_list_repos",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_read_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_read_blob",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_search_symbols",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_file_symbols",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_dependency_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_fs_locate",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_fs_page_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_fs_read_page",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_task_status",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_diff",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_explain",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_color_palette",
+      "state": "inherit"
+    },
+    {
+      "name": "css_to_tailwind",
+      "state": "inherit"
+    },
+    {
+      "name": "get_canonical_template",
+      "state": "inherit"
+    },
+    {
+      "name": "list_canonical_templates",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_responsive_breakpoints",
+      "state": "inherit"
+    },
+    {
+      "name": "get_workspace_status",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_route_task",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_stack_status",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_tool_search",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_tool_describe",
+      "state": "inherit"
+    },
+    {
+      "name": "hydrascope_check_answerable",
+      "state": "inherit"
+    },
+    {
+      "name": "brick_verify",
+      "state": "inherit"
+    },
+    {
+      "name": "brick_inbox",
+      "state": "inherit"
+    },
+    {
+      "name": "brick_blast_radius",
+      "state": "inherit"
+    },
+    {
+      "name": "brick_plan_fanout",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_ground_workspace",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_resolve_scale_profile",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_grounded_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_context_remember",
+      "state": "review"
+    },
+    {
+      "name": "krusch_context_revise",
+      "state": "review"
+    },
+    {
+      "name": "krusch_context_nudge",
+      "state": "review"
+    },
+    {
+      "name": "krusch_git_semantic_search",
+      "state": "review"
+    },
+    {
+      "name": "krusch_fs_search",
+      "state": "review"
+    },
+    {
+      "name": "krusch_fs_remember_on_page",
+      "state": "review"
+    },
+    {
+      "name": "krusch_fs_sync",
+      "state": "review"
+    },
+    {
+      "name": "krusch_run",
+      "state": "review"
+    },
+    {
+      "name": "krusch_apply_diff",
+      "state": "review"
+    },
+    {
+      "name": "krusch_reject",
+      "state": "review"
+    },
+    {
+      "name": "krusch_abort",
+      "state": "review"
+    },
+    {
+      "name": "query_design_rules",
+      "state": "review"
+    },
+    {
+      "name": "get_agent_steering",
+      "state": "review"
+    },
+    {
+      "name": "search_drive_rag",
+      "state": "review"
+    },
+    {
+      "name": "read_drive_file",
+      "state": "review"
+    },
+    {
+      "name": "write_drive_file",
+      "state": "review"
+    },
+    {
+      "name": "list_drive_workspace",
+      "state": "review"
+    },
+    {
+      "name": "krusch_tool_call",
+      "state": "block"
+    },
+    {
+      "name": "hydrascope_traverse_context",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_compare_vector_vs_graph",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_run_benchmark",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_supersede_decision",
+      "state": "review"
+    },
+    {
+      "name": "hydrascope_ingest_directory",
+      "state": "review"
+    },
+    {
+      "name": "brick_seal",
+      "state": "review"
+    },
+    {
+      "name": "brick_suggest",
+      "state": "review"
+    },
+    {
+      "name": "brick_share",
+      "state": "review"
+    },
+    {
+      "name": "brick_try_local",
+      "state": "review"
+    },
+    {
+      "name": "brick_adopt",
+      "state": "review"
+    },
+    {
+      "name": "brick_revoke",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_session_start",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_intercept",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_outcome",
+      "state": "review"
+    },
+    {
+      "name": "krusch_grounded_verify_stop",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-stack",
+    "https://github.com/kruschdev/krusch-stack/blob/main/src/mcp/server.js",
+    "https://github.com/kruschdev/krusch-stack/blob/main/bin/krusch-stack.js",
+    "https://krusch.dev/articles/how-krusch-stack-stacks-up.html",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/krusch-stack"
+  ],
+  "saferAlternatives": [
+    "Use --profile memory-only (5 tools) or --profile coding-agent (19 tools) instead of --profile full (39 tools); krusch_context_health runs read-only SELECT and file-hash checks without DB writes.",
+    "Keep krusch_tool_call blocked under Guard and run krusch-stack without --defer-tools (or invoke target MCP tools directly) so Guard evaluates each target tool against its own policy rule.",
+    "Keep krusch_run, krusch_apply_diff, write_drive_file, krusch_fs_sync, brick_try_local, and brick_adopt on Review because they execute commands, run sandboxes, or write files."
+  ]
+}

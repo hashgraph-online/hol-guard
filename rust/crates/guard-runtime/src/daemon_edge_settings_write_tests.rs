@@ -237,3 +237,48 @@ fn only_a_cigar_change_or_a_reset_hands_settings_to_the_native_service() {
     let handed = HANDOFFS.with(|handoffs| handoffs.borrow().clone());
     assert_eq!(handed, vec![edge.home.clone()]);
 }
+
+#[test]
+fn only_turning_cigar_on_can_ask_codex_for_short_replies() {
+    assert!(short_replies::turns_cigar_on(&entries(
+        json!({"context_assistance": {"enabled": true}, "mode": "observe"})
+    )));
+    for settings in [
+        json!({"context_assistance": {"enabled": false}}),
+        json!({"context_assistance": {"enabled": "true"}}),
+        json!({"context_assistance": {}}),
+        json!({"mode": "observe"}),
+    ] {
+        assert!(
+            !short_replies::turns_cigar_on(&entries(settings.clone())),
+            "{settings}"
+        );
+    }
+    // A Guard home outside the home folder (every test home) never asks.
+    let edge = edge("short-replies", "");
+    let cigar_on = entries(json!({"context_assistance": {"enabled": true}}));
+    assert!(!short_replies::ask_due(&cigar_on, &edge.home));
+}
+
+#[test]
+fn turning_cigar_on_is_answered_by_the_edge() {
+    // The edge runs the save itself; it never relays it (a relay has no daemon
+    // behind it and answers 404). A test home has no enrolled CIGAR runtime,
+    // so the edge's own check refuses it and nothing is written.
+    let edge = edge("cigar-on", "");
+    let answer = post(
+        &edge,
+        json!({"settings": {"context_assistance": {"enabled": true, "runtime_id": "cigar-test"}}}),
+        "invalid_settings",
+    );
+    let (status, body) = answer.expect("the edge answers the save itself");
+    assert_eq!(status, 400, "{body}");
+    assert_eq!(body["error"], "invalid_settings");
+    assert!(
+        body["message"]
+            .as_str()
+            .is_some_and(|text| text.contains("CPython")),
+        "{body}"
+    );
+    assert!(!edge.home.join("config.toml").exists());
+}

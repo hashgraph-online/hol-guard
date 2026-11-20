@@ -42,7 +42,7 @@ def _run_apps_command(
 ) -> int:
     apps_command = getattr(args, "apps_command", None)
     if apps_command is None:
-        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+        from ..mcp_discovery_client import observe_configured_mcp_servers
 
         observe_configured_mcp_servers(store, context=context, seen_at=_now())
         _emit(
@@ -96,7 +96,7 @@ def _run_apps_command(
 
     if apps_command == "disconnect":
         try:
-            canonical_harness = get_adapter(harness).harness
+            canonical_harness = resolve_harness(harness)
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2
