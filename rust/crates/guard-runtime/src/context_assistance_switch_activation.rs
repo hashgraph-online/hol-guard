@@ -140,7 +140,7 @@ pub(super) fn verify_selected(
 /// the reserved built-in installation. With memory-only data there is no saved
 /// evidence tied to the old engine, so the re-measured built-in selection
 /// stands in for the saved one. Saved data generations keep the strict check.
-fn builtin_upgrade(
+pub(super) fn builtin_upgrade(
     selected: &guard_cigar_release::SelectionPointer,
     measured: &guard_cigar_release::SelectionPointer,
 ) -> bool {

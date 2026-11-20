@@ -269,3 +269,26 @@ mod restoration;
 mod rollback;
 #[path = "context_assistance_switch_scope_erasure_tests.rs"]
 mod scope_erasure;
+
+fn builtin(sha: char) -> SelectionPointer {
+    let mut pointer = pointer("builtin");
+    pointer.runtime.installation_sha256 = sha.to_string().repeat(64);
+    pointer.runtime.origin = SelectionOrigin::Builtin {
+        core_version: "0.14.2".into(),
+    };
+    pointer
+}
+
+#[test]
+fn updated_builtin_engine_replaces_the_saved_memory_selection() {
+    let fixture = Fixture::new(false);
+    let mut owner = Owner::acquire(&fixture.home).unwrap();
+    owner.initialize(builtin('a')).unwrap();
+    owner.initialize(builtin('b')).unwrap();
+    assert_eq!(owner.record().unwrap().current, builtin('b'));
+    assert_eq!(owner.record().unwrap().revision, 2);
+    let mut saved = builtin('c');
+    saved.data = SelectionData::LegacySaved;
+    assert!(owner.initialize(saved).is_err());
+    assert!(owner.initialize(pointer("other")).is_err());
+}
