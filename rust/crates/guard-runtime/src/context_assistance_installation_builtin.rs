@@ -4,7 +4,7 @@
 //! time, so it cannot go stale or be replaced on disk.
 use super::*;
 use guard_cigar_release::SelectionOrigin;
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{atomic::AtomicBool, Arc};
 
 /// Reserved runtime id. Enrollment and the downloaded-runtime installer
 /// refuse it, so a stored record can never shadow the built-in engine.
@@ -142,12 +142,10 @@ mod tests {
             record.approval,
             guard_context_assistance::builtin_approval()
         );
-        assert!(
-            record
-                .selection
-                .work_dir
-                .ends_with("context-assistance/work/builtin")
-        );
+        assert!(record
+            .selection
+            .work_dir
+            .ends_with("context-assistance/work/builtin"));
         assert!(record.selection.python_bundle.is_none());
         assert!(installation(Path::new("relative")).is_err());
         assert_eq!(choice()["builtin"], true);
