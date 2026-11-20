@@ -296,9 +296,15 @@ fn the_stdin_envelope_answers_and_refuses() {
     let answer: Value =
         serde_json::from_slice(&run_command(request.to_string().as_bytes()).unwrap()).unwrap();
     assert_eq!(answer, json!({"ok": true, "result": {"due": true}}));
-    let refused: Value = serde_json::from_slice(&run_command(&b"{}"[..]).unwrap()).unwrap();
+    let other = json!({"schema": SCHEMA, "guard_home": home.path(), "op": "other", "now": NOW});
+    let refused: Value =
+        serde_json::from_slice(&run_command(other.to_string().as_bytes()).unwrap()).unwrap();
     assert_eq!(refused, json!({"ok": false, "error": INVALID}));
-    assert!(run_command(&b"{\"unknown\": 1}"[..]).is_ok());
+    assert_eq!(run_command(&b"{}"[..]), Err(INVALID.to_owned()));
+    assert_eq!(
+        run_command(&b"{\"unknown\": 1}"[..]),
+        Err(INVALID.to_owned())
+    );
 }
 
 #[test]
