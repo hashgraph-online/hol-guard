@@ -984,7 +984,7 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
     assert backoff.get("accepted") == 0
 
 
-@pytest.mark.parametrize("failure_kind", ("http", "network"))
+@pytest.mark.parametrize("failure_kind", ("http", "network", "native"))
 def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1032,6 +1032,8 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
                 hdrs=Message(),
                 fp=None,
             )
+        if failure_kind == "native":
+            raise runner.GuardSyncNotConfiguredError("Guard Cloud is not connected.")
         raise OSError("network unavailable")
 
     monkeypatch.setattr(aibom_cli, "_batch_inventory_events", plan_mixed_snapshots)
@@ -1039,7 +1041,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
     monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", fail_valid_batch)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as raised:
         sync_aibom_snapshots(
             store,
             HarnessContext(
@@ -1054,8 +1056,16 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
             },
         )
 
+    if failure_kind == "native":
+        assert isinstance(raised.value, runner.GuardSyncNotConfiguredError)
     summary = store.get_sync_payload("aibom_sync_summary")
     assert isinstance(summary, dict)
+    expected_error = {
+        "http": "Guard Cloud AIBOM sync failed due to an HTTP error.",
+        "network": "Guard Cloud AIBOM sync failed due to a network error.",
+        "native": "Guard Cloud is not connected.",
+    }[failure_kind]
+    assert summary.get("error") == expected_error
     assert summary.get("synced") is False
     assert summary.get("partial") is True
     assert summary.get("accepted") == 0
