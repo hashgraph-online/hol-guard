@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.zambo",
+  "version": "1.0.0",
+  "name": "Zambo MCP",
+  "description": "Hosted MCP server for verifiable AI work: handovers between AIs, memory, continuity threads, site and code audits, scam and prompt-injection checks, live prices, and Day Pass access. 37 tools on the default surface, 153 in the full catalog. Every call that runs returns an AER-1 receipt: a SHA-256 commitment anyone can recompute to check the saved result was not changed. Read tools stay on Guard's usual handling; write, handover, and payment tools require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "zambo.dev",
+    "displayName": "Zambo",
+    "url": "https://zambo.dev"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#111827"
+  },
+  "homepage": "https://zambo.dev",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://zambo.dev/mcp",
+    "serverNames": [
+      "zambo"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-shared-state-write",
+    "external-content-ingestion",
+    "external-metered-payment"
+  ],
+  "tools": [
+    {
+      "name": "capability_search",
+      "state": "inherit"
+    },
+    {
+      "name": "memory_recall",
+      "state": "inherit"
+    },
+    {
+      "name": "memory_remember",
+      "state": "review"
+    },
+    {
+      "name": "scam_check",
+      "state": "inherit"
+    },
+    {
+      "name": "day_pass_redeem",
+      "state": "review"
+    },
+    {
+      "name": "spend_limit_set",
+      "state": "review"
+    },
+    {
+      "name": "spend_limit_status",
+      "state": "inherit"
+    },
+    {
+      "name": "handover_accept",
+      "state": "review"
+    },
+    {
+      "name": "handover",
+      "state": "review"
+    },
+    {
+      "name": "handover_status",
+      "state": "inherit"
+    },
+    {
+      "name": "handover_list",
+      "state": "inherit"
+    },
+    {
+      "name": "zambo_home",
+      "state": "inherit"
+    },
+    {
+      "name": "activity_today",
+      "state": "inherit"
+    },
+    {
+      "name": "workflow_close",
+      "state": "review"
+    },
+    {
+      "name": "workflow_seal",
+      "state": "review"
+    },
+    {
+      "name": "zambo_universal",
+      "state": "review"
+    },
+    {
+      "name": "new_session",
+      "state": "review"
+    },
+    {
+      "name": "continuity_get_recent",
+      "state": "inherit"
+    },
+    {
+      "name": "continuity_list_threads",
+      "state": "inherit"
+    },
+    {
+      "name": "continuity_open_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "continuity_start_thread",
+      "state": "review"
+    },
+    {
+      "name": "continuity_set_prefs",
+      "state": "review"
+    },
+    {
+      "name": "journal_log",
+      "state": "review"
+    },
+    {
+      "name": "live_price",
+      "state": "inherit"
+    },
+    {
+      "name": "pdf_extract",
+      "state": "inherit"
+    },
+    {
+      "name": "doc_intel",
+      "state": "review"
+    },
+    {
+      "name": "leadsignal",
+      "state": "inherit"
+    },
+    {
+      "name": "provibe_audit",
+      "state": "review"
+    },
+    {
+      "name": "ghost_audit_site",
+      "state": "review"
+    },
+    {
+      "name": "ghost_audit_status",
+      "state": "inherit"
+    },
+    {
+      "name": "ghost_audit_report",
+      "state": "inherit"
+    },
+    {
+      "name": "credithunt",
+      "state": "inherit"
+    },
+    {
+      "name": "prompt_shield",
+      "state": "inherit"
+    },
+    {
+      "name": "day_pass_checkout_link",
+      "state": "review"
+    },
+    {
+      "name": "day_pass_activate",
+      "state": "review"
+    },
+    {
+      "name": "day_pass_status",
+      "state": "inherit"
+    },
+    {
+      "name": "pass_status",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://zambo.dev",
+    "https://zambo.dev/install",
+    "https://datatracker.ietf.org/doc/draft-zambo-aer1/26/"
+  ],
+  "saferAlternatives": [
+    "Keep day_pass_activate and day_pass_checkout_link on Review so a person approves before any payment call runs; creating a checkout link never charges anyone.",
+    "Use the read tools (live_price, scam_check, handover_status, activity_today) for checks that change nothing."
+  ]
+}

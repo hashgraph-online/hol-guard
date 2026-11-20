@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Fixture with a dangerous local skill definition",
   "author": {
-    "name": "Hashgraph Online",
+    "name": "HOL",
     "email": "dev@hol.org"
   },
   "homepage": "https://github.com/hashgraph-online/hol-guard",

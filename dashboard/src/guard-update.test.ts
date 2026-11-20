@@ -1,9 +1,25 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
+import {
+  buildGuardDaemonCandidatePorts,
+  GuardDesktopHandoffError,
+  normalizeGuardUpdateStatus,
+  updateReconnectSucceeded,
+} from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
 import { GuardUpdatePanel } from "./guard-update-panel";
+import {
+  GuardUpdateBanner,
+  readDismissedDesktopUpdateVersion,
+  rememberDismissedDesktopUpdateVersion,
+} from "./guard-update-banner";
+import {
+  DESKTOP_HANDOFF_ALREADY_CURRENT,
+  DESKTOP_HANDOFF_FAILED,
+  desktopHandoffFailureMessage,
+  desktopUpdateBannerModel,
+} from "./guard-update-copy";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -35,6 +51,7 @@ assert(normalized.update_available === true, "update_available should normalize"
 assert(normalized.version_check.update_available === true, "version_check should normalize");
 assert(normalized.update_in_progress === true, "update_in_progress should normalize");
 assert(normalized.release_channel === "stable", "missing update channel should default to stable");
+assert(normalized.update_mode === "automatic", "missing update mode should default to automatic");
 
 const alphaReadyStatus = normalizeGuardUpdateStatus({
   current_version: "1.2.3",
@@ -71,6 +88,14 @@ const alphaUpdateMarkup = renderToStaticMarkup(
 );
 assert(alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') && alphaUpdateMarkup.includes(">Update</span></button>"), "update-ready state pairs the version line with a compact inline Update action");
 assert(alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"), "the ready-version label wraps long release strings instead of clipping them");
+
+const updateModeMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({ ...alphaReadyStatus, update_mode: "ask" }),
+    onSetUpdateMode: () => undefined,
+  }),
+);
+assert(updateModeMarkup.includes("Ask before installing"), "the update panel should expose the saved Core update mode");
 
 const longVersion = "3.0.111a1.dev456+g1a2b3c4d5e6";
 const longVersionMarkup = renderToStaticMarkup(
@@ -485,6 +510,113 @@ assert(
   "embedded reinstall prompt should point at the app first",
 );
 
+// The embedded banner is the prominent announcement the sidebar panel
+// cannot be: it names the ready version and hands the update to the app.
+const bannerStatus = normalizeGuardUpdateStatus({
+  current_version: "3.53.0a4",
+  latest_version: "3.53.0a5",
+  installer: "desktop",
+  version_check: { source: "desktop_core", status: "stale", current_version: "3.53.0a4", latest_version: "3.53.0a5", update_available: true },
+  auto_updatable: true,
+  update_available: true,
+  blocked_reason: null,
+  release_channel: "alpha",
+});
+const bannerModel = desktopUpdateBannerModel(bannerStatus, true, null);
+if (bannerModel === null) {
+  throw new Error("embedded dashboard with a ready update should produce a banner model");
+}
+assert(bannerModel.title.includes("3.53.0a5 is ready"), "banner title should name the ready version");
+assert(
+  desktopUpdateBannerModel(bannerStatus, false, null) === null,
+  "standalone dashboard should not use the Desktop banner",
+);
+assert(
+  desktopUpdateBannerModel(bannerStatus, true, "3.53.0a5") === null,
+  "dismissing one version should hide its banner",
+);
+assert(
+  desktopUpdateBannerModel(bannerStatus, true, "3.53.0a4") !== null,
+  "dismissing an older version must not hide a newer banner",
+);
+assert(
+  desktopUpdateBannerModel({ ...bannerStatus, update_available: false }, true, null) === null,
+  "no banner without an available update",
+);
+assert(
+  desktopUpdateBannerModel({ ...bannerStatus, update_suppressed: true }, true, null) === null,
+  "a suppressed update stays quiet instead of re-announcing",
+);
+
+// Dismissal storage keeps one version: dismissing a newer release after an
+// older one must restore the newer version, not whichever key sorts first.
+const dismissalStore = new Map<string, string>();
+Object.assign(globalThis, {
+  window: {
+    location: { href: "http://127.0.0.1:5474/", search: "?desktop_embed=1", hash: "" },
+    sessionStorage: {
+      getItem: (key: string) => dismissalStore.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        dismissalStore.set(key, value);
+      },
+    },
+    localStorage: rememberedChannelStorage,
+  },
+});
+rememberDismissedDesktopUpdateVersion("3.53.0a5");
+rememberDismissedDesktopUpdateVersion("3.53.0a6");
+assert(
+  readDismissedDesktopUpdateVersion() === "3.53.0a6",
+  "dismissal should restore the most recently dismissed version",
+);
+assert(
+  desktopUpdateBannerModel({ ...bannerStatus, latest_version: "3.53.0a6" }, true, readDismissedDesktopUpdateVersion()) === null,
+  "a reloaded dashboard should keep the newest dismissal dismissed",
+);
+
+const bannerMarkup = renderToStaticMarkup(
+  createElement(GuardUpdateBanner, {
+    model: bannerModel,
+    onDismiss: () => undefined,
+  }),
+);
+assert(bannerMarkup.includes("HOL Guard 3.53.0a5 is ready"), "banner should announce the ready version");
+assert(bannerMarkup.includes("Update in the app"), "banner action should hand off to the app updater");
+assert(bannerMarkup.includes("Not now"), "banner should offer a per-version dismissal");
+assert(
+  bannerMarkup.includes("Your approvals and settings stay saved."),
+  "banner should reassure that approvals survive the update",
+);
+
 (globalThis as { window?: unknown }).window = priorWindow;
+
+// A hand-off failure names what happened. Only an unanswered request
+// "did not reach the app"; a refusal from Guard carries its own reason.
+assert(
+  desktopHandoffFailureMessage(new TypeError("Failed to fetch")) === DESKTOP_HANDOFF_FAILED,
+  "a network failure should say the request did not reach the app",
+);
+assert(
+  desktopHandoffFailureMessage(new DOMException("The operation was aborted.", "AbortError")) === DESKTOP_HANDOFF_FAILED,
+  "a timed-out request should say the request did not reach the app",
+);
+assert(
+  desktopHandoffFailureMessage(
+    new GuardDesktopHandoffError("Guard is already on the latest version.", "update_not_available", 400),
+  ) === DESKTOP_HANDOFF_ALREADY_CURRENT,
+  "an already-current refusal should not claim the request was lost",
+);
+const unmanagedMessage = desktopHandoffFailureMessage(
+  new GuardDesktopHandoffError("This install is not managed by the HOL Guard app.", "desktop_handoff_unavailable", 400),
+);
+assert(
+  unmanagedMessage.startsWith("This install is not managed by the HOL Guard app.") &&
+    !unmanagedMessage.includes("did not reach"),
+  "a daemon refusal should show the daemon's reason",
+);
+assert(
+  desktopHandoffFailureMessage(new GuardDesktopHandoffError("  ", "desktop_handoff_failed", 500)) === DESKTOP_HANDOFF_FAILED,
+  "an empty daemon reason should fall back to the menu-bar route",
+);
 
 console.log("guard-update.test.ts: all tests passed");

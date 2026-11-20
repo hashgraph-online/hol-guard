@@ -20,7 +20,6 @@ import pytest
 
 from codex_plugin_scanner.guard.shims import (
     _is_transient_path,
-    _strip_managed_marker_blocks,
     ensure_guard_shim_path_in_shell_profile,
     ensure_package_shim_path_in_shell_profile,
     prepare_guard_shim_shell_profile,
@@ -159,20 +158,6 @@ class TestEnsureSkipsTransientShimDir:
         assert not (home / ".zshrc").exists()
 
 
-class TestStripManagedMarkerBlocks:
-    def test_preserves_unrelated_marker_free_content(self) -> None:
-        content = "a=1\nb=2\n"
-        assert _strip_managed_marker_blocks(content, _PACKAGE_PROFILE_MARKER) == content
-
-    def test_empty_content_stays_empty(self) -> None:
-        assert _strip_managed_marker_blocks("", _PACKAGE_PROFILE_MARKER) == ""
-
-    def test_user_triple_blank_lines_preserved(self) -> None:
-        """Stripping must only drop blank lines adjacent to a removed block; user blanks stay intact."""
-        content = "a=1\n\n\n\nb=2\n"  # 3 blank lines between user content
-        assert _strip_managed_marker_blocks(content, _PACKAGE_PROFILE_MARKER) == content
-
-
 class TestEnsureSkipsOnWindows:
     """Both profile writers must short-circuit on Windows before touching .zshrc."""
 
@@ -184,9 +169,9 @@ class TestEnsureSkipsOnWindows:
         (guard_home / "package-shims" / "bin").mkdir(parents=True)
         return _context(home, guard_home)
 
+    @pytest.mark.skipif(os.name != "nt", reason="the native runtime decides Windows from its own build")
     def test_guard_shim_skipped_on_windows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ctx = self._stable_ctx(tmp_path)
-        monkeypatch.setattr("codex_plugin_scanner.guard.shims.os.name", "nt")
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.shims._is_transient_path",
             lambda path: False,
@@ -194,6 +179,7 @@ class TestEnsureSkipsOnWindows:
         result = ensure_guard_shim_path_in_shell_profile(ctx)
         assert result["changed"] is False
         assert result["manual_path_required"] is True
+        assert result["manual_path_reason"] == "unsupported_shell"
         assert not (ctx.home_dir / ".zshrc").exists()
 
 

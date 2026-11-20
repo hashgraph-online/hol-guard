@@ -21,6 +21,64 @@ pub fn request_expired(accepted_at: Instant) -> bool {
     accepted_at.elapsed() >= TOTAL_REQUEST_BUDGET
 }
 
+fn deadline_expired() -> io::Error {
+    io::Error::new(io::ErrorKind::TimedOut, "resident exchange deadline")
+}
+
+/// A socket read timeout bounds one read, not an exchange: a client that sends
+/// one byte before each timeout renews it for as long as it likes and keeps
+/// the worker that is reading. Every resident read is bounded by a deadline
+/// for the whole exchange, and each read of it is given only the time left
+/// before that deadline, so neither a drip feed nor a silence after the last
+/// byte can hold a worker past the bound its exchange was admitted under.
+pub(crate) fn read_exact_by(
+    stream: &mut dyn crate::resident_transport::ResidentStream,
+    buffer: &mut [u8],
+    deadline: Instant,
+) -> io::Result<()> {
+    let mut filled = 0;
+    while filled < buffer.len() {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(deadline_expired());
+        }
+        stream.set_resident_read_timeout(Some(left))?;
+        match stream.read(&mut buffer[filled..]) {
+            Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
+            Ok(read) => filled += read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+/// The same bound for the answer. A caller that stops reading fills the socket
+/// buffer and blocks the write; without a deadline for the whole response, and
+/// without cutting each write to what is left of it, it holds its worker one
+/// write timeout at a time.
+pub(crate) fn write_all_by(
+    stream: &mut dyn crate::resident_transport::ResidentStream,
+    buffer: &[u8],
+    deadline: Instant,
+) -> io::Result<()> {
+    let mut written = 0;
+    while written < buffer.len() {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(deadline_expired());
+        }
+        stream.set_resident_write_timeout(Some(left))?;
+        match stream.write(&buffer[written..]) {
+            Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+            Ok(wrote) => written += wrote,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
 pub fn classify_io_error(error: &io::Error) -> IoFailureClass {
     match error.kind() {
         io::ErrorKind::BrokenPipe

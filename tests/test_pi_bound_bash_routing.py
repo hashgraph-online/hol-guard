@@ -12,17 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_bound_bash_intent_source import (
+from tests.pi_extension_support import managed_extension_source, previous_managed_extension_source
+from tests.pi_extension_template import (
+    BOUND_BASH_HOST_STAMP_MARKER,
     BOUND_BASH_INTENT_SOURCE,
-)
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_bound_bash_source import (
-    with_bound_bash_host_observation,
-)
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
     CONTAINED_TEST_HELPERS_SOURCE,
+    fragment,
 )
-from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="native Bash owner is macOS-only")
 
@@ -127,7 +123,9 @@ if (process.umask() !== mask) throw Error("mask changed");
 console.log(JSON.stringify({ result, mask }));
 """
     script = tmp_path / "host-observation.ts"
-    script.write_text(with_bound_bash_host_observation(source, harness=harness))
+    assert source.count(BOUND_BASH_HOST_STAMP_MARKER) == 1
+    stamp = fragment("bound_bash_host_stamp", harness=harness)
+    script.write_text(source.replace(BOUND_BASH_HOST_STAMP_MARKER, stamp))
     result = subprocess.run([bun, str(script)], text=True, capture_output=True, check=True, timeout=15)
     decoded = json.loads(result.stdout)
     stamp = decoded["result"]["guard_bound_bash_host"]

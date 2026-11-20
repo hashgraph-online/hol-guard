@@ -9,9 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import mcp_tool_calls, native_mcp_tool_call_identity
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
-from codex_plugin_scanner.guard.daemon.mcp_relay_evidence_drain import (
-    is_mcp_relay_evidence,
+from codex_plugin_scanner.guard.evidence_drains.mcp_relay_evidence_drain import (
     record_mcp_relay_evidence,
 )
 from codex_plugin_scanner.guard.proxy import runtime_mcp_projection
@@ -214,17 +212,6 @@ def test_a_recorder_failure_drops_the_record(
     monkeypatch.setattr(mcp_tool_calls, "allow_tool_call", fail)
 
     assert not record_mcp_relay_evidence(object(), tmp_path, _record())
-
-
-def test_the_drain_routes_relay_records_to_the_relay_recorder(
-    tmp_path: Path, calls: list[tuple[str, dict[str, Any]]]
-) -> None:
-    host = SimpleNamespace(store=object(), guard_home=tmp_path)
-
-    assert is_mcp_relay_evidence(_record())
-    assert not is_mcp_relay_evidence({"event": "PreToolUse"})
-    assert hook_direct_evidence_drain.record_direct_hook_evidence(host, _record())  # type: ignore[arg-type]
-    assert [kind for kind, _ in calls] == ["allow"]
 
 
 def test_an_inline_approved_forward_remembers_its_allow(

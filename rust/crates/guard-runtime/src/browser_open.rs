@@ -7,6 +7,7 @@
 //! inside a graphical session, through `xdg-open`.
 
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 fn env_flag(name: &str) -> bool {
     std::env::var(name).is_ok_and(|value| {
@@ -72,4 +73,44 @@ pub(crate) fn open_browser_url(url: &str) -> bool {
         .stderr(Stdio::null())
         .spawn()
         .is_ok()
+}
+
+/// How long an app link's launcher gets to say whether anything owns the
+/// scheme. `open` and `xdg-open` answer well inside this.
+const APP_LINK_VERDICT: Duration = Duration::from_millis(1500);
+
+#[cfg(test)]
+#[path = "approval_browser_policy_tests.rs"]
+mod policy_tests;
+
+/// Open an app link such as `hol-guard-desktop://...` and report whether an
+/// app took it. Unlike a web link, nothing may own the scheme: `open` and
+/// `xdg-open` then exit non-zero, so the launcher is waited for a bounded
+/// time. A launcher still running at the deadline counts as accepted.
+pub(crate) fn open_app_url(url: &str) -> bool {
+    if suppressed_for_tests() {
+        return false;
+    }
+    let Some(mut command) = launcher(url) else {
+        return false;
+    };
+    let Ok(mut child) = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    let deadline = Instant::now() + APP_LINK_VERDICT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Ok(None) => return true,
+            Err(_) => return false,
+        }
+    }
 }

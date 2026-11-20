@@ -10,15 +10,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_handler as transport
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.native_daemon_handler import NativeDaemonHandlerError
 from codex_plugin_scanner.guard.runtime import runner
-from tests.daemon_control_patching import patch_daemon_global
 
 pytestmark = pytest.mark.native_route_unpinned
 
@@ -141,40 +138,3 @@ def test_a_status_count_that_differs_from_the_request_raises(monkeypatch: pytest
     )
     with pytest.raises(NativeDaemonHandlerError):
         transport.native_detection_app_statuses(["a", "b"], guard_home=tmp_path)
-
-
-def test_a_failed_action_answers_503_when_the_resident_cannot_answer(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    def unavailable(*_args: object, **_kwargs: object) -> None:
-        raise NativeDaemonHandlerError("native_daemon_handler_unavailable")
-
-    monkeypatch.setattr(transport, "_decide", unavailable)
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.server = SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path))  # type: ignore[assignment]
-    status, payload = handler._headless_app_action_payload(action_path="connect", payload={})
-    assert (status, payload) == (503, {"error": "native_handler_policy_unavailable"})
-
-
-def test_a_completed_action_reports_applied_when_only_the_state_is_unavailable(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-
-    def unavailable(*_args: object, **_kwargs: object) -> None:
-        raise NativeDaemonHandlerError("native_daemon_handler_unavailable")
-
-    patch_daemon_global(monkeypatch, "native_headless_action_state", unavailable)
-    patch_daemon_global(
-        monkeypatch, "_queue_headless_cloud_sync_with_optional_publish", lambda **_k: {"status": "queued"}
-    )
-    patch_daemon_global(monkeypatch, "_managed_controls_publish_for", lambda _server: None)
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.server = SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path))  # type: ignore[assignment]
-    handler._harness_context = lambda _payload: object()  # type: ignore[method-assign,assignment,return-value]
-    handler._run_headless_managed_action = lambda *_a, **_k: {"managed_install": {"active": True}}  # type: ignore[method-assign]
-    handler._record_headless_receipt = lambda **_k: {"id": "receipt-1"}  # type: ignore[method-assign]
-    status, payload = handler._headless_app_action_payload(action_path="connect", payload={"harness": "codex"})
-    assert status == 503
-    assert payload["error"] == "native_handler_policy_unavailable"
-    assert payload["action_applied"] is True
-    assert payload["receipt"] == {"id": "receipt-1", "cloud_sync": {"status": "queued"}}

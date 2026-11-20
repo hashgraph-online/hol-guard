@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_contained_tests as route
-from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
+import codex_plugin_scanner
+from tests import codex_containment_route as route
 
 
 def receipt() -> dict[str, object]:
@@ -40,6 +40,24 @@ def hook_input(workspace: Path, **extra: object) -> str:
     )
 
 
+_REAL_RUN = subprocess.run
+
+
+def only_the_version_probe(monkeypatch: pytest.MonkeyPatch, probe) -> None:
+    """Answer ``codex --version`` with ``probe``; every other process runs for real.
+
+    The routing builds its isolated command by asking the native launcher, a
+    short process of its own that a blanket replacement would answer wrongly.
+    """
+
+    def run(command: object, *args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if isinstance(command, list) and command[:1] == ["/bin/codex"]:
+            return probe(command, *args, **kwargs)
+        return _REAL_RUN(command, *args, **kwargs)  # type: ignore[call-overload]
+
+    monkeypatch.setattr(route.subprocess, "run", run)
+
+
 def capable(monkeypatch: pytest.MonkeyPatch, version: str | None) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(route, "launching_codex_executable", lambda: None if version is None else Path("/bin/codex"))
@@ -47,10 +65,10 @@ def capable(monkeypatch: pytest.MonkeyPatch, version: str | None) -> None:
     def run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess([], 0, stdout=f"{version}\n", stderr="")
 
-    monkeypatch.setattr(route.subprocess, "run", run)
+    only_the_version_probe(monkeypatch, run)
 
 
-def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
+def test_current_codex_rewrites_to_the_contained_sink(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     hook_home = tmp_path / "hook-home"
     result = route.route_codex_containment(
@@ -59,7 +77,7 @@ def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
         guard_home=tmp_path / "guard",
         home_dir=hook_home,
     )
-    shaped = codex_hook_response(result, event_name="PreToolUse")
+    shaped = result
     assert shaped["hookSpecificOutput"]["permissionDecision"] == "allow"
     argv = shlex.split(shaped["hookSpecificOutput"]["updatedInput"]["command"])
     assert "execute-contained-test" in argv
@@ -67,6 +85,9 @@ def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
     assert argv[argv.index("--guard-home") + 1] == str(tmp_path / "guard")
     assert argv[argv.index("--home") + 1] == str(hook_home)
     assert argv[argv.index("--home") + 1] != str(Path.home())
+    package_root = Path(codex_plugin_scanner.__file__).resolve().parents[1]
+    assert (package_root / "codex_plugin_scanner").is_dir()
+    assert any(f"sys.path.insert(0, {str(package_root)!r})" in arg for arg in argv)
     Path(argv[argv.index("--request-file") + 1]).unlink()
 
 
@@ -83,7 +104,9 @@ def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
         "codex-cli 1.0",
     ],
 )
-def test_old_or_unknown_codex_keeps_the_denial_with_an_update_hint(tmp_path, monkeypatch, version):
+def test_old_or_unknown_codex_keeps_the_denial_with_an_update_hint(
+    containment_resident, tmp_path, monkeypatch, version
+):
     capable(monkeypatch, version)
     result = route.route_codex_containment(
         receipt(),
@@ -91,7 +114,7 @@ def test_old_or_unknown_codex_keeps_the_denial_with_an_update_hint(tmp_path, mon
         guard_home=tmp_path / "guard",
         home_dir=tmp_path / "hook-home",
     )
-    shaped = codex_hook_response(result, event_name="PreToolUse")
+    shaped = result
     assert shaped["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "updatedInput" not in shaped["hookSpecificOutput"]
     assert shaped["hookSpecificOutput"]["permissionDecisionReason"].endswith(route.UPDATE_HINT)
@@ -133,7 +156,7 @@ def test_failed_version_probe_never_rewrites(monkeypatch):
         ({}, {"guard_containment_receipt_only": True}),
     ],
 )
-def test_non_containment_and_sink_rechecks_pass_through(tmp_path, monkeypatch, change, extra):
+def test_non_containment_and_sink_rechecks_pass_through(containment_resident, tmp_path, monkeypatch, change, extra):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = {**receipt(), **change}
     result = route.route_codex_containment(
@@ -168,7 +191,7 @@ def test_unbound_or_relative_home_keeps_the_original_denial(tmp_path, monkeypatc
     )
 
 
-def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
+def test_version_probe_stops_at_the_hook_deadline(containment_resident, tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(route, "launching_codex_executable", lambda: Path("/bin/codex"))
     clock = {"now": 50.0}
@@ -179,7 +202,7 @@ def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
         recorded["timeout"] = float(kwargs["timeout"])
         return subprocess.CompletedProcess([], 0, stdout="codex-cli 0.162.1\n", stderr="")
 
-    monkeypatch.setattr(route.subprocess, "run", run)
+    only_the_version_probe(monkeypatch, run)
     allowed = route.route_codex_containment(
         receipt(),
         hook_input=hook_input(tmp_path),
@@ -187,7 +210,7 @@ def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
         home_dir=tmp_path / "hook-home",
         deadline=50.25,
     )
-    shaped = codex_hook_response(allowed, event_name="PreToolUse")
+    shaped = allowed
     assert shaped["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert recorded["timeout"] == 0.25
     allowed_argv = shlex.split(shaped["hookSpecificOutput"]["updatedInput"]["command"])
@@ -201,34 +224,35 @@ def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
         home_dir=tmp_path / "hook-home",
         deadline=80.0,
     )
-    shaped_denial = codex_hook_response(denied, event_name="PreToolUse")
+    shaped_denial = denied
     assert shaped_denial["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "updatedInput" not in shaped_denial["hookSpecificOutput"]
     assert recorded["timeout"] == 0.25
 
 
-def test_other_platforms_and_missing_guard_home_pass_through(tmp_path, monkeypatch):
+def test_a_missing_guard_home_passes_through(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = receipt()
     assert route.route_codex_containment(native, hook_input=hook_input(tmp_path), guard_home=None) is native
-    monkeypatch.setattr(sys, "platform", "linux")
-    assert (
-        route.route_codex_containment(native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard") is native
-    )
 
 
-def test_linux_routes_the_workspace_sandbox(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("reason", "profile"),
+    [
+        ("native_workspace_containment_required", "workspace-contained-v1"),
+        ("native_pytest_readonly_containment_required", "pytest-readonly-v2"),
+    ],
+)
+def test_linux_routes_the_workspace_sandbox_and_the_read_only_profiles(
+    containment_resident, tmp_path, monkeypatch, reason, profile
+):
     capable(monkeypatch, "codex-cli 0.162.1")
     monkeypatch.setattr(sys, "platform", "linux")
-    native = {
-        **receipt(),
-        "reason_code": "native_workspace_containment_required",
-        "required_execution_profile": "workspace-contained-v1",
-    }
+    native = {**receipt(), "reason_code": reason, "required_execution_profile": profile}
     result = route.route_codex_containment(
         native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
     )
-    shaped = codex_hook_response(result, event_name="PreToolUse")
+    shaped = result
     assert shaped["hookSpecificOutput"]["permissionDecision"] == "allow"
     argv = shlex.split(shaped["hookSpecificOutput"]["updatedInput"]["command"])
     Path(argv[argv.index("--request-file") + 1]).unlink()
@@ -241,30 +265,6 @@ def test_linux_walks_proc_to_the_launching_codex(monkeypatch):
     monkeypatch.setattr(route.os, "readlink", lambda path: executables[path])
     monkeypatch.setattr(route.Path, "read_text", lambda self, **_kwargs: "40 (sh (x) y) S 30 1 1")
     assert route.launching_codex_executable() == Path("/opt/codex/bin/codex")
-
-
-def test_codex_response_drops_allow_without_updated_input():
-    shaped = codex_hook_response(
-        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}},
-        event_name="PreToolUse",
-    )
-    assert shaped == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
-
-
-def test_policy_deny_overrides_an_updated_input_allow():
-    shaped = codex_hook_response(
-        {
-            "policy_action": "deny",
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "updatedInput": {"command": "true"},
-            },
-        },
-        event_name="PreToolUse",
-    )
-    assert shaped["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "updatedInput" not in shaped["hookSpecificOutput"]
 
 
 @pytest.mark.parametrize(
@@ -308,3 +308,19 @@ def test_linux_does_not_take_an_unofficial_codex_name(monkeypatch):
     parents = {"/proc/40/stat": "40 (codex-evil) S 30 1 1", "/proc/30/stat": "30 (node) S 1 1 1"}
     monkeypatch.setattr(route.Path, "read_text", lambda self, **_kwargs: parents[str(self)])
     assert route.launching_codex_executable() is None
+
+
+def test_windows_ancestor_walk_rejects_a_reused_parent_id(monkeypatch):
+    from tests import codex_containment_route_windows as walk
+
+    monkeypatch.setattr(walk.sys, "platform", "win32")
+    monkeypatch.setattr(walk.os, "getpid", lambda: 30)
+    monkeypatch.setattr(walk, "_parents", lambda: {30: 20, 20: 10, 10: 0})
+    monkeypatch.setattr(walk, "_image_path", lambda pid: Path("codex.exe" if pid == 10 else "shell.exe"))
+    starts = {30: 300, 20: 200, 10: 100}
+    monkeypatch.setattr(walk, "_start_time", starts.get)
+    assert walk.windows_codex_ancestor(lambda name: name == "codex.exe", 6) is not None
+    starts[10] = 250
+    assert walk.windows_codex_ancestor(lambda name: name == "codex.exe", 6) is None
+    starts[10] = None
+    assert walk.windows_codex_ancestor(lambda name: name == "codex.exe", 6) is None

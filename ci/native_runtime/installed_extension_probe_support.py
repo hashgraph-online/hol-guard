@@ -116,7 +116,7 @@ def _additive_source_request() -> dict[str, object]:
     trust = {
         "schemaVersion": "guard.extension-trust-class-map.v1",
         "publishers": {
-            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+            "hol": {"id": "hol", "displayName": "HOL"},
             "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
         },
         "classes": {"first-party": [extension_id], "trusted-library": [], "external": []},

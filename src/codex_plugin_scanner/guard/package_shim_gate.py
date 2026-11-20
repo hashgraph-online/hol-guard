@@ -48,11 +48,20 @@ def package_shim_command_requires_guard(
         return True
     normalized_argv = tuple(str(argument) for argument in argv)
     if normalized_manager == "bun":
+        # Bun runs files and scripts, so the install parser's "no intent" is
+        # not a pass. Help and version still print and exit. Install help is
+        # the same exit: `bun add --help` never installs.
         return normalized_argv not in {
             ("--help",),
             ("--version",),
             ("-v",),
             ("help",),
+            ("add", "--help"),
+            ("add", "-h"),
+            ("install", "--help"),
+            ("install", "-h"),
+            ("i", "--help"),
+            ("i", "-h"),
         }
     command = [normalized_manager, *normalized_argv]
     intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace, guard_home=guard_home)

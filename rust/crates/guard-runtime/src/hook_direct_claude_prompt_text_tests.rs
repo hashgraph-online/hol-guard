@@ -1,5 +1,8 @@
-//! Parity vectors recorded from the daemon's Python prompt notice
-//! (`scripts/record_claude_prompt_notice_vectors.py`).
+//! Parity vectors first recorded from Guard's Python prompt copy
+//! (`scripts/record_claude_prompt_notice_vectors.py`). Since prompt reviews
+//! wait for the tool call, a held prompt shows its reason and a flagged
+//! prompt Guard sent on (`warn/…`) carries the briefing; the vectors were
+//! rewritten for that, since the Python copy is retired.
 
 use serde_json::{json, Value};
 
@@ -11,7 +14,7 @@ const VECTORS: &str = include_str!("../tests/fixtures/claude_prompt_notice_vecto
 fn the_notice_matches_the_daemon() {
     let document: Value = serde_json::from_str(VECTORS).unwrap();
     let vectors = document["vectors"].as_array().unwrap();
-    assert_eq!(vectors.len(), 273);
+    assert_eq!(vectors.len(), 362);
     for case in vectors {
         let name = case["name"].as_str().unwrap();
         let mut response = case["response"].clone();

@@ -2,100 +2,49 @@
 
 from __future__ import annotations
 
-import hashlib
+import base64
 
-from .containers import location
-from .metadata_objects import ObjectStore, encoded
-from .pack_store import MAX_BLOB_BYTES, MAX_OBJECT_BYTES, PackReader, decode, digest, publish_object
+from .metadata_objects import ObjectStore
+from .object_native import addressed, objects_read, sessioned, verify
+from .pack_store import MAX_OBJECT_BYTES, missing_object, publish_object
 
 
 class LocatedStore(ObjectStore):
-    def __init__(self, directory, publisher=None, fetch=None):
+    def __init__(self, directory, fetch=None):
         super().__init__(directory)
-        self.publisher = publisher
         self.fetch = fetch
 
-    def put(self, data, kind="data", expanded_length=None):
-        if self.publisher is None:
-            raise ValueError("delivery store has no publisher")
-        reference = super().put(data, kind, expanded_length)
-        return {**reference, "location": self.publisher.asset(data, "object")}
-
-    def put_json(self, value):
-        data = encoded(value)
-        if not 0 < len(data) <= MAX_BLOB_BYTES:
-            raise ValueError("delivery metadata exceeds assembled byte limit")
-        refs = [self.put(data[offset : offset + MAX_OBJECT_BYTES]) for offset in range(0, len(data), MAX_OBJECT_BYTES)]
-        while len(refs) > 1:
-            refs = [
-                self.put(
-                    encoded({"schema": "guard.delivery-concat.v2", "parts": parts}),
-                    "concat",
-                    sum(part["expanded_length"] for part in parts),
-                )
-                for offset in range(0, len(refs), 64)
-                if (parts := refs[offset : offset + 64])
-            ]
-        return refs[0]
-
+    @sessioned
     def blob(self, reference, depth=0):
-        if not isinstance(reference, dict) or set(reference) != {
-            "sha256",
-            "length",
-            "expanded_length",
-            "kind",
-            "location",
-        }:
-            raise ValueError("located delivery reference invalid")
-        if (
-            not digest(reference["sha256"])
-            or not isinstance(reference["kind"], str)
-            or reference["kind"] not in {"data", "concat"}
-            or type(reference["length"]) is not int
-            or not 0 < reference["length"] <= MAX_OBJECT_BYTES
-        ):
-            raise ValueError("located delivery reference bounds invalid")
-        if (
-            depth > 4
-            or type(reference["expanded_length"]) is not int
-            or not 0 < reference["expanded_length"] <= MAX_BLOB_BYTES
-        ):
-            raise ValueError("located delivery expansion invalid")
-        target = location(reference["location"], reference["sha256"], "object")
-        raw_ref = {key: reference[key] for key in ("sha256", "length", "kind", "expanded_length")}
-        raw_ref.update(kind="data", expanded_length=reference["length"])
-        path = self.directory / (reference["sha256"] + ".json")
-        if not path.exists() and not path.is_symlink() and self.fetch is not None:
-            if type(reference["length"]) is not int or not 0 < reference["length"] <= MAX_OBJECT_BYTES:
-                raise ValueError("located delivery length invalid")
-            data = self.fetch(target, reference["length"])
-            if len(data) != reference["length"] or hashlib.sha256(data).hexdigest() != reference["sha256"]:
+        # The runtime walks the reference and names every object the cache lacks;
+        # each is fetched, verified natively, then published before asking again.
+        fetched: set[str] = set()
+        while True:
+            reply = addressed(
+                "expand",
+                sources=objects_read(self.directory),
+                mode="located",
+                directory=str(self.directory),
+                reference=reference,
+                depth=depth,
+                invalid="located delivery reference invalid",
+            )
+            if "need" not in reply:
+                break
+            self._transfer(reply["need"], fetched)
+        self.reads.update(reply["reads"])
+        return base64.b64decode(reply["data"], validate=True)
+
+    def _transfer(self, need, fetched):
+        if self.fetch is None:
+            raise missing_object(self.directory, need[0]["sha256"])
+        for row in need:
+            if row["sha256"] in fetched:
+                raise ValueError("located delivery object missing after fetch")
+            fetched.add(row["sha256"])
+            data = self.fetch(row["location"], row["length"])
+            if len(data) > MAX_OBJECT_BYTES:
+                # Too large to send for checking; no object is this big.
                 raise ValueError("fetched delivery object integrity invalid")
-            publish_object(self.directory, reference["sha256"], data)
-        data = PackReader.blob(self, raw_ref)
-        if reference["kind"] == "data":
-            if len(data) != reference["expanded_length"]:
-                raise ValueError("located delivery length invalid")
-            return data
-        value = decode(data)
-        if (
-            reference["kind"] != "concat"
-            or not isinstance(value, dict)
-            or set(value) != {"schema", "parts"}
-            or value["schema"] != "guard.delivery-concat.v2"
-            or not isinstance(value["parts"], list)
-            or not 0 < len(value["parts"]) <= 64
-        ):
-            raise ValueError("located delivery concatenation invalid")
-        parts = []
-        total = 0
-        for part in value["parts"]:
-            if not isinstance(part, dict) or type(part.get("expanded_length")) is not int:
-                raise ValueError("located delivery part invalid")
-            total += part["expanded_length"]
-            if not 0 < total <= reference["expanded_length"]:
-                raise ValueError("located delivery expansion invalid")
-            parts.append(self.blob(part, depth + 1))
-        if total != reference["expanded_length"]:
-            raise ValueError("located delivery expansion invalid")
-        return b"".join(parts)
+            verify(data, row["sha256"], row["length"])
+            publish_object(self.directory, row["sha256"], data)

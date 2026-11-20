@@ -1,4 +1,4 @@
-"""Exercise generated Cursor outage denials against an immutable installed wheel."""
+"""Exercise the generated Cursor client's unavailable answers against an immutable installed wheel."""
 
 from __future__ import annotations
 
@@ -13,20 +13,22 @@ import pytest
 
 from scripts.installed_canary_proof import InstalledCanaryError, load_subject, verify_install
 
+_EXPECTED_GROUPS = {"gate_denied": 5, "observer_continues": 2}
+
 
 class _Results:
     def __init__(self) -> None:
         self.passed = 0
         self.skipped = 0
-        self.group_passed = {"import_unavailable": 0, "unacknowledged_watch": 0}
+        self.group_passed = {"gate_denied": 0, "observer_continues": 0}
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         if report.when == "call" and report.passed:
             self.passed += 1
             test_name = report.nodeid.rsplit("::", 1)[-1].split("[", 1)[0]
             group = {
-                "test_generated_cursor_import_failure_denies_unparsed_actions": "import_unavailable",
-                "test_generated_cursor_unparsed_input_ignores_unacknowledged_watch": "unacknowledged_watch",
+                "test_generated_cursor_client_denies_a_gated_action": "gate_denied",
+                "test_generated_cursor_client_lets_an_observer_continue": "observer_continues",
             }.get(test_name)
             if group is not None:
                 self.group_passed[group] += 1
@@ -60,11 +62,11 @@ def main() -> int:
                 ],
                 plugins=[results],
             )
-        if status != 0 or results.passed != 10 or results.skipped != 0:
-            raise InstalledCanaryError("Installed Cursor outage qualification requires all ten cases to pass")
-        if results.group_passed != {"import_unavailable": 5, "unacknowledged_watch": 5}:
+        if status != 0 or results.passed != 7 or results.skipped != 0:
+            raise InstalledCanaryError("Installed Cursor outage qualification requires all seven cases to pass")
+        if results.group_passed != _EXPECTED_GROUPS:
             raise InstalledCanaryError(
-                f"Installed Cursor outage qualification requires both five-case groups; observed {results.group_passed}"
+                f"Installed Cursor outage qualification requires every case group; observed {results.group_passed}"
             )
         for name, module in tuple(sys.modules.items()):
             if name == "codex_plugin_scanner" or name.startswith("codex_plugin_scanner."):
@@ -74,21 +76,13 @@ def main() -> int:
         if verify_install(subject, args.repo_root) != installed:
             raise InstalledCanaryError("Installed package identity changed during Cursor outage qualification")
         report = {
-            "schema_version": "hol-guard.installed-cursor-outage-evidence.v1",
+            "schema_version": "hol-guard.installed-cursor-outage-evidence.v2",
             "installed": installed,
             "passed": results.passed,
             "skipped": results.skipped,
-            "unparsed_input_fixture": True,
             "case_groups": {
-                "import_unavailable": {
-                    "passed": results.group_passed["import_unavailable"],
-                    "guard_imports_unavailable": True,
-                },
-                "unacknowledged_watch": {
-                    "passed": results.group_passed["unacknowledged_watch"],
-                    "guard_imports_unavailable": False,
-                    "mode_authority_fixture": True,
-                },
+                "gate_denied": {"passed": results.group_passed["gate_denied"], "guard_invoked": False},
+                "observer_continues": {"passed": results.group_passed["observer_continues"], "guard_invoked": False},
             },
             "requested_actions_executed": False,
         }

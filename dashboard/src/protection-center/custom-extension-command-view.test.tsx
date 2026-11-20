@@ -12,6 +12,7 @@ import {
   commandRowUsageFor,
   groupCommands,
   groupStateSummary,
+  listedVariationsSummary,
   savedStateMap,
   sortCommands,
   stateFilterCounts,
@@ -102,5 +103,18 @@ assert.doesNotMatch(long, /lint:part0 protection setting/);
 assert.match(long, /aria-label="lint family protection setting"/);
 
 assert.match(render([]), /Guard has not loaded scripts/);
+
+// Every select in the browser is the dashboard's styled select, never the
+// browser's native control.
+assert.match(long, /<select/);
+assert.doesNotMatch(long, /<select(?![^>]*appearance-none)/);
+
+const variation = (command_id: string): LocalCliCommand => ({
+  command_id, name: command_id, usage: `merge.sh ${command_id}`, description: "", parent_id: null, state: "inherit",
+});
+assert.equal(listedVariationsSummary([variation("root"), variation("other")]), null);
+assert.equal(listedVariationsSummary([variation("root"), variation("--repo"), variation("--dry-run"), variation("other")]), "2 options");
+assert.equal(listedVariationsSummary([variation("deploy"), variation("-v")]), "1 command and 1 option");
+assert.equal(listedVariationsSummary([variation("deploy"), variation("build")]), "2 commands");
 
 console.log("custom-extension-command-view.test.tsx: all assertions passed");

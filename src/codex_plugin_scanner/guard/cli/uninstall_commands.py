@@ -6,9 +6,8 @@ import shutil
 import subprocess
 import sys
 
-from ..adapters.base import HarnessContext
-from ..codex_install_transaction import codex_install_transaction
-from ..daemon.manager import retire_all_guard_daemons_for_home
+from ..harness_context import HarnessContext
+from ..native_daemon_manage import retire_all_guard_daemons_for_home
 from ..native_resident_update_lock import NativeResidentUpdateLockError, hold_native_resident_update_lock
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_status, remove_guard_profile_blocks, uninstall_package_shims
@@ -336,22 +335,26 @@ def retire_native_resident_after_last_harness(context: HarnessContext, store: Gu
     if _resident_kept(context, store):
         return None
     try:
-        # Same order as self-uninstall: the update barrier, then the install
-        # transaction. Holding both, an install cannot activate a harness
-        # between the last check and the stop.
-        with (
-            hold_native_resident_update_lock(
+        # The store is read through the resident, which refuses every request
+        # while this process holds the barrier's exclusive side, so it is read
+        # only above. Each stop attempt takes the barrier and the installation
+        # lock together and drops both before the next round. An install that
+        # holds its lease makes that attempt fail with
+        # native_resident_install_in_progress; between rounds it can reach the
+        # resident to finish and release the lease. No install can start while
+        # an attempt holds the lock, and one that needs the resident after it
+        # stops starts a new one on its next request.
+        return retire_native_resident_for_home(
+            context.guard_home,
+            hold_install_lock=True,
+            attempt_barrier=lambda: hold_native_resident_update_lock(
                 context.guard_home,
                 initial_executable=resident_stop_executable(),
             ),
-            codex_install_transaction(
-                context.guard_home, context.guard_home / "managed", actor="managed.retire_resident"
-            ),
-        ):
-            if _resident_kept(context, store):
-                return None
-            return retire_native_resident_for_home(context.guard_home)
-    except (NativeResidentUpdateLockError, OSError, RuntimeError, TimeoutError):
+        )
+    except (NativeResidentUpdateLockError, OSError, RuntimeError, TimeoutError, ValueError):
+        # The harness is already disconnected; a resident that could not be
+        # stopped is reported, never turned into a failed uninstall.
         return False
 
 

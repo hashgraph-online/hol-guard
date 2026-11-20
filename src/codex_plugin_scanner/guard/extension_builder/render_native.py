@@ -10,6 +10,8 @@ from .review import DEFAULT_GUIDANCE, Decision, Review
 
 COMMAND_SOURCE_SCHEMA = "guard.command-extension-source.v1"
 COMMAND_FIXTURE_SCHEMA = "guard.command-extension-fixtures.v1"
+DEFAULT_EXTENSION_DESCRIPTION = "Conservative operation knowledge compiled from a contributor inventory."
+MAX_RULE_SAFE_VARIANTS = 64
 
 
 def contribution_path(metadata: Metadata) -> str:
@@ -62,6 +64,24 @@ def _literal_matcher(metadata: Metadata, argv: tuple[str, ...]) -> dict[str, obj
     return {"op": "reviewed-literal.v1", "config": {"executable": metadata.executable, "arguments": list(argv)}}
 
 
+def _unclassified_decision(review: Review) -> Decision:
+    """The fallback rule matches every invocation, so it carries every reviewed literal.
+
+    Each literal is an exact ``reviewed-literal.v1`` match. Without it, a literal
+    reviewed on its own operation still produced an effective segment under the
+    unclassified rule, and disabling that permission blocked the reviewed form.
+    Unknown invocations keep the review floor.
+    """
+
+    literals = tuple(argv for _, decision in review.entries for argv in decision.safe_argv)
+    if len(literals) > MAX_RULE_SAFE_VARIANTS:
+        raise BuilderError(
+            "safe_variant_limit",
+            "The unclassified rule can carry at most 64 reviewed literals; split the inventory or review fewer forms.",
+        )
+    return Decision("review", safe_argv=literals)
+
+
 def render_command_source(discovery: Discovery, review: Review) -> str:
     metadata = discovery.metadata
     decisions = review.by_id()
@@ -71,7 +91,7 @@ def render_command_source(discovery: Discovery, review: Review) -> str:
     rules: list[dict[str, object]] = []
     for operation in (None, *discovery.operations):
         suffix = "unclassified" if operation is None else operation.operation_id
-        decision = Decision("review") if operation is None else decisions[operation.operation_id]
+        decision = _unclassified_decision(review) if operation is None else decisions[operation.operation_id]
         permission_id = f"{metadata.catalog_id}.permission.{suffix}"
         title = "Unclassified invocation" if operation is None else (" ".join(operation.path) or "Root invocation")[:96]
         description = "Reviews inventoried operations; unknown invocations also require review."
@@ -127,7 +147,7 @@ def render_command_source(discovery: Discovery, review: Review) -> str:
                 "extension_id": metadata.catalog_id,
                 "version": "1.0.0",
                 "name": metadata.name,
-                "description": "Conservative operation knowledge compiled from a contributor inventory.",
+                "description": metadata.description or DEFAULT_EXTENSION_DESCRIPTION,
                 "action_classes": [action_class],
                 "risk_classes": list(_risks(review)),
                 "safer_alternatives": [DEFAULT_GUIDANCE],
@@ -147,7 +167,7 @@ def render_command_source(discovery: Discovery, review: Review) -> str:
                 },
                 "homepage": metadata.homepage,
                 "icon": {"kind": "none"},
-                "license": None,
+                "license": metadata.license or None,
                 "permissions": permissions,
                 "rules": rules,
             },
@@ -158,6 +178,7 @@ def render_command_source(discovery: Discovery, review: Review) -> str:
 def render_command_fixture_cases(discovery: Discovery, review: Review) -> list[dict[str, object]]:
     metadata = discovery.metadata
     decisions = review.by_id()
+    unclassified_rule_id = f"{metadata.catalog_id}.unclassified"
     cases: list[dict[str, object]] = []
     for operation in discovery.operations:
         decision = decisions[operation.operation_id]
@@ -174,17 +195,21 @@ def render_command_fixture_cases(discovery: Discovery, review: Review) -> list[d
             }
         )
         for index, argv in enumerate(decision.safe_argv):
-            cases.append(
-                {
-                    "id": f"{operation.operation_id}-safe-{index}",
-                    "command": " ".join((metadata.executable, *argv)),
-                    "enabled_extensions": [metadata.catalog_id],
-                    "disabled_permissions": [],
-                    "expected_action": "review",
-                    "rule_id": rule_id,
-                    "expected_effective_segments": [],
-                }
-            )
+            command = " ".join((metadata.executable, *argv))
+            # A reviewed literal must leave no effective segment on any rule that
+            # matches it: its own operation rule and the unclassified fallback.
+            for case_suffix, case_rule in (("", rule_id), ("-unclassified", unclassified_rule_id)):
+                cases.append(
+                    {
+                        "id": f"{operation.operation_id}-safe-{index}{case_suffix}",
+                        "command": command,
+                        "enabled_extensions": [metadata.catalog_id],
+                        "disabled_permissions": [],
+                        "expected_action": "review",
+                        "rule_id": case_rule,
+                        "expected_effective_segments": [],
+                    }
+                )
     return cases
 
 

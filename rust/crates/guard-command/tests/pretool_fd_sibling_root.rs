@@ -49,7 +49,7 @@ fn a_sibling_tree_that_could_name_a_secret_is_reviewed() {
 }
 
 #[test]
-fn an_option_that_widens_the_listing_keeps_its_review() {
+fn an_option_that_leaves_the_names_only_shape_keeps_its_review() {
     let layout = layout("fd-sibling-widening");
     write(
         layout.org.join("service-api/app/badge/page.tsx"),
@@ -57,16 +57,21 @@ fn an_option_that_widens_the_listing_keeps_its_review() {
     );
     let cwd = layout.org.join("app-portal");
     for command in [
-        // `--hidden` prints the entries the walk proves nothing about.
-        "fd --hidden . ~/Code/org/service-api",
         // `--follow` leaves the tree the walk measured.
         "fd --follow . ~/Code/org/service-api",
         // `--exec` runs a program per match rather than printing a name.
         "fd . ~/Code/org/service-api --exec cat {}",
-        // `--no-ignore` searches what the repository's ignore rules exclude.
-        "fd --no-ignore . ~/Code/org/service-api",
     ] {
         assert_decision(&cwd, &layout.home, command, false);
+    }
+    // `--hidden` and `--no-ignore` print the names `find` prints from the
+    // same root, so they take the decision `find` takes there.
+    assert_decision(&cwd, &layout.home, "find ~/Code/org/service-api", true);
+    for command in [
+        "fd --hidden . ~/Code/org/service-api",
+        "fd --no-ignore . ~/Code/org/service-api",
+    ] {
+        assert_decision(&cwd, &layout.home, command, true);
     }
 }
 

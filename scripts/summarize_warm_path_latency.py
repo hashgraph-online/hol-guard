@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -15,6 +16,52 @@ from warm_path_stats import median, percentile, spread_ratio
 _PATH_TITLES = {"hook": "Warm benign PreToolUse hook (process spawn to exit)", "mcp": "Warm non-package MCP tools/call"}
 # A run set is reported as noisy when per-round p95 values span more than this share of their median.
 NOISE_SPREAD = 0.15
+# Distinct refusal reasons carried into the summary for one target.
+REASON_LIMIT = 6
+# Characters that would otherwise let refusal text open a code span, a link, a
+# table cell or emphasis in the published report.
+_MARKDOWN_ESCAPES = str.maketrans({c: "\\" + c for c in "\\`*_[]|<>#"})
+# A decision class is a short token in a code span; anything longer or stranger
+# than that came from a hook's own answer and is cut down to fit.
+_CLASS_TOKEN_CHARS = 40
+
+
+def _by_round(item: tuple[str, object]) -> tuple[int, str]:
+    """Order round keys by their number, so round 10 follows round 9."""
+
+    key = item[0]
+    return (int(key), key) if key.lstrip("-").isdigit() else (sys.maxsize, key)
+
+
+def _inline(text: str) -> str:
+    """Refusal text as one escaped markdown fragment.
+
+    A hook's stderr is arbitrary: a traceback, a wrapped message, a line that
+    starts with a pipe or a hash. Collapsing it to one line and escaping the
+    characters markdown reads keeps a refusal a readable sentence instead of a
+    new heading, table or link in the job summary.
+    """
+
+    return " ".join(text.split()).translate(_MARKDOWN_ESCAPES)
+
+
+def _class(name: str) -> str:
+    """A decision class as a code span that cannot carry markdown.
+
+    A class is built from the decision a hook answered with, so a backtick or a
+    newline in that answer reaches the report. A code span cannot be escaped
+    from the inside, so the name is reduced to the characters a class is made
+    of and bounded before it is wrapped.
+    """
+
+    token = re.sub(r"[^0-9A-Za-z_-]+", "_", name).strip("_")[:_CLASS_TOKEN_CHARS]
+    return f"`{token or 'unnamed'}`"
+
+
+def _classes(counts: dict[str, int]) -> str:
+    """Decision classes as `name x count` pairs."""
+
+    return ", ".join(f"{_class(name)} x{count}" for name, count in sorted(counts.items())) or "none"
 
 
 def _rows(document: dict[str, object], path: str, label: str) -> list[dict[str, object]]:
@@ -80,6 +127,45 @@ def _setup_statuses(rows: list[dict[str, object]]) -> dict[str, int]:
     return statuses
 
 
+def _non_allow_detail(rows: list[dict[str, object]]) -> dict[str, object]:
+    """Where the refused samples landed and why, over the rounds that recorded it.
+
+    A pooled count cannot tell a warm-up window apart from a steady refusal, and
+    one class can cover several reasons, so the per-round counts, the sample runs
+    and the first distinct reasons are carried through to the summary. A round
+    whose runs the probe itself cut short is named, so a report that shows only
+    the early positions says so rather than reading as the whole picture.
+    """
+
+    per_round: dict[str, int] = {}
+    runs: dict[str, list[list[int]]] = {}
+    truncated: list[str] = []
+    reasons: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for r in rows:
+        detail = r["phase"].get("non_ok")  # type: ignore[union-attr]
+        if not isinstance(detail, dict):
+            continue
+        label = str(r["round"])
+        per_round[label] = int(detail["count"])
+        if detail["runs"]:
+            runs[label] = detail["runs"]  # type: ignore[assignment]
+        if detail.get("runs_truncated"):
+            truncated.append(label)
+        for reason in detail["reasons"]:  # type: ignore[union-attr]
+            key = (str(reason["class"]), str(reason["detail"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            reasons.append({"round": r["round"], **reason})
+    return {
+        "per_round": per_round,
+        "runs": runs,
+        "runs_truncated": truncated,
+        "reasons": reasons[:REASON_LIMIT],
+    }
+
+
 def summarize_label(rows: list[dict[str, object]]) -> dict[str, object]:
     per_round = {q: [float(r["phase"]["stats_ms"][q]) for r in rows] for q in ("p50", "p95", "p99")}  # type: ignore[index]
     pooled = [value for r in rows for value in r["phase"]["samples_ms"]]  # type: ignore[index]
@@ -100,6 +186,7 @@ def summarize_label(rows: list[dict[str, object]]) -> dict[str, object]:
         "pooled_p99_ms": percentile(pooled, 99),
         "classes": classes,
         "non_allow": sum(int(r["phase"]["non_allow"]) for r in rows),  # type: ignore[index]
+        "non_allow_detail": _non_allow_detail(rows),
         "client_cpu_ms_per_call": _optional_median([r["phase"].get("client_cpu_ms_per_call") for r in rows]),  # type: ignore[union-attr]
         "service_cpu_ms_per_call": median([float(r["phase"]["service_cpu_ms_per_call"]) for r in rows]),  # type: ignore[index]
         "service_rss_mb": median([float(r["phase"]["service"]["rss_mb"]) for r in rows]),  # type: ignore[index]
@@ -203,6 +290,35 @@ def render_markdown(document: dict[str, object], summary: dict[str, object]) -> 
             lines.append(
                 f"Service by role (median), `{summary[role]}`: {roles}." + (f" Setup: {setup}." if setup else "")
             )
+        for role in ("baseline", "candidate"):
+            s = entry[role]
+            if not s["non_allow"]:
+                continue
+            detail = s["non_allow_detail"]
+            per_round = ", ".join(
+                f"round {key} x{count}" for key, count in sorted(detail["per_round"].items(), key=_by_round)
+            )
+            reasons = "; ".join(
+                f"{_class(str(reason['class']))} at round {reason['round']} sample {reason['index']}"
+                + (f": {_inline(str(reason['detail']))}" if reason["detail"] else "")
+                for reason in detail["reasons"]
+            )
+            cut = set(detail["runs_truncated"])
+            runs = ", ".join(
+                "round {key} {spans}{more}".format(
+                    key=key,
+                    spans=",".join(f"{first}-{last}" for first, last in value),
+                    more=" and later positions not recorded" if key in cut else "",
+                )
+                for key, value in sorted(detail["runs"].items(), key=_by_round)
+            )
+            lines.append(
+                f"Non-allow samples, `{summary[role]}`: {s['non_allow']}"
+                + (f" ({per_round})" if per_round else "")
+                + "."
+                + (f" Sample runs: {runs}." if runs else "")
+                + (f" Reasons: {reasons}." if reasons else "")
+            )
         flags = []
         if entry["noisy"]:
             flags.append(f"round p95 spread above {int(NOISE_SPREAD * 100)}%: treat the delta as inconclusive")
@@ -217,7 +333,8 @@ def render_markdown(document: dict[str, object], summary: dict[str, object]) -> 
             "",
             f"p95 delta (median of per-round p95, candidate vs baseline): **{entry['p95_delta_pct']:+.1f}%**. "
             f"Per-round paired deltas: {paired}.",
-            f"Decision classes baseline {entry['baseline']['classes']}, candidate {entry['candidate']['classes']}.",
+            f"Decision classes baseline {_classes(entry['baseline']['classes'])}, "  # type: ignore[arg-type]
+            f"candidate {_classes(entry['candidate']['classes'])}.",  # type: ignore[arg-type]
         ]
         lines += [f"Flag: {flag}." for flag in flags] or ["No noise or parity flags."]
         lines.append("")

@@ -63,13 +63,71 @@ class InstalledRuntime:
         }
 
 
+def _console_script_interpreter(path: Path) -> Path | None:
+    """The interpreter a console script's shebang names, when it names one directly."""
+
+    shebang = _shebang(path)
+    if shebang is None:
+        return None
+    words = shebang.split()
+    if not words:
+        return None
+    interpreter = Path(words[0])
+    if interpreter.name == "env":
+        # An env-mediated shebang resolves its interpreter through PATH at run
+        # time, so it names no fixed interpreter to inspect.
+        return None
+    return interpreter if interpreter.is_absolute() else None
+
+
+def _packaged_native_runtime(script: Path) -> Path | None:
+    """The native runtime a native wheel sealed beside its console script.
+
+    A platform wheel installs the sealed runtime inside the package, at the
+    same ``codex_plugin_scanner/_native`` path the frozen bundle carries.
+    The product resolves that location itself only when its own native
+    identity checks pass; on a lane-built development wheel those checks can
+    fail on provenance metadata the lane never asserted, and every hook then
+    fails closed as an infrastructure denial the replay reads as a verdict.
+    Locate the sealed runtime through the script's own interpreter so the lane
+    can pin it explicitly and measure the harness behaviour instead.
+    """
+
+    interpreter = _console_script_interpreter(script)
+    if interpreter is None or not interpreter.exists():
+        return None
+    probe = (
+        "import codex_plugin_scanner, pathlib;"
+        " print(pathlib.Path(codex_plugin_scanner.__file__).resolve().parent.parent)"
+    )
+    try:
+        completed = subprocess.run(
+            [str(interpreter), "-I", "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=_VERSION_TIMEOUT,
+            env=_base_environment(),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if not lines:
+        return None
+    bundled = Path(lines[-1]) / BUNDLED_NATIVE_RUNTIME
+    return bundled if bundled.exists() else None
+
+
 def classify(path: Path) -> tuple[str, Path | None]:
     """Name the packaging of ``path`` and the native runtime it carries.
 
     A onedir bundle is recognised by its sibling ``_internal`` directory with
     the sealed native runtime inside it, which is what the Desktop feed builds
-    and asserts. Anything else that is not a text script is treated as a
-    onefile bundle; a text script is a wheel console script.
+    and asserts. A console script whose wheel sealed the runtime inside the
+    package reports that runtime too. Anything else that is not a text script
+    is treated as a onefile bundle; a text script is a wheel console script.
     """
 
     internal = path.parent / ONEDIR_INTERNAL
@@ -81,7 +139,7 @@ def classify(path: Path) -> tuple[str, Path | None]:
         bundled = internal / BUNDLED_NATIVE_RUNTIME
         return FROZEN_ONEDIR, (bundled if bundled.exists() else None)
     if _shebang(path) is not None:
-        return SCRIPT, None
+        return SCRIPT, _packaged_native_runtime(path)
     return FROZEN_ONEFILE, None
 
 
@@ -229,12 +287,21 @@ def resolve_runtime(path: Path, *, require_frozen: bool) -> InstalledRuntime:
     )
 
 
-def isolated_environment(*, home: Path, guard_home: Path) -> dict[str, str]:
+def isolated_environment(*, home: Path, guard_home: Path, native_runtime: Path | None = None) -> dict[str, str]:
     """Environment for driving the executable against a lane-owned home.
 
     Every harness path Guard writes is derived from ``HOME``, so pointing it at
     a lane-owned directory keeps the run away from the operator's real
     ``~/.claude``, ``~/.codex`` and ``~/.omp``.
+
+    When the lane resolved the executable's own sealed native runtime, it is
+    pinned here explicitly, with the native mode forced: the runtime only
+    honours the binary override under ``force``, so exporting the path alone
+    would leave selection to the default candidate search. The hooks the
+    install registers inherit this environment from the harness process the
+    lane spawns, and a hook that cannot resolve the native runtime fails
+    closed as an infrastructure denial, which the replay would otherwise
+    record as a harness verdict.
     """
 
     environment = _base_environment()
@@ -244,6 +311,9 @@ def isolated_environment(*, home: Path, guard_home: Path) -> dict[str, str]:
     environment["XDG_CONFIG_HOME"] = str(home / ".config")
     environment["XDG_STATE_HOME"] = str(home / ".local" / "state")
     environment["XDG_CACHE_HOME"] = str(home / ".cache")
+    if native_runtime is not None:
+        environment["HOL_GUARD_NATIVE_BINARY"] = str(native_runtime)
+        environment["HOL_GUARD_NATIVE"] = "force"
     return environment
 
 

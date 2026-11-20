@@ -23,6 +23,8 @@ import { DecisionBadge } from "./decision-badge";
 import { APPROVAL_LEFT_STOPPED_LABEL, approvalLeftActionStopped } from "./approval-outcome";
 import { LoggedActionPanel } from "../logged-action-panel";
 import { guardActionPresentation } from "../guard-action";
+import { attachedNativeDecision } from "../context-assistance/native-decision-selector";
+import { ContextHistoryPanel } from "../context-assistance/history-panel";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
@@ -437,6 +439,9 @@ export function EvidenceActionDetail({
         <EvidenceTimeline receipt={receipt} />
 
         <TechnicalSection receipt={receipt} />
+        {attachedNativeDecision(receipt.action_envelope_json, receipt.harness) ? <ContextHistoryPanel key={receipt.receipt_id}
+          decisionId={attachedNativeDecision(receipt.action_envelope_json, receipt.harness)!}
+          harness={receipt.harness} /> : null}
 
         <button
           type="button"

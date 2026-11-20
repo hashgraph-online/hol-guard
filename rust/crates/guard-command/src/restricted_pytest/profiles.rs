@@ -3,9 +3,9 @@ use super::authority::{ancestor_paths, dedupe_parent_paths, runtime_roots};
 use super::credentials::{denials, patterns, seatbelt_string};
 use super::framework_grants::{framework_grants, sealed_on_disk, FrameworkGrants};
 use super::*;
+use collection_links::collection_link_metadata;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -32,6 +32,8 @@ struct Input {
     home: Option<PathBuf>,
 }
 
+#[path = "collection_links.rs"]
+mod collection_links;
 #[cfg(test)]
 #[path = "workspace_grant_profile_tests.rs"]
 mod workspace_grant_profile_tests;
@@ -55,6 +57,19 @@ const READONLY: &[&str] = &[
     "python-eval-readonly-v1",
     "node-eval-readonly-v1",
 ];
+/// A read-only pytest run may bind a loopback socket, and nothing more.
+/// `pytest-rerunfailures` binds `localhost:0` in `pytest_configure` whenever
+/// `pytest-xdist` is installed, even for a run without `-n`, and pytest stops
+/// with an internal error when that bind is refused. The plugin listens from
+/// a background thread, where a refusal only warns. Seatbelt cannot name
+/// port 0, and in practice it does not hold a bind to the loopback address
+/// either, so the grant is safe only because a bound socket can do nothing:
+/// `listen`, receiving a datagram and connecting out all stay denied. No
+/// host process can reach the socket and the run cannot reach a service.
+/// What a bind can still do is hold a port, so a host service that starts
+/// on that port during the run gets `EADDRINUSE` until the socket closes or
+/// the run ends.
+const PYTEST_LOOPBACK_BIND: &[&str] = &["(allow network-bind (local ip \"localhost:*\"))"];
 const MAC_ROOTS: &[&str] = &[
     "/System",
     "/Library/Apple",
@@ -106,38 +121,6 @@ fn existing(paths: &[&str]) -> Vec<PathBuf> {
         .map(PathBuf::from)
         .filter(|p| p.exists())
         .collect()
-}
-
-fn collection_link_metadata(input: &Input) -> Result<Vec<PathBuf>, RestrictedPytestError> {
-    let patterns: Vec<Regex> = patterns().iter().map(|p| Regex::new(p).unwrap()).collect();
-    let mut targets = BTreeSet::new();
-    for directory in BTreeSet::from([input.workspace.clone(), input.cwd.clone()]) {
-        let entries = fs::read_dir(directory).map_err(|_| {
-            RestrictedPytestError::new(
-                PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-                "Collection metadata is unavailable.",
-            )
-        })?;
-        for entry in entries.take(4096) {
-            let entry = entry.map_err(|_| {
-                RestrictedPytestError::new(
-                    PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-                    "Collection metadata is unavailable.",
-                )
-            })?;
-            if entry.file_type().is_ok_and(|v| v.is_symlink()) {
-                if let Ok(target) = entry.path().canonicalize() {
-                    if !patterns
-                        .iter()
-                        .any(|p| p.is_match(&target.to_string_lossy()))
-                    {
-                        targets.insert(target);
-                    }
-                }
-            }
-        }
-    }
-    Ok(targets.into_iter().collect())
 }
 
 fn macos_profile(input: &Input) -> Result<String, RestrictedPytestError> {
@@ -320,6 +303,9 @@ fn compose_macos_profile(
             "(deny file-write* {})",
             filter(&immutable, "literal")
         ));
+    }
+    if input.profile_version == "pytest-readonly-v2" {
+        lines.extend(PYTEST_LOOPBACK_BIND.iter().map(|line| (*line).to_owned()));
     }
     if readonly {
         lines.extend(denials(matches!(

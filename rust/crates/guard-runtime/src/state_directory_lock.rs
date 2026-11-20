@@ -130,24 +130,32 @@ fn same_live_lock(
 
 pub(crate) fn acquire(path: &Path) -> Result<DirectoryLock, DirectoryLockError> {
     let (file, canonical, identity) = open_verified_directory(path)?;
-    let mut entries = registry().lock().map_err(|_| DirectoryLockError::Failed)?;
-
-    if let Some(lock) = same_live_lock(entries.by_path.get(&canonical), identity, &canonical)? {
-        return Ok(lock);
-    }
-    if let Some(lock) = same_live_lock(entries.by_identity.get(&identity), identity, &canonical)? {
-        return Ok(lock);
-    }
-    entries.by_path.remove(&canonical);
-    entries.by_identity.remove(&identity);
-
-    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if crate::resident_state::is_lock_contention(&error) {
-            DirectoryLockError::Busy
-        } else {
-            DirectoryLockError::Failed
+    let deadline = crate::resident_state::lock_contention_deadline();
+    let mut entries = loop {
+        let mut entries = registry().lock().map_err(|_| DirectoryLockError::Failed)?;
+        if let Some(lock) = same_live_lock(entries.by_path.get(&canonical), identity, &canonical)? {
+            return Ok(lock);
         }
-    })?;
+        if let Some(lock) =
+            same_live_lock(entries.by_identity.get(&identity), identity, &canonical)?
+        {
+            return Ok(lock);
+        }
+        entries.by_path.remove(&canonical);
+        entries.by_identity.remove(&identity);
+
+        match fs2::FileExt::try_lock_exclusive(&file) {
+            Ok(()) => break entries,
+            Err(error) if crate::resident_state::is_lock_contention(&error) => {
+                // Wait without the registry so other directories stay available.
+                drop(entries);
+                if !crate::resident_state::pause_for_lock_contention(deadline) {
+                    return Err(DirectoryLockError::Busy);
+                }
+            }
+            Err(_) => return Err(DirectoryLockError::Failed),
+        }
+    };
     let inner = Arc::new(DirectoryLockInner {
         file,
         path: canonical.clone(),
@@ -221,16 +229,12 @@ impl DirectoryLock {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "hol-guard-state-directory-lock-{label}-{}-{}",
             std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -247,6 +251,32 @@ mod tests {
         assert!(fs2::FileExt::try_lock_exclusive(&probe).is_err());
         drop(last);
         fs2::FileExt::try_lock_exclusive(&probe).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn acquire_waits_out_a_descriptor_copy_that_closes_promptly() {
+        let root = root("prompt-release");
+        let copy = OpenOptions::new().read(true).open(&root).unwrap();
+        fs2::FileExt::try_lock_exclusive(&copy).unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            drop(copy);
+        });
+        let lock = acquire(&root).unwrap();
+        release.join().unwrap();
+        drop(lock);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn acquire_reports_busy_when_contention_outlasts_the_wait() {
+        let root = root("held");
+        let holder = OpenOptions::new().read(true).open(&root).unwrap();
+        fs2::FileExt::try_lock_exclusive(&holder).unwrap();
+        assert!(matches!(acquire(&root), Err(DirectoryLockError::Busy)));
+        drop(holder);
+        drop(acquire(&root).unwrap());
         fs::remove_dir_all(root).unwrap();
     }
 

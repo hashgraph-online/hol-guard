@@ -16,8 +16,9 @@ from ..approval_gate import (
     public_config,
     require_extension_control,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
-from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..native_daemon_client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
+from ..native_daemon_peer import load_guard_daemon_endpoint
+from ..native_extension_control import NativeExtensionControlError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityError
@@ -27,7 +28,7 @@ from ..runtime.extension_control_proof import (
     issue_extension_control_enrollment_proof,
 )
 from ..store import GuardStore
-from .approval_gate_prompt import prompt_for_approval_gate
+from .approval_gate_prompt import prompt_for_approval_gate, submit_with_pulse
 from .commands_support_prompts import _shell_join
 from .extension_catalog_reads import catalog_list, catalog_show, pattern_extensions
 
@@ -116,6 +117,7 @@ def _enroll(guard_home: Path, actor: str, output_stream: TextIO | None) -> int:
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         actor_id=actor,
         nonce=secrets.token_hex(16),
+        guard_home=guard_home,
     )
     gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False)
     proof = issue_extension_control_enrollment_proof(
@@ -215,7 +217,7 @@ def _recover_authority(
             for warning in recovery_warnings:
                 print(f"Warning: {warning}", file=sys.stderr)
     else:
-        from ..daemon.manager import ensure_guard_daemon
+        from ..native_daemon_manage import ensure_guard_daemon
 
         try:
             ensure_guard_daemon(guard_home)
@@ -225,7 +227,8 @@ def _recover_authority(
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
             payload["approval_totp_code"] = gate_input.totp_code
-        response = _client(guard_home).acknowledge_degraded_extension_controls(payload)
+        client = _client(guard_home)
+        response = submit_with_pulse(guard_home, client.acknowledge_degraded_extension_controls, payload, gate_input)
     _emit(response, output_stream)
     return 0
 
@@ -334,7 +337,7 @@ def run_extension_controls_command(
                 output_stream=output_stream,
             )
         if command != "status":
-            from ..daemon.manager import ensure_guard_daemon
+            from ..native_daemon_manage import ensure_guard_daemon
 
             try:
                 ensure_guard_daemon(guard_home)
@@ -370,7 +373,9 @@ def run_extension_controls_command(
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
             payload["approval_totp_code"] = gate_input.totp_code
-        preview = client.preview_extension_controls(payload)
+        # The approval is spent on the preview, which issues the proof the apply
+        # uses, so the apply payload carries no Pulse fields.
+        preview = submit_with_pulse(guard_home, client.preview_extension_controls, payload, gate_input)
         proof_id = preview.get("proof_id")
         if not isinstance(proof_id, str):
             raise ExtensionControlProofError("daemon did not issue a mutation proof")
@@ -405,6 +410,10 @@ def run_extension_controls_command(
     except GuardDaemonRequestError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 4 if error.status in {401, 403, 423} else 2
+    except NativeExtensionControlError as error:
+        # Enrollment asks the native runtime for its digest before prompting.
+        print(f"Error: the native extension-control runtime did not answer ({error.code}); retry.", file=sys.stderr)
+        return 2
     except (TypeError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

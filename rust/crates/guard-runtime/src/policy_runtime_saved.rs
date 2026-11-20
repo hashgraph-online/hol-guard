@@ -40,6 +40,8 @@ pub(crate) struct Probe<'a> {
     pub(crate) workspace: Option<&'a str>,
     pub(crate) publisher: Option<&'a str>,
     pub(crate) context: Option<&'a str>,
+    /// The checkout a portable probe stands for, which Cloud exceptions name.
+    pub(crate) exception_workspace: Option<&'a str>,
 }
 
 pub(crate) fn evaluate(
@@ -54,6 +56,7 @@ pub(crate) fn evaluate(
         lookup.artifact_id = Some(probe.artifact_id.to_owned());
         lookup.artifact_hash = Some(probe.artifact_hash.to_owned());
         lookup.workspace = probe.workspace.map(str::to_owned);
+        lookup.exception_workspace = probe.exception_workspace.map(str::to_owned);
         lookup.publisher = probe.publisher.map(str::to_owned);
         lookup.runtime_exact_match_context = probe.context.map(str::to_owned);
         evaluate_non_consuming(&lookup, &connection)
@@ -175,6 +178,7 @@ where
             workspace,
             publisher: spec.publisher.as_deref(),
             context,
+            exception_workspace: spec.workspace.as_deref(),
         })
     };
     let workspace = spec.workspace.as_deref();

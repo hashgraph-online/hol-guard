@@ -27,17 +27,21 @@ pub(crate) const NON_RECOGNITION_REASON_CODES: [&str; 2] = [
     "native_workspace_containment_executable_outside_roots",
 ];
 
-/// The one review an allowed grant lifts to `allow`: the generic review due
-/// only to non-recognition. The outside-roots review runs in the grant's
-/// sandbox instead, and every other review keeps its risk signal.
-pub(crate) const GRANT_LIFTABLE_REASON_CODE: &str = NON_RECOGNITION_REASON_CODES[0];
-
-/// Whether an allowed grant may lift a review with `reason_code` to `allow`.
-/// The CLI hook names no reason: it settles the grant against the native
-/// floor afterwards, so its review keeps lifting as before.
+/// Whether an allowed grant may lift a review with `reason_code` to `allow`:
+/// a review due only to non-recognition, including the one the workspace
+/// sandbox leaves when the program lives outside its executable roots. The
+/// grant names that program, so it answers the only question either review
+/// asks; every other review keeps its risk signal. The CLI hook names no
+/// reason: it settles the grant against the native floor afterwards, so its
+/// review keeps lifting as before.
 pub(crate) fn grant_lifts(reason_code: Option<&str>) -> bool {
-    reason_code.is_none_or(|code| code == GRANT_LIFTABLE_REASON_CODE)
+    reason_code.is_none_or(|code| NON_RECOGNITION_REASON_CODES.contains(&code))
 }
+
+/// The connector field set, only to `true`, when the user allowed an earlier
+/// version of the file: the agent is told the file changed, not that the CLI
+/// was never set up.
+pub(crate) const ALLOWED_EARLIER_VERSION: &str = "allowed_earlier_version";
 
 /// Hex digits of the action digest in a connector group id.
 const ACTION_DIGEST_HEX: usize = 16;
@@ -68,17 +72,31 @@ pub(crate) fn for_launch(request: &LocalCliHookRequestV1, launch: &Launch) -> Op
         &launch.identity_hash,
     )
     .ok()
-    .filter(|unset| *unset)
-    .map(|_| {
-        payload(
+    .flatten()
+    .map(|undecided| {
+        let mut connector = payload(
             &launch.cli_id,
             &launch.identity_hash,
             &launch.name,
             &launch.source,
             &request.cwd,
             &request.command,
-        )
+        );
+        if undecided == crate::local_cli_grant_op::Undecided::AllowedEarlierVersion {
+            connector[ALLOWED_EARLIER_VERSION] = Value::Bool(true);
+        }
+        connector
     })
+}
+
+/// The connector payload only when the user allowed an earlier version of
+/// `launch`; a CLI this device never decided names none.
+pub(crate) fn for_changed_launch(
+    request: &LocalCliHookRequestV1,
+    launch: &Launch,
+) -> Option<Value> {
+    for_launch(request, launch)
+        .filter(|connector| connector.get(ALLOWED_EARLIER_VERSION) == Some(&Value::Bool(true)))
 }
 
 /// Whether `group` is a bare `connector:<identity_hash>` marker, which the
@@ -141,8 +159,8 @@ mod tests {
         assert_eq!(first.len(), "connector:".len() + 64 + 1 + ACTION_DIGEST_HEX);
     }
 
-    /// The Python migration regroups old reviews with its own copy of
-    /// `queue_group_id`; these vectors pin both to the same ids.
+    /// Pins `queue_group_id` to the shared vectors, so stored connector
+    /// groups keep their ids across releases.
     #[test]
     fn group_ids_match_the_shared_vectors() {
         let vectors: Value = serde_json::from_str(include_str!(
@@ -182,6 +200,26 @@ mod tests {
             assert!(!is_non_recognition(Some(code)), "{code}");
         }
         assert!(!is_non_recognition(None));
+    }
+
+    #[test]
+    fn an_allowed_grant_lifts_only_a_review_due_to_non_recognition() {
+        // The outside-roots review asks the question the grant answers, so
+        // it lifts like the generic review rather than running the allowed
+        // program in a sandbox with no network or home reads.
+        assert!(grant_lifts(Some("native_command_review_required")));
+        assert!(grant_lifts(Some(
+            "native_workspace_containment_executable_outside_roots"
+        )));
+        assert!(grant_lifts(None));
+        for code in [
+            "native_workspace_containment_required",
+            "native_network_review",
+            "native_sensitive_access_review",
+            "",
+        ] {
+            assert!(!grant_lifts(Some(code)), "{code}");
+        }
     }
 
     #[test]

@@ -45,7 +45,7 @@ function extension(id: string, permissions: ExtensionPermission[], aliases: stri
     required: false,
     trust_class: "first-party",
     activation: "default-on",
-    publisher: { id: "hol", displayName: "Hashgraph Online" },
+    publisher: { id: "hol", displayName: "HOL" },
     icon: { kind: "none" },
     source: "built-in",
     version: "1.0.0",

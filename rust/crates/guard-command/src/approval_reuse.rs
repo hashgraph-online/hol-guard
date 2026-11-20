@@ -35,7 +35,7 @@ pub const APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM: &str =
     "approval_reuse_context_changed_after_claim";
 
 /// `ApprovalReuseDecision` (:58-72). Wire field names are the Python
-/// `to_evidence` keys exactly — `commands_hook_native_copilot.py` depends on
+/// `to_evidence` keys exactly — Python readers of the evidence depend on
 /// them, so a rename would silently break consumers.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]

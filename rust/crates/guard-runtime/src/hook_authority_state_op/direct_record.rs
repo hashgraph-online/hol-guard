@@ -24,6 +24,7 @@ pub(crate) fn claude_record_notice_direct(
     let foreign_key = std::cell::Cell::new(false);
     let env = Env {
         connection,
+        guard_home: None,
         key: Some(zeroize::Zeroizing::new(key.to_vec())),
         key_id: Some(key_id),
         now,
@@ -34,4 +35,28 @@ pub(crate) fn claude_record_notice_direct(
         return Err(DirectNoticeDefer::ForeignKey);
     }
     Ok(())
+}
+
+/// [`claude_record_notice_direct`] for the daemon's own store write, which
+/// already holds the current key: a row signed under another key id is
+/// cleaned up and re-signed, as the `claude_record_notice` op does, instead
+/// of deferring to a daemon that is the caller.
+pub(crate) fn claude_record_notice_current_key(
+    connection: &Connection,
+    key: &[u8],
+    key_id: &str,
+    now: &str,
+    session_id: &str,
+    tool_name: Option<&str>,
+    payload: &Value,
+) {
+    let env = Env {
+        connection,
+        guard_home: None,
+        key: Some(zeroize::Zeroizing::new(key.to_vec())),
+        key_id: Some(key_id),
+        now,
+        foreign_key: None,
+    };
+    env.claude_record_notice(session_id, tool_name, payload);
 }

@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[path = "hook_evidence_journal_batch_tests.rs"]
+mod batch_tests;
+
 use std::sync::Arc;
 
 use crate::hook_evidence_writer::{
@@ -13,10 +16,7 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let elapsed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let elapsed = crate::unique_nanos::unique_nanos();
         let path = std::env::temp_dir().join(format!(
             "hg-evidence-journal-{label}-{}-{elapsed}",
             std::process::id()

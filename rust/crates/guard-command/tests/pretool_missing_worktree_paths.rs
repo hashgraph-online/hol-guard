@@ -33,10 +33,7 @@ fn workspace(name: &str) -> Workspace {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-missing-worktree")

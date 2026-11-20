@@ -996,7 +996,8 @@
      "native_edge": {
       "policy_action": "block",
       "minimum_action": null,
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1052,7 +1053,8 @@
      "native_edge": {
       "policy_action": "review",
       "minimum_action": null,
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1070,6 +1072,63 @@
      "tool_eligibility_needed": true,
      "action_with_tool_grant": "allow",
      "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
+    }
+   }
+  },
+  {
+   "name": "edge_network_review_floors_pre_tool",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "allow",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {},
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": {
+      "policy_action": "review",
+      "minimum_action": "review",
+      "decision": "deny",
+      "reason_code": "network_known_bad_host"
+     },
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "review",
      "permission_decision_reason": null,
      "daemon_failure_reason": null,
      "token": {
@@ -1108,7 +1167,8 @@
      "native_edge": {
       "policy_action": null,
       "minimum_action": "sandbox-required",
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1164,7 +1224,8 @@
      "native_edge": {
       "policy_action": "bogus",
       "minimum_action": null,
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1220,7 +1281,8 @@
      "native_edge": {
       "policy_action": null,
       "minimum_action": null,
-      "decision": "deny"
+      "decision": "deny",
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1276,7 +1338,8 @@
      "native_edge": {
       "policy_action": "block",
       "minimum_action": null,
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1332,7 +1395,8 @@
      "native_edge": {
       "policy_action": "",
       "minimum_action": "block",
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,
@@ -1857,7 +1921,8 @@
      "native_edge": {
       "policy_action": "block",
       "minimum_action": null,
-      "decision": null
+      "decision": null,
+      "reason_code": null
      },
      "daemon_status": null,
      "fail_mode": null,

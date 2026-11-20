@@ -3,8 +3,9 @@
 //!
 //! Python reads the store and the harness. This op decides what that evidence
 //! means: the capability snapshot and its delta, the artifact diff, the
-//! history and provenance context, the receipt summaries, the incident copy
-//! and the per-artifact result rows. Every query is pure and answers with a
+//! history and provenance context, the receipt summaries, the incident copy,
+//! the per-artifact result rows and what the composed decision means for the
+//! evaluation (blocking, snapshot, receipt, event). Every query is pure and answers with a
 //! bound, digest-checked reply or a stable error code; there is no partial
 //! answer for Python to complete.
 
@@ -16,6 +17,7 @@ use guard_contracts::{
 use serde_json::Value;
 
 use crate::consumer_evidence::artifact_evidence;
+use crate::consumer_outcome::{artifact_outcome, removed_outcome};
 use crate::consumer_result::{artifact_result, incident_context, removed_result};
 
 const REQUEST_INVALID: &str = "native_consumer_artifact_project_request_invalid";
@@ -62,6 +64,12 @@ pub(crate) fn project(query: &ConsumerArtifactProjectQueryV1) -> Result<Value, &
         }
         ConsumerArtifactProjectQueryV1::RemovedResult(query) => {
             removed_result(&body(serde_json::to_value(query))?)
+        }
+        ConsumerArtifactProjectQueryV1::ArtifactOutcome(query) => {
+            artifact_outcome(&body(serde_json::to_value(query))?)
+        }
+        ConsumerArtifactProjectQueryV1::RemovedOutcome(query) => {
+            removed_outcome(&body(serde_json::to_value(query))?)
         }
         ConsumerArtifactProjectQueryV1::IncidentContext(query) => {
             incident_context(&body(serde_json::to_value(query))?)

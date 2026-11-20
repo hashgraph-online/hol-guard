@@ -28,10 +28,7 @@ fn world(tag: &str) -> World {
     let root = std::fs::canonicalize("/tmp").unwrap().join(format!(
         "guard-ls-temporary-{tag}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let home = root.join("home");
     let scratch = root.join("scratch");
@@ -79,8 +76,24 @@ fn a_missing_name_below_a_temporary_directory_prints_only_an_error() {
 fn a_pattern_below_an_owned_temporary_directory_names_its_matches() {
     let world = world("pattern");
     let scratch = fixture::shell_word(&world.scratch);
-    for command in [format!("ls {scratch}/pg*"), format!("ls {scratch}/notes*")] {
+    for command in [
+        format!("ls {scratch}/pg*"),
+        format!("ls {scratch}/notes*"),
+        // A pattern that does not start with `.` never matches `.` or `..`.
+        format!("ls {scratch}/*"),
+        format!("ls -d {scratch}/*"),
+        format!("ls -ld {scratch}/*"),
+        format!("ls -d {scratch}/*-run"),
+    ] {
         assert_decision(&world.workspace, &world.home, &command, true);
+    }
+    // With bash globstar or zsh recursive globbing, ** can expand to deeper paths.
+    // This leaf-only proof must not allow it without inspecting every nested match.
+    for command in [
+        format!("ls -d {scratch}/**"),
+        format!("ls -ld {scratch}/**"),
+    ] {
+        assert_decision(&world.workspace, &world.home, &command, false);
     }
 }
 
@@ -100,9 +113,14 @@ fn the_home_tree_and_hidden_matches_keep_their_review() {
     ));
     std::fs::create_dir_all(hidden.join("inner")).unwrap();
     let _cleanup = fixture::FixtureCleanup(hidden.clone());
+    std::fs::create_dir_all(world.scratch.join(".cache/inner")).unwrap();
     let home = fixture::shell_word(&world.home);
     let root = fixture::shell_word(&world.root);
+    let scratch = fixture::shell_word(&world.scratch);
     for command in [
+        format!("ls -d {scratch}/*"),
+        format!("ls -d {scratch}/.*"),
+        format!("ls -d {scratch}/.?*"),
         format!("ls {root}*"),
         format!("ls -d {root}*"),
         format!("ls {}*", fixture::shell_word(&hidden)),
@@ -110,6 +128,31 @@ fn the_home_tree_and_hidden_matches_keep_their_review() {
         format!("ls {home}/.ssh/missing-key"),
         format!("ls {home}/.*"),
         format!("ls {}/*", fixture::shell_word(world.root.parent().unwrap())),
+    ] {
+        assert_decision(&world.workspace, &world.home, &command, false);
+    }
+}
+
+#[test]
+fn home_aliases_and_symlinked_key_targets_do_not_gain_a_leaf_glob_allowance() {
+    let world = world("aliases");
+    let alias = world.root.join("home-alias");
+    std::os::unix::fs::symlink(&world.home, &alias).unwrap();
+    let vault = world.root.join("fixture-vault");
+    std::fs::create_dir_all(&vault).unwrap();
+    std::fs::write(vault.join("server.pem"), "synthetic key-name fixture").unwrap();
+    std::os::unix::fs::symlink(
+        vault.join("server.pem"),
+        world.scratch.join("published-link"),
+    )
+    .unwrap();
+    let scratch = fixture::shell_word(&world.scratch);
+    let root = fixture::shell_word(&world.root);
+    let workspace = fixture::shell_word(&world.workspace);
+    for command in [
+        format!("ls -d {root}/home-alias/*"),
+        format!("ls -d {workspace}/../../*"),
+        format!("ls -d {scratch}/*"),
     ] {
         assert_decision(&world.workspace, &world.home, &command, false);
     }

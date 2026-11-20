@@ -43,7 +43,10 @@ def native_authoring_index(tmp_path_factory):
     import base64
     import io
 
-    from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded, entries
+    from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded
+    from tests.delivery_scripts import script
+
+    entries = script("extension_delivery_objects").entries
 
     compiler = REPOSITORY / "rust/target/debug/guard-command-source"
     if not compiler.is_file():

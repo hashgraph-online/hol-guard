@@ -5,6 +5,24 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest import prepare_restric
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 
+@pytest.mark.parametrize(
+    "reason",
+    ["git_restricted_invalid_metadata", "git_restricted_sandbox_unavailable", "git_restricted_invalid_command"],
+)
+def test_native_git_refusals_keep_their_reason_code(monkeypatch, reason):
+    monkeypatch.setattr(
+        transport,
+        "_call",
+        lambda *args, **kwargs: {"reason_code": reason, "message": "protected Git plan refused"},
+    )
+
+    with pytest.raises(RestrictedPytestError) as raised:
+        transport._request("prepare_git", {}, dict)
+
+    assert raised.value.reason_code == reason
+    assert "invalid_reply" not in str(raised.value)
+
+
 @pytest.mark.parametrize("profile", ["unknown", "pytest-restricted-v1"])
 def test_readonly_request_rejects_lowered_or_unknown_native_profile(monkeypatch, tmp_path, profile):
     reply = {

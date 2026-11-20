@@ -18,10 +18,7 @@ fn fixture() -> Fixture {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
@@ -32,7 +29,7 @@ fn fixture() -> Fixture {
         "project/src/one.ts",
         "project/src/password-reset-email.tsx",
         "project/src/secrets-loader.ts",
-        "project/app/registry/[slug]/page.tsx",
+        "project/app/items/[slug]/page.tsx",
         "project/.env",
         "project/credentials.json",
         "project/private-key.pem",
@@ -41,6 +38,7 @@ fn fixture() -> Fixture {
         "project/id_rsa",
         ".agent/skills/x/SKILL.md",
         ".agent/skills/x/run.py",
+        ".agent/skills/x/inventory.db",
         ".agent/skills/.hidden/SKILL.md",
         ".agent/artifacts/report.md",
         ".agent/artifacts/data.json",
@@ -79,7 +77,7 @@ fn allowed(f: &Fixture, harness: &str, tool: &str, input: Value) -> bool {
 #[test]
 fn bracketed_route_files_are_literal_reads() {
     let f = fixture();
-    let page = f.project.join("app/registry/[slug]/page.tsx");
+    let page = f.project.join("app/items/[slug]/page.tsx");
     let page = page.to_str().unwrap();
     assert!(allowed(
         &f,
@@ -93,12 +91,12 @@ fn bracketed_route_files_are_literal_reads() {
         &f,
         "omp",
         "read",
-        json!({"path": "app/registry/[slug]/page.tsx"})
+        json!({"path": "app/items/[slug]/page.tsx"})
     ));
     // Brackets never widen a read to an unresolved or glob-shaped target.
     for path in [
-        "app/registry/[slug]/missing.tsx",
-        "app/registry/[a-z]*/page.tsx",
+        "app/items/[slug]/missing.tsx",
+        "app/items/[a-z]*/page.tsx",
         "app/[x]/../../.env",
     ] {
         assert!(!allowed(&f, "omp", "read", json!({"path": path})), "{path}");
@@ -183,11 +181,17 @@ fn harness_skill_and_artifact_dirs_are_readable_but_not_the_rest_of_agent_home()
     assert!(allowed(
         &f,
         "omp",
+        "read",
+        json!({"path": format!("{h}/.agent/skills/x/run.py")})
+    ));
+    assert!(allowed(
+        &f,
+        "omp",
         "eval",
         json!({"language":"js","code": format!("display(await tool.read({{path:'{h}/.agent/skills/x/SKILL.md'}}))")})
     ));
     for path in [
-        format!("{h}/.agent/skills/x/run.py"),
+        format!("{h}/.agent/skills/x/inventory.db"),
         format!("{h}/.agent/skills/.hidden/SKILL.md"),
         format!("{h}/.agent/artifacts/data.json"),
         format!("{h}/.agent/artifacts/.cache/note.md"),
@@ -468,7 +472,7 @@ fn content_searches_of_agent_state_trees_stay_reviewed() {
 #[test]
 fn bracketed_paths_are_literal_only_for_host_read_tools() {
     let f = fixture();
-    let page = f.project.join("app/registry/[slug]/page.tsx");
+    let page = f.project.join("app/items/[slug]/page.tsx");
     let page = page.to_str().unwrap();
     for (harness, tool) in [
         ("omp", "read_many_files"),

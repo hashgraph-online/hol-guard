@@ -11,8 +11,10 @@ from pathlib import Path
 
 import extension_artifact_bundle as legacy
 import extension_delivery_github as provider
+from extension_delivery_containers import maximum
 from extension_delivery_inventory import publication_inventory, read_plan
 from extension_delivery_legacy import UNAVAILABLE, unavailable_marker
+from extension_delivery_runtime import pinned_runtime
 from extension_delivery_selector import select
 from extension_delivery_source import verify_sources
 
@@ -22,7 +24,6 @@ from codex_plugin_scanner.guard.catalog_delivery.authority import (
     decode,
     verify_distribution,
 )
-from codex_plugin_scanner.guard.catalog_delivery.containers import maximum
 from codex_plugin_scanner.guard.catalog_delivery.selection import root_tag
 from codex_plugin_scanner.guard.catalog_delivery.transport import PROVENANCE_ASSET, ROOT_ASSET
 from codex_plugin_scanner.guard.extension_builder.io import read_bytes
@@ -75,6 +76,18 @@ def publish(directory, source, publication):
     verify_sources(Path(__file__).resolve().parents[1], source, generated=True)
     assets = publication_inventory(directory, verified, Path(__file__).resolve().parents[1])
     rows = read_plan(directory, assets, source, publication)
+    # Every release carries the signed distribution root, which already binds
+    # each data asset in it by digest. Reusing the attested root bundle keeps
+    # the published evidence verifiable under the authority subject bounds,
+    # the way the legacy compatibility release already reuses it.
+    anchor = {name: directory / name for name in (ROOT_ASSET, PROVENANCE_ASSET)}
+    anchor_specs = {
+        name: spec(path, MAX_PROVENANCE_BYTES if name == PROVENANCE_ASSET else 65536) for name, path in anchor.items()
+    }
+
+    def verify(bundle):
+        verify_distribution(data, bundle, expected_source_sha=source, now=int(time.time()))
+
     provider.verify_repository()
     pending = defaultdict(dict)
     for row in rows:
@@ -103,18 +116,16 @@ def publish(directory, source, publication):
             else:
                 provider.verify_asset(remote[name], row)
     for tag, expected in sorted(pending.items()):
+        if set(anchor) & set(expected):
+            raise ValueError("data release inventory collides with the distribution root")
         paths = {name: directory / "assets" / tag / name for name in expected}
-        provider.publish_assets(tag, source, paths, expected)
+        provider.publish_assets(
+            tag, source, {**paths, **anchor}, {**expected, **anchor_specs}, verify_existing_provenance=verify
+        )
     publish_legacy(directory, root, source)
-    paths = {name: directory / name for name in (ROOT_ASSET, PROVENANCE_ASSET)}
-    expected = {
-        name: spec(path, MAX_PROVENANCE_BYTES if name == PROVENANCE_ASSET else 65536) for name, path in paths.items()
-    }
-
-    def verify(bundle):
-        verify_distribution(data, bundle, expected_source_sha=source, now=int(time.time()))
-
-    provider.publish_assets(root_tag(source, publication), source, paths, expected, verify_existing_provenance=verify)
+    provider.publish_assets(
+        root_tag(source, publication), source, anchor, anchor_specs, verify_existing_provenance=verify
+    )
     selected = select(
         {
             "schema": "guard.extension-distribution-selector.v2",
@@ -136,4 +147,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with pinned_runtime():
+        main()

@@ -76,6 +76,31 @@
    }
   },
   {
+   "accepted": true,
+   "kind": "consumer_approval_context_token",
+   "name": "consumer_token_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok",
+    "token": "guard-approval-context:v1:AA"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "consumer_approval_context_token",
+   "name": "consumer_token_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
    "accepted": false,
    "kind": "configured_environment_hash",
    "name": "configured_environment_hash_missing",

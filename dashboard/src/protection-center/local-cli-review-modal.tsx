@@ -18,6 +18,8 @@ export function CustomExtensionReviewModal(props: {
   busy: boolean;
   error: string | null;
   approvalGate: GuardApprovalGatePublicConfig | null;
+  /** The last save was refused for a missing code, so a recent proof no longer stands in. */
+  requireFreshTotp?: boolean;
   onCancel: () => void;
   onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
 }) {
@@ -41,13 +43,13 @@ export function CustomExtensionReviewModal(props: {
     props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
       approvalPassword: password,
       approvalTotpCode: totp,
-    }));
+    }, props.requireFreshTotp === true));
   }, [password, props, totp]);
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.approvalGate,
     { approvalPassword: password, approvalTotpCode: totp },
     props.busy,
-    false,
+    props.requireFreshTotp === true,
     true,
   );
   return (
@@ -55,7 +57,7 @@ export function CustomExtensionReviewModal(props: {
       <form ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="custom-extension-review-title" onSubmit={handleSubmit} className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl focus:outline-none">
         <h2 id="custom-extension-review-title" className="text-xl font-semibold text-brand-dark">{title}</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          {reviewModalDetail(props.approvalGate)}
+          {reviewModalDetail(props.approvalGate, props.requireFreshTotp === true)}
         </p>
         {props.item.surface === "mcp" ? <div className="mt-3 text-sm leading-6 text-brand-dark">
           <p>{props.item.source_label || "This host"} · This configured connection</p>
@@ -90,6 +92,7 @@ export function CustomExtensionReviewModal(props: {
             approvalGate={props.approvalGate}
             approvalPassword={password}
             approvalTotpCode={totp}
+            requireFreshTotp={props.requireFreshTotp === true}
             requireGate={true}
             onApprovalPasswordChange={handlePassword}
             onApprovalTotpCodeChange={handleTotp}

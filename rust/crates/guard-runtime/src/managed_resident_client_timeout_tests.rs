@@ -52,6 +52,25 @@ fn a_contained_execute_keeps_the_deadline_its_own_timeout_earns() {
 }
 
 #[test]
+fn an_extension_control_preview_keeps_the_deadline_python_grants_it() {
+    // Python asks fifteen seconds for a semantic preview and five for a plain
+    // composition or resolution; the ceiling must not cut the former to nine.
+    assert_eq!(
+        client_timeout(br#"{"operation":"extension_control","deadline_budget_ms":15000}"#),
+        Duration::from_secs(15)
+    );
+    assert_eq!(
+        client_timeout(br#"{"operation":"extension_control","deadline_budget_ms":5000}"#),
+        Duration::from_secs(5)
+    );
+    // The ceiling still bounds a larger ask.
+    assert_eq!(
+        client_timeout(br#"{"operation":"extension_control","deadline_budget_ms":999999}"#),
+        Duration::from_secs(15)
+    );
+}
+
+#[test]
 fn client_deadline_is_bounded() {
     assert_eq!(
         client_timeout(br#"{"deadline_budget_ms":999999}"#),
@@ -116,5 +135,46 @@ fn client_deadline_is_bounded() {
     assert_eq!(
         client_timeout(br#"{"deadline_budget_ms":250}"#),
         Duration::from_millis(250)
+    );
+}
+
+#[test]
+fn a_hook_edge_settling_a_custom_rule_keeps_the_rule_allowance() {
+    // The daemon waits five seconds past the review budget for the edge to
+    // settle a custom extension rule. A relay that stopped at the review
+    // budget dropped the edge's answer while the daemon was still waiting
+    // for it, and the call failed closed as unavailable.
+    let schema = guard_contracts::GUARD_HOOK_ENVELOPE_V2_SCHEMA;
+    let envelope = |rules: &str| {
+        format!(r#"{{"schema":"{schema}","deadline_budget_ms":750,"local_cli_rules":{rules}}}"#)
+    };
+    assert_eq!(
+        client_timeout(envelope(r#"{"store_path":"guard.db"}"#).as_bytes()),
+        Duration::from_millis(5_750)
+    );
+    assert_eq!(
+        client_timeout(envelope("null").as_bytes()),
+        Duration::from_millis(750)
+    );
+    // Only a hook envelope asks for a rule; another request keeps its budget.
+    assert_eq!(
+        client_timeout(
+            br#"{"operation":"guard_store","deadline_budget_ms":750,"local_cli_rules":{}}"#
+        ),
+        Duration::from_millis(750)
+    );
+}
+
+#[test]
+fn a_runner_authority_probe_keeps_its_widened_budget() {
+    // Kinds that run a hook canary or a CLI probe may ask for up to a
+    // minute; the nine-second default abandoned them mid-probe.
+    assert_eq!(
+        client_timeout(br#"{"operation":"runner_authority","deadline_budget_ms":30000}"#),
+        Duration::from_secs(30)
+    );
+    assert_eq!(
+        client_timeout(br#"{"operation":"runner_authority","deadline_budget_ms":90000}"#),
+        Duration::from_secs(60)
     );
 }

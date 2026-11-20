@@ -11,116 +11,93 @@ AIBOM items carry redacted paths (``{home}/...``). The collection's home and
 workspace directories are stored with the rows so each path can be restored to
 the absolute form the inventory table uses: the same artifact then dedupes and
 hashes the same way whichever source saw it.
+
+The native runtime (``fleet_aibom_rows``) decides which rows a collection
+stores and which stored rows the table already holds; this module holds the
+locks and reads and writes the stored state.
 """
 
 from __future__ import annotations
 
-import os
 import threading
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .fleet_posture_common import HARNESS_IDS, normalized_timestamp
-from .fleet_posture_inventory import ITEM_SOURCE_SCOPES, inventory_item_kind
+from .fleet_posture_inventory import store_home
 
 if TYPE_CHECKING:
     from ..store import GuardStore
 
 AIBOM_ITEMS_STATE_KEY = "fleet_posture_aibom_items"
-# One machine rarely carries more than a few hundred items; the cap bounds the stored row.
-MAX_AIBOM_ROWS = 5_000
-_PROJECT_SCOPES = frozenset({"project", "workspace"})
+# The native request parser refuses any JSON array wider than this, so rows and
+# items cross in chunks the runtime joins back in order.
+_NATIVE_JSON_WIDTH = 4096
+# The row fields the native runtime reads to key, dedupe and keep rows.
+_ROW_FIELDS = (
+    "harness",
+    "artifact_type",
+    "artifact_name",
+    "config_path",
+    "removed_at",
+    "present",
+    "first_seen_at",
+    "source_scope",
+    "collection_workspace",
+)
 
 
-def _resolved(path: Path | None) -> Path | None:
+def _chunks(values: list[Any]) -> list[list[Any]]:
+    return [values[start : start + _NATIVE_JSON_WIDTH] for start in range(0, len(values), _NATIVE_JSON_WIDTH)]
+
+
+def _projected(rows: Iterable[Mapping[str, object]]) -> list[list[dict[str, object]]]:
+    return _chunks([{key: row.get(key) for key in _ROW_FIELDS if key in row} for row in rows])
+
+
+def _resolved(path: Path | None) -> str | None:
     if path is None:
         return None
     try:
-        return path.expanduser().resolve()
+        return str(path.expanduser().resolve())
     except (OSError, RuntimeError):
         return None
 
 
-def _absolute_path(redacted: object, home_dir: Path | None, workspace_dir: Path | None) -> str | None:
-    """The absolute path an AIBOM ``configPath`` was redacted from, when it can be restored."""
-
-    if not isinstance(redacted, str) or not redacted:
-        return None
-    for prefix, root in (("{home}/", home_dir), ("{workspace}/", workspace_dir)):
-        if redacted.startswith(prefix):
-            return str(root / redacted[len(prefix) :]) if root is not None else redacted
-    return redacted
-
-
-def _path_identity(path: object) -> str:
-    if not isinstance(path, str) or not path:
-        return ""
-    return os.path.realpath(path) if os.path.isabs(path) else path
-
-
-def _row_key(row: Mapping[str, object]) -> str:
-    kind = inventory_item_kind(row.get("artifact_type")) or ""
-    name = str(row.get("artifact_name") or "").strip()
-    return "\0".join((str(row.get("harness") or ""), kind, name, _path_identity(row.get("config_path"))))
-
-
-def _installed(row: Mapping[str, object]) -> bool:
-    return not row.get("removed_at") and row.get("present") not in (0, False, "0")
-
-
-def _source_scope(item_id: str, harness: str, config_path: str | None, workspace_dir: Path | None) -> str | None:
-    """The item's scope from its id when the id names one, else from where its file lives."""
-
-    for segment in item_id.split(":")[1:-1]:
-        scope = segment.removeprefix(f"{harness}-")
-        if scope in ITEM_SOURCE_SCOPES:
-            return scope
-    if not config_path or not os.path.isabs(config_path):
-        return None
-    # Without a scanned workspace the collection only reads user-wide configuration.
-    if workspace_dir is not None and Path(config_path).is_relative_to(workspace_dir):
-        return "project"
-    return "global"
-
-
-def _stored(store: GuardStore) -> dict[str, object]:
-    raw = store.get_sync_payload(AIBOM_ITEMS_STATE_KEY)
-    return raw if isinstance(raw, dict) else {}
+def _text(value: object) -> str:
+    return str(value or "")
 
 
 def _stored_rows(store: GuardStore) -> list[dict[str, object]]:
-    rows = _stored(store).get("rows")
+    raw = store.get_sync_payload(AIBOM_ITEMS_STATE_KEY)
+    rows = raw.get("rows") if isinstance(raw, dict) else None
     if not isinstance(rows, list):
         return []
     return [dict(row) for row in rows if isinstance(row, dict)]
 
 
-def _item_rows(snapshot: Any, home_dir: Path | None, workspace_dir: Path | None) -> Iterable[dict[str, object]]:
-    harness = str(getattr(snapshot, "agent_type", "") or "")
-    seen_at = normalized_timestamp(getattr(snapshot, "generated_at", None))
-    if harness not in HARNESS_IDS or seen_at is None:
-        return
-    for item in getattr(snapshot, "items", ()) or ():
+def _snapshot_request(snapshot: Any) -> tuple[dict[str, object], list[Any]]:
+    items: list[Any] = list(getattr(snapshot, "items", ()) or ())
+    projected: list[dict[str, object]] = []
+    for item in items:
         metadata = item.metadata if isinstance(getattr(item, "metadata", None), dict) else {}
-        # An explicit artifact type decides; the item kind only stands in when there is none,
-        # so a type fleet posture does not report (a Cline host, say) never becomes a plugin.
-        artifact_type = str(metadata.get("artifactType") or getattr(item, "item_kind", "") or "")
-        name = str(getattr(item, "display_name", "") or "").strip()
-        if inventory_item_kind(artifact_type) is None or not name:
-            continue
-        config_path = _absolute_path(metadata.get("configPath"), home_dir, workspace_dir)
-        yield {
-            "artifact_type": artifact_type,
-            "harness": harness,
-            "artifact_name": name,
-            "artifact_hash": getattr(item, "content_hash", None),
-            "source_scope": _source_scope(str(getattr(item, "item_id", "") or ""), harness, config_path, workspace_dir),
-            "config_path": config_path,
-            "first_seen_at": seen_at,
-            "last_seen_at": seen_at,
-            "present": True,
-        }
+        config_path = metadata.get("configPath")
+        projected.append(
+            {
+                "item_id": _text(getattr(item, "item_id", "")),
+                "item_kind": _text(getattr(item, "item_kind", "")),
+                "artifact_type": _text(metadata.get("artifactType")),
+                "name": _text(getattr(item, "display_name", "")),
+                "config_path": config_path if isinstance(config_path, str) else None,
+            }
+        )
+    generated_at = getattr(snapshot, "generated_at", None)
+    request: dict[str, object] = {
+        "harness": _text(getattr(snapshot, "agent_type", "")),
+        "generated_at": generated_at if isinstance(generated_at, str) else None,
+        "items": _chunks(projected),
+    }
+    return request, items
 
 
 # The daemon refresh loop, request handlers and the CLI can collect at the same
@@ -143,53 +120,54 @@ def remember_aibom_items(
     The collection replaces the user-wide items and the project items of the
     workspace it scanned, so an item it no longer finds leaves the next fleet
     posture as a removal. Project items of other workspaces stay until a
-    collection scans their workspace again.
+    collection scans their workspace again. The native runtime decides the
+    rows; when it cannot answer, the stored rows stay as they were.
     """
 
-    home = _resolved(home_dir)
-    workspace = _resolved(workspace_dir)
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    requests = [_snapshot_request(snapshot) for snapshot in snapshots]
     with _ROWS_LOCK, store.hold_aibom_items_lock():
-        return _replace_rows(store, snapshots, now=now, home=home, workspace=workspace)
-
-
-def _replace_rows(
-    store: GuardStore,
-    snapshots: Iterable[Any],
-    *,
-    now: str,
-    home: Path | None,
-    workspace: Path | None,
-) -> int:
-    scanned = str(workspace) if workspace is not None else None
-    previous = _stored_rows(store)
-    first_seen = {_row_key(row): row.get("first_seen_at") for row in previous}
-    rows: dict[str, dict[str, object]] = {}
-    for snapshot in snapshots:
-        for row in _item_rows(snapshot, home, workspace):
-            key = _row_key(row)
-            if key in rows or len(rows) >= MAX_AIBOM_ROWS:
-                continue
-            earlier = normalized_timestamp(first_seen.get(key))
-            if earlier is not None:
-                row["first_seen_at"] = earlier
-            if row["source_scope"] in _PROJECT_SCOPES:
-                row["collection_workspace"] = scanned
-            rows[key] = row
-    for row in previous:
-        kept_workspace = row.get("collection_workspace")
-        if row.get("source_scope") not in _PROJECT_SCOPES or kept_workspace is None or kept_workspace == scanned:
-            continue
-        key = _row_key(row)
-        if key not in rows and len(rows) < MAX_AIBOM_ROWS:
-            rows[key] = row
-    store.set_sync_payload(AIBOM_ITEMS_STATE_KEY, {"collectedAt": now, "rows": list(rows.values())}, now)
-    return len(rows)
+        previous = _stored_rows(store)
+        try:
+            payload = native_runner_authority(
+                "fleet_aibom_rows",
+                {
+                    "op": "remember",
+                    "snapshots": [request for request, _ in requests],
+                    "previous": _projected(previous),
+                    "home": _resolved(home_dir),
+                    "workspace": _resolved(workspace_dir),
+                },
+                store_home(store),
+            )
+        except NativeRunnerAuthorityError:
+            return 0
+        rows: list[dict[str, object]] = []
+        for row in payload["rows"]:
+            item = requests[row.pop("snapshot")][1][row.pop("item")]
+            rows.append({**row, "artifact_hash": getattr(item, "content_hash", None), "present": True})
+        rows.extend(previous[index] for index in payload["kept"])
+        store.set_sync_payload(AIBOM_ITEMS_STATE_KEY, {"collectedAt": now, "rows": rows}, now)
+        return len(rows)
 
 
 def fleet_inventory_rows(store: GuardStore) -> list[dict[str, object]]:
-    """Local inventory rows followed by the AIBOM-detected rows the table does not already hold."""
+    """Local inventory rows followed by the AIBOM-detected rows the table does not already hold.
+
+    A failed read raises, as the inventory table read does: an unreadable
+    inventory must not look like an empty one.
+    """
+
+    from ..native_runner_authority import native_runner_authority
 
     table_rows = store.list_inventory()
-    # A row Guard marked removed does not hide the same item found installed again.
-    known = {_row_key(row) for row in table_rows if _installed(row)}
-    return [*table_rows, *(row for row in _stored_rows(store) if _row_key(row) not in known)]
+    stored = _stored_rows(store)
+    if not stored:
+        return list(table_rows)
+    payload = native_runner_authority(
+        "fleet_aibom_rows",
+        {"op": "union", "table": _projected(table_rows), "stored": _projected(stored)},
+        store_home(store),
+    )
+    return [*table_rows, *(stored[index] for index in payload["kept"])]

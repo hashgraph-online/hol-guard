@@ -3,7 +3,7 @@
   "id": "mcp.apple-docs-2.0-mcp",
   "version": "1.0.0",
   "name": "Apple Docs 2.0 MCP",
-  "description": "Apple's developer documentation for AI agents: developer.apple.com search, whole documentation pages as Markdown with declarations, OS availability and deprecation notes, the Human Interface Guidelines, App Store Connect Help, sample code and WWDC sessions from 2014 to 2026 with transcripts and code. Read-only: it writes no files, runs no commands and needs no credentials. Off until you turn it on.",
+  "description": "Search and read Apple's developer documentation, including API references, design guidelines, sample code, App Store Connect Help and WWDC transcripts. The documentation and WWDC tools offer views for related APIs, availability, topics, years and code examples. External and off until a local administrator enables it.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -21,91 +21,45 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "apple-docs-2.0-mcp"
+    "package": "apple-docs-2.0-mcp@3.0.0"
   },
   "riskClasses": [
-    "external-network-read"
+    "external-network-read",
+    "external-content-ingestion",
+    "package-or-source-installation"
   ],
   "tools": [
     {
       "name": "search_apple_docs",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "get_apple_doc_content",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "list_technologies",
-      "state": "allow"
-    },
-    {
-      "name": "search_framework_symbols",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "search_docs_map",
-      "state": "allow"
-    },
-    {
-      "name": "get_related_apis",
-      "state": "allow"
-    },
-    {
-      "name": "resolve_references_batch",
-      "state": "allow"
-    },
-    {
-      "name": "get_platform_compatibility",
-      "state": "allow"
-    },
-    {
-      "name": "find_similar_apis",
-      "state": "allow"
-    },
-    {
-      "name": "get_documentation_updates",
-      "state": "allow"
-    },
-    {
-      "name": "get_technology_overviews",
-      "state": "allow"
-    },
-    {
-      "name": "get_sample_code",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "list_wwdc_videos",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "search_wwdc_content",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "get_wwdc_video",
-      "state": "allow"
-    },
-    {
-      "name": "get_wwdc_code_examples",
-      "state": "allow"
-    },
-    {
-      "name": "browse_wwdc_topics",
-      "state": "allow"
-    },
-    {
-      "name": "find_related_wwdc_videos",
-      "state": "allow"
-    },
-    {
-      "name": "list_wwdc_years",
-      "state": "allow"
+      "state": "inherit"
     },
     {
       "name": "other",
-      "state": "inherit"
+      "state": "review"
     }
   ],
   "referenceUrls": [
@@ -113,7 +67,8 @@
     "https://www.npmjs.com/package/apple-docs-2.0-mcp"
   ],
   "saferAlternatives": [
-    "Pin a release, for example npx -y apple-docs-2.0-mcp@2.0.7, to review each update before it runs.",
-    "Set a tool to review instead of allow if you want to approve each request it sends to Apple's servers."
+    "Use the reviewed launcher npx -y apple-docs-2.0-mcp@3.0.0. Review a new version before changing the pin.",
+    "Use get_apple_doc_content with view for related APIs, similar APIs, references, or availability. The WWDC tools also support views for years, topics, code examples, and related sessions.",
+    "Use Apple's developer documentation directly when a tool call is unnecessary."
   ]
 }

@@ -14,6 +14,22 @@ generated descriptor. Contributions remain **External, opt-in, and off until
 enabled**. Names, help descriptions, and MCP annotations do not establish
 safety.
 
+## Install the CLI
+
+The `hol-guard extensions` commands below ship in the released package, so generating and
+validating a kit needs no Rust toolchain:
+
+```sh
+pipx install hol-guard
+hol-guard --version
+```
+
+Connect the agent you author with, for example `hol-guard install claude-code`, so you can compare
+the current catalog with `hol-guard command explain` before you start and exercise the extension
+in that agent after it ships. See
+[Test with an installed Guard](../extensions/contributing.md#test-with-an-installed-guard).
+Repository checks that use `uv run --no-sync` still run from a source checkout.
+
 ## Canonical files
 
 For a command contribution, edit or review these files:
@@ -68,7 +84,7 @@ dependencies and build the compiler with the pinned Rust toolchain:
 
 ```sh
 uv sync --frozen --extra dev
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
 ```
 
 The shell examples below use Bash and `jq`. On Windows, use Git Bash and add
@@ -88,10 +104,13 @@ separately reviewed trust map, and the compiler's packaged baseline:
 
 ```sh
 rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
+rust/target/release/guard-command-source export-built > packaged-build.json
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
+  --slurpfile built packaged-build.json \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",
+    validation_base:{catalog:$built[0].catalog,programs:[]}}' \
   > source-build.json
 
 rust/target/release/guard-command-source schema > source-schema.json
@@ -123,7 +142,7 @@ For the Extension Builder CLI in an editable checkout, explicitly select a
 fresh compiler after generating the program:
 
 ```sh
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
 export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
 ```
 
@@ -133,6 +152,14 @@ there is no packaged compiler manifest; add `.exe` to its value on Windows.
 A native wheel supplies its own platform compiler and manifest. The installed
 builder verifies package, source, binary, and embedded-program identities and
 does not discover Cargo or fall back to Python matcher semantics.
+
+## Bind a hosted action
+
+A command source or MCP server contribution stays local-only unless a sibling
+`guard.cloud-action-binding-contribution.v1` document names hosted actions it
+covers. Most contributions need none. [Bind a hosted action](HOSTED-ACTIONS.md)
+explains when to add a binding, how to validate and compile it offline, what
+reviewers check and what a merged binding changes today.
 
 ## Run portable fixtures
 
@@ -163,7 +190,7 @@ temporary envelope; they are not part of the fixture contract.
 The focused Rust integration test exercises the checked-in source and fixture:
 
 ```sh
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 ```
 
 ## Generate a review kit from exported metadata
@@ -192,6 +219,14 @@ hol-guard extensions generate \
 
 hol-guard extensions validate samplectl-kit
 ```
+
+Optional `--license` (an SPDX expression such as `MIT` or
+`(MIT OR CC0-1.0)`, at most 64 characters) and `--description`
+(one line, at most 512 characters) record the upstream license and a specific
+summary in the discovery snapshot. CLI kits render them into the command
+source; without them the source keeps `license: null` and the generic
+description. They are part of the snapshot binding, so adding them to an
+existing kit means a new discovery and a re-bound review.
 
 The output directory must not exist and its parent must already exist. A CLI
 kit contains `discovery.json`, `review.json`, `report.json`, a README, a file
@@ -289,7 +324,11 @@ hol-guard extensions diff samplectl-kit samplectl-reviewed
 
 Changed source bytes, identity, or metadata invalidate the old review binding.
 `diff` exits 1 when valid kits differ. A safe literal removes review evidence
-only from its own generated rule; it cannot suppress another rule, a required
+only from its own generated rule and from the kit's unclassified fallback rule,
+which matches every invocation and therefore carries every reviewed literal
+(at most 64 per kit). Each literal gets a fixture case on both rules, so a CLI
+review also needs operations plus twice its literals to stay within the native
+runner's 256 fixture cases. It cannot suppress another rule, a required
 floor, device policy, or executable-identity checks. Unknown CLI invocations
 retain review. Unknown and unreviewed MCP tools inherit existing handling.
 
@@ -323,7 +362,7 @@ satisfy a test:
 ```sh
 uv run --no-sync python scripts/build_native_command_program.py
 uv run --no-sync python scripts/build_native_command_program.py --check
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
 uv run --no-sync python scripts/export_extension_directory.py
 uv run --no-sync python scripts/render_command_extension_directory.py
@@ -382,9 +421,11 @@ descriptions and review input are publishable author input; inspect them for
 secrets before submission.
 
 The bounded contracts reject excessive input rather than truncating it. The
-current limits include 8 MiB source/compiler input, 4 MiB compiled program,
-32 matcher depth, 16,384 matcher nodes, 512 extensions, 1,024 rules, 64 safe
-variants per rule, and the adapter limits in `contracts/extensions/`.
+current limits include 8 MiB source/compiler input (the pack lifecycle
+subcommand is read by the runtime's own stdin reader instead, at 6 MiB),
+4 MiB compiled program, 32 matcher depth, 16,384 matcher nodes, 512
+extensions, 1,024 rules, 64 safe variants per rule, and the adapter limits in
+`contracts/extensions/`.
 
 ## Exit statuses
 

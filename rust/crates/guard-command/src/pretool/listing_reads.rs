@@ -6,63 +6,13 @@
 //! route directories such as `[slug]`), while an unquoted `*`, `?` or `[` is
 //! expanded by the proof itself and every match is checked.
 
+use super::read_paths::hidden_listing;
 use super::{safe_reads, search};
 
-struct Word {
-    value: String,
-    unquoted_glob: bool,
-    quoted_glob: bool,
-}
-
-/// Split segment text into shell words, tracking where glob characters sit.
-/// `None` for anything beyond plain words and simple quotes, which makes the
-/// caller treat every glob character as unquoted.
-fn quoted_words(text: &str) -> Option<Vec<Word>> {
-    let mut words = Vec::new();
-    let mut current: Option<Word> = None;
-    let mut quote: Option<char> = None;
-    for character in text.chars() {
-        match quote {
-            Some(open) if character == open => quote = None,
-            Some(open) => {
-                if character == '\\' || (open == '"' && matches!(character, '$' | '`')) {
-                    return None;
-                }
-                let word = current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-                word.quoted_glob |= matches!(character, '*' | '?' | '[');
-                word.value.push(character);
-            }
-            None if matches!(character, '\'' | '"') => {
-                quote = Some(character);
-                current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-            }
-            None if character == '\\' => return None,
-            None if character.is_whitespace() => words.extend(current.take()),
-            None => {
-                let word = current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-                word.unquoted_glob |= matches!(character, '*' | '?' | '[');
-                word.value.push(character);
-            }
-        }
-    }
-    if quote.is_some() {
-        return None;
-    }
-    words.extend(current);
-    Some(words)
-}
+#[path = "listing_words.rs"]
+mod words;
+pub(super) use words::literal_words;
+use words::quoted_words;
 
 enum Operand {
     Plain,
@@ -91,12 +41,19 @@ fn classify_operands(text: &str, arguments: &[String]) -> Option<Vec<Operand>> {
         .collect()
 }
 
+/// `absent_recursive` says whether a missing operand stays missing while the
+/// listing runs: no peer segment may create a file, directory or link at that
+/// name, because a recursive listing walks whatever appears there.
 pub(super) fn safe_listing_segment(
     text: &str,
     arguments: &[String],
     context: super::PathContext<'_>,
+    absent_recursive: bool,
 ) -> bool {
     let recursive = arguments.iter().any(|argument| is_recursive_flag(argument));
+    let lists_hidden = arguments
+        .iter()
+        .any(|argument| lists_hidden_entries(argument));
     if !recursive
         && !arguments
             .iter()
@@ -125,9 +82,17 @@ pub(super) fn safe_listing_segment(
             None => &Operand::Plain,
         };
         let allowed = match kind {
+            // A name that is not there holds no tree to walk, so a recursive
+            // listing of it prints the same error a plain `ls` does. A `~` is
+            // expanded by the shell from its own `HOME`, which this screen
+            // reads as the declared home, so a walk is admitted under it only
+            // once `shell_home_matches` says the two name one directory.
             Operand::Plain if recursive => {
                 surviving += 1;
-                search::safe_recursive_target(argument, context)
+                search::safe_recursive_listing_target(argument, context, lists_hidden)
+                    || (absent_recursive
+                        && (!argument.starts_with('~') || context.shell_home_matches)
+                        && absent_listing_operand(argument, context))
             }
             // A listing without a glob admits a name that is not there, because
             // the shell prints an error and nothing else. One glob beside it
@@ -142,6 +107,8 @@ pub(super) fn safe_listing_segment(
             Operand::QuotedLiteral => {
                 surviving += 1;
                 search::safe_literal_bracket_tree(argument, context, recursive)
+                    || (!recursive
+                        && search::safe_literal_bracket_listing_target(argument, context))
             }
             Operand::Glob if search::safe_glob_operand(argument, context, recursive) => {
                 surviving += 1;
@@ -150,22 +117,50 @@ pub(super) fn safe_listing_segment(
             Operand::Glob => {
                 search::safe_unmatched_glob_operand(argument, context, recursive)
                     || (!recursive && leaf_glob_operand(argument, context))
+                    || (!recursive
+                        && search::safe_literal_bracket_listing_target(argument, context))
             }
         };
-        if !allowed {
+        if !allowed || !search::listable_spelling(argument, context, recursive, kinds.is_some()) {
             return false;
         }
     }
     // A recursive listing walks the working directory only when no operand
     // survives. An unmatched bracket beside a real operand does not.
-    surviving > 0 || !recursive || search::safe_recursive_target(".", context)
+    surviving > 0 || !recursive || search::safe_recursive_listing_target(".", context, lists_hidden)
+}
+
+/// A glob that a program prints instead of listing, as in `echo src/*`. The
+/// shell hands it the names a non-recursive `ls` of the same pattern prints, so
+/// the word takes that listing's proof.
+pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> bool {
+    search::safe_glob_operand(value, context, false)
+        || search::safe_unmatched_glob_operand(value, context, false)
+        || leaf_glob_operand(value, context)
+}
+
+/// A file-test operand the shell may hand over as a pattern, as in a loop
+/// guard `[ -f tests/*.py ]`. The test reports one bit about whatever word
+/// arrives: the literal spelling when nothing matches, or a match. So the
+/// literal spelling must name nothing, which keeps a file called
+/// `tests/[ab].py` from standing in for the pattern, and every match must clear
+/// the read proof `cat` needs, or the pattern must match nothing. A quoted
+/// `~` stays literal and names `./~`, so a home spelling also needs the
+/// working directory to hold no `~` entry.
+pub(super) fn tested_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    value.contains(['*', '?', '['])
+        && (!value.starts_with('~') || no_literal_home_entry(context))
+        && expanded_path(value, context)
+            .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
+        && (safe_reads::glob_file_matches(value, context).is_some()
+            || search::safe_unmatched_glob_operand(value, context, false))
 }
 
 /// `ls` of a path that does not exist prints only an error. Agents probe for
 /// optional directories this way (`ls ~/work/scripts 2>/dev/null`). The
-/// nearest existing ancestor must be a directory a listing may name, and every
-/// missing component must be a visible name that clears the sensitive screens,
-/// so the probe cannot spell a hidden or credential location.
+/// nearest existing ancestor must be a directory a listing may name, and the
+/// path must clear the sensitive screens, so the probe cannot spell a
+/// credential location.
 pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_>) -> bool {
     if value.is_empty()
         || value.len() > 4096
@@ -188,9 +183,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     let Some(expanded) = expanded_path(value, context) else {
         return false;
     };
-    if !std::fs::symlink_metadata(&expanded)
-        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-    {
+    if !std::fs::symlink_metadata(&expanded).is_err_and(|error| absent(&error)) {
         return false;
     }
     let mut missing: Vec<&std::ffi::OsStr> = Vec::new();
@@ -199,14 +192,29 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
             Ok(_) => {
                 let private_temporary =
                     super::listing_temporary::private_temporary_ancestor(ancestor, context);
+                let (home, cwd) = (context.home_dir, context.cwd);
+                // A name that is not there prints `No such file or
+                // directory` and nothing else, so what the probe may spell
+                // is whatever a listing of the same path would be allowed to
+                // print if it did exist. A plain name is one, with the `.git`
+                // marker an agent probes for and a repository's `.github`
+                // beside it; so is a tool's own directory in the home
+                // directory, which a present-path listing already allows and
+                // an absent one used to refuse, reporting by the
+                // disagreement whether the tool was set up; and a hidden
+                // name inside a repository, as `.next` before the first
+                // build, under the same screens as its listing. `~/.aws`,
+                // `~/.config/gh` and the other stores stay refused, because
+                // the answer to a probe for one of them is itself the
+                // account it keeps.
                 let spelled = missing.iter().enumerate().all(|(index, part)| {
                     let name = part.to_string_lossy();
-                    // `.git` is the one marker agents probe for. A missing
-                    // leaf prints only an error and reveals no content.
-                    // `.github` holds a project's workflows, never a
-                    // credential, so a probe for them may name it anywhere.
                     !name.starts_with('.') || (index == 0 && name == ".git") || name == ".github"
-                }) || private_temporary;
+                }) || hidden_listing::absent_home_hidden_tool_path(
+                    &expanded, ancestor, home,
+                ) || hidden_listing::absent_repository_hidden_path(
+                    &expanded, ancestor, home, cwd,
+                ) || private_temporary;
                 // The owner's private temporary root itself (`$TMPDIR`) sits
                 // in a location the listing screens deny, but nobody else can
                 // put an entry there, so a missing name below it is enough.
@@ -214,7 +222,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                     && spelled
                     && (private_temporary || listable_ancestor(ancestor, context));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(error) if absent(&error) => {
                 let Some(name) = ancestor.file_name() else {
                     return false;
                 };
@@ -226,7 +234,30 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     false
 }
 
+/// Whether a lookup failed because the path is not there. A path that runs
+/// through a regular file, as `<worktree>/.git/index.lock` does where `.git`
+/// is a linked worktree's gitfile, fails with `Not a directory` and prints
+/// that error and nothing else, the same as a missing name. The walk still
+/// judges that file as the nearest existing ancestor.
+fn absent(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
+}
+
 /// The path an operand names, with `~` and a relative cwd resolved.
+///
+/// A `~` is expanded here from the declared `home_dir`, which is the home the
+/// shell reports; where a caller needs the two to be one directory it screens
+/// `shell_home_matches` itself before admitting the operand.
+/// True when the working directory holds no entry named `~`.
+fn no_literal_home_entry(context: super::PathContext<'_>) -> bool {
+    expanded_path("./~", context)
+        .filter(|path| path.is_absolute())
+        .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
+}
+
 fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
     if value.starts_with('~') {
         super::read_paths::expand_home_read_path(value, context.home_dir)
@@ -245,14 +276,7 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 /// Upper bound on the entries a leaf glob's directory may hold.
 const MAX_LEAF_ENTRIES: usize = 4096;
 
-/// `ls /tmp/pg-run/.s.PGSQL*`: a pattern in the last component only, below a
-/// literal directory that `ls` may list by name and that no other user can
-/// add an entry to. The screened glob expansion refuses
-/// hidden and socket matches, but a listing prints only their names, as
-/// listing the directory itself would. Every entry the pattern could match
-/// under any shell option (`dotglob`, `nocaseglob`) is screened: a directory
-/// match has its entries listed, so it needs the listing proof itself, and
-/// any other match must clear the sensitive-path and credential-name screens.
+/// Screen every leaf glob match below a listable, owner-controlled non-home directory.
 fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
@@ -265,41 +289,58 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0'])
         || (value.contains('\\') && !cfg!(windows))
         || value.contains(['{', '}', '(', ')', '!'])
-        // A trailing wildcard can always spell a credential name, so the
-        // pattern only screens its fixed path; every match is screened below.
+        // zsh extended globs can reach hidden names; `**` reaches unchecked nested paths.
+        // Reject both rather than trusting the leaf-only proof.
+        || pattern.contains(['#', '^', '~'])
+        || pattern.contains("**")
+        // The fixed directory and every wildcard match need screening.
         || super::sensitive_path_argument(value)
         || super::sensitive_read_path_argument(directory)
     {
         return false;
     }
-    // A superset of every match: the literal text before the first wildcard
-    // and after the last one, compared without case.
+    // A superset of every match. A pattern of only `*` and `?` is matched
+    // as the shell matches it, without case, so `*pr7519*` is judged by the
+    // names it can expand to and not by every sibling, such as a hidden
+    // `.factory` beside it. That match is byte-wise, so a name that is not
+    // ASCII uses a looser match that holds under any locale. A bracket class
+    // uses the literal prefix and suffix around the wildcards.
     let lowered = pattern.to_ascii_lowercase();
     let prefix = &lowered[..lowered.find(['*', '?', '[']).unwrap_or(lowered.len())];
     let suffix = &lowered[lowered.rfind(['*', '?', ']']).map_or(0, |at| at + 1)..];
+    let bracketed = pattern.contains(['[', ']']);
     let candidate = |name: &str| {
+        if !bracketed && name.is_ascii() && pattern.is_ascii() {
+            return safe_reads::wildcard_matches(pattern.as_bytes(), name.as_bytes());
+        }
+        if !bracketed {
+            return safe_reads::wildcard_may_match(pattern, name);
+        }
         let name = name.to_ascii_lowercase();
         name.len() >= prefix.len() + suffix.len()
             && name.starts_with(prefix)
             && name.ends_with(suffix)
     };
-    // `.*` can match `.` and `..`, which name the directory and its parent.
-    if candidate(".") || candidate("..") {
+    // A shell matches `.` and `..` (the directory, its parent) only by a `.`-led pattern.
+    if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return false;
     }
     let Some(base) = expanded_path(directory, context) else {
         return false;
     };
-    // The shell expands the pattern after this screen, and anyone can add a
-    // matching link to a world-writable directory (`/tmp`) in between, so a
-    // pattern directly below one keeps its review whatever it matches now.
+    let Ok(canonical_base) = std::fs::canonicalize(&base) else {
+        return false;
+    };
+    if context
+        .home_dir
+        .is_some_and(|h| !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base))
+    {
+        return false;
+    }
+    // Shell expansion races are unsafe in world-writable directories.
     if super::listing_temporary::writable_by_anyone(&base) {
         return false;
     }
-    // The listing names the matches, not the directory holding them, so a
-    // temporary directory only the owner can add entries to answers for a
-    // pattern below it (`ls /tmp/tmp.ab12/pg*`) although listing it whole
-    // may stay reviewed. Every match is screened on its own below.
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
@@ -327,20 +368,24 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         let Some(text) = path.to_str() else {
             return false;
         };
-        // A hidden directory (`.config`, `.cache`) may hold credentials whose
-        // names the listing would print, so a wildcard never reaches into one.
+        // Never a hidden directory (`.config`) or a key file (`server.pem`), as in `ls -R`.
         let listed = if std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
             !name.starts_with('.')
                 && safe_reads::safe_listing_arguments(&[text.to_owned()], context)
         } else {
             !super::sensitive_read_path_argument(text)
+                && !search::key_file_name(&name)
                 && std::fs::canonicalize(&path).is_ok_and(|canonical| {
-                    super::read_paths::resolved_location_allowed(
-                        &canonical,
-                        context.home_dir,
-                        context.cwd,
-                        false,
-                    )
+                    canonical
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|name| !search::key_file_name(name))
+                        && super::read_paths::resolved_location_allowed(
+                            &canonical,
+                            context.home_dir,
+                            context.cwd,
+                            false,
+                        )
                 })
         };
         if !listed {
@@ -361,7 +406,8 @@ fn parent_steps_lead(value: &str) -> bool {
 
 /// The nearest existing ancestor must be a directory a listing may name. The
 /// kernel resolves `..` physically, so a spelling with parent steps is judged
-/// by its canonical directory, never by its lexical text.
+/// by its canonical directory, never by its lexical text. A hidden directory
+/// of a repository counts too; see `absent_probe_hidden_ancestor`.
 fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>) -> bool {
     let parent_steps = ancestor
         .components()
@@ -376,7 +422,13 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     };
     resolved.to_str().is_some_and(|parent| {
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
-            || (!parent_steps && search::skill_listing_root(parent, context))
+            || (!parent_steps && search::skill_listing_root(parent, context, false))
+            || (!parent_steps
+                && super::read_paths::absent_probe_hidden_ancestor(
+                    parent,
+                    context.home_dir,
+                    context.cwd,
+                ))
     })
 }
 
@@ -403,6 +455,39 @@ fn powershell_recursion(argument: &str) -> bool {
     name == "s" || (name.len() >= 2 && ("recurse".starts_with(&name) || "depth".starts_with(&name)))
 }
 
+/// `ls` prints a hidden entry only when asked for one. Without `-a`, `-A`,
+/// `-f` or their long spellings it neither prints a hidden name nor descends
+/// into a hidden directory, so nothing hidden below the root reaches its
+/// output.
+fn lists_hidden_entries(argument: &str) -> bool {
+    if let Some(name) = argument.strip_prefix("--") {
+        let name = name.split('=').next().unwrap_or(name);
+        return !name.is_empty() && ("all".starts_with(name) || "almost-all".starts_with(name));
+    }
+    if crate::powershell_reads::windows_powershell_host() && powershell_hidden(argument) {
+        return true;
+    }
+    // GNU `ls -f` is `-aU`: it prints hidden names and descends into hidden
+    // directories, so it asks for the same reach `-a` does.
+    argument.starts_with('-')
+        && argument
+            .chars()
+            .skip(1)
+            .any(|flag| flag == 'a' || flag == 'A' || flag == 'f')
+}
+
+/// On Windows `ls` can be PowerShell's Get-ChildItem, where `-Force` is what
+/// lists a hidden entry. Any case-insensitive prefix of it counts.
+fn powershell_hidden(argument: &str) -> bool {
+    argument
+        .strip_prefix('-')
+        .filter(|name| !name.starts_with('-'))
+        .is_some_and(|name| {
+            let name = name.split(':').next().unwrap_or(name).to_ascii_lowercase();
+            !name.is_empty() && "force".starts_with(name.as_str())
+        })
+}
+
 fn follows_links(argument: &str) -> bool {
     matches!(
         argument,
@@ -413,64 +498,5 @@ fn follows_links(argument: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn a_leaf_glob_lists_hidden_names_in_a_listable_directory_only() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/listing-leaf-glob")
-            .join(std::process::id().to_string());
-        let home = root.join("home");
-        let project = home.join("work/project");
-        let run = home.join("work/run");
-        for directory in [
-            project.join("src"),
-            run.join(".cache-x"),
-            run.join("data"),
-            home.join(".ssh"),
-        ] {
-            std::fs::create_dir_all(directory).unwrap();
-        }
-        for file in [
-            run.join(".s.PGSQL.5432.lock"),
-            run.join(".env"),
-            run.join("data/notes.txt"),
-            home.join(".ssh/id_rsa"),
-        ] {
-            std::fs::write(file, "synthetic\n").unwrap();
-        }
-        let (home, project) = (
-            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
-            crate::runtime_read_paths::canonicalize_text(&project).unwrap(),
-        );
-        let context = crate::pretool::PathContext {
-            home_dir: home.to_str(),
-            cwd: project.to_str(),
-            ..Default::default()
-        };
-        let w = home.join("work").display().to_string();
-        let h = home.display().to_string();
-        for (command, allowed) in [
-            (format!("ls {w}/run/.s.PGSQL*"), true),
-            (
-                format!("ls -la {w}/run/.s.PGSQL* {w}/run/.s.MISSING*"),
-                true,
-            ),
-            (format!("ls {w}/run/d*"), true),
-            (format!("ls -R {w}/run/.s.PGSQL*"), false),
-            (format!("ls {w}/run/.c*"), false),
-            (format!("ls {w}/run/.e*"), false),
-            (format!("ls {w}/run/.*"), false),
-            (format!("ls {w}/*/.s.PGSQL*"), false),
-            (format!("ls {h}/.ssh/*"), false),
-            (format!("ls {h}/.ssh/id*"), false),
-        ] {
-            let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
-            assert_eq!(
-                super::safe_listing_segment(&command, &words[1..], context),
-                allowed,
-                "{command}"
-            );
-        }
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
+#[path = "listing_reads_tests.rs"]
+mod tests;

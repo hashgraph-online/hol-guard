@@ -2,62 +2,45 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
-from codex_plugin_scanner.guard.models import GuardArtifact
+from tests.live_hook_review_support import LIVE_ALLOWS_RETIRED_REVIEW, live_shell_review, quietly_allowed
 
 
-def _artifact(command: str, *, home: Path) -> GuardArtifact | None:
-    return _hook_runtime_artifact(
-        harness="codex",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".guard",
-        workspace=None,
-    )
+def _quiet(command: str, *, home: Path) -> bool:
+    cwd = home / "projects" / "current"
+    cwd.mkdir(parents=True, exist_ok=True)
+    return quietly_allowed(live_shell_review(command, home_dir=home, cwd=cwd))
 
 
-def test_leading_home_cd_and_github_read_has_no_runtime_artifact_without_workspace(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_leading_home_cd_and_github_read_has_no_runtime_artifact_without_workspace(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     (home / "projects" / "review-worktree").mkdir(parents=True)
 
-    artifact = _artifact(
+    assert _quiet(
         "cd ~/projects/review-worktree && gh pr view 17 --json state,mergedAt,mergeCommit 2>&1",
         home=home,
     )
 
-    assert artifact is None
 
-
-def test_leading_home_cd_does_not_hide_github_mutation_without_workspace(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_leading_home_cd_does_not_hide_github_mutation_without_workspace(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     (home / "projects" / "review-worktree").mkdir(parents=True)
 
-    artifact = _artifact("cd ~/projects/review-worktree && gh pr merge 17 --admin", home=home)
-
-    assert artifact is not None
+    assert not _quiet("cd ~/projects/review-worktree && gh pr merge 17 --admin", home=home)
 
 
-def test_dynamic_cd_keeps_compound_github_read_fail_closed(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+def test_dynamic_cd_keeps_compound_github_read_fail_closed(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     home.mkdir()
 
-    artifact = _artifact("cd $TARGET && gh pr view 17 --json state", home=home)
-
-    assert artifact is not None
+    assert not _quiet("cd $TARGET && gh pr view 17 --json state", home=home)
 
 
-def test_execution_before_cd_keeps_compound_github_read_fail_closed(tmp_path: Path) -> None:
-    home = tmp_path / "home"
+@LIVE_ALLOWS_RETIRED_REVIEW
+def test_execution_before_cd_keeps_compound_github_read_fail_closed(live_hook_root: Path) -> None:
+    home = live_hook_root / "home"
     (home / "projects" / "review-worktree").mkdir(parents=True)
 
-    artifact = _artifact(
+    assert not _quiet(
         "printf ready && cd ~/projects/review-worktree && gh pr view 17 --json state",
         home=home,
     )
-
-    assert artifact is not None

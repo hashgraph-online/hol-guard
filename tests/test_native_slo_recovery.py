@@ -81,7 +81,9 @@ def test_resident_stop_always_verifies_containment_before_optional_client_teardo
 
     monkeypatch.setattr(session_module, "_resident_state_may_exist", lambda _path: True)
     monkeypatch.setattr(session_module.subprocess, "run", stop)
-    monkeypatch.setattr(session_module, "close_native_resident_clients", lambda _home: calls.append("close-clients"))
+    monkeypatch.setattr(
+        session_module, "close_native_resident_clients", lambda _home: calls.append("close-clients") or True
+    )
 
     result = session_module.stop_native_resident(
         tmp_path / "runtime", tmp_path / "guard-home", preserve_clients=preserve_clients, write_diagnostic=False

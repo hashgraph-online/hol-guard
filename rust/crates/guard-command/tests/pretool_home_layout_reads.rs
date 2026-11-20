@@ -42,6 +42,26 @@ pub(crate) fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts:
     )
 }
 
+/// As [`decide`], for a shell whose `HOME` names a different directory from
+/// the declared one.
+pub(crate) fn decide_with_shell_home(
+    cwd: &Path,
+    home: &Path,
+    command: &str,
+    shell_home_matches: bool,
+) -> guard_contracts::PreToolResultV1 {
+    fixture::evaluate_with_shell_home(
+        "codex",
+        "PreToolUse",
+        &json!({"tool_name":"Bash", "tool_input":{"command":command}}),
+        Some(&fixture::github_controls("enabled")),
+        None,
+        home.to_str(),
+        cwd.to_str(),
+        shell_home_matches,
+    )
+}
+
 pub(crate) fn repository(path: &Path) {
     std::fs::create_dir_all(path.join(".github/workflows")).unwrap();
     std::fs::create_dir_all(path.join("src")).unwrap();
@@ -65,10 +85,7 @@ pub(crate) fn layout(name: &str) -> Layout {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "home-layout-{name}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = fixture::FixtureCleanup(root.clone());
     let home = root.join("home");

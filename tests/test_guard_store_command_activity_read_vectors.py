@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard import store_command_activity_privacy, store_rev
 from codex_plugin_scanner.guard.native_guard_store import _raise_for_code
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_wire import shadow_wire
+from tests import native_store_shims
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
@@ -68,7 +69,7 @@ def recorded_diagnostic_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
         "BUILT_IN_COMMAND_EXTENSION_REGISTRY",
         SimpleNamespace(extensions=extensions),
     )
-    monkeypatch.setattr(store_command_activity_privacy, "COMMAND_ACTIVITY_HARNESSES", catalog["harnesses"])
+    monkeypatch.setattr(store_command_activity_privacy, "command_activity_harnesses", lambda: catalog["harnesses"])
 
 
 def test_diagnostics_allowlists_include_new_catalog_entries(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,7 +103,12 @@ def _cases() -> list[tuple[str, int, dict[str, Any], dict[str, Any]]]:
 
 
 def _invoke(store: GuardStore, source: dict[str, Any]) -> object:
-    return getattr(store, source["method"])(*source.get("args", ()), **source.get("kwargs", {}))
+    args, kwargs = source.get("args", ()), source.get("kwargs", {})
+    # Ops only tests reach have no store wrapper; their shim takes the store first.
+    shim = getattr(native_store_shims, source["method"], None)
+    if shim is not None:
+        return shim(store, *args, **kwargs)
+    return getattr(store, source["method"])(*args, **kwargs)
 
 
 def _json(method: str, value: object) -> object:

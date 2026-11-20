@@ -17,6 +17,7 @@ use super::context_digest_json::{
     write_canonical_json, write_canonical_json_with_limit, write_json_string,
 };
 use super::context_digest_result_check::{check_result, gated, kind_name};
+pub(crate) use guard_contracts::{is_python_space, python_strip};
 use guard_contracts::{
     ContextDigestComponentsV1, ContextDigestKindV1, ContextDigestRequestV1, ContextDigestResultV1,
     PackageContextComponentV1, PackageContextEvidenceV1, APPROVAL_CONTEXT_TOKEN_PREFIX,
@@ -308,29 +309,6 @@ pub(crate) fn validate_context_tokens(saved: &Value, current: &Value) -> Option<
     None
 }
 
-/// CPython `str.strip()` whitespace set: the ASCII controls 0x09-0x0d and
-/// 0x1c-0x1f plus every Unicode code point whose `isspace` is true.
-pub(crate) fn is_python_space(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{09}'..='\u{0d}'
-            | ' '
-            | '\u{1c}'..='\u{1f}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'..='\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
-}
-
-pub(crate) fn python_strip(text: &str) -> &str {
-    text.trim_matches(|ch: char| is_python_space(ch))
-}
-
 pub(crate) fn configured_values_hash(
     values: Option<&Value>,
     configured_keys: Option<&[String]>,
@@ -517,6 +495,35 @@ fn evaluate_request(
         } => {
             result.native_bash_reply_valid = Some(crate::native_bash_reply_validation::validate(
                 reply_kind, material, request,
+            ));
+        }
+        ContextDigestKindV1::NativeDecisionReceiptValidation { receipt, edge } => {
+            result.native_decision_receipt_valid =
+                Some(crate::edge::standalone_receipt(receipt, edge));
+        }
+        ContextDigestKindV1::TransitionHookObservation { payload, receipt } => {
+            result.transition_hook_observation =
+                crate::transition_hook_observation::observe(payload, receipt);
+        }
+        ContextDigestKindV1::PublicationInverseClaim {
+            action,
+            grant_id,
+            subject,
+            operation_id,
+            owner_pid,
+            deadline,
+            retirement_seconds,
+        } => {
+            result.publication_inverse_claim = Some(crate::publication_inverse_claims::answer(
+                action,
+                &crate::publication_inverse_claims::Presented {
+                    grant_id,
+                    subject,
+                    operation_id,
+                    owner_pid: *owner_pid,
+                    deadline,
+                },
+                *retirement_seconds,
             ));
         }
         ContextDigestKindV1::McpLaunchEnvironment {
@@ -710,6 +717,7 @@ fn evaluate_request(
             cwd,
             home_dir,
             launch_env,
+            package_manager_binding,
         } => {
             let launch_env_value = launch_env.as_ref().map(|env| {
                 Value::Object(
@@ -718,19 +726,33 @@ fn evaluate_request(
                         .collect(),
                 )
             });
-            result.runtime_identity =
-                Some(observe_value(Phase::ContextRuntimeLaunchIdentity, || {
-                    guard_command::launch_identity::build_runtime_launch_identity(
-                        command.as_ref().unwrap_or(&Value::Null),
-                        args,
-                        *structured_command,
-                        *direct_executable,
-                        search_path.as_deref(),
-                        cwd.as_deref().map(Path::new),
-                        home_dir.as_deref().map(Path::new),
-                        launch_env_value.as_ref(),
-                    )
-                }));
+            let mut identity = observe_value(Phase::ContextRuntimeLaunchIdentity, || {
+                guard_command::launch_identity::build_runtime_launch_identity(
+                    command.as_ref().unwrap_or(&Value::Null),
+                    args,
+                    *structured_command,
+                    *direct_executable,
+                    search_path.as_deref(),
+                    cwd.as_deref().map(Path::new),
+                    home_dir.as_deref().map(Path::new),
+                    launch_env_value.as_ref(),
+                )
+            });
+            // The executed argv and every reuse check keep reading
+            // `argv_sha256`; only the approval binding reads this digest, and
+            // only when a presentation-only option changed the spelling.
+            if *package_manager_binding {
+                if let Some(binding) = guard_command::launch_identity::package_binding_argv_digest(
+                    command.as_ref().unwrap_or(&Value::Null),
+                    args,
+                    *structured_command,
+                ) {
+                    if let Some(map) = identity.as_object_mut() {
+                        map.insert("binding_argv_sha256".into(), Value::String(binding));
+                    }
+                }
+            }
+            result.runtime_identity = Some(identity);
         }
         ContextDigestKindV1::GuardRunLaunchPlans {
             adapter_commands,
@@ -850,6 +872,13 @@ fn evaluate_request(
         ContextDigestKindV1::GenericHookApprovalContext { inputs } => {
             result.token = Some(crate::hook_approval_context::generic_hook_token(inputs)?);
         }
+        ContextDigestKindV1::ConsumerApprovalContextToken { request } => {
+            result.token = Some(crate::consumer_approval_context::consumer_token(request)?);
+        }
+        ContextDigestKindV1::PackageRunnerTarget { tokens } => {
+            result.package_runner_target =
+                crate::native_exact_action_op::runner_bin::package_runner_target(tokens);
+        }
     }
     Ok(())
 }
@@ -914,6 +943,7 @@ fn evaluate_context_digest_request_inner(
         browser_mcp: None,
         mcp_redacted_value: None,
         native_bash_reply_valid: None,
+        native_decision_receipt_valid: None,
         runtime_identity: None,
         runtime_identity_match: None,
         runtime_identity_reusable: None,
@@ -929,6 +959,9 @@ fn evaluate_context_digest_request_inner(
         claude_guard_question: None,
         memory_pattern: None,
         guard_run_launch: None,
+        package_runner_target: None,
+        transition_hook_observation: None,
+        publication_inverse_claim: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

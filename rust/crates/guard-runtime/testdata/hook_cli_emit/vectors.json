@@ -1,0 +1,156 @@
+[
+  {
+    "harness": "grok",
+    "event_name": "PreToolUse",
+    "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"blocked\"},\"policy_action\":\"block\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"blocked\"},\"policy_action\":\"block\",\"decision\":\"deny\"}",
+    "stderr": "",
+    "exit_code": 2
+  },
+  {
+    "harness": "grok",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\"review\",\"reason\":\"needs review\",\"reason_code\":\"native_network_review\",\"approval_url\":\"http://127.0.0.1:4781/approvals/0123456789abcdef\",\"approval_request_id\":\"r1\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs review\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs review\",\"reason_code\":\"native_network_review\",\"approval_url\":\"http://127.0.0.1:4781/approvals/0123456789abcdef\",\"approval_request_id\":\"r1\"}",
+    "stderr": "",
+    "exit_code": 2
+  },
+  {
+    "harness": "grok",
+    "event_name": "UserPromptSubmit",
+    "response": "{\"policy_action\":\"block\",\"reason\":\"secret in prompt\"}",
+    "stdout": "{\"decision\":\"block\",\"reason\":\"secret in prompt\"}",
+    "stderr": "",
+    "exit_code": 2
+  },
+  {
+    "harness": "grok",
+    "event_name": "PostToolUse",
+    "response": "{}",
+    "stdout": "{}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "grok",
+    "event_name": "user_prompt_submit",
+    "response": "{}",
+    "stdout": "{}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "grok",
+    "event_name": "PreToolUse",
+    "response": "{}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+    "stderr": "",
+    "exit_code": 2
+  },
+  {
+    "harness": "grok",
+    "event_name": "PreToolUse",
+    "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"policy_action\":\"review\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\"},\"policy_action\":\"review\",\"decision\":\"deny\"}",
+    "stderr": "",
+    "exit_code": 2
+  },
+  {
+    "harness": "copilot",
+    "event_name": "PermissionRequest",
+    "response": "{\"behavior\":\"deny\",\"message\":\"no\",\"interrupt\":false}",
+    "stdout": "{\"behavior\":\"deny\",\"message\":\"no\",\"interrupt\":false}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "copilot",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\"allow\",\"reason\":\"ok\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "kimi",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\"block\",\"reason\":\"denied \\u00e9\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"denied \\u00e9\"}}",
+    "stderr": "denied é",
+    "exit_code": 2
+  },
+  {
+    "harness": "zcode",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\"sandbox-required\",\"reason\":\"native command extension policy\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"native command extension policy\"}}",
+    "stderr": "native command extension policy Run `hol-guard command controls recover-authority` in a terminal to restore the protected control floor.",
+    "exit_code": 2
+  },
+  {
+    "harness": "devin",
+    "event_name": "PermissionRequest",
+    "response": "{\"decision\":\"allow\",\"policy_action\":\"block\"}",
+    "stdout": "{\"decision\":\"block\",\"policy_action\":\"block\",\"reason\":\"HOL Guard blocked this action (block)\"}",
+    "stderr": "HOL Guard blocked this action (block)",
+    "exit_code": 2
+  },
+  {
+    "harness": "openclaw",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\"warn\",\"reason_code\":\"x\",\"approval_url\":\"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\",\"reason_code\":\"x\",\"approval_url\":\"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "cline",
+    "event_name": "PostToolUse",
+    "response": "{\"reason_code\":\"native_policy_update_in_progress\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"allow\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "codex",
+    "event_name": "PreToolUse",
+    "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\"}}",
+    "policy_action": "block"
+  },
+  {
+    "harness": "codex",
+    "event_name": "UserPromptSubmit",
+    "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"note\"}}",
+    "policy_action": "allow"
+  },
+  {
+    "harness": "cursor",
+    "event_name": "PostToolUse",
+    "response": "{\"reason_code\":\"native_policy_update_in_progress\"}",
+    "policy_action": "warn"
+  },
+  {
+    "harness": "cursor",
+    "event_name": "PostToolUse",
+    "response": "{\"reason_code\":\"invalid_hook_payload_reference\"}",
+    "policy_action": "block"
+  },
+  {
+    "harness": "pi",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\" review \"}",
+    "policy_action": "review"
+  },
+  {
+    "harness": "opencode",
+    "event_name": "PreToolUse",
+    "response": "{\"policy_action\":\"bogus\"}",
+    "policy_action": "block"
+  },
+  {
+    "harness": "omp",
+    "event_name": "PermissionRequest",
+    "response": "{\"decision\":\"ask\",\"policy_action\":\"allow\"}",
+    "policy_action": "allow"
+  }
+]

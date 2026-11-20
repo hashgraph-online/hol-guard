@@ -23,8 +23,34 @@ pub(crate) fn evaluate(
         budget.check()?;
         return Ok(result);
     }
+    if operation == "contained_test_request" {
+        let result = crate::contained_test_request::evaluate(input);
+        budget.check()?;
+        return Ok(result);
+    }
+    // The grant reading lives with the workspace sink, which is contained on
+    // Unix only. Where there is no sink the operation falls through to the
+    // platform's own answer below, which reports no enforceable backend
+    // rather than a grant nothing can hold.
+    #[cfg(unix)]
+    if operation == "workspace_grant_script_roots" {
+        let result = crate::contained_workspace_grant_plan::evaluate(input);
+        budget.check()?;
+        return Ok(result);
+    }
     if operation == "process_ceiling" {
         let result = crate::restricted_process_ceiling::evaluate(budget.deadline());
+        budget.check()?;
+        return Ok(result);
+    }
+    // Protected Git proves its executable with the execution-safety check,
+    // which lives here, so the planner is handed it rather than a copy.
+    #[cfg(unix)]
+    if operation == "prepare_git" {
+        let result = guard_command::restricted_pytest::prepare_git(
+            input,
+            crate::git_execution_safety_binary::binary_path_is_trusted,
+        );
         budget.check()?;
         return Ok(result);
     }
@@ -35,8 +61,16 @@ pub(crate) fn evaluate(
         budget.deadline(),
     );
     #[cfg(not(unix))]
-    let result = if let Some(result) = guard_command::contained_argv::evaluate(operation, input) {
+    let result = if let Some(result) = guard_command::contained_argv::evaluate(operation, input)
+        .or_else(|| guard_command::vite_output::evaluate(operation, input))
+        .or_else(|| guard_command::node_build_output::evaluate(operation, input))
+    {
         result
+    } else if operation == "prepare_git" {
+        serde_json::json!({
+            "reason_code": "git_restricted_sandbox_unavailable",
+            "message": "Protected Git filtering is unavailable."
+        })
     } else if operation == "normalized_command" {
         guard_command::restricted_command::evaluate_normalized(input)
     } else if cfg!(windows) && operation == "prepare_inline" {

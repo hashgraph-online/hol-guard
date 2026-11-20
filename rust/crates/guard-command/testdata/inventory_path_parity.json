@@ -1,0 +1,753 @@
+{
+ "pure_posix": [
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [],
+   "path": ""
+  },
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [],
+   "path": "."
+  },
+  {
+   "is_absolute": false,
+   "name": "..",
+   "parts": [
+    ".."
+   ],
+   "path": ".."
+  },
+  {
+   "is_absolute": true,
+   "name": "",
+   "parts": [
+    "/"
+   ],
+   "path": "/"
+  },
+  {
+   "is_absolute": true,
+   "name": "",
+   "parts": [
+    "//"
+   ],
+   "path": "//"
+  },
+  {
+   "is_absolute": true,
+   "name": "",
+   "parts": [
+    "/"
+   ],
+   "path": "///"
+  },
+  {
+   "is_absolute": false,
+   "name": "..",
+   "parts": [
+    "a",
+    ".."
+   ],
+   "path": "a/.."
+  },
+  {
+   "is_absolute": false,
+   "name": "a",
+   "parts": [
+    "a"
+   ],
+   "path": "a/."
+  },
+  {
+   "is_absolute": false,
+   "name": "foo",
+   "parts": [
+    "foo"
+   ],
+   "path": "foo/"
+  },
+  {
+   "is_absolute": true,
+   "name": "b",
+   "parts": [
+    "/",
+    "a",
+    "b"
+   ],
+   "path": "/a//b/"
+  },
+  {
+   "is_absolute": false,
+   "name": "a\\b",
+   "parts": [
+    "a\\b"
+   ],
+   "path": "a\\b"
+  },
+  {
+   "is_absolute": false,
+   "name": "x",
+   "parts": [
+    "~",
+    "x"
+   ],
+   "path": "~/x"
+  },
+  {
+   "is_absolute": false,
+   "name": "..",
+   "parts": [
+    "a",
+    "..",
+    ".."
+   ],
+   "path": "a/../.."
+  },
+  {
+   "is_absolute": true,
+   "name": "hosts.yml",
+   "parts": [
+    "/",
+    "home",
+    "me",
+    ".config",
+    "gh",
+    "hosts.yml"
+   ],
+   "path": "/home/me/.config/gh/hosts.yml"
+  },
+  {
+   "is_absolute": false,
+   "name": "path.txt",
+   "parts": [
+    "relative",
+    "path.txt"
+   ],
+   "path": "relative/path.txt"
+  },
+  {
+   "is_absolute": true,
+   "name": "tmp",
+   "parts": [
+    "/",
+    "tmp"
+   ],
+   "path": "/tmp"
+  },
+  {
+   "is_absolute": false,
+   "name": "C:",
+   "parts": [
+    "C:"
+   ],
+   "path": "C:"
+  },
+  {
+   "is_absolute": false,
+   "name": "C:x",
+   "parts": [
+    "C:x"
+   ],
+   "path": "C:x"
+  },
+  {
+   "is_absolute": false,
+   "name": "C:\\Users\\me\\x",
+   "parts": [
+    "C:\\Users\\me\\x"
+   ],
+   "path": "C:\\Users\\me\\x"
+  },
+  {
+   "is_absolute": false,
+   "name": "x",
+   "parts": [
+    "C:",
+    "Users",
+    "me",
+    "x"
+   ],
+   "path": "C:/Users/me/x"
+  },
+  {
+   "is_absolute": false,
+   "name": "\\\\server\\share\\dir\\f.txt",
+   "parts": [
+    "\\\\server\\share\\dir\\f.txt"
+   ],
+   "path": "\\\\server\\share\\dir\\f.txt"
+  },
+  {
+   "is_absolute": false,
+   "name": "\\\\?\\UNC\\server\\share",
+   "parts": [
+    "\\\\?\\UNC\\server\\share"
+   ],
+   "path": "\\\\?\\UNC\\server\\share"
+  },
+  {
+   "is_absolute": false,
+   "name": "\\\\?\\unc\\server\\share",
+   "parts": [
+    "\\\\?\\unc\\server\\share"
+   ],
+   "path": "\\\\?\\unc\\server\\share"
+  },
+  {
+   "is_absolute": false,
+   "name": "\\\\?\\Unc\\server\\share\\dir\\f.txt",
+   "parts": [
+    "\\\\?\\Unc\\server\\share\\dir\\f.txt"
+   ],
+   "path": "\\\\?\\Unc\\server\\share\\dir\\f.txt"
+  }
+ ],
+ "pure_windows": [
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [],
+   "path": ""
+  },
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [],
+   "path": "."
+  },
+  {
+   "is_absolute": false,
+   "name": "..",
+   "parts": [
+    ".."
+   ],
+   "path": ".."
+  },
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [
+    "\\"
+   ],
+   "path": "/"
+  },
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [
+    "\\\\"
+   ],
+   "path": "//"
+  },
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [
+    "\\\\\\"
+   ],
+   "path": "///"
+  },
+  {
+   "is_absolute": false,
+   "name": "..",
+   "parts": [
+    "a",
+    ".."
+   ],
+   "path": "a/.."
+  },
+  {
+   "is_absolute": false,
+   "name": "a",
+   "parts": [
+    "a"
+   ],
+   "path": "a/."
+  },
+  {
+   "is_absolute": false,
+   "name": "foo",
+   "parts": [
+    "foo"
+   ],
+   "path": "foo/"
+  },
+  {
+   "is_absolute": false,
+   "name": "b",
+   "parts": [
+    "\\",
+    "a",
+    "b"
+   ],
+   "path": "/a//b/"
+  },
+  {
+   "is_absolute": false,
+   "name": "b",
+   "parts": [
+    "a",
+    "b"
+   ],
+   "path": "a\\b"
+  },
+  {
+   "is_absolute": false,
+   "name": "x",
+   "parts": [
+    "~",
+    "x"
+   ],
+   "path": "~/x"
+  },
+  {
+   "is_absolute": false,
+   "name": "..",
+   "parts": [
+    "a",
+    "..",
+    ".."
+   ],
+   "path": "a/../.."
+  },
+  {
+   "is_absolute": false,
+   "name": "hosts.yml",
+   "parts": [
+    "\\",
+    "home",
+    "me",
+    ".config",
+    "gh",
+    "hosts.yml"
+   ],
+   "path": "/home/me/.config/gh/hosts.yml"
+  },
+  {
+   "is_absolute": false,
+   "name": "path.txt",
+   "parts": [
+    "relative",
+    "path.txt"
+   ],
+   "path": "relative/path.txt"
+  },
+  {
+   "is_absolute": false,
+   "name": "tmp",
+   "parts": [
+    "\\",
+    "tmp"
+   ],
+   "path": "/tmp"
+  },
+  {
+   "is_absolute": false,
+   "name": "",
+   "parts": [
+    "C:"
+   ],
+   "path": "C:"
+  },
+  {
+   "is_absolute": false,
+   "name": "x",
+   "parts": [
+    "C:",
+    "x"
+   ],
+   "path": "C:x"
+  },
+  {
+   "is_absolute": true,
+   "name": "x",
+   "parts": [
+    "C:\\",
+    "Users",
+    "me",
+    "x"
+   ],
+   "path": "C:\\Users\\me\\x"
+  },
+  {
+   "is_absolute": true,
+   "name": "x",
+   "parts": [
+    "C:\\",
+    "Users",
+    "me",
+    "x"
+   ],
+   "path": "C:/Users/me/x"
+  },
+  {
+   "is_absolute": true,
+   "name": "f.txt",
+   "parts": [
+    "\\\\server\\share\\",
+    "dir",
+    "f.txt"
+   ],
+   "path": "\\\\server\\share\\dir\\f.txt"
+  },
+  {
+   "is_absolute": true,
+   "name": "",
+   "parts": [
+    "\\\\?\\UNC\\server\\share\\"
+   ],
+   "path": "\\\\?\\UNC\\server\\share"
+  },
+  {
+   "is_absolute": true,
+   "name": "",
+   "parts": [
+    "\\\\?\\unc\\server\\share\\"
+   ],
+   "path": "\\\\?\\unc\\server\\share"
+  },
+  {
+   "is_absolute": true,
+   "name": "f.txt",
+   "parts": [
+    "\\\\?\\Unc\\server\\share\\",
+    "dir",
+    "f.txt"
+   ],
+   "path": "\\\\?\\Unc\\server\\share\\dir\\f.txt"
+  }
+ ],
+ "relative_to_posix": [
+  {
+   "base": "/home/me",
+   "parts": [
+    "x",
+    "y"
+   ],
+   "path": "/home/me/x/y"
+  },
+  {
+   "base": "/home/me",
+   "parts": [],
+   "path": "/home/me"
+  },
+  {
+   "base": "/home/me",
+   "parts": null,
+   "path": "/home/other/x"
+  },
+  {
+   "base": "/home/me",
+   "parts": [
+    "..",
+    "me",
+    "x"
+   ],
+   "path": "/home/me/../me/x"
+  },
+  {
+   "base": "/home/me",
+   "parts": null,
+   "path": "/home/mex/y"
+  },
+  {
+   "base": "C:\\Users\\me",
+   "parts": null,
+   "path": "C:\\Users\\me\\x"
+  },
+  {
+   "base": "C:\\Users\\me",
+   "parts": null,
+   "path": "C:\\USERS\\ME\\x"
+  },
+  {
+   "base": "D:\\Users\\me",
+   "parts": null,
+   "path": "C:\\Users\\me\\x"
+  },
+  {
+   "base": "\\\\server\\share",
+   "parts": null,
+   "path": "\\\\server\\share\\dir\\f.txt"
+  },
+  {
+   "base": "\\\\?\\UNC\\server\\share",
+   "parts": null,
+   "path": "\\\\?\\unc\\server\\share\\dir\\f.txt"
+  }
+ ],
+ "relative_to_windows": [
+  {
+   "base": "/home/me",
+   "parts": [
+    "x",
+    "y"
+   ],
+   "path": "/home/me/x/y"
+  },
+  {
+   "base": "/home/me",
+   "parts": [],
+   "path": "/home/me"
+  },
+  {
+   "base": "/home/me",
+   "parts": null,
+   "path": "/home/other/x"
+  },
+  {
+   "base": "/home/me",
+   "parts": [
+    "..",
+    "me",
+    "x"
+   ],
+   "path": "/home/me/../me/x"
+  },
+  {
+   "base": "/home/me",
+   "parts": null,
+   "path": "/home/mex/y"
+  },
+  {
+   "base": "C:\\Users\\me",
+   "parts": [
+    "x"
+   ],
+   "path": "C:\\Users\\me\\x"
+  },
+  {
+   "base": "C:\\Users\\me",
+   "parts": [
+    "x"
+   ],
+   "path": "C:\\USERS\\ME\\x"
+  },
+  {
+   "base": "D:\\Users\\me",
+   "parts": null,
+   "path": "C:\\Users\\me\\x"
+  },
+  {
+   "base": "\\\\server\\share",
+   "parts": [
+    "dir",
+    "f.txt"
+   ],
+   "path": "\\\\server\\share\\dir\\f.txt"
+  },
+  {
+   "base": "\\\\?\\UNC\\server\\share",
+   "parts": [
+    "dir",
+    "f.txt"
+   ],
+   "path": "\\\\?\\unc\\server\\share\\dir\\f.txt"
+  }
+ ],
+ "tree": {
+  "commands": [
+   {
+    "expected": "cat {home}/.config/creds.txt",
+    "value": "cat {root}/home/.config/creds.txt"
+   },
+   {
+    "expected": "cp {home}/project/app.py {workspace}/pkg/mod.py",
+    "value": "cp {root}/home/project/app.py {root}/work/pkg/mod.py"
+   },
+   {
+    "expected": "python {workspace}/pkg/mod.py --token redacted",
+    "value": "python {root}/work/pkg/mod.py --token sekrit"
+   },
+   {
+    "expected": "curl https://api.example.com/v1/x?token=redacted -H \"Authorization: Bearer redacted",
+    "value": "curl https://api.example.com/v1/x?token=abc -H \"Authorization: Bearer sekrit\""
+   },
+   {
+    "expected": "curl -H 'authorization:   BEARER redacted https://host.example.com/p",
+    "value": "curl -H 'authorization:   BEARER sekrit' https://user:pw@host.example.com/p"
+   },
+   {
+    "expected": "xhttps://host.example.com/p",
+    "value": "xhttps://host.example.com/p"
+   },
+   {
+    "expected": "gh api --api_key redacted --api-key redacted",
+    "value": "gh api --api_key sekrit --api-key sekrit"
+   },
+   {
+    "expected": "export API_KEY=redacted password=redacted",
+    "value": "export API_KEY=sekrit password=sekrit"
+   },
+   {
+    "expected": "export APı_KEY=redacted",
+    "value": "export APı_KEY=sekrit"
+   },
+   {
+    "expected": "AUTHORİZATİON: bearer redacted",
+    "value": "AUTHORİZATİON: bearer sekrit"
+   },
+   {
+    "expected": "cmd --token\u001dredacted",
+    "value": "cmd --token\u001dsekrit"
+   },
+   {
+    "expected": "cmd secret=\u001csekrit",
+    "value": "cmd secret=\u001csekrit"
+   },
+   {
+    "expected": "cmd\u001dhosts",
+    "value": "cmd\u001d/etc/hosts"
+   },
+   {
+    "expected": "no secrets here",
+    "value": "no secrets here"
+   },
+   {
+    "expected": "{home}/project/app.py leading-path-not-at-boundary",
+    "value": "{root}/home/project/app.py leading-path-not-at-boundary"
+   }
+  ],
+  "cwd": "{root}/work",
+  "dirs": [
+   "home",
+   "home/project",
+   "home/.config",
+   "work",
+   "work/pkg"
+  ],
+  "files": [
+   "home/project/app.py",
+   "home/.config/creds.txt",
+   "work/pkg/mod.py"
+  ],
+  "home_dir": "{root}/home",
+  "known_paths": [
+   {
+    "expected": "{workspace}/pkg/mod.py",
+    "value": "{root}/work/pkg/mod.py",
+    "workspace_dir": "{root}/work"
+   },
+   {
+    "expected": "{home}/project/app.py",
+    "value": "{root}/home/project/app.py",
+    "workspace_dir": "{root}/work"
+   },
+   {
+    "expected": "hosts",
+    "value": "/etc/hosts",
+    "workspace_dir": "{root}/work"
+   },
+   {
+    "expected": "pkg/mod.py",
+    "value": "pkg/mod.py",
+    "workspace_dir": "{root}/work"
+   },
+   {
+    "expected": "{workspace}/.",
+    "value": "{root}/work",
+    "workspace_dir": "{root}/work"
+   },
+   {
+    "expected": "x",
+    "value": "{root}/work/loop-a/x",
+    "workspace_dir": "{root}/work"
+   },
+   {
+    "expected": "hosts",
+    "value": "{root}/etc/hosts",
+    "workspace_dir": null
+   },
+   {
+    "expected": "{home}/project/app.py",
+    "value": "{root}/home/project/app.py",
+    "workspace_dir": null
+   }
+  ],
+  "links": [
+   {
+    "link": "home/link-to-work",
+    "target": "../work"
+   },
+   {
+    "link": "work/loop-a",
+    "target": "loop-b"
+   },
+   {
+    "link": "work/loop-b",
+    "target": "loop-a"
+   },
+   {
+    "link": "home/project/missing-link",
+    "target": "gone"
+   }
+  ],
+  "local_paths": [
+   {
+    "expected": "{home}/project/app.py",
+    "home_dir": "{root}/home",
+    "path": "{root}/home/project/app.py"
+   },
+   {
+    "expected": "{home}/.",
+    "home_dir": "{root}/home",
+    "path": "{root}/home"
+   },
+   {
+    "expected": "{home}/.",
+    "home_dir": "{root}/home",
+    "path": "{root}/home/."
+   },
+   {
+    "expected": "mod.py",
+    "home_dir": "{root}/home",
+    "path": "{root}/work/pkg/mod.py"
+   },
+   {
+    "expected": "mod.py",
+    "home_dir": "{root}/home",
+    "path": "pkg/mod.py"
+   },
+   {
+    "expected": "mod.py",
+    "home_dir": "{root}/home",
+    "path": "{root}/home/link-to-work/pkg/mod.py"
+   },
+   {
+    "expected": "{home}/.config/creds.txt",
+    "home_dir": "{root}/home",
+    "path": "{root}/home/project/../.config/creds.txt"
+   },
+   {
+    "expected": "x",
+    "home_dir": "{root}/home",
+    "path": "{root}/work/loop-a/x"
+   },
+   {
+    "expected": "{home}/project/nope/deeper.txt",
+    "home_dir": "{root}/home",
+    "path": "{root}/home/project/nope/deeper.txt"
+   },
+   {
+    "expected": "{home}/project/gone",
+    "home_dir": "{root}/home",
+    "path": "{root}/home/project/missing-link"
+   },
+   {
+    "expected": "app.py",
+    "home_dir": null,
+    "path": "{root}/home/project/app.py"
+   },
+   {
+    "expected": "{home}/project/app.py",
+    "home_dir": "{root}/home",
+    "path": "../home/project/app.py"
+   }
+  ],
+  "platform": "posix",
+  "workspace_dir": "{root}/work"
+ }
+}

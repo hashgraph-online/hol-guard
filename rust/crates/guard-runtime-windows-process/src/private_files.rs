@@ -372,7 +372,8 @@ pub fn delete_private_file_handle(handle: &std::fs::File) -> io::Result<()> {
     mark_handle_for_delete(handle)
 }
 
-pub(super) fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
+/// Delete one open file by its handle; the handle needs DELETE access.
+pub fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
     let mut disposition = FILE_DISPOSITION_INFO { DeleteFile: 1 };
     // SAFETY: The handle was opened with DELETE access; the disposition buffer
     // remains valid for this synchronous call.
@@ -390,10 +391,12 @@ pub(super) fn mark_handle_for_delete(handle: &std::fs::File) -> io::Result<()> {
     Ok(())
 }
 
-pub(super) fn rename_into_directory(
+/// Rename an open file into the directory `parent` is a handle to.
+pub fn rename_into_directory(
     parent: &std::fs::File,
     source: &std::fs::File,
     destination: &OsStr,
+    replace_existing: bool,
 ) -> io::Result<()> {
     let name = destination.encode_wide().collect::<Vec<_>>();
     if name.is_empty() || name.contains(&0) {
@@ -417,8 +420,14 @@ pub(super) fn rename_into_directory(
     // UTF-16 payload expected by FILE_RENAME_INFO.
     unsafe {
         let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
-        (*info).ReplaceIfExists =
-            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL;
+        // A publish that must not overwrite clears the replace bit: the
+        // rename then fails with ERROR_ALREADY_EXISTS instead of destroying
+        // the object already at the destination.
+        (*info).ReplaceIfExists = if replace_existing {
+            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL
+        } else {
+            FILE_RENAME_POSIX_SEMANTICS as BOOL
+        };
         (*info).RootDirectory = parent.as_raw_handle() as HANDLE;
         (*info).FileNameLength = byte_count as DWORD;
         std::ptr::copy_nonoverlapping(

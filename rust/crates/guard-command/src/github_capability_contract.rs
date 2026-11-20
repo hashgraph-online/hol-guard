@@ -489,11 +489,291 @@ pub fn github_assessment(
 }
 
 /// `github_cli_invocation_is_help` (:381).
+///
+/// A trailing `--help` prints the subcommand's help and runs nothing, so
+/// `gh repo delete owner/name --help` is as local as `gh --help`. It is only
+/// help when the token before it is a plain word: after a written option the
+/// `--help` is that option's value, and `gh issue create --title --help` opens
+/// an issue. `-h` carries no such reading past the first token, where the CLI
+/// reads it as `--hostname`. It is also only help when gh is the one reading
+/// the flag: see `trailing_help_prints_gh_help`.
 pub fn github_cli_invocation_is_help(normalized: &[String]) -> bool {
-    (matches!(
+    if matches!(
         normalized.first().map(String::as_str),
         Some("--help") | Some("-h")
-    )) || normalized == ["auth", "switch", "--help"]
+    ) {
+        return true;
+    }
+    match normalized.split_last() {
+        Some((last, before)) if last == "--help" => {
+            before.last().is_some_and(|token| !token.starts_with('-'))
+                && trailing_help_prints_gh_help(before)
+        }
+        _ => false,
+    }
+}
+
+/// The commands the GitHub CLI itself owns, each with the subcommands it owns.
+///
+/// gh registers aliases, installed extensions and `gh extension exec` with
+/// flag parsing disabled, and forwards every argument — `--help` included — to
+/// the alias's shell command or to the extension binary, which runs instead of
+/// printing help. A name gh does not own is one of those, so the trailing
+/// `--help` reading is only safe for the names listed here. A built-in missing
+/// from the list reads as it did before the trailing-help reading existed.
+///
+/// An alias can also sit under a group: `gh alias set --shell "issue mine" …`
+/// is accepted, and `gh issue mine --help` then runs the alias with `--help`
+/// as its argument. gh refuses to register a name it already owns, so listing
+/// a group's own subcommands is what keeps a nested alias out. A group whose
+/// list is empty owns no subcommands, and gh refuses an alias beneath it too,
+/// so a word there is an argument to the command itself. A few of these
+/// subcommands are groups in their own right, and those are listed in
+/// `GITHUB_BUILTIN_NESTED_GROUPS` so an alias cannot hide one level deeper.
+const GITHUB_BUILTIN_COMMANDS: &[(&str, &[&str])] = &[
+    ("accessibility", &[]),
+    ("alias", &["delete", "import", "list", "set"]),
+    ("api", &[]),
+    ("attestation", &["download", "trusted-root", "verify"]),
+    (
+        "auth",
+        &[
+            "login",
+            "logout",
+            "refresh",
+            "setup-git",
+            "status",
+            "switch",
+            "token",
+        ],
+    ),
+    ("browse", &[]),
+    ("cache", &["delete", "list"]),
+    (
+        "codespace",
+        &[
+            "code", "cp", "create", "delete", "edit", "jupyter", "list", "logs", "ports",
+            "rebuild", "ssh", "stop", "view",
+        ],
+    ),
+    ("completion", &[]),
+    ("config", &["clear-cache", "get", "list", "set"]),
+    (
+        "extension",
+        &[
+            "browse", "create", "exec", "install", "list", "remove", "search", "upgrade",
+        ],
+    ),
+    (
+        "gist",
+        &[
+            "clone", "create", "delete", "edit", "list", "rename", "view",
+        ],
+    ),
+    ("gpg-key", &["add", "delete", "list"]),
+    ("help", &[]),
+    (
+        "issue",
+        &[
+            "close", "comment", "create", "delete", "develop", "edit", "list", "lock", "pin",
+            "reopen", "status", "transfer", "unlock", "unpin", "view",
+        ],
+    ),
+    ("label", &["clone", "create", "delete", "edit", "list"]),
+    ("org", &["list"]),
+    (
+        "pr",
+        &[
+            "checkout",
+            "checks",
+            "close",
+            "comment",
+            "create",
+            "diff",
+            "edit",
+            "list",
+            "lock",
+            "merge",
+            "ready",
+            "reopen",
+            "revert",
+            "review",
+            "status",
+            "unlock",
+            "update-branch",
+            "view",
+        ],
+    ),
+    (
+        "project",
+        &[
+            "close",
+            "copy",
+            "create",
+            "delete",
+            "edit",
+            "field-create",
+            "field-delete",
+            "field-list",
+            "item-add",
+            "item-archive",
+            "item-create",
+            "item-delete",
+            "item-edit",
+            "item-list",
+            "link",
+            "list",
+            "mark-template",
+            "unlink",
+            "view",
+        ],
+    ),
+    (
+        "release",
+        &[
+            "create",
+            "delete",
+            "delete-asset",
+            "download",
+            "edit",
+            "list",
+            "upload",
+            "verify",
+            "verify-asset",
+            "view",
+        ],
+    ),
+    (
+        "repo",
+        &[
+            "archive",
+            "autolink",
+            "clone",
+            "create",
+            "delete",
+            "deploy-key",
+            "edit",
+            "fork",
+            "gitignore",
+            "license",
+            "list",
+            "read-dir",
+            "read-file",
+            "rename",
+            "set-default",
+            "sync",
+            "unarchive",
+            "view",
+        ],
+    ),
+    ("ruleset", &["check", "list", "view"]),
+    (
+        "run",
+        &[
+            "cancel", "delete", "download", "list", "rerun", "view", "watch",
+        ],
+    ),
+    ("search", &["code", "commits", "issues", "prs", "repos"]),
+    ("secret", &["delete", "list", "set"]),
+    ("ssh-key", &["add", "delete", "list"]),
+    ("status", &[]),
+    ("variable", &["delete", "get", "list", "set"]),
+    ("version", &[]),
+    ("workflow", &["disable", "enable", "list", "run", "view"]),
+];
+
+/// The built-in subcommands that own subcommands themselves.
+///
+/// gh registers an alias wherever its parent group is, so a name under one of
+/// these is a name a user can take: `gh alias set --shell "repo deploy-key zap"`
+/// is accepted and `gh repo deploy-key zap --help` then runs it. Reading the
+/// trailing `--help` has to walk down to the group that really owns the last
+/// name, not stop at the first one.
+const GITHUB_BUILTIN_NESTED_GROUPS: &[(&str, &str, &[&str])] = &[
+    ("codespace", "ports", &["forward", "visibility"]),
+    ("repo", "autolink", &["create", "delete", "list", "view"]),
+    ("repo", "deploy-key", &["add", "delete", "list"]),
+    ("repo", "gitignore", &["list", "view"]),
+    ("repo", "license", &["list", "view"]),
+];
+
+/// The options gh reads a value from wherever they are written. Cobra takes
+/// these and their values out of the way before it matches a subcommand, so
+/// they say nothing about where the subcommand ends up.
+const GITHUB_OPTIONS_THAT_TAKE_A_VALUE: &[&str] = &["-R", "--repo", "--hostname"];
+
+/// Whether a trailing `--help` is read by gh rather than by something gh runs.
+fn trailing_help_prints_gh_help(before: &[String]) -> bool {
+    // After `--`, gh stops parsing flags, so `gh release create v1 -- notes.md
+    // --help` uploads a file named `--help` and publishes the release.
+    if before.iter().any(|token| token == "--") {
+        return false;
+    }
+    // Cobra matches a name byte for byte unless `EnableCaseInsensitive` is set,
+    // and gh leaves it alone, so `ISSUE` is not the built-in `issue`: it is a
+    // name gh looks up among the user's aliases, and an alias can run anything.
+    // Reading its `--help` as gh's own would hand that alias a local reading.
+    let Some(top) = before.first().map(String::as_str) else {
+        return false;
+    };
+    let Some((_, subcommands)) = GITHUB_BUILTIN_COMMANDS
+        .iter()
+        .find(|(name, _)| *name == top)
+    else {
+        return false;
+    };
+    // `gh extension exec <name> …` forwards everything after the name to the
+    // extension binary.
+    if top == "extension" && before.get(1).is_some_and(|t| t == "exec") {
+        return false;
+    }
+    // Cobra matches a subcommand against the words that are left once it has
+    // taken the options out of the way, so a written option in front of a name
+    // does not keep gh from expanding an alias there: `gh issue -R o/r mine`
+    // still runs the `issue mine` alias. Walk the names the way gh does, and
+    // read the trailing `--help` only when gh owns every one of them.
+    let mut parent = top;
+    let mut owned = subcommands;
+    let mut index = 1;
+    while index < before.len() {
+        let token = &before[index];
+        if token.starts_with('-') {
+            // A value written onto the option carries its own, so the next word
+            // is still a name. A bare option whose arity gh does not publish
+            // here could take the next word or leave it, and the name an alias
+            // would be registered under is exactly that word, so the reading is
+            // given up rather than guessed.
+            if token.contains('=') || (token.starts_with("-R") && token.as_str() != "-R") {
+                index += 1;
+                continue;
+            }
+            if GITHUB_OPTIONS_THAT_TAKE_A_VALUE.contains(&token.as_str()) {
+                index += 2;
+                continue;
+            }
+            return false;
+        }
+        if owned.is_empty() {
+            // The command owns no names, so this word is an argument to it and
+            // gh is still the one reading the flag.
+            return true;
+        }
+        if !owned.contains(&token.as_str()) {
+            return false;
+        }
+        let Some((_, group_name, deeper)) = GITHUB_BUILTIN_NESTED_GROUPS
+            .iter()
+            .find(|(group, sub, _)| *group == parent && *sub == token.as_str())
+        else {
+            // A command that owns no further names reads the rest as its own
+            // arguments, `gh repo delete owner/name --help` included.
+            return true;
+        };
+        parent = group_name;
+        owned = deeper;
+        index += 1;
+    }
+    true
 }
 
 /// `combine_github_assessments` (:387).

@@ -1,6 +1,6 @@
-use super::super::store::{self, STORE_UNREADABLE};
+use super::super::store::{self, STORE_NEWER, STORE_UNREADABLE};
 use super::*;
-use crate::local_store_read::{schema_checksum, SUPPORTED_SCHEMA_VERSION};
+use crate::local_store_read::{schema_checksum, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION};
 use crate::policy_decision_lookup_op::tests::{seed_store, tmp_store};
 use crate::policy_decision_lookup_op::{policy_row_to_json, POLICY_LOOKUP_COLUMNS};
 use crate::policy_store::policy_store_direct_lane::{DirectLaneBinding, DirectLaneIntegrityKey};
@@ -234,7 +234,15 @@ fn a_missing_or_newer_store_is_read_as_the_proxy_reads_it() {
             params![SUPPORTED_SCHEMA_VERSION + 1],
         )
         .unwrap();
-    assert!(matches!(store::open(&newer), Err(STORE_UNREADABLE)));
+    assert!(matches!(store::open(&newer), Err(STORE_NEWER)));
+}
+
+#[test]
+fn a_store_the_resident_cannot_read_is_not_a_newer_store() {
+    let corrupt = std::env::temp_dir().join(format!("mcp-relay-corrupt-{}", std::process::id()));
+    std::fs::create_dir_all(&corrupt).unwrap();
+    std::fs::write(corrupt.join(STORE_FILE_NAME), b"not a database").unwrap();
+    assert!(matches!(store::open(&corrupt), Err(STORE_UNREADABLE)));
 }
 
 #[test]
@@ -244,12 +252,27 @@ fn a_store_without_saved_rows_answers_as_empty() {
 }
 
 #[test]
-fn a_cached_bundle_defers_and_remote_rows_are_read() {
+fn a_cached_bundle_keeps_only_its_rows_and_remote_rows_are_read() {
     let (home, connection) = guard_home("bundle");
     sync_state(&connection, "policy_bundle", "{}");
     // Without a policy-bundle row, the bundle's identities match nothing.
     assert!(read(&home, &binding(), |saved| saved.is_none()).unwrap());
+    // An empty bundle authorizes no row, so its saved block is dropped.
     decide(&connection, "artifact", "block", None, "policy-bundle");
+    let dropped = read(&home, &binding(), |saved| {
+        let saved = saved.expect("bundle row");
+        assert!(saved.bundle_identities.is_empty());
+        saved.answer(&policy_need(ARTIFACT, None)).unwrap()
+    })
+    .unwrap();
+    assert_eq!(dropped["decision"], Value::Null);
+    // A bundle the resident cannot read is left to the proxy.
+    connection
+        .execute(
+            "update sync_state set payload_json = 'not json' where state_key = 'policy_bundle'",
+            [],
+        )
+        .unwrap();
     let deferred = read(&home, &binding(), |_| ()).err();
     assert_eq!(deferred, Some("mcp_relay_saved_remote_policy"));
     // The lookup never serves a cloud-sync row, and serves a signed memory
@@ -273,6 +296,29 @@ fn a_cached_bundle_defers_and_remote_rows_are_read() {
         "cloud-signed-memory",
     );
     assert_eq!(answer(&home)["decision"]["action"], "block");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_cached_bundle_is_judged_at_the_callers_time() {
+    let (home, connection) = guard_home("bundle-clock");
+    sync_state(&connection, "policy_bundle", r#"{"bundleVersion": 1}"#);
+    decide(&connection, "artifact", "block", None, "policy-bundle");
+    let read_at = |now: &str| {
+        let connection = store::open(&home).unwrap().expect("store");
+        store::saved_at(
+            &connection,
+            &binding(),
+            home.to_str().unwrap(),
+            HARNESS,
+            now.to_owned(),
+        )
+        .map(|saved| saved.map(|saved| saved.now.clone()))
+    };
+    assert_eq!(read_at(SIGNED_AT), Ok(Some(SIGNED_AT.to_owned())));
+    // A time the bundle check cannot read defers, so the caller's time, not
+    // the resident's clock, is the one the bundle was judged at.
+    assert_eq!(read_at("not a time"), Err("mcp_relay_saved_remote_policy"));
 }
 
 #[test]

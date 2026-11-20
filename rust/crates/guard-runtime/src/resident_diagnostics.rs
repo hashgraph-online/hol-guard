@@ -17,6 +17,13 @@ const MAX_MANAGED_PHASE_BYTES: u64 = 64 * 1024;
 // of making a request thread wait for diagnostic file I/O.
 const MANAGED_PHASE_QUEUE_LINES: usize = 1024;
 const PHASE_LINE_BYTES: usize = 192;
+// The writer appends every line already queued in one write. Each append runs
+// the private-file checks, which cost far more than the write on Windows; one
+// check per line let a busy resident's backlog take seconds to drain on exit,
+// while it still held the owner lock.
+const PHASE_BATCH_BYTES: usize = 16 * 1024;
+// A batch larger than the bounded file would be refused and stop the writer.
+const _: () = assert!((PHASE_BATCH_BYTES as u64) < MAX_MANAGED_PHASE_BYTES);
 
 struct ManagedPhaseFile {
     file: File,
@@ -152,14 +159,28 @@ fn spawn_managed_writer(
             // Ends when the resident retires the sink (every sender dropped)
             // or when an append refuses an unlinked, altered, non-private, or
             // broken file. Dropping the receiver disconnects later emits.
-            for line in receiver {
-                if file.append(line.as_bytes()).is_none() {
+            while let Ok(line) = receiver.recv() {
+                if file.append(&next_batch(line, &receiver)).is_none() {
                     break;
                 }
             }
         })
         .ok()?;
     Some((sender, writer))
+}
+
+/// `first` followed by the lines already queued behind it, up to
+/// `PHASE_BATCH_BYTES`, in queue order.
+fn next_batch(first: PhaseLine, receiver: &mpsc::Receiver<PhaseLine>) -> Vec<u8> {
+    let mut batch = Vec::with_capacity(PHASE_BATCH_BYTES);
+    batch.extend_from_slice(first.as_bytes());
+    while batch.len() + PHASE_LINE_BYTES <= PHASE_BATCH_BYTES {
+        let Ok(line) = receiver.try_recv() else {
+            break;
+        };
+        batch.extend_from_slice(line.as_bytes());
+    }
+    batch
 }
 
 static PHASE_OUTPUT: LazyLock<Mutex<PhaseOutput>> =
@@ -340,6 +361,21 @@ pub(crate) fn note(name: &'static str, value: usize) {
     }
 }
 
+/// Notes the declarative command work counts after a resident request, so a
+/// scale run can report the active set and candidate counts it measured.
+pub(crate) fn note_command_work() {
+    if !enabled() {
+        return;
+    }
+    let stats = guard_command::native_command_program::work_stats::snapshot();
+    if let Some(active) = stats.active_extensions {
+        note("command_active_extensions", active);
+    }
+    note("command_candidates_last", stats.last_candidates);
+    note("command_matchers_evaluated_last", stats.last_evaluated);
+    note("command_candidates_max", stats.max_candidates);
+}
+
 fn emit_line(arguments: std::fmt::Arguments<'_>) {
     // A broken diagnostic sink must not change native wire/error results.
     // Render only finite labels and numbers into a bounded stack buffer.
@@ -418,3 +454,7 @@ pub(crate) fn observe_value<T>(phase: Phase, operation: impl FnOnce() -> T) -> T
     emit(phase, Status::Ok, started.elapsed());
     result
 }
+
+#[cfg(test)]
+#[path = "resident_diagnostics_tests.rs"]
+mod tests;

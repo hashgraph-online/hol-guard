@@ -66,7 +66,7 @@ class MemorySecretStore:
 def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
 
 

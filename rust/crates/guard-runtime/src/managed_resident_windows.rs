@@ -110,6 +110,10 @@ fn supervise_managed_child(
     let started = Instant::now();
     let mut child = spawn_managed_child(executable, &argument_refs)
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
+    // Held across the wait, as on Unix: it is how the exit record tells this
+    // child's requested-stop note from one left by a run this supervisor did
+    // not start.
+    let child_process_id = child.id();
     let mut liveness_writer = child.take_stdin().ok_or_else(|| {
         let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
         "native_resident_spawn_stdin_failed".to_owned()
@@ -142,7 +146,14 @@ fn supervise_managed_child(
         status_result.map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;
     // Windows spawns the serving child without a stderr pipe, so the record
     // carries the supervisor's own classification of this exit.
-    super::exit_record::record_supervised_exit(supervised, None, status_success, None, ran_for);
+    super::exit_record::record_supervised_exit(
+        supervised,
+        None,
+        status_success,
+        None,
+        ran_for,
+        child_process_id,
+    );
     if status_success {
         Ok(())
     } else {
@@ -158,7 +169,7 @@ mod tests {
     use std::io::{self, Read};
     use std::process::{Command, Stdio};
     use std::thread;
-    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, Instant};
 
     const CHILD_MARKER_ENV: &str = "HOL_GUARD_TEST_LIVENESS_CHILD_MARKER";
     const CHILD_PARENT_ENV: &str = "HOL_GUARD_TEST_LIVENESS_CHILD_PARENT";
@@ -179,10 +190,7 @@ mod tests {
 
     #[test]
     fn liveness_pipe_remains_open_while_child_runs_and_closes_after_wait() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock is after the Unix epoch")
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let directory = env::temp_dir().join(format!(
             "guard-runtime-liveness-{}-{nonce}",
             std::process::id()
@@ -229,10 +237,7 @@ mod tests {
 
     #[test]
     fn liveness_pipe_closes_once_owner_and_clients_are_gone() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock is after the Unix epoch")
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let directory = env::temp_dir().join(format!(
             "guard-runtime-orphan-{}-{nonce}",
             std::process::id()

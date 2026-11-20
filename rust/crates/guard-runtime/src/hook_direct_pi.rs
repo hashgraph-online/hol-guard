@@ -14,7 +14,8 @@
 //! of the view still names the binding the scan ran under. The resident holds
 //! that view in its own lane binding, so it runs all three itself and answers
 //! the mediated hook too. A hook whose view the lane does not hold still
-//! defers, and the daemon resolves it.
+//! defers, and the daemon sends it to the edge with its own view, which the
+//! edge answers the same way (`edge_structured`).
 
 use super::POST_TOOL_USE;
 use serde_json::{json, Value};
@@ -31,9 +32,9 @@ const CONFIG_VIEW_KEYS: [&str; 4] = [
 ];
 /// What resolving one bounded managed-policy view may take.
 const RESOLUTION_BUDGET: Duration = Duration::from_millis(100);
-/// `STRUCTURED_CONTENT_MEDIATION_SCHEMA`, which every disposition carries.
+/// The schema every disposition carries.
 const MEDIATION_SCHEMA: &str = "guard-structured-content-mediation.v1";
-/// The spellings `canonical_harness_name` maps onto them.
+/// The spellings the daemon maps onto them.
 const PI_ALIASES: [(&str, &str); 3] = [
     ("pi-agent", "pi"),
     ("pi-coding-agent", "pi"),
@@ -58,9 +59,9 @@ pub(super) fn source_ref_external_allowed(harness: &str) -> bool {
     PI_HARNESSES.contains(&normalized(harness).as_str())
 }
 
-/// Whether `_apply_structured_mediation` projects this hook: a `PostToolUse`
-/// for a harness `canonical_harness_name` names `pi` or `omp`.
-pub(super) fn structured_mediation(harness: &str, event: &str) -> bool {
+/// Whether this hook carries structured output mediation: a `PostToolUse`
+/// for a harness the daemon's alias table names `pi` or `omp`.
+pub(crate) fn structured_mediation(harness: &str, event: &str) -> bool {
     if event != POST_TOOL_USE {
         return false;
     }
@@ -72,14 +73,13 @@ pub(super) fn structured_mediation(harness: &str, event: &str) -> bool {
     PI_HARNESSES.contains(&canonical)
 }
 
-/// What `resolve_managed_structured_output_resolution` reads from the bound
-/// managed-policy view: the binding a managed destination names, whether one
+/// What the native resolution reads from the bound managed-policy view: the binding a managed destination names, whether one
 /// is required at all, and the reason a required destination has none.
 ///
 /// Without a view of `_config_wire`'s shape, or when the query fails, there
-/// is no resolution, and the hook keeps the daemon path, which then resolves
-/// and mediates itself.
-pub(super) fn resolution(harness: &str, view: Option<&Value>) -> Option<Value> {
+/// is no resolution, and the hook keeps the daemon path, which sends the edge
+/// its own view.
+pub(crate) fn resolution(harness: &str, view: Option<&Value>) -> Option<Value> {
     let config = view?;
     let Value::Object(fields) = config else {
         return None;
@@ -98,20 +98,19 @@ pub(super) fn resolution(harness: &str, view: Option<&Value>) -> Option<Value> {
         .map(|result| result["ok"].clone())
 }
 
-/// The binding a resolution names, as `recheck_binding` reads it.
-pub(super) fn resolved_binding(resolution: &Value) -> Value {
+/// The binding a resolution names, as the recheck reads it.
+pub(crate) fn resolved_binding(resolution: &Value) -> Value {
     resolution["binding"].clone()
 }
 
-/// Whether `_apply_structured_mediation` returns the edge response unchanged:
-/// the resolution finds nothing required for the bound managed-policy view.
+/// Whether the edge response stays unchanged: the resolution finds nothing
+/// required for the bound managed-policy view.
 fn unrequired(resolution: &Value) -> bool {
     resolution["required"].as_bool() != Some(true)
 }
 
-/// What the daemon's `_apply_structured_mediation` passes `mediate_prepare`
-/// once the edge has decided.
-pub(super) struct Mediation<'a> {
+/// What `mediate_prepare` is given once the edge has decided.
+pub(crate) struct Mediation<'a> {
     pub harness: &'a str,
     /// The resolution the hook's own lane admission produced.
     pub resolution: &'a Value,
@@ -166,14 +165,14 @@ fn harness_json(disposition: &Value) -> Option<Value> {
     Some(rendered)
 }
 
-/// The `structured_content_mediation` the daemon adds to the edge response,
-/// or `None` where it adds none.
+/// The `structured_content_mediation` for the edge response, or `None` where
+/// there is none.
 ///
-/// `refresh` is the daemon's `recheck_binding`: the binding a second read of
-/// the managed-policy view names, which forwarding requires to still be the
-/// one the scan ran under. A read that fails names none, and the content is
-/// withheld as a changed binding.
-pub(super) fn mediate(context: &Mediation<'_>, refresh: impl FnOnce() -> Value) -> Option<Value> {
+/// `refresh` returns the binding a second read of the managed-policy view
+/// names, which forwarding requires to still be the one the scan ran under. A
+/// read that fails names none, and the content is withheld as a changed
+/// binding.
+pub(crate) fn mediate(context: &Mediation<'_>, refresh: impl FnOnce() -> Value) -> Option<Value> {
     if unrequired(context.resolution) {
         return None;
     }

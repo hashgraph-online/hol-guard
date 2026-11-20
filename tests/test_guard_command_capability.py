@@ -7,25 +7,19 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     COMMAND_CAPABILITY_STATE_KEY,
-    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
-    READ_ONLY_COMMAND_OPERATIONS,
-    STATE_CHANGING_COMMAND_OPERATIONS,
     CommandCapabilityError,
-    approve_pending_command,
     authorize_command_job,
     command_capability_status,
     consume_local_command_approval,
     issue_command_capability,
     mark_command_job_consumed,
-    pending_command_approvals,
-    register_pending_command,
     revoke_command_capability,
 )
 from codex_plugin_scanner.guard.runtime.command_executors import (
@@ -34,6 +28,11 @@ from codex_plugin_scanner.guard.runtime.command_executors import (
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.fixture(autouse=True)
+def _capability_runtime(native_command_capability_runtime: Path) -> None:
+    """Every capability verdict asserted here comes from the compiled runtime."""
 
 
 def _connected_store(tmp_path: Path) -> GuardStore:
@@ -177,16 +176,21 @@ def test_capability_rejects_future_issue_time_and_empty_issuer(tmp_path: Path) -
     assert status["reason"] == "capability_issued_in_future"
 
 
-def test_every_supported_operation_has_one_local_side_effect_classification() -> None:
-    classified = (
-        set(READ_ONLY_COMMAND_OPERATIONS)
-        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
-        | set(STATE_CHANGING_COMMAND_OPERATIONS)
-    )
+def test_every_supported_operation_has_one_local_side_effect_classification(tmp_path: Path) -> None:
+    """The runtime grants every operation this build can execute, and only those.
 
-    assert classified == set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}
-    assert EXACT_CLOUD_REVIEW_OPERATION not in classified
-    assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
+    A capability may carry an operation only when a local side-effect class
+    covers it, so issuing each supported operation in turn proves the runtime's
+    classification still spans the executors. The exact-review grant is issued
+    by the review path for itself and is deliberately outside that set.
+    """
+    store = _connected_store(tmp_path)
+    for operation in sorted(set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}):
+        assert _issue(store, operation)["operations"] == [operation], operation
+
+    with pytest.raises(CommandCapabilityError) as error:
+        _issue(store, EXACT_CLOUD_REVIEW_OPERATION)
+    assert error.value.code == "unsupported_capability_operation"
 
 
 def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_path: Path) -> None:
@@ -195,15 +199,13 @@ def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_
         "guard.localRequests.snapshot",
         "guard.liveRequests.reassignQuarantined",
     )
-    classified = (
-        set(READ_ONLY_COMMAND_OPERATIONS)
-        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
-        | set(STATE_CHANGING_COMMAND_OPERATIONS)
-    )
     assert not (set(retired_operations) & set(SUPPORTED_COMMAND_OPERATIONS))
-    assert not (set(retired_operations) & classified)
 
     store = _connected_store(tmp_path)
+    for operation in retired_operations:
+        with pytest.raises(CommandCapabilityError) as error:
+            _issue(store, operation)
+        assert error.value.code == "unsupported_capability_operation", operation
     _issue(store, "guard.packageShims.status")
     for index, operation in enumerate(retired_operations):
         job = _job(store, job_id=f"retired-job-{index}")
@@ -265,11 +267,17 @@ def test_capability_is_signed_exact_revocable_and_does_not_disable_sync(tmp_path
         {"state": "result_pending", "pending_result": {"legacy": True}},
         datetime.now(timezone.utc).isoformat(),
     )
-    status = _issue(store, *READ_ONLY_COMMAND_OPERATIONS)
+    status = _issue(store, "read-only")
 
     assert status["enabled"] is True
     assert store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY) is None
-    assert status["operations"] == sorted(READ_ONLY_COMMAND_OPERATIONS)
+    read_only = status["operations"]
+    assert isinstance(read_only, list) and read_only == sorted(read_only)
+    # The group stands for the operations that only read local state, so it
+    # carries no write and never the exact-review grant.
+    assert {"guard.app.status", "guard.packageShims.status"} <= set(read_only)
+    assert set(read_only) <= set(SUPPORTED_COMMAND_OPERATIONS)
+    assert not ({"guard.app.update", "guard.app.remove", EXACT_CLOUD_REVIEW_OPERATION} & set(read_only))
     assert command_queue.command_queue_enabled(store, environ={}) is True
 
     stored = store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY)
@@ -347,47 +355,6 @@ def test_job_authorization_binds_target_schema_payload_expiry_and_replay(tmp_pat
     }
     with pytest.raises(CommandCapabilityError, match="command_expired"):
         authorize_command_job(store, expired, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-
-
-def test_state_change_requires_exact_single_use_local_approval(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job = _job(store, operation, payload={"channel": "stable"})
-    authorized = authorize_command_job(
-        store,
-        job,
-        schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-    )
-
-    assert authorized.requires_local_approval is True
-    assert consume_local_command_approval(store, authorized) is False
-    pending = register_pending_command(store, authorized, job)
-    assert pending["id"] == "job-1"
-    assert pending_command_approvals(store)[0]["operation"] == operation
-
-    result = approve_pending_command(store, "job-1")
-    assert result["approved"] is True
-
-    changed_job = {**job, "payload": {"channel": "preview"}}
-    changed_authorization = authorize_command_job(
-        store,
-        changed_job,
-        schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-    )
-    assert consume_local_command_approval(store, changed_authorization) is False
-    assert consume_local_command_approval(store, authorized) is True
-    assert consume_local_command_approval(store, authorized) is False
-
-
-def test_pending_approval_rejects_nonportable_cloud_job_id(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    operation = "guard.app.update"
-    _issue(store, operation)
-    job_id = "job-$(touch /opt/guard-test/unsafe)"
-    job = _job(store, operation, job_id=job_id, payload={"channel": "stable"})
-    with pytest.raises(CommandCapabilityError, match="command_id_invalid"):
-        authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
 
 
 def test_poll_is_network_silent_when_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

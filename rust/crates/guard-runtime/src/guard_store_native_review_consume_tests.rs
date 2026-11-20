@@ -51,7 +51,11 @@ fn blocks_use_the_same_identity_window_scope_and_latest_decision_rules() {
         }
         insert_rows(&Connection::open(&db).unwrap(), "approval_requests", &rows);
         let first = &scenario["calls"][0];
-        let expected = scenario["native_may_deny"] != true && first["result"] == true;
+        // A Block once answers retries for five minutes, not the hour an
+        // Allow once covers, so the one-hour edge does not block.
+        let expected = scenario["native_may_deny"] != true
+            && first["result"] == true
+            && name != "exactly_one_hour";
         for _ in 0..2 {
             let reply = call(&home, &first["args"], "matching_native_review_block");
             assert_eq!(reply["status"], "ok", "{name}: {reply}");
@@ -136,4 +140,296 @@ fn replays_every_recorded_consume_scenario() {
         let _ = std::fs::remove_dir_all(&home);
     }
     assert!(calls >= 80, "only {calls} recorded calls");
+}
+
+/// The retry sends the command as run; the resolved row holds it with
+/// credentials masked. The exact binding is `artifact_hash`, so the masked
+/// row still answers the retry.
+#[test]
+fn a_masked_stored_target_still_answers_the_raw_retry() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let first = &scenario["calls"][0];
+    assert_eq!(first["result"], true);
+    let sent = first["args"]["launch_target"].as_str().unwrap().to_owned();
+    let raw = format!("{sent} -H \"Authorization: Bearer secret-token-value\"");
+    let stored = guard_command::redacted_command_tokens::redact_text(&raw).text;
+    assert_ne!(stored, raw);
+    let home = temp_home("masked-target");
+    let db = home.join("guard.db");
+    seed(&db, &vectors);
+    let mut rows = scenario["rows"].clone();
+    for row in rows.as_array_mut().unwrap() {
+        if row["launch_target"] == sent.as_str() {
+            row["launch_target"] = Value::from(stored.clone());
+        }
+    }
+    insert_rows(&Connection::open(&db).unwrap(), "approval_requests", &rows);
+    let mut args = first["args"].clone();
+    args["launch_target"] = Value::from(raw);
+    let reply = consume(&home, &args);
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], true);
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// An answer often arrives after the agent stopped waiting. It still covers
+/// the user's "try again" for an hour: the next identical try runs once, a
+/// second try or a changed command asks again, and after the hour it asks.
+#[test]
+fn a_late_answer_covers_one_identical_retry_within_the_hour() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let base = scenario["calls"][0]["args"].clone();
+    let at = |now: &str| {
+        let mut args = base.clone();
+        args["now"] = Value::from(now);
+        args
+    };
+    let fresh = |label: &str| {
+        let home = temp_home(label);
+        seed(&home.join("guard.db"), &vectors);
+        insert_rows(
+            &Connection::open(home.join("guard.db")).unwrap(),
+            "approval_requests",
+            &scenario["rows"],
+        );
+        home
+    };
+
+    let home = fresh("late-answer");
+    let mut changed = at("2026-03-01T12:40:00+00:00");
+    changed["launch_target"] = Value::from(format!(
+        "{} --force",
+        base["launch_target"].as_str().unwrap()
+    ));
+    assert_eq!(
+        consume(&home, &changed)["payload"],
+        false,
+        "a changed command asks"
+    );
+    assert_eq!(
+        consume(&home, &at("2026-03-01T12:40:00+00:00"))["payload"],
+        true,
+        "the next identical try runs"
+    );
+    assert_eq!(
+        consume(&home, &at("2026-03-01T12:41:00+00:00"))["payload"],
+        false,
+        "a second try asks"
+    );
+    std::fs::remove_dir_all(home).unwrap();
+
+    let home = fresh("late-answer-expired");
+    assert_eq!(
+        consume(&home, &at("2026-03-01T13:01:00+00:00"))["payload"],
+        false,
+        "after the hour it asks"
+    );
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// A refusal only stops a retry loop: after five minutes a new try is a new
+/// question, even though an Allow once would still cover it.
+#[test]
+fn a_block_once_answers_retries_for_five_minutes_only() {
+    let (home, base) = settle_home("block-five-minutes", true);
+    for (now, blocked) in [
+        ("2026-03-01T12:04:00+00:00", true),
+        ("2026-03-01T12:05:00+00:00", true),
+        ("2026-03-01T12:06:00+00:00", false),
+    ] {
+        let mut args = base.clone();
+        args["now"] = Value::from(now);
+        let reply = call(&home, &args, "matching_native_review_block");
+        assert_eq!(reply["status"], "ok", "{now}: {reply}");
+        assert_eq!(reply["payload"], blocked, "{now}");
+    }
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// `settle_native_review_reuse` answers every recorded retry exactly as the
+/// separate block check followed by the spend does, and leaves the same
+/// effects behind, with the spend allowed or not.
+#[test]
+fn settling_matches_the_separate_block_check_and_spend() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let mut blocked = 0;
+    let mut allowed = 0;
+    for scenario in vectors["scenarios"].as_array().unwrap() {
+        let name = scenario["name"].as_str().unwrap();
+        for (flip, spend) in [(false, true), (false, false), (true, true)] {
+            let label = format!("{name} flip={flip} spend={spend}");
+            let mut rows = scenario["rows"].clone();
+            if flip {
+                for row in rows.as_array_mut().unwrap() {
+                    row["resolution_action"] = match row["resolution_action"].as_str() {
+                        Some("allow") => Value::from("block"),
+                        Some("block") => Value::from("allow"),
+                        _ => row["resolution_action"].clone(),
+                    };
+                }
+            }
+            let mut homes = Vec::new();
+            for side in ["separate", "settled"] {
+                let home = temp_home(&format!("settle-{side}-{name}-{flip}-{spend}"));
+                seed(&home.join("guard.db"), &vectors);
+                insert_rows(
+                    &Connection::open(home.join("guard.db")).unwrap(),
+                    "approval_requests",
+                    &rows,
+                );
+                homes.push(home);
+            }
+            let args = &scenario["calls"][0]["args"];
+            let expected =
+                if call(&homes[0], args, "matching_native_review_block")["payload"] == true {
+                    Value::from("blocked")
+                } else if spend && consume(&homes[0], args)["payload"] == true {
+                    Value::from("allowed")
+                } else {
+                    Value::Null
+                };
+            let mut settle_args = args.clone();
+            settle_args["spend"] = Value::Bool(spend);
+            let reply = call(&homes[1], &settle_args, "settle_native_review_reuse");
+            assert_eq!(reply["status"], "ok", "{label}: {reply}");
+            assert_eq!(reply["payload"], expected, "{label}");
+            let [separate, settled] = [&homes[0], &homes[1]].map(|home| {
+                dump(
+                    &Connection::open(home.join("guard.db")).unwrap(),
+                    "guard_continuation_effects",
+                    "effect_key",
+                )
+            });
+            assert_eq!(settled, separate, "{label}: effects");
+            blocked += usize::from(expected == "blocked");
+            allowed += usize::from(expected == "allowed");
+            for home in homes {
+                let _ = std::fs::remove_dir_all(home);
+            }
+        }
+    }
+    assert!(
+        blocked > 0 && allowed > 0,
+        "{blocked} blocked, {allowed} allowed"
+    );
+}
+
+/// The first recorded scenario's rows, with its matching allow turned into a
+/// matching block when `block` is set.
+fn settle_home(label: &str, block: bool) -> (std::path::PathBuf, Value) {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = &vectors["scenarios"][0];
+    let mut rows = scenario["rows"].clone();
+    if block {
+        for row in rows.as_array_mut().unwrap() {
+            if row["resolution_action"] == "allow" {
+                row["resolution_action"] = Value::from("block");
+            }
+        }
+    }
+    let home = temp_home(label);
+    seed(&home.join("guard.db"), &vectors);
+    insert_rows(
+        &Connection::open(home.join("guard.db")).unwrap(),
+        "approval_requests",
+        &rows,
+    );
+    (home, scenario["calls"][0]["args"].clone())
+}
+
+/// A spend flag that is not a boolean refuses the call rather than guessing,
+/// whether the retry would match an allow or a block.
+#[test]
+fn a_malformed_spend_flag_is_refused() {
+    for block in [false, true] {
+        let (home, mut args) = settle_home(&format!("settle-malformed-spend-{block}"), block);
+        args["spend"] = Value::from("yes");
+        let reply = call(&home, &args, "settle_native_review_reuse");
+        assert_ne!(reply["status"], "ok", "block={block}: {reply}");
+        assert_eq!(
+            dump(
+                &Connection::open(home.join("guard.db")).unwrap(),
+                "guard_continuation_effects",
+                "effect_key"
+            ),
+            serde_json::json!([])
+        );
+        std::fs::remove_dir_all(home).unwrap();
+    }
+}
+
+/// Without a spend the settle only checks for a block, so a writer holding
+/// the store does not hold it up.
+#[test]
+fn a_block_check_without_a_spend_takes_no_write_lock() {
+    let (home, mut args) = settle_home("settle-block-check-lock-free", true);
+    args["spend"] = Value::Bool(false);
+    let writer = Connection::open(home.join("guard.db")).unwrap();
+    writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let reply = call(&home, &args, "settle_native_review_reuse");
+    writer.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], "blocked", "{reply}");
+    drop(writer);
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// The live hook resuming on an Allow once and an identical retry are two
+/// uses of one approval: whichever comes first spends it, the other refuses.
+#[test]
+fn a_live_resume_and_a_retry_share_one_spend() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let args = &scenario["calls"][0]["args"];
+    assert_eq!(scenario["calls"][0]["result"], true);
+    let now = args["now"].as_str().unwrap();
+    let allow = scenario["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["resolution_action"] == "allow" && row["status"] == "resolved")
+        .unwrap();
+    let request_id = allow["request_id"].as_str().unwrap();
+    for resume_first in [true, false] {
+        let home = temp_home(&format!("live-resume-spend-{resume_first}"));
+        let db = home.join("guard.db");
+        seed(&db, &vectors);
+        insert_rows(
+            &Connection::open(&db).unwrap(),
+            "approval_requests",
+            &scenario["rows"],
+        );
+        let resume = || {
+            crate::guard_store_native_review_consume::spend_for_live_resume(
+                &Connection::open(&db).unwrap(),
+                request_id,
+                now,
+            )
+        };
+        if resume_first {
+            assert!(resume().unwrap());
+            assert_eq!(consume(&home, args)["payload"], false);
+        } else {
+            assert_eq!(consume(&home, args)["payload"], true);
+            assert!(!resume().unwrap());
+        }
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }

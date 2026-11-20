@@ -33,6 +33,7 @@ from .policy_integrity import PolicyIntegrityStatus, PolicyIntegrityVerification
 
 POLICY_INTEGRITY_ROWS_FEATURE = "policy-integrity-rows-v1"
 POLICY_INTEGRITY_GENERATION_FEATURE = "policy-integrity-generation-v1"
+POLICY_INTEGRITY_RECONCILE_FEATURE = "policy-integrity-reconcile-v1"
 _REQUEST_SCHEMA = "guard-policy-integrity-rows-request.v1"
 _RESULT_SCHEMA = "guard-policy-integrity-rows-result.v1"
 _KEY_FIELD = "integrity_key_b64"
@@ -64,6 +65,7 @@ _ROW_COLUMNS = (
     "updated_at",
     "workspace",
 )
+_TALLY_FIELDS = frozenset({"rows", "has_legacy", "pending_candidates", "pending_valid", "current_valid"})
 _SIGNATURE_FIELDS = frozenset(
     {"integrity_version", "integrity_generation", "payload_hash", "payload_mac", "integrity_key_id", "signed_at"}
 )
@@ -149,7 +151,9 @@ def native_prepare_policy_integrity_generation(
     }
     payload = _resident_payload(guard_home, request, required_feature=POLICY_INTEGRITY_GENERATION_FEATURE)
     outcome = payload.get("generation")
-    if payload.get("verify") != [] or payload.get("sign") != [] or not isinstance(outcome, dict):
+    if set(payload) != {"verify", "sign", "generation"} or not isinstance(outcome, dict):
+        raise NativePolicyIntegrityUnavailableError()
+    if payload["verify"] != [] or payload["sign"] != []:
         raise NativePolicyIntegrityUnavailableError()
     prepared_state, still_matches = outcome.get("prepared_state"), outcome.get("still_matches")
     if set(outcome) != {"prepared_state", "still_matches"} or not isinstance(prepared_state, dict):
@@ -157,6 +161,98 @@ def native_prepare_policy_integrity_generation(
     if not isinstance(still_matches, bool):
         raise NativePolicyIntegrityUnavailableError()
     return prepared_state, still_matches
+
+
+def native_reconcile_policy_integrity_generation(
+    *,
+    guard_home: Path,
+    key: bytes,
+    key_id: str,
+    trusted_state: Mapping[str, object],
+    rows: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """The control state the store should trust once the pending generation
+    is decided over ``rows``.
+
+    The caller ships its own rows because it holds an open transaction, whose
+    rows the resident's read-only connection would not see. The returned state
+    equals ``trusted_state`` when nothing about the pending generation changes.
+
+    A store with more rows than one request holds sends them in chunks, the
+    same way verify and sign batches are chunked. Each chunk comes back as
+    counters that the next one carries, and the last asks for the decision, so
+    a large store settles its pending generation instead of failing the request
+    and dropping to degraded mode. The resident decides from the totals; this
+    passes its counters back untouched.
+    """
+
+    _ensure_verifier_key(guard_home, key)
+    chunks = _chunks([_wire_row(row) for row in rows]) or [[]]
+    carried: dict[str, object] | None = None
+    for index, chunk in enumerate(chunks):
+        outcome = _reconcile_chunk(
+            guard_home,
+            key=key,
+            key_id=key_id,
+            trusted_state=trusted_state,
+            rows=chunk,
+            carried=carried,
+            decide=index == len(chunks) - 1,
+        )
+        if index == len(chunks) - 1:
+            next_state = outcome.get("next_state")
+            if set(outcome) != {"next_state"} or not isinstance(next_state, dict):
+                raise NativePolicyIntegrityUnavailableError()
+            return next_state
+        carried = _tally(outcome)
+    raise NativePolicyIntegrityUnavailableError()
+
+
+def _reconcile_chunk(
+    guard_home: Path,
+    *,
+    key: bytes,
+    key_id: str,
+    trusted_state: Mapping[str, object],
+    rows: list[dict[str, object]],
+    carried: dict[str, object] | None,
+    decide: bool,
+) -> Mapping[str, object]:
+    request = _request(key=key, key_id=key_id, verify=[], sign=[])
+    section: dict[str, object] = {
+        "trusted_state": dict(trusted_state),
+        "rows": rows,
+        "decide": decide,
+    }
+    if carried is not None:
+        section["carried"] = carried
+    request["reconcile"] = section
+    payload = _resident_payload(guard_home, request, required_feature=POLICY_INTEGRITY_RECONCILE_FEATURE)
+    outcome = payload.get("reconcile")
+    if set(payload) != {"verify", "sign", "reconcile"} or not isinstance(outcome, dict):
+        raise NativePolicyIntegrityUnavailableError()
+    if payload["verify"] != [] or payload["sign"] != []:
+        raise NativePolicyIntegrityUnavailableError()
+    return outcome
+
+
+def _tally(outcome: Mapping[str, object]) -> dict[str, object]:
+    """The resident's running counters, carried unread into the next chunk.
+
+    Nothing here interprets them: the decision over a chunked store is taken by
+    the resident from the totals, exactly as it is taken over a store that fits
+    in one request.
+    """
+
+    tally = outcome.get("tally")
+    if set(outcome) != {"tally"} or not isinstance(tally, dict) or set(tally) != _TALLY_FIELDS:
+        raise NativePolicyIntegrityUnavailableError()
+    if not isinstance(tally["has_legacy"], bool):
+        raise NativePolicyIntegrityUnavailableError()
+    counts = (tally["rows"], tally["pending_candidates"], tally["pending_valid"], tally["current_valid"])
+    if any(isinstance(count, bool) or not isinstance(count, int) or count < 0 for count in counts):
+        raise NativePolicyIntegrityUnavailableError()
+    return dict(tally)
 
 
 def _run(
@@ -268,7 +364,9 @@ def _request_chunk(
     other = payload.get("sign" if field == "verify" else "verify")
     if not isinstance(outcomes, list) or len(outcomes) != len(items) or other != []:
         raise NativePolicyIntegrityUnavailableError()
-    if "generation" in payload or not all(isinstance(outcome, dict) for outcome in outcomes):
+    if "generation" in payload or "reconcile" in payload:
+        raise NativePolicyIntegrityUnavailableError()
+    if not all(isinstance(outcome, dict) for outcome in outcomes):
         raise NativePolicyIntegrityUnavailableError()
     return outcomes
 

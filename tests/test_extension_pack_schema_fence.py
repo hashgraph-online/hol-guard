@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityError
 from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
+    require_compatible_extension_control_schema,
 )
 
 
@@ -53,9 +54,9 @@ def test_failed_activation_transaction_rolls_back_the_new_writer_floor():
 
 
 def test_activation_v2_fences_the_actual_schema5_writer_without_hiding_v1():
-    source = (Path(__file__).parent / "fixtures/extension-control-schema-v5.py.txt").read_text()
+    fixture = Path(__file__).parent / "fixtures/extension-control-schema-v5.py.txt"
     scope = {"__name__": "codex_plugin_scanner.guard._v5_schema_fixture", "__package__": "codex_plugin_scanner.guard"}
-    exec(compile(source, "extension-control-schema-v5.py.txt", "exec"), scope)
+    exec(compile(fixture.read_text(), str(fixture), "exec"), scope)
     old = scope["ensure_extension_control_authority_schema"]
     connection = sqlite3.connect(":memory:")
     old(connection, activate_packs=True)
@@ -68,3 +69,21 @@ def test_activation_v2_fences_the_actual_schema5_writer_without_hiding_v1():
         old(connection)
     ensure_extension_control_authority_schema(connection)
     assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 6
+
+
+def test_marker_check_reinitializes_a_store_recreated_after_startup():
+    connection = sqlite3.connect(":memory:")
+    ensure_extension_control_authority_schema(connection, activate_packs=True)
+    connection.execute("drop table extension_control_authority_snapshot")
+    assert require_compatible_extension_control_schema(connection)
+    assert connection.execute("select count(*) from extension_control_authority_snapshot").fetchone() == (0,)
+    assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 5
+
+    fresh = sqlite3.connect(":memory:")
+    assert require_compatible_extension_control_schema(fresh)
+    assert fresh.execute("select version from extension_control_schema_migration").fetchone()[0] == 4
+
+    connection.execute("update extension_control_schema_migration set checksum = 'forged'")
+    with pytest.raises(ExtensionControlAuthorityError, match="unsupported"):
+        require_compatible_extension_control_schema(connection)
+    assert not require_compatible_extension_control_schema(connection, require_compatible=False)

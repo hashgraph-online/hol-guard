@@ -35,10 +35,7 @@ fn run(query: &str, input: Value, home: &str) -> Value {
 
 #[test]
 fn large_policy_input_and_output_round_trip_without_evaluating_partial_uploads() {
-    let suffix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let home = std::env::temp_dir()
         .join(format!("guard-document-wire-{suffix}"))
         .to_string_lossy()

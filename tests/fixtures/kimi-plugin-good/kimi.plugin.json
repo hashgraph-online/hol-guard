@@ -20,6 +20,13 @@
   },
   "interface": {
     "displayName": "Demo Memory",
-    "shortDescription": "A Kimi plugin scanner fixture"
+    "shortDescription": "A Kimi plugin scanner fixture",
+    "tryPrompts": ["Summarize the project"],
+    "mcpOverrides": {
+      "demo": {"displayName": "Demo server", "description": "Read-only project context"}
+    },
+    "skillOverrides": {
+      "using-demo": {"displayName": "Using Demo", "description": "Inspect project context"}
+    }
   }
 }

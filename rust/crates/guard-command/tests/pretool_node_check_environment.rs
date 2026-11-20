@@ -13,10 +13,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     std::fs::create_dir_all(home.join("project/.git")).unwrap();
@@ -34,7 +31,7 @@ fn environment(home: &Path, names: &[&str]) -> guard_contracts::GuardExecutionEn
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -91,5 +88,24 @@ fn inherited_node_preloads_keep_the_review() {
                 "{name}: {command}"
             );
         }
+    }
+}
+
+#[test]
+fn a_heap_size_node_options_stamped_inert_lets_syntax_checks_proceed() {
+    let home = home();
+    let stamped = guard_contracts::GuardExecutionEnvironmentV1 {
+        node_options_inert: true,
+        ..environment(&home, &["HOME", "PATH", "NODE_OPTIONS"])
+    };
+    for command in CHECKS {
+        assert_eq!(decision(&home, &stamped, command), "allow", "{command}");
+    }
+    let preload = guard_contracts::GuardExecutionEnvironmentV1 {
+        node_options_inert: true,
+        ..environment(&home, &["HOME", "PATH", "NODE_OPTIONS", "LD_PRELOAD"])
+    };
+    for command in CHECKS {
+        assert_ne!(decision(&home, &preload, command), "allow", "{command}");
     }
 }

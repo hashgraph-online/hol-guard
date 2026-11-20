@@ -10,16 +10,20 @@
 //!    contract's recommended allow scope are derived in process;
 //! 3. `_record_silent_native_review_event`.
 //!
-//! A home whose legacy rows still wait for the daemon's backfill answers
-//! `null` without writing. A queued row the event cannot be reproduced for
-//! fails the op, so the transaction rolls back and the daemon queues it.
+//! The hook's direct write leaves two cases to the daemon: a home whose
+//! legacy rows still wait for a backfill answers `null` without writing, and
+//! a queued row the event cannot be reproduced for fails the op, so the
+//! transaction rolls back. The daemon's write (`daemon: true`) is the last
+//! writer, so it backfills legacy rows first, as `add_approval_request` does,
+//! and keeps a queued row whose event cannot be reproduced without one, as
+//! the daemon did when `add_event` failed.
 
 use guard_contracts::ApprovalScopeItemV1;
 use rusqlite::Connection;
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use crate::approval_scope_contract::{contract, text as scope_text, View};
-use crate::guard_store_approval_write::add_native_review_approval_request;
+use crate::guard_store_approval_write::{add_native_review_approval_request, add_request};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{query_one, text, Row, StoreError, StoreResult};
 use crate::guard_store_guard_event::{add_guard_event, approval_created_event};
@@ -64,25 +68,57 @@ const ENVELOPE_KEYS: [&str; 26] = [
 /// `native_approval_scope._RAW_PAYLOAD_KEYS`.
 const RAW_PAYLOAD_KEYS: [&str; 2] = ["permission_mode", "permissionMode"];
 
-/// Queue the review and write its `approval.created` event. Returns the
-/// stored request id, or `null` (nothing written) while legacy rows wait for
-/// the daemon's backfill.
+/// Queue the review and write its `approval.created` event. On the hook path
+/// it returns the stored request id, or `null` (nothing written) while legacy
+/// rows wait for the daemon. With `daemon` set it backfills them itself and
+/// returns `{request_id, event_error}`: like the daemon always did, it keeps
+/// the queued review when its event cannot be written, under a savepoint so
+/// any failed event write is undone alone, and names the failure code.
 pub(crate) fn add_silent_native_review_approval_request(
     connection: &Connection,
     source: &str,
     args: &Args,
 ) -> StoreResult<Value> {
     let now = args.str("now")?;
-    let Value::String(request_id) = add_native_review_approval_request(connection, source, args)?
-    else {
-        return Ok(Value::Null);
+    let daemon = args.flag("daemon")?;
+    let request_id = if daemon {
+        add_request(connection, source, args.raw("request"), now, None)?
+    } else {
+        let Value::String(request_id) =
+            add_native_review_approval_request(connection, source, args)?
+        else {
+            return Ok(Value::Null);
+        };
+        request_id
     };
-    let queued = queued_request(connection, &request_id)?;
+    if !daemon {
+        record_event(connection, &request_id, now)?;
+        return Ok(Value::String(request_id));
+    }
+    // Whatever stops the event, the queued review stands; the daemon logs
+    // the failure code.
+    connection.execute_batch("savepoint silent_review_event")?;
+    let event_error = match record_event(connection, &request_id, now) {
+        Ok(()) => {
+            connection.execute_batch("release silent_review_event")?;
+            Value::Null
+        }
+        Err(error) => {
+            connection
+                .execute_batch("rollback to silent_review_event; release silent_review_event")?;
+            Value::from(error.code())
+        }
+    };
+    Ok(json!({"request_id": request_id, "event_error": event_error}))
+}
+
+fn record_event(connection: &Connection, request_id: &str, now: &str) -> StoreResult<()> {
+    let queued = queued_request(connection, request_id)?;
     let (payload, timestamp) =
         approval_created_event(&queued, now).ok_or(StoreError::Invalid(EVENT_UNAVAILABLE))?;
     add_guard_event(connection, "approval.created", &payload, &timestamp)?
         .ok_or(StoreError::Invalid(EVENT_UNAVAILABLE))?;
-    Ok(Value::String(request_id))
+    Ok(())
 }
 
 /// `get_approval_request(request_id)` for the fields

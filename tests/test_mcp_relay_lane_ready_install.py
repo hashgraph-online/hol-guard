@@ -90,11 +90,9 @@ GuardStore(Path(sys.argv[1]), prime_policy_integrity=False).upsert_policy(
 _CLI = """
 import sys
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex_lifecycle_lock
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
 home = Path(sys.argv[1])
 commands_lifecycle_gate.trusted_user_home = lambda: home
-codex_lifecycle_lock._account_home = lambda: home
 from codex_plugin_scanner.cli import main
 sys.exit(main(sys.argv[2:]))
 """
@@ -227,9 +225,7 @@ def _until(condition: Callable[[], T | None | bool], what: str) -> T:
 def installed(tmp_path: Path) -> Iterator[_Install]:
     install = _Install(tmp_path, _runtime())
     try:
-        result = install.guard(
-            "install", "codex", "--workspace", str(install.workspace), "--json", extra={"HOL_GUARD_MCP_RELAY": "native"}
-        )
+        result = install.guard("install", "codex", "--workspace", str(install.workspace), "--json")
         assert result.returncode == 0, result.stderr[-2000:]
         result = install.guard("daemon", "ensure", "--workspace", str(install.workspace))
         assert result.returncode == 0, result.stderr[-2000:]

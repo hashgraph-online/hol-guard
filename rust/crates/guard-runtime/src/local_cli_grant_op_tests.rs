@@ -137,6 +137,7 @@ impl Fixture {
             current_action: action.to_owned(),
             source: source.clone(),
             command_id: command_id.map(str::to_owned),
+            options: Vec::new(),
         }
     }
 }
@@ -388,3 +389,6 @@ mod store;
 
 #[path = "local_cli_grant_op_capability_tests.rs"]
 mod capability;
+
+#[path = "local_cli_grant_op_option_tests.rs"]
+mod option;

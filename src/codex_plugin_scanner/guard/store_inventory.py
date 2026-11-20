@@ -4,7 +4,9 @@ Artifact snapshots, diffs, inventory, capabilities, provenance cache and the
 attestation sequence run in the native resident (``guard_store`` op), which owns
 the SQL and the decision-contract canonicalization. Python serializes the
 inputs and shapes the decoded rows; it never recomputes what the resident
-persists. Local device metadata stays here.
+persists. Writes to the local device row run there too; reads of it and of
+the connected workspace stay here, because the cloud capability checks read
+them before the native store is provisioned.
 """
 
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
@@ -250,6 +252,11 @@ class StoreInventoryMixin:
             {"artifact_hash": artifact_hash, "payload_json": json.dumps(payload), "now": now},
         )
 
+    def _device_row_args(self) -> dict[str, object]:
+        """What the resident needs to recreate a missing device row."""
+
+        return {"new_device_id": uuid4().hex, "created_at": _now()}
+
     def get_or_create_installation_id(self) -> str:
         with self._connect() as connection:
             self._ensure_local_device(connection)
@@ -263,16 +270,7 @@ class StoreInventoryMixin:
 
     def set_device_label(self, label: str, now: str) -> dict[str, str]:
         normalized_label = label.strip() or "Local machine"
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            connection.execute(
-                """
-                update guard_devices
-                set device_label = ?, updated_at = ?
-                where device_key = ?
-                """,
-                (normalized_label, now, _DEVICE_ROW_KEY),
-            )
+        self._native_store_call("set_device_label", {**self._device_row_args(), "label": normalized_label, "now": now})
         # A chosen label is kept even when it reads like a default ("Local machine");
         # clearing the label hands the name back to the host name.
         self.set_sync_payload(DEVICE_LABEL_CHOICE_KEY, {"label": normalized_label if label.strip() else None}, now)
@@ -293,18 +291,9 @@ class StoreInventoryMixin:
         return effective_device_label(label, chosen=chosen)
 
     def rotate_installation_id(self, now: str) -> dict[str, str]:
-        new_installation_id = uuid4().hex
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            connection.execute(
-                """
-                update guard_devices
-                set installation_id = ?, updated_at = ?
-                where device_key = ?
-                """,
-                (new_installation_id, now, _DEVICE_ROW_KEY),
-            )
-        return self.get_device_metadata()
+        return self._native_store_call(
+            "rotate_installation_id", {**self._device_row_args(), "installation_id": uuid4().hex, "now": now}
+        )
 
     def get_device_metadata(self) -> dict[str, str]:
         with self._connect() as connection:

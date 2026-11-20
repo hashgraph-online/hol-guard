@@ -135,10 +135,7 @@ fn init_of_a_fresh_owned_temporary_directory_is_quiet() {
     let parent = std::fs::canonicalize("/tmp").unwrap().join(format!(
         "guard-init-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let _cleanup = FixtureCleanup(parent.clone());
     std::fs::create_dir(&parent).unwrap();
@@ -193,6 +190,10 @@ fn clone_of_a_local_repository_into_a_fresh_directory_is_quiet() {
         format!("git clone -q --no-hardlinks {primary} {copy}"),
         format!("git clone --single-branch -b main {primary} {copy}"),
         format!("git clone -n {primary} {copy}"),
+        // `--shared` borrows the source's objects instead of copying them.
+        // It names no program and runs the same checkout `--local` runs.
+        format!("git clone --shared {primary} {copy}"),
+        format!("git clone -s -q {primary} {copy}"),
     ] {
         session.assert_allow(&command, CLONE);
     }
@@ -220,6 +221,12 @@ fn clone_of_a_local_repository_into_a_fresh_directory_is_quiet() {
         format!("git clone {primary} {copy} > {home}/clone.log"),
         format!("git clone {primary} {copy} && rm -rf {primary}"),
         format!("git clone -b missing-branch {primary} {copy}"),
+        // `--no-local` sends the copy through the transport, which reads a
+        // repository this proof has not read.
+        format!("git clone --no-local {primary} {copy}"),
+        // `--reference` borrows objects from a repository the proof never
+        // named, so it is not the bounded source `--shared` borrows from.
+        format!("git clone --reference {home}/org {primary} {copy}"),
     ] {
         session.assert_not_allow(&command);
     }
@@ -249,10 +256,7 @@ fn init_of_a_fresh_leaf_directly_in_a_temporary_root_is_quiet() {
     let unique = format!(
         "guard-init-root-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let mut roots = vec![std::fs::canonicalize("/tmp").unwrap()];
     let private = std::fs::canonicalize(std::env::temp_dir()).unwrap();
@@ -334,10 +338,7 @@ fn a_clone_from_a_repository_other_users_can_rewrite_keeps_review() {
     let leaf = std::fs::canonicalize("/tmp").unwrap().join(format!(
         "guard-clone-temp-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let _cleanup = FixtureCleanup(leaf.clone());
     for source in [leaf.clone(), leaf.join("nested")] {

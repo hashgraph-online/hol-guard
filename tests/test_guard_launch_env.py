@@ -17,15 +17,15 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guard_hook_payload_module
-from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
+from tests.codex_toml_support import read_toml_payload
 from tests.conftest import guard_commands_module
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode", "native_prompt_runtime")
@@ -91,8 +91,8 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
-    CodexHarnessAdapter._write_authenticated_hook_config(
+    publication_helpers.install_config_hooks(payload, context, config_path=config_path)
+    publication_helpers.write_authenticated_hook_config(
         context,
         config_path=config_path,
         payload=payload,
@@ -1225,7 +1225,7 @@ def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, capsys):
+def test_opencode_prompt_hook_sends_sensitive_prompt_without_queueing(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
@@ -1262,12 +1262,15 @@ def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, caps
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    prompt_request = output["approval_requests"][0]
 
-    assert rc == 1
-    assert output["artifact_type"] == "prompt_request"
-    assert prompt_request["artifact_type"] == "prompt_request"
-    assert prompt_request["approval_url"].startswith("http://127.0.0.1:4455/requests/")
+    # A prompt that asks for local secrets is sent flagged; the read it leads
+    # to is reviewed at the tool stage, so nothing is queued for the prompt.
+    assert rc == 0
+    assert output.get("decision") != "block"
+    assert output["policy_action"] == "warn"
+    assert output["reason_code"] == "native_sensitive_prompt"
+    assert "approval_requests" not in output
+    assert GuardStore(home_dir).list_approval_requests(limit=5) == []
 
 
 def test_guard_run_allows_debug_prompt_with_quoted_publish_error(monkeypatch, tmp_path, capsys):

@@ -45,7 +45,18 @@ BULLETED_SECTIONS = {"feat", "fix"}
 
 MAX_SUMMARY_BULLETS = 3
 MAX_BULLET_CHARS = 220
-MAX_RENDERED_CHANGES = 80
+# GitHub rejects release bodies over 125,000 characters. The change list gets
+# most of that; the rest leaves room for the install block, the readiness notes
+# appended after generation and the contributor thanks.
+MAX_CHANGE_LIST_CHARS = 100_000
+MAX_BODY_CHARS = 125_000
+# The publication workflow appends a readiness paragraph to the generated body,
+# so the generator spends less than the whole limit.
+RESERVED_BODY_CHARS = 1_000
+# A release with an unusually wide contributor list still credits people, but
+# the thanks paragraph cannot grow without bound at the change list's expense.
+MAX_CREDITED_CONTRIBUTORS = 100
+_CHANGE_LIST_SLOT = "\x00change-list\x00"
 
 
 @dataclass
@@ -414,7 +425,7 @@ def entry_line(change: Change, repo: str) -> str:
     return f"- {description} ({link}){breaking}"
 
 
-def render_sections(changes: Sequence[Change], repo: str) -> str:
+def render_sections(changes: Sequence[Change], repo: str, *, with_bullets: bool = True) -> str:
     blocks: list[str] = []
     for section in SECTION_ORDER:
         entries = [change for change in changes if change.section == section]
@@ -423,7 +434,7 @@ def render_sections(changes: Sequence[Change], repo: str) -> str:
         lines = [f"## {SECTION_TITLES.get(section, 'Internal')}", ""]
         for change in entries:
             lines.append(entry_line(change, repo))
-            if section in BULLETED_SECTIONS:
+            if with_bullets and section in BULLETED_SECTIONS:
                 for bullet in change.summary_bullets:
                     lines.append(f"  - {bullet}")
         blocks.append("\n".join(lines))
@@ -431,11 +442,10 @@ def render_sections(changes: Sequence[Change], repo: str) -> str:
 
 
 def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
-    """Summarize very large histories (no previous tag) instead of listing every entry.
+    """Summarize a history too large to list as per-section counts plus a link.
 
-    GitHub caps release bodies at 125,000 characters; a first-of-channel release
-    covering the full project history would exceed that, so render per-section
-    counts plus a link into the commit history.
+    Only reached when even the bare change list exceeds the body budget, such
+    as a first-of-channel release covering the full project history.
     """
     counts: list[tuple[str, int]] = []
     for section in SECTION_ORDER:
@@ -449,6 +459,34 @@ def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
         f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha})."
     )
     return "\n".join(lines)
+
+
+def render_change_list(changes: Sequence[Change], repo: str, available: int | None = None) -> str:
+    """List every change, shedding detail only when the list would not fit.
+
+    A large release still names each change: the PR summary bullets go first,
+    and the list falls back to per-section counts only when the bare entries
+    alone exceed the budget. ``available`` is what the rest of the body leaves
+    for the list; the list never spends more than ``MAX_CHANGE_LIST_CHARS``
+    either way.
+    """
+    budget = MAX_CHANGE_LIST_CHARS if available is None else min(available, MAX_CHANGE_LIST_CHARS)
+    full = render_sections(changes, repo)
+    if len(full) <= budget:
+        return full
+    bare = render_sections(changes, repo, with_bullets=False)
+    if len(bare) <= budget:
+        return bare
+    return render_condensed_sections(changes, repo)
+
+
+def render_thanks(contributors: Sequence[tuple[str, bool]]) -> str:
+    """Credit contributors by name, naming the rest by count once the list is wide."""
+    credited = [f"@{name}" if is_login else name for name, is_login in contributors[:MAX_CREDITED_CONTRIBUTORS]]
+    remainder = len(contributors) - len(credited)
+    if remainder:
+        credited.append(f"and {remainder} more")
+    return f"Thanks {', '.join(credited)}!"
 
 
 def render_notes(
@@ -510,17 +548,8 @@ def render_notes(
         lines.append(f"**{' • '.join(heading_stats)}**{scope_note}.")
     lines.append("")
 
-    if len(changes) > MAX_RENDERED_CHANGES:
-        lines.append(render_condensed_sections(changes, repo))
-        lines.append("")
-    else:
-        sections = render_sections(changes, repo)
-        if sections:
-            lines.append(sections)
-            lines.append("")
-        else:
-            lines.append("This release ships no user-facing changes; it refreshes release artifacts only.")
-            lines.append("")
+    lines.append(_CHANGE_LIST_SLOT)
+    lines.append("")
 
     lines.append("## Install")
     lines.append("")
@@ -568,10 +597,17 @@ def render_notes(
             )
         lines.append("")
     if contributors:
-        credited = [f"@{name}" if is_login else name for name, is_login in contributors]
-        lines.append(f"Thanks {', '.join(credited)}!")
+        lines.append(render_thanks(contributors))
         lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
+    body = "\n".join(lines).rstrip() + "\n"
+
+    # Everything but the change list is already rendered, so what is left of the
+    # body limit is exactly what the list may spend.
+    available = MAX_BODY_CHARS - RESERVED_BODY_CHARS - (len(body) - len(_CHANGE_LIST_SLOT))
+    sections = render_change_list(changes, repo, available) if changes else ""
+    if not sections:
+        sections = "This release ships no user-facing changes; it refreshes release artifacts only."
+    return body.replace(_CHANGE_LIST_SLOT, sections)
 
 
 def main() -> int:

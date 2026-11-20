@@ -94,7 +94,8 @@ pub(crate) fn artifact_directive(
     } else {
         "fallback_envelope"
     };
-    let mut exit = exit_code(canonical, action, event);
+    let json_exit = exit_code(canonical, action, event);
+    let mut exit = json_exit;
     if !exit_block && after_json == "fallback_envelope" && inputs.replayed {
         // A replayed decision was recorded upstream; acknowledge without
         // re-blocking the harness.
@@ -106,6 +107,7 @@ pub(crate) fn artifact_directive(
         queue_approval_request: false,
         emitter: emitter(canonical).to_owned(),
         exit_code: exit,
+        json_exit_code: json_exit,
         stderr_only_on_nonzero_exit: false,
         codex_native_reason: codex_native_reason(inputs, action).to_owned(),
         include_remediation: blocking,

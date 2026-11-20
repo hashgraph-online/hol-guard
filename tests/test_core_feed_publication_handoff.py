@@ -28,7 +28,7 @@ def test_handoff_requires_verified_stable_publication() -> None:
     ):
         assert gate in job["if"]
     assert job["permissions"] == {"actions": "write", "contents": "read"}
-    assert job["runs-on"] == "ubuntu-latest"
+    assert job["runs-on"] == "ubuntu-24.04"
     assert job["steps"][0]["env"]["VERSION"] == "${{ needs.build.outputs.version }}"
     release = yaml.safe_load(WORKFLOW.read_text())["jobs"]["release-main"]
     assert "publish-main-pypi" in release["needs"]

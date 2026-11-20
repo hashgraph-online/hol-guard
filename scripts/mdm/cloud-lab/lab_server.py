@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from cloud_control import ContractError
 from lab_store import Store
 from lab_support import (
     ADMIN_HEADER,
@@ -16,7 +17,6 @@ from lab_support import (
 )
 
 from codex_plugin_scanner.guard.json_transport import escape_json_for_html
-from codex_plugin_scanner.guard.mdm.cloud_control import ContractError
 
 
 class CloudHandler(BaseHTTPRequestHandler):

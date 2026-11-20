@@ -17,7 +17,8 @@ class Client:
         self.incomplete = False
         self.errors = False
 
-    def _request(self, url, *, method, payload):
+    def _request(self, url, *, method, payload, read_only):
+        assert read_only is True
         assert url == "https://api.github.com/graphql" and method == "POST"
         self.requests += 1
         if self.errors:

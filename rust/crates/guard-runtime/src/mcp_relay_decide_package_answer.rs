@@ -13,12 +13,13 @@
 //! holds its evidence for the drain to record, which is how every other route
 //! in this lane already answers.
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use super::package_observe;
 use super::package_policy::PackagePolicy;
 use super::package_route::PackageRoute;
 use super::queue;
+use crate::mcp_proxy_package_answer as answer;
 
 /// `block_tool_call(decision_source="policy-block")`, which every stopped
 /// package call records under.
@@ -45,19 +46,9 @@ pub(super) fn block(
         return Some((message, data));
     }
     let message = match route {
-        PackageRoute::StoredPackageBlock => format!(
-            "HOL Guard blocked package install request {tool} from {server}. This exact request \
-             is already blocked by stored policy with authenticated local integrity."
-        ),
+        PackageRoute::StoredPackageBlock => answer::stored_package_block_message(tool, server),
         PackageRoute::TerminalPackage { policy_action } => {
-            if policy_action == "block" {
-                format!("HOL Guard blocked package install request {tool} from {server}.")
-            } else {
-                format!(
-                    "HOL Guard requires an enforceable sandbox for package install request \
-                     {tool} from {server}; this runtime cannot provide one."
-                )
-            }
+            answer::terminal_package_message(tool, server, policy_action)
         }
         PackageRoute::QueuePackage { .. }
         | PackageRoute::Forward { .. }
@@ -80,28 +71,7 @@ pub(super) fn block(
 /// on, restated as the block the agent was actually given, with the guidance
 /// text as its own next step.
 fn queued_evaluation(policy: &PackagePolicy, message: &str) -> Value {
-    let mut evaluation = policy.evaluation.clone();
-    evaluation.insert("decision".to_owned(), json!("block"));
-    evaluation.insert("policy_action".to_owned(), json!("block"));
-    let mut user_copy = evaluation
-        .get("user_copy")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_else(Map::new);
-    user_copy.insert("title".to_owned(), json!("Package request blocked"));
-    user_copy.insert(
-        "summary".to_owned(),
-        policy
-            .evaluation
-            .get("risk_summary")
-            .cloned()
-            .unwrap_or_else(|| json!("")),
-    );
-    user_copy.insert("dashboard_url".to_owned(), Value::Null);
-    user_copy.insert("next_step".to_owned(), json!(message));
-    user_copy.insert("harness_message".to_owned(), json!(message));
-    evaluation.insert("user_copy".to_owned(), Value::Object(user_copy));
-    Value::Object(evaluation)
+    answer::blocked_package_evaluation(&policy.evaluation, message)
 }
 
 /// The action the answer reports, which a stored block always states as
@@ -177,25 +147,7 @@ pub(super) fn signals(route: &PackageRoute, policy: &PackagePolicy) -> Vec<Strin
 /// it carries no message, and an empty string when it carries neither, in the
 /// order the evaluation reported them.
 pub(super) fn reason_signals(policy: &PackagePolicy) -> Vec<String> {
-    policy
-        .evaluation
-        .get("reasons")
-        .and_then(Value::as_array)
-        .map(|reasons| {
-            reasons
-                .iter()
-                .map(|reason| {
-                    reason
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .filter(|text| !text.is_empty())
-                        .or_else(|| reason.get("code").and_then(Value::as_str))
-                        .unwrap_or("")
-                        .to_owned()
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    answer::reason_signals(&policy.evaluation)
 }
 
 #[cfg(test)]

@@ -554,7 +554,7 @@
       "publishers": {
         "hol": {
           "id": "hol",
-          "displayName": "Hashgraph Online"
+          "displayName": "HOL"
         },
         "hol-curated": {
           "id": "hol-curated",

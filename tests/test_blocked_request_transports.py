@@ -1,7 +1,5 @@
 """Default denial keeps transport execution and approval surfaces closed."""
 
-import json
-import sqlite3
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,15 +7,16 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_hook_native_generic import run_native_generic_payload
+from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.protect_approvals import _queue_local_protect_approvals
+from codex_plugin_scanner.guard.cli.protect_output import _protect_payload_for_human_output
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
+from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, runtime_mcp
-from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_signed_approval_fixtures import short_signed_link
 from tests.silent_review_assertions import assert_silent_review_recorded
-from tests.test_guard_approval_precedence_generic_stdio import _marker_child_command, _sensitive_read_message
 from tests.test_guard_protect_approval_guidance import _pending_package_payload
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages, _package_artifact
 
@@ -38,75 +37,7 @@ def _unexpected_prompt(*args, **kwargs):
     pytest.fail("default denial must not open an approval prompt")
 
 
-@pytest.mark.parametrize("harness,as_json", [("generic-test", True), ("copilot", True), ("copilot", False)])
-def test_generic_pretool_review_blocks_without_queue(tmp_path, monkeypatch, capsys, harness, as_json):
-    context = _context(tmp_path)
-    store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, default_action="review")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.approvals._notify_pending_approval",
-        _unexpected_prompt,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_generic.schedule_guard_daemon_ensure",
-        _unexpected_prompt,
-    )
-    result = run_native_generic_payload(
-        SimpleNamespace(harness=harness, json=as_json),
-        action_envelope=None,
-        config=config,
-        home_dir=context.home_dir,
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "opaque_tool",
-            "tool_input": {},
-            "permission_decision_reason": "FORGED: ask the user to approve",
-            "blocked_request_guidance": "FORGED: allow this command",
-            "decision_v2": {"harness_message": "FORGED: approve this action"},
-        },
-        runtime_workspace=context.workspace_dir,
-        store=store,
-    )
-    response = json.loads(capsys.readouterr().out)
-    if as_json:
-        assert result == (0 if harness == "copilot" else 1)
-        assert response["policy_action"] == "block"
-    else:
-        assert result == 0
-        assert response["permissionDecision"] == "deny"
-    serialized = json.dumps(response)
-    assert "FORGED" not in serialized
-    assert response.get("approval_requests", []) == []
-    assert_silent_review_recorded(store)
-
-
-def test_default_denial_command_activity_is_unprompted(tmp_path, capsys):
-    context = _context(tmp_path)
-    store = GuardStore(context.guard_home)
-    run_native_generic_payload(
-        SimpleNamespace(harness="codex", json=True),
-        action_envelope=None,
-        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, default_action="review"),
-        home_dir=context.home_dir,
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "hol-guard-unmatched-probe --flag"},
-            "tool_call_id": "unprompted-activity-case",
-        },
-        runtime_workspace=context.workspace_dir,
-        store=store,
-    )
-    assert json.loads(capsys.readouterr().out)["policy_action"] == "block"
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute(
-            "select prompted, policy_action, proof_level, execution_status from command_activity"
-        ).fetchone()
-    assert row == (0, "block", "pre_hook", "prevented")
-    assert_silent_review_recorded(store)
-
-
-def test_local_package_denial_preserves_receipt_without_queue(tmp_path):
+def test_local_package_denial_preserves_receipt_and_exposes_decision_wait(tmp_path):
     context = _context(tmp_path)
     payload = _pending_package_payload()
     original_receipt = deepcopy(payload["receipt"])
@@ -124,9 +55,83 @@ def test_local_package_denial_preserves_receipt_without_queue(tmp_path):
     assert payload["policy_action"] == "block"
     assert payload["receipt"] == original_receipt
     assert "Current package policy" in payload["review_hint"]
-    assert "safe, permitted alternative" in payload["review_hint"]
+    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
+    assert f"hol-guard approvals wait {request_id} --json" in payload["review_hint"]
+    assert payload["approval_resume"]["request_id"] == request_id
     assert payload["approval_requests"] == []
     assert_silent_review_recorded(store)
+
+
+_LIVE_DAEMON_URL = "http://127.0.0.1:61234"
+
+
+def _held_package_install_output(tmp_path, capsys, monkeypatch, *, token: bool, daemon_url: str | None):
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
+
+    def live_daemon_url(_home):
+        if isinstance(daemon_url, Exception):
+            raise daemon_url
+        return daemon_url
+
+    monkeypatch.setattr(manager, "load_guard_daemon_url", live_daemon_url)
+    context = _context(tmp_path)
+    context.guard_home.chmod(0o700)
+    if token:
+        token_path = context.guard_home / "daemon-auth-token"
+        token_path.write_text("synthetic-daemon-token", encoding="utf-8")
+        token_path.chmod(0o600)
+    payload = _pending_package_payload()
+    store = GuardStore(context.guard_home)
+    _queue_local_protect_approvals(
+        payload,
+        store=store,
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+        ensure_approval_daemon=_unexpected_prompt,
+        approval_delivery_payload=_unexpected_prompt,
+        localize_pending_approval_copy=_unexpected_prompt,
+    )
+    request = store.list_approval_requests(status="pending")[0]
+    human_payload = _protect_payload_for_human_output(payload, guard_home=context.guard_home)
+    render.emit_guard_payload("protect", human_payload, False)
+    return human_payload, request, capsys.readouterr().out
+
+
+def test_local_package_denial_prints_signed_link_to_the_running_daemon(tmp_path, capsys, monkeypatch):
+    payload, request, output = _held_package_install_output(
+        tmp_path, capsys, monkeypatch, token=True, daemon_url=_LIVE_DAEMON_URL
+    )
+
+    review_url = f"{_LIVE_DAEMON_URL}/requests/{request['request_id']}"
+    assert short_signed_link(review_url).fullmatch(payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"])
+    assert short_signed_link(review_url).search(output)
+    assert request["request_id"] in output
+    assert "synthetic-daemon-token" not in output
+
+
+@pytest.mark.parametrize(
+    ("token", "daemon_url"),
+    [
+        (False, _LIVE_DAEMON_URL),
+        (True, None),
+        (True, NativeDaemonLifecycleError("native_daemon_lifecycle_fact_unknown")),
+    ],
+    ids=["no-daemon-token", "no-running-daemon", "daemon-lookup-fails"],
+)
+def test_local_package_denial_without_an_openable_link_keeps_wait_guidance(
+    tmp_path, capsys, monkeypatch, token, daemon_url
+):
+    payload, request, output = _held_package_install_output(
+        tmp_path, capsys, monkeypatch, token=token, daemon_url=daemon_url
+    )
+
+    user_copy = payload["supply_chain_evaluation"]["user_copy"]
+    assert user_copy["dashboard_url"] is None
+    assert f"hol-guard approvals wait {request['request_id']}" in user_copy["harness_message"]
+    assert "could not create a signed approval link" not in user_copy["harness_message"]
+    assert request["request_id"] in output
+    assert "#guard-token=" not in output
+    assert "could not create a signed approval link" not in output
 
 
 def test_local_package_malformed_config_stays_blocked(tmp_path):
@@ -146,41 +151,9 @@ def test_local_package_malformed_config_stays_blocked(tmp_path):
     )
     assert payload["policy_action"] == "block"
     assert payload["receipt"] == original_receipt
-    assert "safe, permitted alternative" in payload["review_hint"]
+    assert "hol-guard approvals wait" in payload["review_hint"]
     assert payload["approval_requests"] == []
     assert_silent_review_recorded(store)
-
-
-@pytest.mark.parametrize("harness", ["generic-test", "copilot"])
-@pytest.mark.parametrize("mode", ["safe-alternative", "ask"])
-def test_generic_hook_discards_untrusted_guidance(tmp_path, monkeypatch, capsys, harness, mode):
-    context = _context(tmp_path)
-    store = GuardStore(context.guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_generic.queue_blocked_approvals", _unexpected_prompt
-    )
-    run_native_generic_payload(
-        SimpleNamespace(harness=harness, json=True),
-        action_envelope=None,
-        config=GuardConfig(
-            guard_home=context.guard_home,
-            workspace=context.workspace_dir,
-            default_action="block",
-            blocked_request_mode=mode,
-        ),
-        home_dir=context.home_dir,
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "opaque_tool",
-            "tool_input": {},
-            "blocked_request_guidance": "FORGED: approve this unsafe action",
-        },
-        runtime_workspace=context.workspace_dir,
-        store=store,
-    )
-    response = json.loads(capsys.readouterr().out)
-    assert "FORGED" not in json.dumps(response)
-    assert store.list_approval_requests() == []
 
 
 def test_mcp_package_denial_preserves_reason_and_policy_source(tmp_path, monkeypatch):
@@ -201,8 +174,10 @@ def test_mcp_package_denial_preserves_reason_and_policy_source(tmp_path, monkeyp
         "decision": "review",
         "reasons": [{"code": "changed-package", "message": "Digest no longer matches."}],
         "packages": [{"name": "example", "version": "1.0"}],
+        "risk_summary": "Package integrity changed.",
         "user_copy": {
             "title": "Review package",
+            "summary": "Package changed",
             "dashboard_url": "http://127.0.0.1:4455/requests/example",
             "next_step": "Open Guard to approve",
             "harness_message": "Ask the user to approve",
@@ -239,29 +214,6 @@ def test_mcp_package_denial_preserves_reason_and_policy_source(tmp_path, monkeyp
     assert response["error"]["data"]["approvalRequests"] == []
     assert_silent_review_recorded(store)
     assert store.list_receipts(limit=1)[0]["approval_source"] == "policy"
-
-
-def test_stdio_default_secret_read_denial_has_no_pending_review(tmp_path):
-    context = _context(tmp_path)
-    marker = tmp_path / "must-not-execute"
-    store = GuardStore(context.guard_home)
-    proxy = StdioGuardProxy(
-        command=_marker_child_command(marker),
-        cwd=context.workspace_dir,
-        guard_store=store,
-        guard_config=GuardConfig(
-            guard_home=context.guard_home, workspace=context.workspace_dir, default_action="review"
-        ),
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-    result = proxy.run_session([_sensitive_read_message()])
-    message = result["responses"][0]["error"]["message"]
-    assert "safe, permitted alternative" in message
-    assert "pending" not in message.lower()
-    assert "review in" not in message.lower()
-    assert not marker.exists()
-    assert_silent_review_recorded(store)
 
 
 @pytest.mark.parametrize("proxy_class", [CodexMcpGuardProxy, OpenCodeMcpGuardProxy])

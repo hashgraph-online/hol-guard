@@ -22,9 +22,8 @@
 //! either way.
 
 use super::{inline, Routed, ROUTE_UNSUPPORTED};
-use crate::blocked_request_mode::safe_alternative_reason;
 use crate::mcp_tool_policy_decision::Decision;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// `blocked_request_mode`, under which the queue route blocks in place.
 pub(super) const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
@@ -121,12 +120,14 @@ pub(super) fn route(
 pub(super) fn safe_alternative(
     blocked_request_mode: Option<&str>,
     redaction_level: Option<&str>,
+    center: Option<&str>,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
     match (blocked_request_mode, redaction_level) {
         (Some(SAFE_ALTERNATIVE_MODE), Some(level)) => Ok(Routed::SafeAlternative {
             policy_action,
             redaction_level: level.to_owned(),
+            center: center.map(str::to_owned),
         }),
         _ => Err(ROUTE_UNSUPPORTED),
     }
@@ -139,18 +140,7 @@ pub(super) fn safe_alternative_block(
     server: &str,
     signals: &[String],
 ) -> (String, Value) {
-    let reason = format!(
-        "HOL Guard blocked tool call {tool} from {server}. {}",
-        signals.join(" ")
-    );
-    (
-        safe_alternative_reason(&reason, None, None),
-        json!({
-            "approvalRequests": [],
-            "guardPolicyAction": "block",
-            "transportOutcome": "not-forwarded",
-        }),
-    )
+    crate::mcp_proxy_package_answer::safe_alternative_block(tool, server, signals)
 }
 
 #[cfg(test)]

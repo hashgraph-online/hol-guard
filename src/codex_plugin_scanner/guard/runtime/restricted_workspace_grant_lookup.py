@@ -19,7 +19,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .contained_denial_note import denial_note, loopback_denied
+from .contained_denial_note import denial_answer, denial_note
 from .restricted_pytest_model import PYTEST_INVALID_COMMAND_REASON_CODE, RestrictedPytestError
 from .restricted_workspace_grants import ExpectedGrant
 
@@ -86,9 +86,8 @@ def granted_denial_note(grant: ContainedGrant | None) -> Callable[[Iterable[byte
         return denial_note
 
     def note(outputs: Iterable[bytes]) -> str | None:
-        outputs = list(outputs)
-        chosen = denial_note(outputs)
-        if chosen is not None and loopback_denied(outputs):
+        chosen, loopback = denial_answer(outputs)
+        if chosen is not None and loopback:
             # Best effort: the run's own result never depends on this write.
             with suppress(*_STORE_UNANSWERED):
                 store.note_local_cli_capability_cause(

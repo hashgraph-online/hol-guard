@@ -16,10 +16,7 @@ use crate::guard_store_outbox_append::TEST_EVENT_ID_COUNTER;
 const VECTORS: &str = include_str!("../testdata/guard_store/vectors.json");
 
 fn temp_home(tag: &str) -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let home = std::env::temp_dir().join(format!(
         "hol-guard-store-vectors-{tag}-{}-{nonce}",
         std::process::id()

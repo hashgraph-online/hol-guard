@@ -62,8 +62,6 @@ def main() -> int:
             "test_guard_evaluation_preflight.py",
             "test_guard_evaluation_runner.py",
             "test_guard_evaluation_witness_ownership.py",
-            "test_opencode_hook_python.py",
-            "test_opencode_hook_python_isolation.py",
         ):
             shutil.copy2(repo / "tests" / name, test_root / name)
         configuration = root / "pytest.ini"

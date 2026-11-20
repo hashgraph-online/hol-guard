@@ -276,6 +276,42 @@ pub(super) fn replace_private_file(
     .map_err(surfaced_windows_io_error)
 }
 
+/// Publish `temporary` at `path` without ever replacing what is already
+/// there. `Ok(false)` reports that the destination existed, which the caller
+/// treats as a competing writer rather than a failure.
+pub(super) fn publish_new_private_file(
+    temporary: &Path,
+    path: &Path,
+    private_root: &Path,
+) -> Result<bool, String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "native_resident_windows_replace_parent_missing".to_owned())?;
+    if temporary
+        .parent()
+        .is_none_or(|candidate| !same_windows_parent(candidate, parent))
+    {
+        return Err("native_resident_windows_replace_parent_mismatch".to_owned());
+    }
+    let temporary_name = temporary
+        .file_name()
+        .ok_or_else(|| "native_resident_windows_replace_name_missing".to_owned())?;
+    let destination_name = path
+        .file_name()
+        .ok_or_else(|| "native_resident_windows_replace_name_missing".to_owned())?;
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    match with_existing_directory(parent, private_root, |binding| {
+        let source = binding.open_private_file(temporary_name)?;
+        verify_windows_handle(&source, owner.as_ref()).map_err(io::Error::other)?;
+        binding.publish_new_private_file(&source, destination_name)
+    }) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+        Err(error) => Err(surfaced_windows_io_error(error)),
+    }
+}
+
 pub(super) fn remove_private_file(path: &Path, private_root: &Path) -> Result<bool, String> {
     let parent = path
         .parent()

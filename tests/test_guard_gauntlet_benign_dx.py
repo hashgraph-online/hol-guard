@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -10,13 +14,20 @@ import pytest
 
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.clone_fixtures import (
+    HOME_HOOKS_CASE,
+    HOME_HOOKS_NOTES,
     LONG_LIVED_BRANCH,
     LONG_LIVED_CLONE_CASE,
     LONG_LIVED_WORKTREE_CASE,
     long_lived_clone_checks,
     long_lived_clone_config,
 )
-from ci.gauntlet.command_outputs import command_outputs_match
+from ci.gauntlet.command_outputs import (
+    BUN_ENTRY_CASE,
+    STATUS_TAIL_BUILD_CASE,
+    TOKEN_SHELL_CASES,
+    command_outputs_match,
+)
 from ci.gauntlet.fast_forward_fixtures import (
     FAST_FORWARD_CASE,
     FAST_FORWARD_HOOK_CASE,
@@ -25,6 +36,8 @@ from ci.gauntlet.fast_forward_fixtures import (
 )
 from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
+    BUN_TEST_FILE_CASE,
+    BUN_TEST_SCRIPT_MARKER,
     INSTEAD_OF_CASE,
     LARGE_GITCONFIG_CASE,
     LARGE_GITCONFIG_MIN_BYTES,
@@ -37,9 +50,15 @@ from ci.gauntlet.fixtures import (
     gitconfig_variant,
 )
 from ci.gauntlet.host_process import realistic_environment
+from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
-from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER
+from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
 from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
+from ci.gauntlet.workspace_runner_fixtures import (
+    HOME_BUN_ENTRY_CASE,
+    WORKSPACE_QUIET_PACKAGE_TEST_CASE,
+    runner_marker,
+)
 
 NEW_IDS = {
     ALIAS_ESCAPES_CASE,
@@ -129,15 +148,35 @@ def test_parent_directory_scenario_starts_in_a_plain_parent_of_a_repository(tmp_
     assert _shell(fixture, commands[1].replace("{{home}}", str(fixture.home))).stdout.strip()
 
 
+def test_the_quiet_package_test_case_installs_the_entry_its_command_names(tmp_path: Path) -> None:
+    """`npm test` runs the manifest's `test` script, which the shared install does not declare.
+
+    The shared workspace install names its suite `test:unit`, so a case that asks for
+    `npm test` against it measures a missing script rather than the quiet spelling.
+    """
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=WORKSPACE_QUIET_PACKAGE_TEST_CASE)
+    manifest = json.loads((fixture.workspace / "package.json").read_text(encoding="utf-8"))
+    assert manifest["scripts"]["test"] == "jest --ci"
+    launcher = fixture.workspace / "node_modules/.bin/jest"
+    assert launcher.is_symlink() and launcher.resolve().is_file()
+    marker = runner_marker(WORKSPACE_QUIET_PACKAGE_TEST_CASE)
+    assert marker in (fixture.workspace / "node_modules/jest-cli/bin/jest.js").read_text(encoding="utf-8")
+    # The case's own line, so it cannot pass for the plain runner case's reason.
+    assert marker != runner_marker("omp-native-workspace-npx-jest")
+    assert commands_for(WORKSPACE_QUIET_PACKAGE_TEST_CASE) == ("npm test --silent",)
+
+
 REALISM_IDS = {
     "omp-native-glob-recursive-shell-scripts",
     "omp-native-read-credential-placeholder-docs",
     "omp-native-shell-read-credential-placeholder-docs",
     "omp-native-shell-linked-modules-build",
+    "omp-native-shell-linked-modules-bun-entry",
     "omp-native-shell-doctl-reads",
     "omp-native-shell-docker-imagetools-inspect",
     "omp-native-read-token-handling-sources",
     "omp-native-shell-cat-token-handling-sources",
+    "omp-native-shell-cat-token-sources-with-stderr",
 }
 
 
@@ -185,12 +224,70 @@ def test_worktree_borrows_gitignored_modules_from_the_main_checkout(tmp_path: Pa
 
 def test_linked_modules_build_and_doctl_reads_run_on_the_host(tmp_path: Path) -> None:
     fixture = create_fixture(tmp_path / "fx", realistic=True)
-    build = _shell(fixture, commands_for("omp-native-shell-linked-modules-build")[0])
-    assert build.returncode == 0 and "built in" in build.stdout, build.stderr
+    command = commands_for("omp-native-shell-linked-modules-build")[0]
+    build = _shell(fixture, command)
+    assert build.returncode == 0 and VITE_BUILD_MARKER in build.stdout, build.stderr
+    # The marker is the finished build's own line, not a sign the entry ran:
+    # the same entry without `build` prints no build at all.
+    unbuilt = _shell(fixture, command.replace(" build ", " ", 1))
+    assert VITE_BUILD_MARKER not in unbuilt.stdout, unbuilt.stdout
     for command in commands_for("omp-native-shell-doctl-reads"):
         result = _shell(fixture, command)
         assert result.returncode == 0 and result.stdout.strip(), (command, result.stderr)
     assert _shell(fixture, "doctl auth token").returncode != 0
+
+
+def test_the_linked_install_carries_the_node_entry_bun_is_handed(tmp_path: Path) -> None:
+    """`bun node_modules/vite/bin/vite.js build` names the package's own Node entry.
+
+    Guard runs that spelling on the project's Node image, so the installed
+    fixture has to carry the entry on every platform rather than only where
+    Windows needs it.
+    """
+    fixture = create_fixture(tmp_path / "fx", realistic=True)
+    entry = fixture.workspace / DASHBOARD / "node_modules/vite/bin/vite.js"
+    assert entry.is_file()
+    command = commands_for("omp-native-shell-linked-modules-bun-entry")[0]
+    assert "node_modules/vite/bin/vite.js" in command
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is not installed on this host")
+    on_node = command.replace("bun ", f"{shlex.quote(node)} ", 1)
+    build = _shell(fixture, on_node)
+    assert build.returncode == 0 and VITE_BUILD_MARKER in build.stdout, build.stderr
+    unbuilt = _shell(fixture, on_node.replace(" build ", " ", 1))
+    assert VITE_BUILD_MARKER not in unbuilt.stdout, unbuilt.stdout
+
+
+def test_home_spelled_bun_sits_on_the_session_path_its_installer_edits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard grants a launcher's directory as an executable root from the session PATH.
+
+    Bun's installer adds ``~/.bun/bin`` to the login shell's PATH, so the agent
+    session for the home-spelled case carries the fixture's own Bun there. A
+    Guard package shim ahead of the host's Bun is a launcher script, not Bun, so
+    the fixture copies the binary behind it.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    host_bun = shutil.which(
+        "bun", path=os.pathsep.join(entry for entry in entries if not entry.endswith("package-shims/bin"))
+    )
+    if host_bun is None:
+        pytest.skip("Bun is not installed on this host")
+    shim_bin = tmp_path / "guard-home/package-shims/bin"
+    shim_bin.mkdir(parents=True)
+    (shim_bin / "bun").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (shim_bin / "bun").chmod(0o755)
+    monkeypatch.setenv("PATH", str(shim_bin) + os.pathsep + os.environ.get("PATH", ""))
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=HOME_BUN_ENTRY_CASE)
+    planted = fixture.home / ".bun/bin/bun"
+    assert planted.read_bytes() == Path(os.path.realpath(host_bun)).read_bytes()
+    environment = realistic_environment(
+        {"HOME": str(fixture.home), "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}, fixture.home
+    )
+    assert environment["PATH"].split(os.pathsep)[0] == str(planted.parent)
+    assert shutil.which("bun", path=environment["PATH"]) == str(planted)
 
 
 def test_docker_stand_in_answers_only_the_registry_manifest_query(tmp_path: Path) -> None:
@@ -222,7 +319,7 @@ def test_token_handling_sources_are_tracked_and_hold_no_literal_secret(tmp_path:
         assert marker in (fixture.workspace / relative).read_text(encoding="utf-8")
         assert _git(fixture.workspace, fixture.home, "ls-files", relative).strip() == relative
     for scenario in load_catalog():
-        if scenario.id == "omp-native-shell-cat-token-handling-sources":
+        if scenario.id in TOKEN_SHELL_CASES:
             for command in scenario.commands:
                 assert _shell(fixture, command).returncode == 0, command
     for text in SOURCES.values():
@@ -255,6 +352,19 @@ def test_token_source_cases_need_every_file_and_its_own_text() -> None:
     assert command_outputs_match(shell, shells)
     assert not command_outputs_match(shell, shells[:2])
     assert not command_outputs_match(shell, [*shells[:2], _tool_call("bash", {"command": commands[2]}, "nothing\n")])
+
+
+def test_a_stderr_redirect_does_not_hide_the_source_a_command_read() -> None:
+    """The redirect is not the command's file operand, so the case still needs every source."""
+    scenario = {case.id: case for case in load_catalog()}["omp-native-shell-cat-token-sources-with-stderr"]
+    markers = dict(zip(SOURCES, (ROUTE_MARKER, WORKER_MARKER, HELPER_MARKER), strict=True))
+    calls = [
+        _tool_call("bash", {"command": command}, f"{marker}\n")
+        for command, marker in zip(scenario.commands, markers.values(), strict=True)
+    ]
+    assert all(">" in command["args"]["command"] for command in calls)  # type: ignore[index]
+    assert command_outputs_match(scenario, calls)
+    assert not command_outputs_match(scenario, calls[:2])
 
 
 def test_long_lived_clone_fixture_signs_by_default_and_tracks_many_branches(tmp_path: Path) -> None:
@@ -290,6 +400,20 @@ def test_long_lived_clone_worktree_fixture_adds_both_sibling_worktrees(tmp_path:
     assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_WORKTREE_CASE) == {"long-lived-worktrees-added": True}
 
 
+def test_home_hooks_clone_fixture_points_hooks_and_credentials_outside_the_work_tree(tmp_path: Path) -> None:
+    scenario = {s.id: s for s in load_catalog()}[HOME_HOOKS_CASE]
+    assert (scenario.expectation, scenario.oracle) == ("allow", "native-tools")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=HOME_HOOKS_CASE)
+    assert _git(fixture.workspace, fixture.home, "config", "--get", "core.hooksPath").strip() == "~/.app-hooks/empty"
+    assert (fixture.home / ".app-hooks/empty").is_dir()
+    helper = _git(fixture.workspace, fixture.home, "config", "--get-all", "credential.helper")
+    assert "!f() { echo" in helper and "$(gh auth token" in helper
+    assert long_lived_clone_checks(fixture.workspace, HOME_HOOKS_CASE) == {"home-hooks-notes-edited": False}
+    notes = fixture.workspace / HOME_HOOKS_NOTES
+    notes.write_text(notes.read_text(encoding="utf-8").replace("Draft", "Final"), encoding="utf-8")
+    assert long_lived_clone_checks(fixture.workspace, HOME_HOOKS_CASE) == {"home-hooks-notes-edited": True}
+
+
 @pytest.mark.parametrize("case", [FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE])
 def test_fast_forward_fixture_puts_origin_one_commit_ahead(tmp_path: Path, case: str) -> None:
     scenarios = {s.id: s for s in load_catalog()}
@@ -318,3 +442,84 @@ def test_fast_forward_fixture_puts_origin_one_commit_ahead(tmp_path: Path, case:
         )
         assert not _git(other.workspace, other.home, "remote").strip()
         assert not (other.home / ".config/git/hooks/post-merge").exists()
+
+
+def _bash(command: str, key: str) -> dict[str, object]:
+    return {
+        "id": key,
+        "name": "bash",
+        "args": {"command": command},
+        "result": {"content": [{"type": "text", "text": "{{workspace}}/app-portal/src/report.ts\n"}]},
+        "is_error": False,
+    }
+
+
+def test_the_parent_search_accepts_the_spelling_the_redactor_writes() -> None:
+    """That session's cwd is the parent directory, so evidence spells it `{{workspace}}`."""
+    scenario = next(item for item in load_catalog() if item.id == PARENT_WORKSPACE_CASE)
+    calls = [
+        _bash(command.replace("{{home}}/Code/org", "{{workspace}}"), f"call-{index}")
+        for index, command in enumerate(scenario.commands)
+    ]
+    assert native_tools_scope_error(scenario, calls, {}) is None
+    assert native_tools_scope_error(scenario, calls[:1], {}) == "the model skipped a listed shell command"
+    stray = [*calls, _bash("git -C {{workspace}}/app-portal status", "stray")]
+    assert native_tools_scope_error(scenario, stray, {}) == ("the model ran a shell command the scenario did not list")
+
+
+def test_the_bun_entry_case_needs_the_build_line_tail_cannot_supply() -> None:
+    """`| tail -15` answers with its own successful status, whatever the build did.
+
+    The case keeps that shape, because it is the shape the report came from, so its
+    oracle asks for the line the finished build prints instead of the host status.
+    """
+    scenario = {case.id: case for case in load_catalog()}[BUN_ENTRY_CASE]
+    command = scenario.commands[0]
+    assert command.endswith("| tail -15")
+    finished = _tool_call("bash", {"command": command}, f"dist/index.html  0.40 kB\n{VITE_BUILD_MARKER}\n")
+    assert command_outputs_match(scenario, [finished])
+    for text in ("", 'error: Cannot find module "vite"\n', "vite v5.4.0 building for production...\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [finished, finished])
+
+
+def test_the_status_tail_build_case_needs_the_build_line_and_its_status() -> None:
+    """`| tail -15; echo "build=$?"` reports `tail`'s status, never the build's.
+
+    The case keeps that shape, because it is the shape an agent writes when it reads the
+    status of the step before it, so its oracle asks for the line the finished build
+    prints and for the status the run itself printed.
+    """
+    scenario = {case.id: case for case in load_catalog()}[STATUS_TAIL_BUILD_CASE]
+    command = scenario.commands[0]
+    assert command.endswith('| tail -15; echo "build=$?"')
+    finished = _tool_call("bash", {"command": command}, f"dist/index.html  0.40 kB\n{VITE_BUILD_MARKER}\nbuild=0\n")
+    assert command_outputs_match(scenario, [finished])
+    for text in (
+        "",
+        "build=0\n",
+        f"{VITE_BUILD_MARKER}\n",
+        f'error: Cannot find module "vite"\nbuild=0\n',
+        f"{VITE_BUILD_MARKER}\nbuild=0\nbuild=1\n",
+        f"{VITE_BUILD_MARKER}\nbuild=1\n",
+    ):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [finished, finished])
+
+
+def test_the_bun_test_file_case_needs_the_line_only_that_file_prints() -> None:
+    """A clean exit status cannot stand in for the spec Bun was asked to run.
+
+    `bun <file>` reports success for a file it loaded and for one whose assertions
+    never ran, so the oracle asks for the line the file itself prints.
+    """
+    scenario = {case.id: case for case in load_catalog()}[BUN_TEST_FILE_CASE]
+    command = scenario.commands[0]
+    ran = _tool_call("bash", {"command": command}, f"{BUN_TEST_SCRIPT_MARKER}\n")
+    assert command_outputs_match(scenario, [ran])
+    for text in ("", "bun test v1.1.0\n", "error: Module not found\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [ran, ran])

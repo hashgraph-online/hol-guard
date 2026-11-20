@@ -3787,7 +3787,7 @@
       "policy_action": "require-reapproval",
       "publisher": null,
       "queue_group_id": null,
-      "raw_command_text": "export OPENAI_API_KEY=sk-*****",
+      "raw_command_text": "export OPENAI_API_KEY=*****",
       "recommended_scope": "artifact",
       "request_id": "00000000000000000000000000000001",
       "review_command": "hol-guard approvals approve 00000000000000000000000000000001",

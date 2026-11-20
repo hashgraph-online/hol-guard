@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
@@ -5,7 +6,9 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
+import { closeOnEscape } from "./dialog-escape";
 import type { InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
+import { useFocusTrap } from "./use-focus-trap";
 
 type InterceptProofModalProps = {
   proof: InterceptProofSnapshot;
@@ -35,6 +38,8 @@ function ManagerProofRow({
 }
 
 export function InterceptProofModal({ proof, onClose }: InterceptProofModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, dialogRef);
   const toneClass = proof.interceptProved
     ? "border-brand-green/20 bg-brand-green/[0.04]"
     : "border-brand-attention/20 bg-brand-attention/[0.04]";
@@ -43,11 +48,14 @@ export function InterceptProofModal({ proof, onClose }: InterceptProofModalProps
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-label="Intercept proof details"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-end justify-center p-4 focus:outline-none sm:items-center"
       data-testid="intercept-proof-modal"
+      onKeyDown={closeOnEscape(onClose)}
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">

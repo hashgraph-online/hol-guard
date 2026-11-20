@@ -13,8 +13,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
     import tomli as tomllib
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.codex_config import dump_toml
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from tests.codex_toml_support import dump_toml
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT,
     enumerate_codex_hooks,
 )

@@ -79,6 +79,32 @@ fn a_value_taking_option_carrying_its_value_is_accepted() {
 }
 
 #[test]
+fn an_option_written_ahead_of_the_operation_path_is_refused() {
+    let operations = [operation("items-list", &["items", "list"], &[], &[])];
+    let rows = [row("items-list", &["--evil=x", "items", "list"])];
+    assert_eq!(
+        validate(&operations, &rows, &[]),
+        Ok(Some(ReviewedBindingRefusal {
+            index: 0,
+            code: SAFE_VARIANT_SCOPE
+        }))
+    );
+}
+
+#[test]
+fn a_vector_shorter_than_its_operation_path_is_refused() {
+    let operations = [operation("items-list", &["items", "list"], &[], &[])];
+    let rows = [row("items-list", &["items"])];
+    assert_eq!(
+        validate(&operations, &rows, &[]),
+        Ok(Some(ReviewedBindingRefusal {
+            index: 0,
+            code: SAFE_VARIANT_SCOPE
+        }))
+    );
+}
+
+#[test]
 fn a_root_operation_owns_no_operands() {
     let operations = [operation("git", &[], &["--version"], &[])];
     let rows = [row("git", &["status"])];
@@ -190,4 +216,65 @@ fn a_vector_that_differs_only_in_case_from_the_discovery_binds() {
         validate_reviewed_invocations("MyTool", &operations, &rows, &blocked_ids, None),
         Ok(None)
     );
+}
+
+fn validate_executable(
+    executable: &str,
+    operations: &[ReviewedOperation],
+    rows: &[ReviewedInvocation],
+) -> Result<Option<ReviewedBindingRefusal>, &'static str> {
+    validate_reviewed_invocations(executable, operations, rows, &BTreeSet::new(), None)
+}
+
+fn unsafe_variant() -> Result<Option<ReviewedBindingRefusal>, &'static str> {
+    Ok(Some(ReviewedBindingRefusal {
+        index: 0,
+        code: UNSAFE_VARIANT,
+    }))
+}
+
+#[test]
+fn an_executable_that_is_not_a_bounded_basename_is_refused() {
+    let operations = [operation("status", &["status"], &[], &[])];
+    let rows = [row("status", &["status"])];
+    assert_eq!(
+        validate_executable("../demo", &operations, &rows),
+        unsafe_variant()
+    );
+}
+
+#[test]
+fn a_vector_with_no_arguments_at_all_is_refused() {
+    let operations = [operation("root", &[], &[], &[])];
+    let rows = [row("root", &[])];
+    assert_eq!(validate(&operations, &rows, &[]), unsafe_variant());
+}
+
+#[test]
+fn an_argument_longer_than_the_token_bound_is_refused() {
+    let operations = [operation("status", &["status"], &[], &[])];
+    let long = "x".repeat(65);
+    let rows = [row("status", &["status", long.as_str()])];
+    assert_eq!(validate(&operations, &rows, &[]), unsafe_variant());
+}
+
+#[test]
+fn an_invocation_past_the_command_example_limit_is_refused() {
+    let operations = [operation("status", &["status"], &[], &[])];
+    let token = "long-value".repeat(5);
+    let rows = [row(
+        "status",
+        &["status", token.as_str(), token.as_str(), token.as_str()],
+    )];
+    assert_eq!(validate(&operations, &rows, &[]), unsafe_variant());
+}
+
+#[test]
+fn shell_syntax_is_refused_as_spelling_rather_than_scope() {
+    // The vector would also fail its scope check: `rm` names no operation this
+    // discovery carries. An author who wrote a second command needs to be told
+    // that, not told to file it under a different one.
+    let operations = [operation("status", &["status"], &[], &[])];
+    let rows = [row("status", &["status;", "rm", "-rf", "/tmp/x"])];
+    assert_eq!(validate(&operations, &rows, &[]), unsafe_variant());
 }

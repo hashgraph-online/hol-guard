@@ -4,7 +4,7 @@ No actor/provider credentials, custody, external dispatch or business acceptance
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -137,12 +137,10 @@ def test_installation_deadline_never_outlives_its_approval(tmp_path: Path):
     import time
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.approval_gate_state import iso_from_epoch
-
-    grant = SimpleNamespace(expires_at=iso_from_epoch(time.time() + 10))
+    grant = SimpleNamespace(expires_at=datetime.fromtimestamp(time.time() + 10, timezone.utc).isoformat())
     deadline = owner._mutation_deadline(None, grant)
     assert deadline <= time.monotonic() + 10
-    expired = SimpleNamespace(expires_at=iso_from_epoch(time.time() - 1))
+    expired = SimpleNamespace(expires_at=datetime.fromtimestamp(time.time() - 1, timezone.utc).isoformat())
     assert owner._mutation_deadline(None, expired) > time.monotonic() + 10
 
 

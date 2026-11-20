@@ -66,10 +66,12 @@ All three require the daemon token or a dashboard session.
 
 The bundled manifest is
 `src/codex_plugin_scanner/guard/schemas/harness_version_coverage_v1.json`
-([schema](schemas/harness-version-coverage.v1.schema.json)). The runtime
-validator in `codex_plugin_scanner.guard.harness_versions.manifest` is
-authoritative; it rejects the whole manifest on any defect, and the dashboard
-then shows **Coverage unavailable** for every app whose version Guard detected
+([schema](schemas/harness-version-coverage.v1.schema.json)). The native
+runtime validator (`rust/crates/guard-runtime/src/harness_version_manifest.rs`)
+is authoritative; CI and the promotion command apply the same rules through
+`scripts/ci/harness_version_manifest.py`. The runtime rejects the whole manifest
+on any defect, and the dashboard then shows **Coverage unavailable** for every
+app whose version Guard detected
 (apps without a detected version still show **Version unknown**).
 
 ### Eligibility

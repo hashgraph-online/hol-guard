@@ -21,7 +21,7 @@ runs:
       with:
         path: rust/target/release/hol-guard-runtime
         # Hash before dependency restoration; do not accept partial-key matches.
-        key: macos-hol-guard-runtime-v2-${{ runner.arch }}-${{ steps.runtime-platform.outputs.image }}-${{ steps.runtime-platform.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'src/codex_plugin_scanner/guard/contracts/**', '.cargo/**', '.github/actions/setup-rust/action.yml', '.github/actions/ci-job-macos-native-runtime/action.yml', 'scripts/ci/native_cache_environment.py', 'scripts/refresh_extension_artifacts.py') }}
+        key: macos-hol-guard-runtime-v2-${{ runner.arch }}-${{ steps.runtime-platform.outputs.image }}-${{ steps.runtime-platform.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'integrations/cigar/**', 'contributions/**', 'contracts/**', 'spec/**', 'src/codex_plugin_scanner/guard/contracts/**', '.cargo/**', '.github/actions/setup-rust/action.yml', '.github/actions/ci-job-macos-native-runtime/action.yml', 'scripts/ci/native_cache_environment.py', 'scripts/refresh_extension_artifacts.py') }}
     - uses: ./.github/actions/setup-rust
       if: steps.runtime-cache.outputs.cache-hit != 'true'
     - name: Install content-addressed compiler cache
@@ -36,6 +36,11 @@ runs:
       # and the macOS build then recompiles every crate (about 4 min). sccache
       # keys on content and main pushes write objects as they compile, so a
       # cancelled main run still warms it. PRs only read.
+      # The sccache server stops after 10 idle minutes and does not count a
+      # compile still running as activity. A change under a low crate such as
+      # guard-secure-fs rebuilds hol-guard-runtime, a single crate that takes
+      # longer than that in release mode, so the server quit mid-build and the
+      # crate started over without the cache. A timeout of 0 keeps it running.
       shell: bash
       env:
         SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
@@ -46,11 +51,12 @@ runs:
           echo "SCCACHE_GHA_VERSION=cross-platform-runtime"
           echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
           echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+          echo "SCCACHE_IDLE_TIMEOUT=0"
         } >> "$GITHUB_ENV"
     - name: Build the macOS native runtime
       if: steps.runtime-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+      run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime --timings
     - name: Save the macOS native runtime cache
       if: steps.runtime-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -63,5 +69,14 @@ runs:
         name: macos-native-runtime
         path: rust/target/release/hol-guard-runtime
         if-no-files-found: error
+        retention-days: 1
+        overwrite: true
+    - name: Retain native compilation timings
+      if: always() && steps.runtime-cache.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: native-compilation-timings-macos
+        path: rust/target/cargo-timings/cargo-timing.html
+        if-no-files-found: ignore
         retention-days: 1
         overwrite: true

@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import pytest
 from jsonschema import Draft202012Validator
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import native_harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import fleet_posture as fp
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -25,6 +26,19 @@ HASH_A = "sha256:" + "a" * 64
 
 def _validate(payload: dict[str, object]) -> None:
     Draft202012Validator(SCHEMA).validate(payload)
+
+
+_FAKES: dict[str, FakeAdapter] = {}
+
+
+@pytest.fixture(autouse=True)
+def _fake_harness_ops(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer each harness's diagnostics and setup contract from its ``FakeAdapter``."""
+    _FAKES.clear()
+    monkeypatch.setattr(
+        native_harness_ops, "diagnostics", lambda harness, context: _FAKES[harness].diagnostics(context)
+    )
+    monkeypatch.setattr(native_harness_ops, "setup_contract", lambda harness: _FAKES[harness].setup_contract())
 
 
 class FakeAdapter:
@@ -42,6 +56,7 @@ class FakeAdapter:
         self._config_paths = config_paths
         self._artifacts = artifacts
         self._blind_spots = blind_spots
+        _FAKES[harness] = self
 
     def diagnostics(self, _context: HarnessContext) -> dict[str, object]:
         return {
@@ -100,6 +115,7 @@ def _config(**overrides: object) -> SimpleNamespace:
         "harness_postures": {},
         "protection_posture": "protected",
         "mode": "enforce",
+        "security_level": "balanced",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -125,7 +141,7 @@ def _build(
 ) -> fp.FleetPostureBuild:
     config = kwargs.pop("config", _config())
     settings = fp.FleetPostureSettings(context=context, guard_config=config, now=NOW, **kwargs)  # type: ignore[arg-type]
-    return fp.build_fleet_posture_state(store, adapters, settings)
+    return fp.build_fleet_posture_state(store, [adapter.harness for adapter in adapters], settings)
 
 
 def _tools(built: fp.FleetPostureBuild) -> dict[str, dict[str, object]]:
@@ -295,7 +311,7 @@ def test_full_inventory_is_refreshed_after_a_week(
     first = _build(store, context, [FakeAdapter("claude-code")])
     fp.commit_fleet_posture_sent(store, first, now=_iso(NOW))
     later = fp.FleetPostureSettings(context=context, guard_config=_config(), now=NOW + timedelta(days=8))
-    assert fp.build_fleet_posture_state(store, [FakeAdapter("claude-code")], later).mode == "full"
+    assert fp.build_fleet_posture_state(store, [FakeAdapter("claude-code").harness], later).mode == "full"
 
 
 def test_opt_out_sends_digest_only_without_detail(
@@ -601,3 +617,14 @@ def test_hash_key_is_read_once_per_build(
     monkeypatch.setattr(store, "get_sync_payload", counting)
     _build(store, context, [])
     assert reads.count(fp.HASH_KEY_STATE_KEY) == 1
+
+
+def test_muse_inventory_row_is_reported_and_schema_valid(
+    store: GuardStore, context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_inventory(store, monkeypatch, [_row("muse-skill", harness="muse")])
+    _set_receipts(monkeypatch, store, {"muse": NOW})
+    built = _build(store, context, [FakeAdapter("muse")])
+    inventory = built.payload["inventory"]
+    assert {item["harness"] for item in inventory["items"]} == {"muse"}  # type: ignore[index]
+    _validate(built.payload)

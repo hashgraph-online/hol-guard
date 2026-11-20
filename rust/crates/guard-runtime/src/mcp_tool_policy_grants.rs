@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use crate::context_digest::python_strip;
 
 const SELECTOR_PREFIX: &str = "mcp-temporary-grant:v1";
-const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
+pub(crate) const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
 
 pub(crate) fn browser_intent(
     subject: &McpToolPolicySubjectV1,
@@ -64,13 +64,23 @@ pub(crate) fn exact_match_context(intent: Option<&BrowserAutomationIntentV1>) ->
     String::from_utf8(bytes).ok()
 }
 
-fn category_for(intent: &str) -> Option<&'static str> {
+pub(crate) fn category_for(intent: &str) -> Option<&'static str> {
     match intent {
         "browser.navigation" => Some("browser_navigation"),
         "browser.inspect" => Some("browser_inspection"),
         "browser.interact" => Some("browser_interaction"),
         _ => None,
     }
+}
+
+/// The grant rule every reader shares: the routine category is claimed, and
+/// nothing beyond it but the informational external-domain flag.
+pub(crate) fn risks_allow_grant<S: AsRef<str>>(category: &str, risks: &[S]) -> bool {
+    risks.iter().any(|risk| risk.as_ref() == category)
+        && risks.iter().all(|risk| {
+            let risk = risk.as_ref();
+            risk == category || risk == INFORMATIONAL_CATEGORY
+        })
 }
 
 /// Grant selectors, most specific first, for a routine browser capability.
@@ -94,19 +104,28 @@ pub(crate) fn grant_selectors(
     let (Some(identity), Some(category)) = (identity, category) else {
         return Vec::new();
     };
-    if named.is_empty()
-        || !risk_categories.iter().any(|item| item == category)
-        || risk_categories
-            .iter()
-            .any(|item| item != category && item != INFORMATIONAL_CATEGORY)
-    {
+    if named.is_empty() || !risks_allow_grant(category, risk_categories) {
         return Vec::new();
     }
+    vec![
+        exact_grant_selector(artifact_id, artifact_hash),
+        scope_grant_selector(identity, Some(category)),
+        scope_grant_selector(identity, None),
+    ]
+}
+
+/// `temporary_mcp_exact_grant_selector`: one exact call of one artifact.
+pub(crate) fn exact_grant_selector(artifact_id: &str, artifact_hash: &str) -> String {
     let digest =
         guard_policy_snapshot::digest_bytes(format!("{artifact_id}\0{artifact_hash}").as_bytes());
-    vec![
-        format!("{SELECTOR_PREFIX}:exact:{digest}"),
-        format!("{SELECTOR_PREFIX}:{identity}:category:{category}"),
-        format!("{SELECTOR_PREFIX}:{identity}:server"),
-    ]
+    format!("{SELECTOR_PREFIX}:exact:{digest}")
+}
+
+/// `temporary_mcp_grant_selector`: one category of a server, or the whole
+/// server when no category is named.
+pub(crate) fn scope_grant_selector(server_identity_hash: &str, category: Option<&str>) -> String {
+    match category {
+        Some(category) => format!("{SELECTOR_PREFIX}:{server_identity_hash}:category:{category}"),
+        None => format!("{SELECTOR_PREFIX}:{server_identity_hash}:server"),
+    }
 }

@@ -36,7 +36,11 @@ def source_compiler() -> Path:
 
 
 @contextmanager
-def compiled_inventory(compiler: Path | None = None, *, root: Path = ROOT):
+def compiled_inventory(compiler: Path | None = None, *, root: Path = ROOT, inventory=None):
+    if inventory is not None:
+        with inventory.open(compiler or source_compiler(), root=root) as compiled:
+            yield compiled
+        return
     with tempfile.TemporaryDirectory(prefix="hol-guard-directory-") as scratch:
         directory = Path(scratch).resolve(strict=True)
         sys.path.insert(0, _SCRIPTS)

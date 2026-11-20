@@ -1,0 +1,1081 @@
+{
+  "schema": "guard-local-cli-help-parse-parity.v1",
+  "cases": [
+    {
+      "name": "wrangler-click-style",
+      "text": "\nUsage: wrangler [OPTIONS] COMMAND [ARGS]...\n\nCommands:\n  docs [COMMAND..]  Open Wrangler docs\n  init [NAME]       Initialize a Worker\n  dev [SCRIPT]      Listen for local files\n  deploy [SCRIPT]   Deploy a Worker\n  pages             Commands for Pages\n  help              Show help\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[COMMAND..]  Open Wrangler docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[NAME]       Initialize a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "dev",
+          "name": "dev",
+          "usage": "dev",
+          "description": "[SCRIPT]      Listen for local files",
+          "parent_id": null
+        },
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "[SCRIPT]   Deploy a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "pages",
+          "name": "pages",
+          "usage": "pages",
+          "description": "Commands for Pages",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "argparse-choice-set",
+      "text": "\nusage: ship.py [-h] {deploy,status,rollback} ...\n\npositional arguments:\n  {deploy,status,rollback}\n    deploy              Ship the build\n    status              Show status\n    rollback            Undo the last ship\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "status",
+          "name": "status",
+          "usage": "status",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "rollback",
+          "name": "rollback",
+          "usage": "rollback",
+          "description": "",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "cobra-available-commands",
+      "text": "\nAvailable Commands:\n  auth        Authenticate\n  browse      Open the repository\n  pr          Manage pull requests\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "auth",
+          "name": "auth",
+          "usage": "auth",
+          "description": "Authenticate",
+          "parent_id": null
+        },
+        {
+          "command_id": "browse",
+          "name": "browse",
+          "usage": "browse",
+          "description": "Open the repository",
+          "parent_id": null
+        },
+        {
+          "command_id": "pr",
+          "name": "pr",
+          "usage": "pr",
+          "description": "Manage pull requests",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "yargs-groups",
+      "text": "\nwrangler\n\nCOMMANDS\n  wrangler docs [search..]        Open Wrangler's command documentation in your browser\n  wrangler init [name]            Create a new project\n\nACCOUNT\n  wrangler login                  Login to Cloudflare\n  wrangler whoami                 Retrieve your user information\n\nCOMPUTE & AI\n  wrangler d1                     Manage Workers D1 databases\n\nGLOBAL FLAGS\n  -c, --config  Path to Wrangler configuration file  [string]\n  -h, --help    Show help  [boolean]\n\nEXAMPLES\n  wrangler tail my-worker         Stream logs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[search..]        Open Wrangler's command documentation in your browser",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[name]            Create a new project",
+          "parent_id": null
+        },
+        {
+          "command_id": "login",
+          "name": "login",
+          "usage": "login",
+          "description": "Login to Cloudflare",
+          "parent_id": null
+        },
+        {
+          "command_id": "whoami",
+          "name": "whoami",
+          "usage": "whoami",
+          "description": "Retrieve your user information",
+          "parent_id": null
+        },
+        {
+          "command_id": "d1",
+          "name": "d1",
+          "usage": "d1",
+          "description": "Manage Workers D1 databases",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "yargs-nested-group",
+      "text": "\nwrangler d1\n\nCOMMANDS\n  wrangler d1 list                List D1 databases\n  wrangler d1 execute <database>  Execute a command or SQL file\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        "d1"
+      ],
+      "expected": [
+        {
+          "command_id": "list",
+          "name": "list",
+          "usage": "list",
+          "description": "List D1 databases",
+          "parent_id": null
+        },
+        {
+          "command_id": "execute",
+          "name": "execute",
+          "usage": "execute",
+          "description": "<database>  Execute a command or SQL file",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "yargs-colon-terminated-heading",
+      "text": "ACCOUNT:\n  wrangler login   Login\n  wrangler whoami  Show user\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler"
+      ],
+      "expected": [
+        {
+          "command_id": "login",
+          "name": "login",
+          "usage": "login",
+          "description": "Login",
+          "parent_id": null
+        },
+        {
+          "command_id": "whoami",
+          "name": "whoami",
+          "usage": "whoami",
+          "description": "Show user",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "prose-and-examples-are-not-commands",
+      "text": "\nkubectl controls the Kubernetes cluster manager.\n\nCommands:\n  get           Display one or many resources\n\nExamples:\n  # List all pods\n  kubectl get pods -o wide\n",
+      "parent_id": null,
+      "invocation": [
+        "kubectl"
+      ],
+      "expected": [
+        {
+          "command_id": "get",
+          "name": "get",
+          "usage": "get",
+          "description": "Display one or many resources",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "nested-invocation-over-the-same-text",
+      "text": "\nkubectl controls the Kubernetes cluster manager.\n\nCommands:\n  get           Display one or many resources\n\nExamples:\n  # List all pods\n  kubectl get pods -o wide\n",
+      "parent_id": null,
+      "invocation": [
+        "kubectl",
+        "get"
+      ],
+      "expected": [
+        {
+          "command_id": "get",
+          "name": "get",
+          "usage": "get",
+          "description": "Display one or many resources",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "parent-id-keys-every-command",
+      "text": "\nAvailable Commands:\n  auth        Authenticate\n  browse      Open the repository\n  pr          Manage pull requests\n",
+      "parent_id": "gh",
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "gh.auth",
+          "name": "auth",
+          "usage": "auth",
+          "description": "Authenticate",
+          "parent_id": "gh"
+        },
+        {
+          "command_id": "gh.browse",
+          "name": "browse",
+          "usage": "browse",
+          "description": "Open the repository",
+          "parent_id": "gh"
+        },
+        {
+          "command_id": "gh.pr",
+          "name": "pr",
+          "usage": "pr",
+          "description": "Manage pull requests",
+          "parent_id": "gh"
+        }
+      ]
+    },
+    {
+      "name": "parent-id-with-a-choice-set",
+      "text": "\nusage: ship.py [-h] {deploy,status,rollback} ...\n\npositional arguments:\n  {deploy,status,rollback}\n    deploy              Ship the build\n    status              Show status\n    rollback            Undo the last ship\n",
+      "parent_id": "ship",
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "ship.deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "",
+          "parent_id": "ship"
+        },
+        {
+          "command_id": "ship.status",
+          "name": "status",
+          "usage": "status",
+          "description": "",
+          "parent_id": "ship"
+        },
+        {
+          "command_id": "ship.rollback",
+          "name": "rollback",
+          "usage": "rollback",
+          "description": "",
+          "parent_id": "ship"
+        }
+      ]
+    },
+    {
+      "name": "blank-line-closes-the-section",
+      "text": "Commands:\n  build  Build it\n\n  stray  Not a command\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-trailing-header-closes-the-section",
+      "text": "Commands:\n  build  Build it\nOptions:\n  verbose  Say more\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "option-rows-are-not-commands",
+      "text": "Commands:\n  -v, --verbose  Say more\n  build  Build it\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "the-same-name-is-recorded-once",
+      "text": "Commands:\n  build  First\n  build  Second\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "First",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-description-is-cut-at-two-hundred-characters",
+      "text": "Commands:\n  build  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "help-and-completion-are-never-commands",
+      "text": "Commands:\n  help  Show help\n  completion  Emit a script\n  completions  Emit scripts\n  HELP  Shout\n  build  Build it\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-choice-set-without-a-section",
+      "text": "usage: tool [-h] {add,remove} ...\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "add",
+          "name": "add",
+          "usage": "add",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "remove",
+          "name": "remove",
+          "usage": "remove",
+          "description": "",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-choice-set-with-spaces",
+      "text": "Commands:\n  {add , remove ,  list}\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "add",
+          "name": "add",
+          "usage": "add",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "remove",
+          "name": "remove",
+          "usage": "remove",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "list",
+          "name": "list",
+          "usage": "list",
+          "description": "",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "no-commands-at-all",
+      "text": "Usage: tool [OPTIONS]\n\nOptions:\n  -h  Show help\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": []
+    },
+    {
+      "name": "python-line-boundaries-and-whitespace",
+      "text": "Commands:\u001d  build\u001cBuild it\u000b  ship  Ship it  sail  Sail it   swim  Swim it\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "Build",
+          "name": "Build",
+          "usage": "Build",
+          "description": "it",
+          "parent_id": null
+        },
+        {
+          "command_id": "ship",
+          "name": "ship",
+          "usage": "ship",
+          "description": "Ship it",
+          "parent_id": null
+        },
+        {
+          "command_id": "sail",
+          "name": "sail",
+          "usage": "sail",
+          "description": "Sail it",
+          "parent_id": null
+        },
+        {
+          "command_id": "swim",
+          "name": "swim",
+          "usage": "swim",
+          "description": "Swim it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-name-row-with-no-description",
+      "text": "Commands:\n  build\n  ship\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "ship",
+          "name": "ship",
+          "usage": "ship",
+          "description": "",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "an-unindented-row-under-a-section",
+      "text": "Commands:\nbuild  Build it\n  ship  Ship it\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        },
+        {
+          "command_id": "ship",
+          "name": "ship",
+          "usage": "ship",
+          "description": "Ship it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-yargs-row-whose-prefix-does-not-match",
+      "text": "COMMANDS\n  wrangler docs  Docs\n  npm run build  Not ours\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "Docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "npm",
+          "name": "npm",
+          "usage": "npm",
+          "description": "run build  Not ours",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-yargs-row-that-is-only-the-invocation",
+      "text": "COMMANDS\n  wrangler\n  wrangler docs  Docs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler"
+      ],
+      "expected": [
+        {
+          "command_id": "wrangler",
+          "name": "wrangler",
+          "usage": "wrangler",
+          "description": "",
+          "parent_id": null
+        },
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "Docs",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-name-longer-than-forty-one-characters",
+      "text": "Commands:\n  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  Too long\n  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  Just fits\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "name": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "usage": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "description": "Just fits",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-name-that-does-not-start-with-a-letter",
+      "text": "Commands:\n  9lives  Nope\n  _hidden  Nope\n  build  Build it\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-section-header-with-trailing-whitespace",
+      "text": "Available Commands  :\n  build  Build it\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "build",
+          "name": "build",
+          "usage": "build",
+          "description": "Build it",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "management-commands-heading",
+      "text": "Management Commands:\n  container  Manage containers\n  image      Manage images\n",
+      "parent_id": null,
+      "invocation": [],
+      "expected": [
+        {
+          "command_id": "container",
+          "name": "container",
+          "usage": "container",
+          "description": "Manage containers",
+          "parent_id": null
+        },
+        {
+          "command_id": "image",
+          "name": "image",
+          "usage": "image",
+          "description": "Manage images",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "a-non-command-group-closes-the-section",
+      "text": "COMMANDS\n  wrangler docs  Docs\n\nUSAGE\n  wrangler login  Login\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "Docs",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "an-empty-invocation-word-is-skipped",
+      "text": "COMMANDS\n  wrangler docs  Docs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        ""
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "Docs",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-yargs-root",
+      "text": "\nwrangler\n\nCOMMANDS\n  wrangler docs [search..]        Open Wrangler's command documentation in your browser\n  wrangler init [name]            Create a new project\n\nACCOUNT\n  wrangler login                  Login to Cloudflare\n  wrangler whoami                 Retrieve your user information\n\nCOMPUTE & AI\n  wrangler d1                     Manage Workers D1 databases\n\nGLOBAL FLAGS\n  -c, --config  Path to Wrangler configuration file  [string]\n  -h, --help    Show help  [boolean]\n\nEXAMPLES\n  wrangler tail my-worker         Stream logs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[search..]        Open Wrangler's command documentation in your browser",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[name]            Create a new project",
+          "parent_id": null
+        },
+        {
+          "command_id": "login",
+          "name": "login",
+          "usage": "login",
+          "description": "Login to Cloudflare",
+          "parent_id": null
+        },
+        {
+          "command_id": "whoami",
+          "name": "whoami",
+          "usage": "whoami",
+          "description": "Retrieve your user information",
+          "parent_id": null
+        },
+        {
+          "command_id": "d1",
+          "name": "d1",
+          "usage": "d1",
+          "description": "Manage Workers D1 databases",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-yargs-probes-docs",
+      "text": "\nwrangler\n\nCOMMANDS\n  wrangler docs [search..]        Open Wrangler's command documentation in your browser\n  wrangler init [name]            Create a new project\n\nACCOUNT\n  wrangler login                  Login to Cloudflare\n  wrangler whoami                 Retrieve your user information\n\nCOMPUTE & AI\n  wrangler d1                     Manage Workers D1 databases\n\nGLOBAL FLAGS\n  -c, --config  Path to Wrangler configuration file  [string]\n  -h, --help    Show help  [boolean]\n\nEXAMPLES\n  wrangler tail my-worker         Stream logs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        "docs"
+      ],
+      "expected": [
+        {
+          "command_id": "wrangler",
+          "name": "wrangler",
+          "usage": "wrangler",
+          "description": "init [name]            Create a new project",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-yargs-probes-init",
+      "text": "\nwrangler\n\nCOMMANDS\n  wrangler docs [search..]        Open Wrangler's command documentation in your browser\n  wrangler init [name]            Create a new project\n\nACCOUNT\n  wrangler login                  Login to Cloudflare\n  wrangler whoami                 Retrieve your user information\n\nCOMPUTE & AI\n  wrangler d1                     Manage Workers D1 databases\n\nGLOBAL FLAGS\n  -c, --config  Path to Wrangler configuration file  [string]\n  -h, --help    Show help  [boolean]\n\nEXAMPLES\n  wrangler tail my-worker         Stream logs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        "init"
+      ],
+      "expected": [
+        {
+          "command_id": "wrangler",
+          "name": "wrangler",
+          "usage": "wrangler",
+          "description": "docs [search..]        Open Wrangler's command documentation in your browser",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-yargs-probes-login",
+      "text": "\nwrangler\n\nCOMMANDS\n  wrangler docs [search..]        Open Wrangler's command documentation in your browser\n  wrangler init [name]            Create a new project\n\nACCOUNT\n  wrangler login                  Login to Cloudflare\n  wrangler whoami                 Retrieve your user information\n\nCOMPUTE & AI\n  wrangler d1                     Manage Workers D1 databases\n\nGLOBAL FLAGS\n  -c, --config  Path to Wrangler configuration file  [string]\n  -h, --help    Show help  [boolean]\n\nEXAMPLES\n  wrangler tail my-worker         Stream logs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        "login"
+      ],
+      "expected": [
+        {
+          "command_id": "wrangler",
+          "name": "wrangler",
+          "usage": "wrangler",
+          "description": "docs [search..]        Open Wrangler's command documentation in your browser",
+          "parent_id": null
+        },
+        {
+          "command_id": "Login",
+          "name": "Login",
+          "usage": "Login",
+          "description": "to Cloudflare",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-yargs-probes-whoami",
+      "text": "\nwrangler\n\nCOMMANDS\n  wrangler docs [search..]        Open Wrangler's command documentation in your browser\n  wrangler init [name]            Create a new project\n\nACCOUNT\n  wrangler login                  Login to Cloudflare\n  wrangler whoami                 Retrieve your user information\n\nCOMPUTE & AI\n  wrangler d1                     Manage Workers D1 databases\n\nGLOBAL FLAGS\n  -c, --config  Path to Wrangler configuration file  [string]\n  -h, --help    Show help  [boolean]\n\nEXAMPLES\n  wrangler tail my-worker         Stream logs\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        "whoami"
+      ],
+      "expected": [
+        {
+          "command_id": "wrangler",
+          "name": "wrangler",
+          "usage": "wrangler",
+          "description": "docs [search..]        Open Wrangler's command documentation in your browser",
+          "parent_id": null
+        },
+        {
+          "command_id": "Retrieve",
+          "name": "Retrieve",
+          "usage": "Retrieve",
+          "description": "your user information",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-yargs-probes-d1",
+      "text": "\nwrangler d1\n\nCOMMANDS\n  wrangler d1 list                List D1 databases\n  wrangler d1 execute <database>  Execute a command or SQL file\n",
+      "parent_id": null,
+      "invocation": [
+        "wrangler",
+        "d1"
+      ],
+      "expected": [
+        {
+          "command_id": "list",
+          "name": "list",
+          "usage": "list",
+          "description": "List D1 databases",
+          "parent_id": null
+        },
+        {
+          "command_id": "execute",
+          "name": "execute",
+          "usage": "execute",
+          "description": "<database>  Execute a command or SQL file",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-click-root-under-another-program",
+      "text": "\nUsage: wrangler [OPTIONS] COMMAND [ARGS]...\n\nCommands:\n  docs [COMMAND..]  Open Wrangler docs\n  init [NAME]       Initialize a Worker\n  dev [SCRIPT]      Listen for local files\n  deploy [SCRIPT]   Deploy a Worker\n  pages             Commands for Pages\n  help              Show help\n",
+      "parent_id": null,
+      "invocation": [
+        "ship"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[COMMAND..]  Open Wrangler docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[NAME]       Initialize a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "dev",
+          "name": "dev",
+          "usage": "dev",
+          "description": "[SCRIPT]      Listen for local files",
+          "parent_id": null
+        },
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "[SCRIPT]   Deploy a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "pages",
+          "name": "pages",
+          "usage": "pages",
+          "description": "Commands for Pages",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-click-probes-docs",
+      "text": "\nUsage: wrangler [OPTIONS] COMMAND [ARGS]...\n\nCommands:\n  docs [COMMAND..]  Open Wrangler docs\n  init [NAME]       Initialize a Worker\n  dev [SCRIPT]      Listen for local files\n  deploy [SCRIPT]   Deploy a Worker\n  pages             Commands for Pages\n  help              Show help\n",
+      "parent_id": null,
+      "invocation": [
+        "ship",
+        "docs"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[COMMAND..]  Open Wrangler docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[NAME]       Initialize a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "dev",
+          "name": "dev",
+          "usage": "dev",
+          "description": "[SCRIPT]      Listen for local files",
+          "parent_id": null
+        },
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "[SCRIPT]   Deploy a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "pages",
+          "name": "pages",
+          "usage": "pages",
+          "description": "Commands for Pages",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-click-probes-init",
+      "text": "\nUsage: wrangler [OPTIONS] COMMAND [ARGS]...\n\nCommands:\n  docs [COMMAND..]  Open Wrangler docs\n  init [NAME]       Initialize a Worker\n  dev [SCRIPT]      Listen for local files\n  deploy [SCRIPT]   Deploy a Worker\n  pages             Commands for Pages\n  help              Show help\n",
+      "parent_id": null,
+      "invocation": [
+        "ship",
+        "init"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[COMMAND..]  Open Wrangler docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[NAME]       Initialize a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "dev",
+          "name": "dev",
+          "usage": "dev",
+          "description": "[SCRIPT]      Listen for local files",
+          "parent_id": null
+        },
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "[SCRIPT]   Deploy a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "pages",
+          "name": "pages",
+          "usage": "pages",
+          "description": "Commands for Pages",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-click-probes-dev",
+      "text": "\nUsage: wrangler [OPTIONS] COMMAND [ARGS]...\n\nCommands:\n  docs [COMMAND..]  Open Wrangler docs\n  init [NAME]       Initialize a Worker\n  dev [SCRIPT]      Listen for local files\n  deploy [SCRIPT]   Deploy a Worker\n  pages             Commands for Pages\n  help              Show help\n",
+      "parent_id": null,
+      "invocation": [
+        "ship",
+        "dev"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[COMMAND..]  Open Wrangler docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[NAME]       Initialize a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "dev",
+          "name": "dev",
+          "usage": "dev",
+          "description": "[SCRIPT]      Listen for local files",
+          "parent_id": null
+        },
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "[SCRIPT]   Deploy a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "pages",
+          "name": "pages",
+          "usage": "pages",
+          "description": "Commands for Pages",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-click-probes-deploy",
+      "text": "\nUsage: wrangler [OPTIONS] COMMAND [ARGS]...\n\nCommands:\n  docs [COMMAND..]  Open Wrangler docs\n  init [NAME]       Initialize a Worker\n  dev [SCRIPT]      Listen for local files\n  deploy [SCRIPT]   Deploy a Worker\n  pages             Commands for Pages\n  help              Show help\n",
+      "parent_id": null,
+      "invocation": [
+        "ship",
+        "deploy"
+      ],
+      "expected": [
+        {
+          "command_id": "docs",
+          "name": "docs",
+          "usage": "docs",
+          "description": "[COMMAND..]  Open Wrangler docs",
+          "parent_id": null
+        },
+        {
+          "command_id": "init",
+          "name": "init",
+          "usage": "init",
+          "description": "[NAME]       Initialize a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "dev",
+          "name": "dev",
+          "usage": "dev",
+          "description": "[SCRIPT]      Listen for local files",
+          "parent_id": null
+        },
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "[SCRIPT]   Deploy a Worker",
+          "parent_id": null
+        },
+        {
+          "command_id": "pages",
+          "name": "pages",
+          "usage": "pages",
+          "description": "Commands for Pages",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "name": "discovery-click-probes-pages",
+      "text": "Commands:\n  deploy  Deploy a page\n",
+      "parent_id": null,
+      "invocation": [
+        "ship",
+        "pages"
+      ],
+      "expected": [
+        {
+          "command_id": "deploy",
+          "name": "deploy",
+          "usage": "deploy",
+          "description": "Deploy a page",
+          "parent_id": null
+        }
+      ]
+    }
+  ]
+}

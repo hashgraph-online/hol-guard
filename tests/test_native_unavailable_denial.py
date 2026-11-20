@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -27,7 +27,7 @@ def test_native_worker_unavailable_preserves_explicit_protection_mode(
     # The stub bypasses the transport that normally replaces each request's
     # failure code. Do not inherit a previous request's control-binding error.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker_native.native_resident_client_failure_code",
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native.native_resident_client_failure_code",
         lambda: "native_client_process_failed",
     )
     observed_modes: list[bool] = []
@@ -36,7 +36,7 @@ def test_native_worker_unavailable_preserves_explicit_protection_mode(
         observed_modes.append(kwargs["observe_mode"])
         return None
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", unavailable_native)
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", unavailable_native)
     worker = HookWorker(store=GuardStore(guard_home))
     monkeypatch.setattr(
         worker,
@@ -75,7 +75,9 @@ def test_missing_mode_authority_does_not_infer_watch_from_config(
     config = guard_home / "config.toml"
     config_bytes = b'mode = "observe"\nprotection_posture = "watch"\n'
     config.write_bytes(config_bytes)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", lambda **_kwargs: None
+    )
     worker = HookWorker(store=GuardStore(guard_home))
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: None)
     try:

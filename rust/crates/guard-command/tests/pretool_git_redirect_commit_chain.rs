@@ -8,19 +8,15 @@ const WRITE: &str = "native_exact_safe_git_local_write";
 fn a_workspace_file_written_then_committed_in_a_linked_worktree_is_quiet() {
     let session = session("redirect-commit");
     std::fs::create_dir_all(session.worktree.join("docs")).unwrap();
-    let at_tree = |command: &str| session.evaluate_at(command, &session.worktree);
-    let allowed = |command: &str| {
-        let result = at_tree(command);
-        (result.minimum_action == "allow" && result.reason_code == WRITE)
-            .then_some(())
-            .ok_or(format!("{command}: {}", result.reason_code))
-    };
+    // The workspace sandbox may run the chain in the worktree instead of
+    // Git's write proof allowing it; either way it raises no review.
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
     for command in [
         "echo x > notes.txt && git add -A && git commit -m init",
         "printf 'draft notes' > docs/notes.md && git add docs/notes.md && git commit -m 'docs: add notes'",
         "echo x >> notes.txt && git add notes.txt && git commit -q -m update",
     ] {
-        allowed(command).unwrap();
+        quiet(command).unwrap();
     }
 }
 
@@ -76,10 +72,13 @@ fn writes_into_the_hooks_directory_or_an_included_file_stay_reviewed() {
         let result = at_tree(command);
         (result.minimum_action == "allow").then_some(result.reason_code)
     };
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
     let chain = |target: &str| format!("echo x > {target} && git add -A && git commit -m init");
     std::fs::create_dir_all(session.worktree.join("hooks")).unwrap();
     session.config(&["core.hooksPath", "hooks"]);
-    assert_eq!(allow_reason(&chain("notes.txt")).as_deref(), Some(WRITE));
+    // Whether Git's proof allows the chain or the sandbox runs it in the
+    // worktree, a write outside the hooks directory raises no review.
+    quiet(&chain("notes.txt")).unwrap();
     for target in [
         "hooks/pre-commit",
         "Hooks/pre-commit",
@@ -98,5 +97,5 @@ fn writes_into_the_hooks_directory_or_an_included_file_stay_reviewed() {
     assert_eq!(allow_reason(&chain("extra.inc")), None);
     assert_eq!(allow_reason(&chain("notes.txt")), None);
     session.config(&["--unset-all", "include.path"]);
-    assert_eq!(allow_reason(&chain("notes.txt")).as_deref(), Some(WRITE));
+    quiet(&chain("notes.txt")).unwrap();
 }

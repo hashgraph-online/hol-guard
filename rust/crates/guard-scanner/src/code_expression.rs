@@ -48,6 +48,11 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
     {
         return false;
     }
+    if separator == b':'
+        && crate::code_shapes::fetch_credentials_mode(&matched[..index], tail, rest_of_line)
+    {
+        return true;
+    }
     let mut body = tail.trim_start();
     let mut mode = Mode::Assign;
     if body.starts_with('=') {
@@ -69,11 +74,28 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
     let mut expression = String::with_capacity(body.len() + rest_of_line.len());
     expression.push_str(body.trim_start());
     expression.push_str(rest_of_line);
+    if reads_as_code(mode, &expression) {
+        return true;
+    }
+    // `self.password = (unquote(ud['password'])` opens a group that a later
+    // line closes, as Python wraps a long conditional value. Such a value is
+    // read again without the open bracket; a literal on a later line is
+    // matched there.
+    mode == Mode::Assign
+        && expression.starts_with('(')
+        // Only the outer bracket may be open: `(decode(` still has a call
+        // whose arguments, perhaps a literal, are on a later line.
+        && expression.matches('(').count() == expression.matches(')').count() + 1
+        && reads_as_code(mode, &expression[1..])
+}
+
+/// Whether `expression`, the value after the separator, is code in `mode`.
+fn reads_as_code(mode: Mode, expression: &str) -> bool {
     // The cursor stops at its limit, so a longer expression could hide a literal.
     if expression.len() > MAX_EXPRESSION_BYTES {
         return false;
     }
-    let mut cursor = Cursor::new(&expression);
+    let mut cursor = Cursor::new(expression);
     match mode {
         Mode::Arrow => {
             cursor.skip_blanks();
@@ -144,6 +166,12 @@ impl<'a> Cursor<'a> {
                 structural = structural || fallback_proves;
             } else if self.keyword(b"as") || self.keyword(b"satisfies") {
                 if self.scan(None, 1) == Scan::Fail {
+                    return false;
+                }
+                structural = true;
+                break;
+            } else if self.equality_operator() {
+                if !self.guarded_choice() {
                     return false;
                 }
                 structural = true;
@@ -260,12 +288,20 @@ impl<'a> Cursor<'a> {
         self.scan(None, 1) != Scan::Fail
     }
 
-    /// A comparison such as `token === expected`: the other side must be code,
-    /// never a literal.
+    /// A comparison such as `token === expected`: the other side is code, or
+    /// the kind of short plain literal [`equality_literals_ok`] already reads
+    /// as a mode or a label.
     fn comparison(&mut self) -> bool {
         self.skip_blanks();
-        if self.done() || matches!(self.bytes[self.at], b'"' | b'\'' | b'`') {
+        if self.done() {
             return false;
+        }
+        if matches!(self.bytes[self.at], b'"' | b'\'' | b'`') {
+            // The credential rule reads the comparison's own `==` as its
+            // separator, so a literal on the right arrives here at the front
+            // of the expression with no operator left for
+            // [`equality_literals_ok`] to find. Judge it the same way.
+            return every_literal_is_a_label(&self.bytes[self.at..]);
         }
         let start = self.at;
         self.operand(false).is_some()
@@ -275,7 +311,7 @@ impl<'a> Cursor<'a> {
 }
 
 /// A bare run of at least sixteen lower-case letters, as in a passphrase.
-fn spelled_word(word: &[u8]) -> bool {
+pub(crate) fn spelled_word(word: &[u8]) -> bool {
     word.len() >= 16 && word.iter().all(u8::is_ascii_lowercase)
 }
 
@@ -308,7 +344,92 @@ fn equality_literals_ok(expression: &[u8]) -> bool {
     true
 }
 
-fn label(literal: &[u8]) -> bool {
+/// Whether every quoted literal in `text` reads as a mode or a label, as in
+/// `if token == "--" {` or `if (secret === 'none' || mode !== 'prod')`. An
+/// unclosed literal hides however much the cursor never read, so it never
+/// qualifies, and literals joined by `+` spell out one value between them, so
+/// the pieces are read as that value rather than as labels. A value this rejects is still matched on its own line wherever it
+/// is spelled out, so the check loses no credential by reading only labels here.
+fn every_literal_is_a_label(text: &[u8]) -> bool {
+    let mut at = 0usize;
+    while at < text.len() {
+        let quote = text[at];
+        if !matches!(quote, b'"' | b'\'' | b'`') {
+            // A line comment is prose to the end of the line. An apostrophe in
+            // `don't` is not an unclosed literal, so reading on would reject a
+            // line whose code holds nothing but labels.
+            if text[at..].starts_with(b"//") {
+                return true;
+            }
+            // A block comment is prose too, but code can follow it, so the
+            // scan resumes after it closes.
+            if text[at..].starts_with(b"/*") {
+                let Some(end) = text[at + 2..].windows(2).position(|pair| pair == b"*/") else {
+                    return true;
+                };
+                at += end + 4;
+                continue;
+            }
+            // Pieces joined by `+` spell out one value between them, so none
+            // of them is a label however short each piece is on its own. A
+            // `+` beside anything else is ordinary arithmetic. A comment
+            // between a piece and the `+` is prose, so it is read past: the
+            // nearest code on each side is what the `+` joins.
+            if quote == b'+'
+                && (matches!(code_before(&text[..at]).last(), Some(b'"' | b'\'' | b'`'))
+                    || matches!(
+                        code_after(&text[at + 1..]).first(),
+                        Some(b'"' | b'\'' | b'`')
+                    ))
+            {
+                return false;
+            }
+            at += 1;
+            continue;
+        }
+        let Some(body) = leading_literal(&text[at..]) else {
+            return false;
+        };
+        if text.get(at + body.len() + 1) != Some(&quote) || !label(body) {
+            return false;
+        }
+        at += body.len() + 2;
+    }
+    true
+}
+
+/// `text` with any block comments and spacing at its end removed, so a comment
+/// cannot hide the code that ends it. An unopened `*/` ends the search: there
+/// is no code before it to read.
+fn code_before(mut text: &[u8]) -> &[u8] {
+    loop {
+        text = text.trim_ascii_end();
+        let Some(body) = text.strip_suffix(b"*/") else {
+            return text;
+        };
+        let Some(start) = body.windows(2).rposition(|pair| pair == b"/*") else {
+            return &[];
+        };
+        text = &body[..start];
+    }
+}
+
+/// `text` with any block comments and spacing at its start removed. An
+/// unclosed comment ends the search: it hides the rest of the line.
+fn code_after(mut text: &[u8]) -> &[u8] {
+    loop {
+        text = text.trim_ascii_start();
+        if !text.starts_with(b"/*") {
+            return text;
+        }
+        let Some(end) = text[2..].windows(2).position(|pair| pair == b"*/") else {
+            return &[];
+        };
+        text = &text[end + 4..];
+    }
+}
+
+pub(crate) fn label(literal: &[u8]) -> bool {
     literal.len() <= 12
         && literal
             .iter()
@@ -316,7 +437,7 @@ fn label(literal: &[u8]) -> bool {
 }
 
 /// The body of a quoted literal that opens `text`, or the rest when unclosed.
-fn leading_literal(text: &[u8]) -> Option<&[u8]> {
+pub(crate) fn leading_literal(text: &[u8]) -> Option<&[u8]> {
     let quote = *text.first()?;
     if !matches!(quote, b'"' | b'\'' | b'`') {
         return None;
@@ -338,7 +459,7 @@ fn trailing_literal(text: &[u8]) -> Option<&[u8]> {
 }
 
 /// `name:` or `name?:` at the start of a parameter list.
-fn starts_typed_parameter(inner: &[u8]) -> bool {
+pub(crate) fn starts_typed_parameter(inner: &[u8]) -> bool {
     let inner = inner.strip_prefix(b"...").unwrap_or(inner);
     let name = inner
         .iter()

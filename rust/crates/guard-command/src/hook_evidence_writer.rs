@@ -1,4 +1,4 @@
-//! `daemon/runtime_hook_evidence_writer.py` — background evidence writer
+//! the retired Python `runtime_hook_evidence_writer.py` — background evidence writer
 //! (RTM-024): a bounded queue plus append-durable JSONL journal keeping
 //! best-effort command-activity / native-decision-receipt / MCP-discovery
 //! writes outside the security-decision workers.
@@ -103,6 +103,14 @@ pub trait EvidenceStoreApi {
         actions: &[ComposioActionSchema],
         seen_at: &str,
         proposals: &[ComposioWorkflowProposal],
+    ) -> Result<(), io::Error>;
+    /// `store.add_event(event_name, payload, now)` — `Err` = persistence
+    /// failure.
+    fn record_guard_event(
+        &self,
+        event_name: &str,
+        payload: &Map<String, Value>,
+        occurred_at: &str,
     ) -> Result<(), io::Error>;
     /// `store.record_native_decision_receipt(receipt)` — `Ok(false)` =
     /// deduped/rejected result; `Err` = persistence failure.
@@ -219,6 +227,18 @@ pub trait EvidenceJournalApi {
     /// journal rather than leaving a record whose preview was never stored.
     /// `Err` = `OSError`.
     fn append_journal(&self, path: &Path, record: &EvidenceRecord) -> Result<(), io::Error>;
+    /// Preserve each record's append result; native journals may sync one
+    /// bounded batch atomically instead of syncing each record separately.
+    fn append_journal_batch(
+        &self,
+        path: &Path,
+        records: &[&EvidenceRecord],
+    ) -> Vec<Result<(), io::Error>> {
+        records
+            .iter()
+            .map(|record| self.append_journal(path, record))
+            .collect()
+    }
     /// `rewrite_journal(path, *, remove_record_id=, max_bytes=)` — returns
     /// the count of dropped invalid records; `Err` = `OSError`.
     fn rewrite_journal(
@@ -227,6 +247,19 @@ pub trait EvidenceJournalApi {
         remove_record_id: &str,
         max_bytes: usize,
     ) -> Result<u64, io::Error>;
+    /// Remove only records whose store outcome has settled. A failed rewrite
+    /// leaves replay/deduplication responsible for already persisted records.
+    fn rewrite_journal_batch(
+        &self,
+        path: &Path,
+        remove_record_ids: &[String],
+        max_bytes: usize,
+    ) -> Result<u64, io::Error> {
+        remove_record_ids.iter().try_fold(0, |invalid, id| {
+            self.rewrite_journal(path, id, max_bytes)
+                .map(|count| invalid + count)
+        })
+    }
     /// `recover_journal_records(path, *, max_bytes=)` — raw JSON objects plus
     /// invalid-line count; `Err` = `OSError` (caller handles `NotFound`).
     fn recover_journal_records(
@@ -760,6 +793,7 @@ pub enum EvidenceRecord {
     CommandActivity(CommandActivityRecord),
     NativeDecisionReceipt(NativeDecisionReceiptRecord),
     McpDiscovery(McpDiscoveryRecord),
+    GuardEvent(GuardEventRecord),
 }
 
 impl EvidenceRecord {
@@ -769,6 +803,7 @@ impl EvidenceRecord {
             Self::CommandActivity(record) => record.record_id.clone(),
             Self::NativeDecisionReceipt(record) => record.record_id(),
             Self::McpDiscovery(record) => record.record_id.clone(),
+            Self::GuardEvent(record) => record.record_id.clone(),
         }
     }
 
@@ -778,6 +813,7 @@ impl EvidenceRecord {
             Self::CommandActivity(record) => record.payload_bytes,
             Self::NativeDecisionReceipt(record) => record.payload_bytes,
             Self::McpDiscovery(record) => record.payload_bytes,
+            Self::GuardEvent(record) => record.payload_bytes,
         }
     }
 
@@ -787,6 +823,7 @@ impl EvidenceRecord {
             Self::CommandActivity(record) => record.serialized(),
             Self::NativeDecisionReceipt(record) => record.serialized(),
             Self::McpDiscovery(record) => record.serialized(),
+            Self::GuardEvent(record) => record.serialized(),
         }
     }
 
@@ -809,6 +846,9 @@ impl EvidenceRecord {
             }
             Some(EVIDENCE_SCHEMA) => {
                 _command_activity_record_from_json(value).map(Self::CommandActivity)
+            }
+            Some(guard_event::GUARD_EVENT_SCHEMA) => {
+                GuardEventRecord::from_json(value).map(Self::GuardEvent)
             }
             _ => None,
         }
@@ -1602,31 +1642,13 @@ impl EvidenceWorker {
             if batch.is_empty() {
                 return;
             }
-            for record in batch {
-                self.lock_state().in_flight = true;
-                let already_durable = self.lock_state().durable.contains_key(&record.record_id());
-                if !already_durable {
-                    if self
-                        .deps
-                        .journal
-                        .append_journal(&self.journal_path, &record)
-                        .is_err()
-                    {
-                        let mut state = self.lock_state();
-                        state.dropped += 1;
-                        state.failures += 1;
-                        if record.is_receipt() {
-                            state.receipt_dropped += 1;
-                            state.receipt_failures += 1;
-                        }
-                        state.degraded = true;
-                        state.in_flight = false;
-                        continue;
-                    }
-                    self.lock_state()
-                        .durable
-                        .insert(record.record_id(), record.clone());
+            let ready = self.journal_batch(&batch);
+            let mut settled = Vec::new();
+            for (record, ready) in batch.into_iter().zip(ready) {
+                if !ready {
+                    continue;
                 }
+                self.lock_state().in_flight = true;
                 {
                     let mut state = self.lock_state();
                     if state.stopping
@@ -1649,6 +1671,9 @@ impl EvidenceWorker {
                     EvidenceRecord::NativeDecisionReceipt(receipt_record) => {
                         self.persist_native_decision_receipt(receipt_record)
                     }
+                    EvidenceRecord::GuardEvent(event_record) => {
+                        self.persist_guard_event(event_record)
+                    }
                 };
                 let mut state = self.lock_state();
                 match outcome {
@@ -1661,18 +1686,7 @@ impl EvidenceWorker {
                             state.receipt_processed += 1;
                         }
                         state.processed += 1;
-                        match self.rewrite_journal(&record.record_id()) {
-                            Ok(invalid_records) => {
-                                if invalid_records > 0 {
-                                    state.failures += invalid_records;
-                                    state.degraded = true;
-                                }
-                            }
-                            Err(_) => {
-                                state.failures += 1;
-                                state.degraded = true;
-                            }
-                        }
+                        settled.push(record.record_id());
                     }
                     PersistOutcome::Deduped => {
                         let _ = state.durable.remove(&record.record_id());
@@ -1682,18 +1696,7 @@ impl EvidenceWorker {
                         if record.is_receipt() {
                             state.receipt_deduped += 1;
                         }
-                        match self.rewrite_journal(&record.record_id()) {
-                            Ok(invalid_records) => {
-                                if invalid_records > 0 {
-                                    state.failures += invalid_records;
-                                    state.degraded = true;
-                                }
-                            }
-                            Err(_) => {
-                                state.failures += 1;
-                                state.degraded = true;
-                            }
-                        }
+                        settled.push(record.record_id());
                     }
                     outcome @ (PersistOutcome::Retry | PersistOutcome::Busy) => {
                         // A failed write is most often another writer holding
@@ -1730,10 +1733,7 @@ impl EvidenceWorker {
                             if record.is_receipt() {
                                 state.receipt_dropped += 1;
                             }
-                            match self.rewrite_journal(&record_id) {
-                                Ok(invalid_records) => state.failures += invalid_records,
-                                Err(_) => state.failures += 1,
-                            }
+                            settled.push(record_id);
                         } else {
                             if refusals > 0 {
                                 state.retry_refusals.insert(record_id.clone(), refusals);
@@ -1749,6 +1749,8 @@ impl EvidenceWorker {
                 }
                 state.in_flight = false;
             }
+            self.settle_journal_batch(&settled);
+            self.lock_state().in_flight = false;
         }
     }
 
@@ -1940,21 +1942,6 @@ impl EvidenceWorker {
         }
     }
 
-    /// `_rewrite_journal` (:496-502).
-    /// Rewrite the journal without the record, and report how many invalid
-    /// lines the rewrite dropped.
-    ///
-    /// The count is returned rather than recorded here. Every caller runs
-    /// inside the worker loop holding the shared state, and this lock is not
-    /// reentrant: taking it again on the same thread would wedge the worker
-    /// while it holds the lock a stop needs, and every request behind that
-    /// stop with it.
-    fn rewrite_journal(&self, remove_record_id: &str) -> Result<u64, io::Error> {
-        self.deps
-            .journal
-            .rewrite_journal(&self.journal_path, remove_record_id, self.max_bytes)
-    }
-
     fn lock_state(&self) -> MutexGuard<'_, EvidenceState> {
         self.condition.0.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -2004,6 +1991,9 @@ pub const fn journal_file_mode() -> u32 {
 #[path = "hook_evidence_journal_fs.rs"]
 mod journal_fs;
 
+#[path = "hook_evidence_batch.rs"]
+mod batch;
+
 pub use journal_fs::NativeEvidenceJournal;
 
 #[path = "hook_evidence_receipt.rs"]
@@ -2016,6 +2006,11 @@ pub use receipt::{
 
 #[path = "hook_evidence_preview.rs"]
 mod preview;
+
+#[path = "hook_evidence_guard_event.rs"]
+mod guard_event;
+
+pub use guard_event::{GuardEventRecord, POLICY_SOURCE_FENCE_WINDOW_EVENT};
 
 pub use preview::{
     build_invocation_preview, build_invocation_preview_from_payload, checked_command_from_payload,

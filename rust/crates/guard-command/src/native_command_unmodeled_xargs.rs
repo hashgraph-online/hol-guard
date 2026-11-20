@@ -26,6 +26,37 @@ const XARGS_VALUE_OPTIONS: &[&str] = &[
     "--process-slot-var",
 ];
 
+/// The text with each double-quoted home directory read as a fixed path.
+///
+/// `"$HOME/.github/workflows"` names one directory the user owns: the
+/// shell does not split or glob it, and it cannot become a program or an
+/// option. Any other parameter is left in place, so `"$HOME/$DIR"` and a
+/// bare `$HOME` keep the `$` the callers refuse. Bash can bind `HOME`
+/// without writing `HOME=` (`read HOME`, `printf -v HOME`, `for HOME in`,
+/// `HOME+=`), and quoting or escaping can split the name (`HO''ME`,
+/// `HO\ME`). A text that still spells `HOME` once the quoted reads are
+/// replaced and the quote, backslash and newline characters are dropped is
+/// returned unchanged.
+pub(super) fn with_fixed_home(text: &str) -> String {
+    let mut out = text.to_owned();
+    for (quoted, fixed) in [
+        ("\"$HOME\"", "\"/home\""),
+        ("\"${HOME}\"", "\"/home\""),
+        ("\"$HOME/", "\"/home/"),
+        ("\"${HOME}/", "\"/home/"),
+    ] {
+        out = out.replace(quoted, fixed);
+    }
+    let unquoted: String = out
+        .chars()
+        .filter(|c| !matches!(c, '\'' | '"' | '\\' | '\n'))
+        .collect();
+    if unquoted.contains("HOME") {
+        return text.to_owned();
+    }
+    out
+}
+
 /// Whether every `xargs` in the text names the program it runs.
 ///
 /// `xargs` reads standard input as arguments for a program the command
@@ -193,7 +224,7 @@ const COMMAND_PREFIXES: &[&str] = &[
     "nohup",
 ];
 
-fn command_index(words: &[&str]) -> Option<usize> {
+pub(super) fn command_index(words: &[&str]) -> Option<usize> {
     let mut index = 0;
     let mut option_of: Option<&str> = None;
     while index < words.len() {
@@ -379,7 +410,7 @@ fn named_program(word: &str, replace: Option<&str>) -> bool {
 
 /// A program named outright: not built from an expansion, a glob or a
 /// substitution, and not an interpreter that runs something else.
-fn plain_program(word: &str) -> bool {
+pub(super) fn plain_program(word: &str) -> bool {
     !word.contains(['$', '*', '?', '[', '`', '\'', '"', '='])
         && !INTERPRETERS.contains(&command_basename(word).as_str())
 }

@@ -271,7 +271,7 @@
       "publishers": {
         "hol": {
           "id": "hol",
-          "displayName": "Hashgraph Online"
+          "displayName": "HOL"
         },
         "hol-curated": {
           "id": "hol-curated",
@@ -659,8 +659,10 @@
       "enabled_extensions": [
         "command.omairc"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "wrapped-exec",
       "rule_id": "command.omairc.send"
     }

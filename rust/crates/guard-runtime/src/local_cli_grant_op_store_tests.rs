@@ -1,6 +1,7 @@
 //! Store, schema-marker and request-validation cases for `LocalCliGrantDecide`.
 
 use super::*;
+use crate::local_cli_grant_op::{grant_unset, Undecided};
 
 #[test]
 fn ungrantable_material_matches_nothing() {
@@ -147,4 +148,27 @@ fn reply_binds_to_the_request_digest() {
         .unwrap()
         .starts_with("sha256:"));
     assert_ne!(first["request_sha256"], second["request_sha256"]);
+}
+
+#[test]
+fn an_allow_of_an_earlier_version_is_told_apart_from_no_decision() {
+    let fixture = Fixture::new();
+    let identity = script();
+    let home = fixture.home.to_string_lossy().into_owned();
+    let unset = |hash: &str| grant_unset(&home, &identity.cli_id, hash).unwrap();
+    assert_eq!(unset(&identity.hash), Some(Undecided::Never));
+    let older = "0".repeat(64);
+    fixture.grant(&identity, "allowed", Some(&older));
+    assert_eq!(unset(&older), None);
+    assert_eq!(
+        unset(&identity.hash),
+        Some(Undecided::AllowedEarlierVersion)
+    );
+    // A block of an earlier version stays a plain setup review.
+    fixture
+        .connection
+        .execute("update local_cli_grant set state = 'blocked'", [])
+        .unwrap();
+    assert_eq!(unset(&older), None);
+    assert_eq!(unset(&identity.hash), Some(Undecided::Never));
 }

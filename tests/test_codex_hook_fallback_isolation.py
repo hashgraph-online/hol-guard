@@ -3,24 +3,19 @@
 from __future__ import annotations
 
 import contextlib
-import io
 import json
 import os
 import signal
 import subprocess
 import sys
-import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launch_runtime
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     isolated_daemon_start_command,
@@ -28,6 +23,8 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], dict[str, object]]:
@@ -39,9 +36,9 @@ def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], 
         guard_home=tmp_path / "Guard home with spaces",
         home_override_explicit=True,
     )
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     bridge_command = codex_adapter._hook_command_parts(context)
-    config = json.loads(bridge_command[3])
+    config = json.loads(bridge_command[-1])
     assert isinstance(config, dict)
     return context, bridge_command, config
 
@@ -52,7 +49,7 @@ def _trusted_launch(bridge_command: tuple[str, ...], config: dict[str, object]):
         state_path=str(config["state_path"]),
         fallback_command=_config_command(config, "fallback_command"),
         start_command=_config_command(config, "start_command"),
-        config_json=bridge_command[3],
+        config_json=bridge_command[-1],
     )
 
 
@@ -149,7 +146,8 @@ def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     )
     fallback_stdout = trusted.run_fallback(fallback_command, data=payload, timeout_seconds=20)
 
-    assert fallback_stdout == ""
+    fallback_output = json.loads(fallback_stdout)
+    assert fallback_output["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert trusted.cwd == Path(str(config["manifest_path"])).parent.resolve(strict=True)
     assert trusted.cwd != workspace.resolve()
     assert {"PYTHONPATH", "PYTHONSTARTUP", "VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"}.isdisjoint(trusted.environment)
@@ -181,7 +179,7 @@ def test_tampered_bridge_launch_contract_fails_closed_without_executing_project_
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(workspace)
     result = subprocess.run(
-        [*bridge_command[:3], tampered_json],
+        [*bridge_command[:2], tampered_json],
         input=json.dumps({"hook_event_name": "PreToolUse"}),
         capture_output=True,
         text=True,
@@ -228,9 +226,9 @@ def test_signed_runtime_guard_home_is_canonical_across_directory_aliases(tmp_pat
         home_override_explicit=True,
     )
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     bridge_command = codex_adapter._hook_command_parts(context)
-    config = json.loads(bridge_command[3])
+    config = json.loads(bridge_command[-1])
     trusted = _trusted_launch(bridge_command, config)
     canonical_guard_home = context.guard_home.resolve(strict=True)
 
@@ -249,7 +247,7 @@ def test_runtime_rejects_interpreter_symlink_swap(
     replacement = tmp_path / "replacement-python"
     replacement.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     replacement.chmod(0o755)
-    monkeypatch.setattr(codex_adapter.sys, "executable", str(interpreter_link))
+    monkeypatch.setattr(sys, "executable", str(interpreter_link))
     _context, bridge_command, config = _installed_launch(tmp_path)
     interpreter_link.unlink()
     interpreter_link.symlink_to(replacement)
@@ -387,207 +385,6 @@ def test_parent_liveness_stops_child_after_supervisor_is_killed(tmp_path: Path) 
         if child_pid is not None:
             with contextlib.suppress(ProcessLookupError):
                 os.kill(child_pid, signal.SIGKILL)
-
-
-def test_isolated_process_returns_when_tree_termination_cannot_be_confirmed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class StubbornProcess:
-        pid = 987_654
-        stdin = io.BytesIO()
-        stdout = io.BytesIO()
-        stderr = io.BytesIO()
-
-        def poll(self) -> None:
-            return None
-
-        def wait(self, timeout: float | None = None) -> int:
-            raise subprocess.TimeoutExpired(["stubborn"], timeout if timeout is not None else 0.0)
-
-        def kill(self) -> None:
-            raise OSError("kill refused")
-
-    spawns = 0
-
-    def stubborn_popen(*_args: object, **_kwargs: object) -> StubbornProcess:
-        nonlocal spawns
-        spawns += 1
-        return StubbornProcess()
-
-    def refuse_killpg(*_args: object) -> None:
-        raise OSError("kill refused")
-
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", threading.Event())
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_QUARANTINE", [])
-    monkeypatch.setattr(launch_runtime.subprocess, "Popen", stubborn_popen)
-    monkeypatch.setattr(launch_runtime.os, "killpg", refuse_killpg)
-
-    started_at = time.monotonic()
-    result = run_isolated_hook_process(
-        ["stubborn"],
-        input_text="",
-        cwd=tmp_path,
-        environment={},
-        timeout_seconds=0.01,
-    )
-    elapsed = time.monotonic() - started_at
-    latched = run_isolated_hook_process(
-        ["must-not-spawn"],
-        input_text="",
-        cwd=tmp_path,
-        environment={},
-        timeout_seconds=10,
-    )
-
-    assert elapsed < 2
-    assert result.returncode is None
-    assert result.timed_out is True
-    assert result.containment_failed is True
-    assert latched.containment_failed is True
-    assert spawns == 1
-
-
-def test_isolated_process_latches_when_input_writer_cannot_stop(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    real_popen = launch_runtime.subprocess.Popen
-    release_writer = threading.Event()
-
-    class BlockingInput:
-        def write(self, data: bytes) -> int:
-            if not release_writer.wait(timeout=2):
-                return 0
-            return len(data)
-
-        def flush(self) -> None:
-            return
-
-        def close(self) -> None:
-            return
-
-    class ExitedProcess:
-        pid = 987_654
-        stdin = BlockingInput()
-        stdout = io.BytesIO()
-        stderr = io.BytesIO()
-
-        def poll(self) -> int:
-            return 0
-
-        def wait(self, timeout: float | None = None) -> int:
-            del timeout
-            return 0
-
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", threading.Event())
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_QUARANTINE", [])
-    monkeypatch.setattr(launch_runtime.subprocess, "Popen", lambda *_args, **_kwargs: ExitedProcess())
-    monkeypatch.setattr(launch_runtime.os, "killpg", lambda *_args: None)
-
-    started_at = time.monotonic()
-    result = run_isolated_hook_process(
-        ["exited-with-stuck-writer"],
-        input_text="blocked",
-        cwd=tmp_path,
-        environment={},
-        timeout_seconds=1,
-    )
-    elapsed = time.monotonic() - started_at
-    release_writer.set()
-
-    assert elapsed < 1.5
-    assert result.returncode is None
-    assert result.containment_failed is True
-    assert launch_runtime._HOOK_PROCESS_CONTAINMENT_FAILED.is_set()
-
-    monkeypatch.setattr(launch_runtime.subprocess, "Popen", real_popen)
-    recovered = run_isolated_hook_process(
-        [sys.executable, "-I", "-c", "print('recovered')"],
-        input_text="",
-        cwd=tmp_path,
-        environment=isolated_hook_environment(),
-        timeout_seconds=2,
-    )
-
-    assert recovered.returncode == 0
-    assert recovered.stdout.strip() == "recovered"
-    assert launch_runtime._HOOK_PROCESS_CONTAINMENT_FAILED.is_set() is False
-
-
-def test_quarantine_retry_uses_one_deadline_for_all_processes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class StubbornProcess:
-        pid = 987_654
-
-        def poll(self) -> None:
-            return None
-
-        def wait(self, timeout: float | None = None) -> int:
-            if timeout:
-                time.sleep(timeout)
-            raise subprocess.TimeoutExpired(["stubborn"], timeout if timeout is not None else 0.0)
-
-        def kill(self) -> None:
-            raise OSError("kill refused")
-
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", threading.Event())
-    quarantined = [
-        launch_runtime._QuarantinedHookProcess(cast("subprocess.Popen[bytes]", StubbornProcess()), None, ())
-        for _ in range(20)
-    ]
-
-    def refuse_killpg(*_args: object) -> None:
-        raise OSError("kill refused")
-
-    monkeypatch.setattr(
-        launch_runtime,
-        "_HOOK_PROCESS_QUARANTINE",
-        quarantined,
-    )
-    monkeypatch.setattr(launch_runtime.os, "killpg", refuse_killpg)
-
-    started_at = time.monotonic()
-    recovered = launch_runtime._retry_quarantined_hook_processes()
-    elapsed = time.monotonic() - started_at
-
-    assert recovered is False
-    assert elapsed < 1.5
-    assert len(launch_runtime._HOOK_PROCESS_QUARANTINE) == 20
-
-
-def test_quarantine_retry_releases_windows_job_handle_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class ExitedProcess:
-        pid = 987_654
-
-        def poll(self) -> int:
-            return 0
-
-        def wait(self, timeout: float | None = None) -> int:
-            del timeout
-            return 0
-
-    closed_jobs: list[object] = []
-    job = object()
-    quarantined = launch_runtime._QuarantinedHookProcess(
-        cast("subprocess.Popen[bytes]", ExitedProcess()),
-        cast("launch_runtime.WindowsHookJob", job),
-        (),
-    )
-    containment_latch = threading.Event()
-    containment_latch.set()
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_CONTAINMENT_FAILED", containment_latch)
-    monkeypatch.setattr(launch_runtime, "_HOOK_PROCESS_QUARANTINE", [quarantined])
-    monkeypatch.setattr(launch_runtime, "_kill_hook_process", lambda *_args: True)
-    monkeypatch.setattr(launch_runtime, "close_windows_hook_job", closed_jobs.append)
-
-    assert launch_runtime._retry_quarantined_hook_processes() is True
-    assert closed_jobs == [job]
-    assert quarantined.windows_job is None
-    assert launch_runtime._HOOK_PROCESS_CONTAINMENT_FAILED.is_set() is False
 
 
 @pytest.fixture(autouse=True)

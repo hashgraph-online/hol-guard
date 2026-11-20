@@ -59,6 +59,28 @@ def test_stage_from_wheel_extracts_sealed_runtime(tmp_path: Path) -> None:
     assert oct(runtime_path.stat().st_mode & 0o777) == "0o755"
 
 
+
+def test_stage_from_wheel_applies_the_runtime_bound(tmp_path: Path) -> None:
+    runtime = b"native-runtime-bytes"
+    wheel = tmp_path / "hol_guard-3.0.12-py3-none-macosx_11_0_arm64.whl"
+    _write_wheel(wheel, runtime, _manifest(runtime))
+    stage = {"expected_version": "3.0.12", "expected_target": "aarch64-apple-darwin"}
+
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="invalid size"):
+        MODULE.stage_from_wheel(wheel, tmp_path / "small", max_runtime_bytes=len(runtime) - 1, **stage)
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="runtime bound"):
+        MODULE.stage_from_wheel(
+            wheel, tmp_path / "huge", max_runtime_bytes=MODULE._MAX_UNPUBLISHED_RUNTIME_BYTES + 1, **stage
+        )
+    runtime_path, _ = MODULE.stage_from_wheel(wheel, tmp_path / "exact", max_runtime_bytes=len(runtime), **stage)
+    assert runtime_path.read_bytes() == runtime
+
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="wrong size"):
+        MODULE.refresh_identity(tmp_path / "exact", max_runtime_bytes=len(runtime) - 1)
+    with pytest.raises(MODULE.NativeRuntimeStageError, match="runtime bound"):
+        MODULE.refresh_identity(tmp_path / "exact", max_runtime_bytes=MODULE._MAX_UNPUBLISHED_RUNTIME_BYTES + 1)
+    assert MODULE.refresh_identity(tmp_path / "exact", max_runtime_bytes=len(runtime)).is_file()
+
 def _bundle_binding(source_sha: str = "a" * 40) -> dict[str, object]:
     return {
         "schema": "guard.command-pack-bundle.v1",

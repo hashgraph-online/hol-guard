@@ -183,7 +183,7 @@ fn server_identity_metadata(identity: &McpToolCallServerIdentityV1) -> Map<Strin
 
 /// SHA-256 over the tool's authority-bearing fields (`inputSchema`,
 /// `outputSchema`, `annotations`); absent unless `inputSchema` is an object.
-fn tool_definition_authority_hash(definition: &Map<String, Value>) -> Option<String> {
+pub(crate) fn tool_definition_authority_hash(definition: &Map<String, Value>) -> Option<String> {
     if !definition.get("inputSchema").is_some_and(Value::is_object) {
         return None;
     }

@@ -30,12 +30,13 @@ from typing import Any
 from codex_plugin_scanner.guard import cli as _cli_package
 
 _CLI = Path(_cli_package.__file__).parent
+_TESTS = Path(__file__).resolve().parents[5] / "tests"
 
 
-def _owner_function(module: str, name: str, namespace: dict[str, Any]) -> Any:
+def _owner_function(module: str, name: str, namespace: dict[str, Any], *, root: Path | None = None) -> Any:
     """Execute one function's source from the owner module into ``namespace``."""
 
-    path = _CLI / f"{module}.py"
+    path = (root or _CLI) / f"{module}.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     (node,) = [item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == name]
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), namespace)
@@ -45,7 +46,7 @@ def _owner_function(module: str, name: str, namespace: dict[str, Any]) -> Any:
 _OWNER: dict[str, Any] = {"Mapping": Mapping}
 _optional_string = _owner_function("commands_support_runtime_artifacts", "_optional_string", _OWNER)
 _runtime_saved_allow_validation_reason = _owner_function(
-    "commands_support_runtime_policy", "_runtime_saved_allow_validation_reason", _OWNER
+    "resident_probe_support", "_runtime_saved_allow_validation_reason", _OWNER, root=_TESTS
 )
 
 CURRENT_TOKEN = "token-current"

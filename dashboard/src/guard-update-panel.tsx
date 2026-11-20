@@ -1,37 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useState, type ChangeEvent, type ReactNode } from "react";
 import { HiMiniArrowPath } from "react-icons/hi2";
 
-import {
-  fetchGuardUpdateStatus,
-  prepareGuardDaemonReconnect,
-  readRememberedGuardUpdateChannel,
-  reconnectGuardDaemonAfterUpdate,
-  readGuardToken,
-  redirectToGuardDaemonOrigin,
-  scheduleGuardUpdate,
-  setGuardUpdateChannel,
-  type GuardUpdateChannelProof,
-} from "./guard-api";
+import { readRememberedGuardUpdateChannel, type GuardUpdateChannelProof, type GuardUpdateMode } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
+import { UpdateModeDialog } from "./update-mode-dialog";
 import { dashboardEmbedsInDesktop } from "./desktop-embed";
 import { shouldPromptRecoveryReinstall, updateHelpCopy, updateStatusLabel } from "./guard-update-copy";
 import { buildApprovalProofCredentials } from "./approval-proof-inline";
-import type {
-  GuardApprovalGatePublicConfig,
-  GuardDaemonReconnectAuthorization,
-  GuardUpdatePhase,
-  GuardUpdateStatus,
-} from "./guard-types";
+import type { GuardApprovalGatePublicConfig, GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 import { GuardModalLayer } from "./guard-modal-layer";
 import {
   GuardUpdateChannelSummary,
   GUARD_UPDATE_ACTION_BUTTON_CLASS,
   GUARD_UPDATE_CONTROL_TEXT_CLASS,
 } from "./guard-update-channel-summary";
-
-const UPDATE_STATUS_POLL_MS = 60_000;
-const RECONNECT_POLL_MS = 1_500;
-const RECONNECT_TIMEOUT_MS = 180_000;
 
 export type GuardUpdatePanelProps = {
   guardVersion?: string | null;
@@ -42,6 +24,7 @@ export type GuardUpdatePanelProps = {
   onReinstallGuard?: () => void;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   compact?: boolean;
 };
 
@@ -73,6 +56,12 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const [alphaSaveError, setAlphaSaveError] = useState<string | null>(null);
   const [alphaApprovalPassword, setAlphaApprovalPassword] = useState("");
   const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = useState<GuardUpdateMode>(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = useState<string | null>(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = useState("");
   const targetChannel = useAlpha ? "stable" : "alpha";
   const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
 
@@ -118,6 +107,37 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
+  const handleOpenUpdateModeModal = useCallback(() => {
+    setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
+    setUpdateModeSaveError(null);
+    setUpdateModeApprovalPassword("");
+    setUpdateModeApprovalTotpCode("");
+    setUpdateModeModalOpen(true);
+  }, [props.updateStatus?.update_mode]);
+  const handleCloseUpdateModeModal = useCallback(() => {
+    if (updateModeSavePending) return;
+    setUpdateModeModalOpen(false);
+    setUpdateModeSaveError(null);
+  }, [updateModeSavePending]);
+  const handleConfirmUpdateMode = useCallback(async () => {
+    if (!props.onSetUpdateMode) return;
+    setUpdateModeSavePending(true);
+    setUpdateModeSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled
+        ? buildApprovalProofCredentials(props.approvalGate, {
+            approvalPassword: updateModeApprovalPassword,
+            approvalTotpCode: updateModeApprovalTotpCode,
+          })
+        : undefined;
+      await props.onSetUpdateMode(updateModeDraft, proof);
+      setUpdateModeModalOpen(false);
+    } catch (error) {
+      setUpdateModeSaveError(error instanceof Error ? error.message : "Guard could not save the update preference. Try again.");
+    } finally {
+      setUpdateModeSavePending(false);
+    }
+  }, [props.approvalGate, props.onSetUpdateMode, updateModeApprovalPassword, updateModeApprovalTotpCode, updateModeDraft]);
 
   let updateChannelSummary: ReactNode = null;
   if (props.onSetUpdateChannel) {
@@ -136,6 +156,12 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       </p>
     );
   }
+  let updateModeLabel = "Automatic Core updates on";
+  if (props.updateStatus?.update_mode === "ask") {
+    updateModeLabel = "Ask before installing";
+  } else if (props.updateStatus?.update_mode === "off") {
+    updateModeLabel = "Automatic Core updates off";
+  }
 
   return (
     <div
@@ -146,6 +172,11 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       }
     >
       {updateChannelSummary}
+      {props.onSetUpdateMode ? (
+        <button type="button" onClick={handleOpenUpdateModeModal} disabled={busy} className="text-[11px] font-medium text-brand-blue hover:underline" aria-label="Manage Core update preferences">
+          {updateModeLabel}
+        </button>
+      ) : null}
       {props.updateStatus?.update_available ? (
         <div className="flex items-center justify-between gap-2">
           <p className="min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]">
@@ -199,241 +230,26 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
           />
         </GuardModalLayer>
       ) : null}
+      {updateModeModalOpen ? (
+        <GuardModalLayer ariaLabel="Core update preferences" onClose={handleCloseUpdateModeModal} panelClassName="w-full max-w-md">
+          <UpdateModeDialog
+            mode={props.updateStatus?.update_mode ?? "automatic"}
+            draft={updateModeDraft}
+            pending={updateModeSavePending}
+            error={updateModeSaveError}
+            approvalGate={props.approvalGate ?? null}
+            approvalPassword={updateModeApprovalPassword}
+            approvalTotpCode={updateModeApprovalTotpCode}
+            onDraftChange={(event) => setUpdateModeDraft(event.target.value as GuardUpdateMode)}
+            onClose={handleCloseUpdateModeModal}
+            onConfirm={handleConfirmUpdateMode}
+            onApprovalPasswordChange={(event) => setUpdateModeApprovalPassword(event.target.value)}
+            onApprovalTotpCodeChange={(event) => setUpdateModeApprovalTotpCode(event.target.value)}
+          />
+        </GuardModalLayer>
+      ) : null}
     </div>
   );
 }
 
-export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?: boolean }) {
-  const enabled = options?.enabled !== false;
-  const [updateStatus, setUpdateStatus] = useState<GuardUpdateStatus | null>(null);
-  const [updatePhase, setUpdatePhase] = useState<GuardUpdatePhase>(enabled ? "checking" : "idle");
-  const [updateError, setUpdateError] = useState<string | null>(null);
-  const reconnectStartedAt = useRef<number | null>(null);
-  const updatePhaseRef = useRef<GuardUpdatePhase>("checking");
-  const updateStatusEpoch = useRef(0);
-  const channelMutationId = useRef(0);
-  const channelMutationPending = useRef(false);
-  const isMounted = useRef(false);
-
-  useEffect(() => {
-    updatePhaseRef.current = updatePhase;
-  }, [updatePhase]);
-
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  const refreshUpdateStatus = useCallback(async () => {
-    if (!enabled || !isMounted.current || channelMutationPending.current) {
-      return;
-    }
-    const epoch = updateStatusEpoch.current;
-    const mutationId = channelMutationId.current;
-    try {
-      const status = await fetchGuardUpdateStatus();
-      if (
-        !isMounted.current ||
-        epoch !== updateStatusEpoch.current ||
-        mutationId !== channelMutationId.current ||
-        channelMutationPending.current
-      ) {
-        return;
-      }
-      setUpdateStatus(status);
-      if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") {
-        setUpdatePhase("idle");
-      }
-    } catch {
-      if (isMounted.current && updatePhaseRef.current === "checking") {
-        setUpdatePhase("idle");
-      }
-    }
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled) {
-      setUpdatePhase("idle");
-      return;
-    }
-    let cancelled = false;
-    const epoch = updateStatusEpoch.current;
-    const mutationId = channelMutationId.current;
-    void fetchGuardUpdateStatus()
-      .then((status) => {
-        if (
-          cancelled ||
-          epoch !== updateStatusEpoch.current ||
-          mutationId !== channelMutationId.current ||
-          channelMutationPending.current
-        ) {
-          return;
-        }
-        setUpdateStatus(status);
-        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") {
-          setUpdatePhase("idle");
-        }
-      })
-      .catch(() => {
-        if (!cancelled && updatePhaseRef.current === "checking") {
-          setUpdatePhase("idle");
-        }
-      });
-    const pollId = window.setInterval(() => {
-      if (updatePhaseRef.current === "updating" || updatePhaseRef.current === "reconnecting") {
-        return;
-      }
-      void refreshUpdateStatus();
-    }, UPDATE_STATUS_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(pollId);
-    };
-  }, [enabled, refreshUpdateStatus]);
-
-  const waitForReconnect = useCallback(
-    async (
-      expectedPreviousVersion: string,
-      expectedLatestVersion: string | null,
-      authorization: GuardDaemonReconnectAuthorization,
-    ): Promise<boolean> => {
-      reconnectStartedAt.current = Date.now();
-      let sawUpdateInProgress = false;
-      while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
-        try {
-          const reconnectResult = await reconnectGuardDaemonAfterUpdate({
-            expectedPreviousVersion,
-            expectedLatestVersion,
-            sawUpdateInProgress,
-            authorization,
-          });
-          if (!reconnectResult) {
-            throw new Error("Guard daemon not found");
-          }
-          sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
-          if (!reconnectResult.origin) {
-            throw new Error("Guard daemon not ready");
-          }
-          const { origin } = reconnectResult;
-          if (origin !== window.location.origin) {
-            redirectToGuardDaemonOrigin(origin, readGuardToken());
-            return true;
-          }
-          updateStatusEpoch.current += 1;
-          setUpdateStatus(reconnectResult.status);
-          setUpdatePhase("idle");
-          options?.onReconnected?.();
-          return false;
-        } catch {
-          await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
-        }
-      }
-      setUpdatePhase("error");
-      throw new Error("Guard did not reconnect after the update.");
-    },
-    [options],
-  );
-
-  const scheduleAndWait = useCallback(
-    async (params: {
-      forcePypiReinstall?: boolean;
-      expectedPreviousVersion: string;
-      expectedLatestVersion: string | null;
-    }): Promise<void> => {
-      setUpdatePhase("updating");
-      setUpdateError(null);
-      try {
-        const reconnectAuthorization = await prepareGuardDaemonReconnect();
-        const scheduleResult = await scheduleGuardUpdate(
-          params.forcePypiReinstall === true ? { forcePypiReinstall: true } : undefined,
-        );
-        if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
-          setUpdatePhase("reconnecting");
-          const redirected = await waitForReconnect(
-            params.expectedPreviousVersion,
-            params.expectedLatestVersion,
-            reconnectAuthorization,
-          );
-          if (!redirected) {
-            window.location.reload();
-          }
-          return;
-        }
-        if (scheduleResult.scheduled !== true) {
-          throw new Error(
-            scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled. The installed version stays in place.",
-          );
-        }
-        setUpdatePhase("reconnecting");
-        const redirected = await waitForReconnect(
-          params.expectedPreviousVersion,
-          params.expectedLatestVersion,
-          reconnectAuthorization,
-        );
-        if (!redirected) {
-          window.location.reload();
-        }
-      } catch (error) {
-        setUpdatePhase("error");
-        setUpdateError(error instanceof Error ? error.message : "The update did not finish. The installed version stays in place.");
-      }
-    },
-    [waitForReconnect],
-  );
-
-  const onUpdateGuard = useCallback(async () => {
-    if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
-      return;
-    }
-    await scheduleAndWait({
-      expectedPreviousVersion: updateStatus.current_version,
-      expectedLatestVersion: updateStatus.latest_version,
-    });
-  }, [scheduleAndWait, updateStatus]);
-
-  const onReinstallGuard = useCallback(async () => {
-    if (!updateStatus?.recovery_reinstall_available) {
-      return;
-    }
-    // A PyPI reinstall may land the same version; skip the version-change gate
-    // during reconnect by not pinning an expected previous/target version.
-    await scheduleAndWait({
-      forcePypiReinstall: true,
-      expectedPreviousVersion: "",
-      expectedLatestVersion: null,
-    });
-  }, [scheduleAndWait, updateStatus]);
-
-  const onSetUpdateChannel = useCallback(async (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => {
-    const mutationId = ++channelMutationId.current;
-    updateStatusEpoch.current += 1;
-    channelMutationPending.current = true;
-    try {
-      const status = await setGuardUpdateChannel(channel, proof);
-      if (mutationId === channelMutationId.current) {
-        updateStatusEpoch.current += 1;
-        setUpdateStatus(status);
-        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") {
-          setUpdatePhase("idle");
-        }
-      }
-    } finally {
-      if (mutationId === channelMutationId.current) {
-        channelMutationPending.current = false;
-      }
-    }
-  }, []);
-
-  return {
-    guardVersion: updateStatus?.current_version ?? null,
-    updateStatus,
-    updatePhase,
-    updateError,
-    onUpdateGuard,
-    onReinstallGuard,
-    onSetUpdateChannel,
-    refreshUpdateStatus,
-  };
-}
+export { useGuardUpdate } from "./use-guard-update";

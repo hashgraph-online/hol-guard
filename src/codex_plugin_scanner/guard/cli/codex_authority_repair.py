@@ -7,10 +7,8 @@ import math
 import time
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
-from ..adapters.codex import _hook_manifest_spec
 from ..approval_gate import ApprovalGateError, public_config, require_high_risk
+from ..codex_harness_client import _hook_manifest_spec
 from ..codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
 from ..codex_hook_manifest import (
     CODEX_AUTHORITY_REPAIR_ACTION,
@@ -27,7 +25,6 @@ from ..codex_hook_repair import (
 )
 from ..codex_hook_repair_native import inspect_codex_repair_native_runtime
 from ..codex_hook_repair_request import load_codex_hook_repair_request, write_codex_hook_repair_request
-from ..codex_install_transaction import codex_install_transaction
 from ..codex_publication_inverse import publish_codex_publication_inverse, verify_and_retire_codex_publication_inverse
 from ..codex_publication_inverse_authorization import authorize_codex_publication_inverse
 from ..codex_publication_inverse_plan import (
@@ -36,6 +33,9 @@ from ..codex_publication_inverse_plan import (
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
+from ..harness_context import HarnessContext
+from ..native_harness_client import canonical_harness as resolve_harness
+from ..native_owned import codex_install_transaction
 from ..runtime_transition import TransitionError, assert_transition_mutation_allowed, inverse_recovery_budget
 from ..sqlite_tuning import sqlite_operation_deadline
 from ..store import GuardStore
@@ -137,7 +137,7 @@ def run_codex_authority_repair(
             raise TransitionError("authority_repair_request_arguments_invalid")
         if request_path is not None and not dry_run and not request_digest:
             raise TransitionError("authority_repair_request_digest_invalid")
-        if get_adapter(str(args.harness)).harness != "codex":
+        if resolve_harness(str(args.harness)) != "codex":
             raise TransitionError("authority_repair_codex_only")
         if getattr(args, "surface", None) not in (None, "auto", "hooks"):
             raise TransitionError("authority_repair_hooks_only")

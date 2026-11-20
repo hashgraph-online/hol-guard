@@ -279,9 +279,10 @@ def test_native_evidence_uses_the_store_guard_home(tmp_path: Path, monkeypatch) 
 
 def test_client_runtime_error_degrades_instead_of_escaping(tmp_path: Path, monkeypatch) -> None:
     from codex_plugin_scanner.guard import native_mcp_runtime_evidence as transport
+    from codex_plugin_scanner.guard import native_resident_decision as resident
 
     class Features:
-        features = frozenset({transport._FEATURE, transport._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({transport._FEATURE, resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -298,9 +299,9 @@ def test_client_runtime_error_degrades_instead_of_escaping(tmp_path: Path, monke
         raise RuntimeError("can't start new thread")
 
     monkeypatch.setattr(transport, "_native_runtime_status_memo", lambda: Status())
-    monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(transport, "native_record_resident_failure", lambda *a, **k: None)
-    monkeypatch.setattr(transport, "native_resident_client_request", boom)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "native_resident_client_request", boom)
     store = _make_store(tmp_path)
     receipt = block_tool_call(
         store=store,

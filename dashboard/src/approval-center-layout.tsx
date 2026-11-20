@@ -10,6 +10,7 @@ import { QueueConnectionError } from "./queue-connection-error";
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
 import type { BulkGateCredentials } from "./approval-gate-utils";
+import type { QueueGroup } from "./queue-state";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -22,9 +23,11 @@ import type {
   DecisionScope,
 } from "./guard-types";
 import { useGuardUpdate } from "./guard-update-panel";
-import { updateSettings } from "./guard-api";
+import { dashboardEmbedsInDesktop } from "./desktop-embed";
+import { GuardUpdateBanner, readDismissedDesktopUpdateVersion } from "./guard-update-banner";
+import { desktopUpdateBannerModel } from "./guard-update-copy";
 import { WatchProtectionBanner } from "./watch-protection-banner";
-import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
+import { watchBannerModel } from "./harness-posture-ui";
 
 const McpPolicyRequestPanel = lazyWorkspace("mcp-policy-request-panel", () =>
   import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
@@ -74,6 +77,7 @@ type LayoutProps = {
   codexResume: GuardCodexResumeResult | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   homeContent: ReactNode;
+  swarmContent?: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
   extensionsContent: ReactNode;
@@ -81,6 +85,7 @@ type LayoutProps = {
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
   aboutContent?: ReactNode;
+  releasesContent?: ReactNode;
   protectionRepairContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -99,6 +104,7 @@ type LayoutProps = {
     scope_contract_digest?: string;
   }) => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
+  onBulkBlock?: (groups: QueueGroup[]) => Promise<void>;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
@@ -110,17 +116,17 @@ function InboxWatchBanner(props: {
   onRestored?: () => void;
   onOpenSettings: () => void;
 }) {
-  const { snapshot } = props;
-  const handleTurnOn = useCallback(() => {
-    void updateSettings(turnProtectionOnUpdate(snapshot))
-      .then(() => {
-        props.onRestored?.();
-      })
-      .catch(() => {
-        props.onOpenSettings();
-      });
-  }, [props.onOpenSettings, props.onRestored, snapshot]);
-  return <WatchProtectionBanner model={watchBannerModel(snapshot)} onTurnProtectionOn={handleTurnOn} />;
+  const { snapshot, onRestored } = props;
+  const handleTurnedOn = useCallback(() => {
+    onRestored?.();
+  }, [onRestored]);
+  return (
+    <WatchProtectionBanner
+      model={watchBannerModel(snapshot)}
+      onTurnedOn={handleTurnedOn}
+      onOpenSettings={props.onOpenSettings}
+    />
+  );
 }
 
 function renderInboxContent(props: LayoutProps): ReactNode {
@@ -138,6 +144,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       <QueueConnectionError
         message={props.requests.message}
         approvalUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null}
+        requestId={props.activeRequestId}
         onRetry={props.onRetry}
         onRepair={props.onRepair}
       />
@@ -187,11 +194,13 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       onGoHome={props.onGoHome}
       onRetryResume={props.onRetryResume}
       onBulkApprove={props.onBulkApprove}
+      onBulkBlock={props.onBulkBlock}
     />
   );
 }
 
 function renderViewContent(props: LayoutProps): ReactNode {
+  if (props.view === "swarm") return props.swarmContent ?? null;
   if (props.view === "home") {
     return props.homeContent;
   }
@@ -217,11 +226,14 @@ function renderViewContent(props: LayoutProps): ReactNode {
   if (props.view === "protection-repair") {
     return props.protectionRepairContent ?? null;
   }
-  if (props.view === "settings") {
+  if (props.view === "settings" || props.view === "cigar") {
     return props.settingsContent;
   }
   if (props.view === "about") {
     return props.aboutContent ?? null;
+  }
+  if (props.view === "releases") {
+    return props.releasesContent ?? null;
   }
   if (props.view === "policy") {
     return props.policyContent ?? null;
@@ -229,7 +241,8 @@ function renderViewContent(props: LayoutProps): ReactNode {
   if (
     props.view === "supply-chain" ||
     props.view === "audit" ||
-    props.view === "feed-health"
+    props.view === "feed-health" ||
+    props.view === "workspaces"
   ) {
     return props.supplyChainHubContent ?? null;
   }
@@ -279,7 +292,20 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
+
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(
+    () => readDismissedDesktopUpdateVersion(),
+  );
+  const handleDismissUpdateBanner = useCallback((version: string) => {
+    setDismissedUpdateVersion(version);
+  }, []);
+  const updateBannerModel = desktopUpdateBannerModel(
+    updateStatus,
+    dashboardEmbedsInDesktop(),
+    dismissedUpdateVersion,
+  );
 
   return (
     <div className="min-h-screen bg-white text-brand-dark">
@@ -296,6 +322,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
         onSetUpdateChannel={onSetUpdateChannel}
+        onSetUpdateMode={onSetUpdateMode}
         approvalGate={props.approvalGate ?? null}
         cloudUserProfile={
           props.runtime.kind === "ready"
@@ -317,8 +344,16 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         className="guard-shell-content flex flex-col"
         data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       >
-        <main id="main-content" className="guard-shell-main flex-1" tabIndex={-1}>
+        <main id="main-content" className="guard-shell-main flex-1 focus:outline-none" tabIndex={-1}>
           <div className="guard-shell-workspace" data-view={props.view}>
+            {updateBannerModel ? (
+              <div className="mb-4">
+                <GuardUpdateBanner
+                  model={updateBannerModel}
+                  onDismiss={handleDismissUpdateBanner}
+                />
+              </div>
+            ) : null}
             {props.view === "inbox"
               && props.runtime.kind === "ready"
               && watchBannerModel(props.runtime.snapshot) !== null ? (

@@ -7,8 +7,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
-from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..harness_context import HarnessContext
 from ..models import HarnessDetection
 from ..store import GuardStore
 from . import runner_native_authority as _authority

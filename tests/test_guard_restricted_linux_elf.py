@@ -4,8 +4,8 @@ import struct
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.restricted_linux_elf import resolve_linux_elf_loader
 from codex_plugin_scanner.guard.runtime.restricted_linux_landlock import LinuxContainmentUnavailableError
+from tests.restricted_linux_test_support import native_elf_loader
 
 pytestmark = pytest.mark.usefixtures("native_context_digest")
 
@@ -25,7 +25,7 @@ def _image(path, *, interpreter=None, machine=183):
 def test_static_image_does_not_receive_an_unneeded_loader(tmp_path):
     image = tmp_path / "native"
     _image(image)
-    assert resolve_linux_elf_loader(image) is None
+    assert native_elf_loader(image) is None
 
 
 @pytest.mark.parametrize(
@@ -35,7 +35,7 @@ def test_unapproved_or_malformed_loader_cannot_receive_exec_grant(tmp_path, inte
     image = tmp_path / "native"
     _image(image, interpreter=interpreter)
     with pytest.raises(LinuxContainmentUnavailableError):
-        resolve_linux_elf_loader(image)
+        native_elf_loader(image)
 
 
 @pytest.mark.parametrize("content", [b"", b"\x7fELF", bytes(4096)])
@@ -43,7 +43,7 @@ def test_bad_native_metadata_does_not_fall_back_to_guessed_loader(tmp_path, cont
     image = tmp_path / "native"
     image.write_bytes(content)
     with pytest.raises(LinuxContainmentUnavailableError):
-        resolve_linux_elf_loader(image)
+        native_elf_loader(image)
 
 
 def test_executable_symlink_must_already_be_resolved_by_owner(tmp_path):
@@ -51,4 +51,4 @@ def test_executable_symlink_must_already_be_resolved_by_owner(tmp_path):
     _image(actual)
     alias.symlink_to(actual)
     with pytest.raises(LinuxContainmentUnavailableError):
-        resolve_linux_elf_loader(alias)
+        native_elf_loader(alias)

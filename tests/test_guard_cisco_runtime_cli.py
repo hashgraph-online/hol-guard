@@ -888,28 +888,3 @@ def test_cisco_preflight_plans_every_proven_shell_cwd_in_one_call(
 
     assert scanned == [first / "skills", second / "skills"]
     assert [signal.source for signal in signals] == ["cisco_skill"]
-
-
-def test_runtime_cisco_scanner_evidence_hands_the_cwds_to_one_preflight(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from codex_plugin_scanner.guard.cli import commands_hook_native_eval
-
-    calls: list[dict[str, object]] = []
-
-    def fake_scan(action, *, workspace, shell_cwds=()):
-        calls.append({"workspace": workspace, "shell_cwds": shell_cwds})
-        return ()
-
-    monkeypatch.setattr(commands_hook_native_eval, "scan_action_for_cisco_evidence", fake_scan)
-
-    cwds = [str(tmp_path / "first"), str(tmp_path / "second")]
-    evidence = commands_hook_native_eval._runtime_cisco_scanner_evidence(
-        _relative_target_write_action("skills/demo/SKILL.md"),
-        runtime_workspace=tmp_path,
-        raw_shell_cwds=cwds,
-    )
-
-    assert evidence == ()
-    assert calls == [{"workspace": tmp_path, "shell_cwds": cwds}]

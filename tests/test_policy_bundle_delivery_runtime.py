@@ -278,7 +278,7 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
     authority = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(authority)
     wire_digest = runner.build_builtin_extension_catalog_wire(
-        guard_version="test", generated_at="2026-08-25T12:00:00Z"
+        guard_version="test", generated_at="2026-08-25T12:00:00Z", guard_home=store.guard_home
     )["catalogDigest"]
     _device_id, _device_name = runner._guard_device_metadata(store)
     trusted_cloud_device_id = "oauth-machine-managed-controls"
@@ -356,7 +356,7 @@ def test_receipt_sync_rejects_managed_bundle_without_delivery_and_makes_no_ack(
     authority = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(authority)
     wire_digest = runner.build_builtin_extension_catalog_wire(
-        guard_version="test", generated_at="2026-08-25T12:00:00Z"
+        guard_version="test", generated_at="2026-08-25T12:00:00Z", guard_home=store.guard_home
     )["catalogDigest"]
     device_id, _device_name = runner._guard_device_metadata(store)
     store.set_sync_payload(
@@ -401,6 +401,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_managed_commi
     wire_digest = runner.build_builtin_extension_catalog_wire(
         guard_version="test",
         generated_at="2026-08-25T12:00:00Z",
+        guard_home=store.guard_home,
     )["catalogDigest"]
 
     committed_bundle = _bundle()

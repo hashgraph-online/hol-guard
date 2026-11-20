@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import stat
-import subprocess
 from pathlib import Path
 
 from .acl import (
+    _macos_request,
+    _native_answer,
+    _native_deadline,
     _PathSurface,
-    _run_windows_acl_payload,
-    _verify_macos_surface,
-    _windows_filesystem_chain,
-    _windows_result,
 )
 
 
@@ -49,26 +46,12 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
         return False
     if resolved_system == "Darwin":
         surface = _PathSurface("managed-file", path, False, Path(path.anchor))
-        return _verify_macos_surface(surface, expected_uid=0, cache={}).healthy
+        answer = _native_answer(_macos_request((surface,), 0), deadline=_native_deadline())
+        return answer is not None and answer.get("status") == "healthy"
     if resolved_system == "Windows":
-        try:
-            chain = _windows_filesystem_chain(str(path))
-            payload = [
-                {
-                    "name": f"managed-file-{index:03d}",
-                    "path": candidate,
-                    "kind": "filesystem",
-                    "expectedContainer": index < len(chain) - 1,
-                    "leaf": index == len(chain) - 1,
-                }
-                for index, candidate in enumerate(chain)
-            ]
-            raw = _run_windows_acl_payload(payload)
-            rows = raw if isinstance(raw, list) else [raw]
-            results = [_windows_result(row) for row in rows]
-            return len(results) == len(payload) and all(result.healthy for result in results)
-        except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
-            return False
+        request: dict[str, object] = {"op": "windows-file-probe", "managed_file": str(path)}
+        verdict = _native_answer(request, deadline=_native_deadline())
+        return verdict is not None and verdict.get("status") == "healthy"
     if os.name != "posix":
         return False
     return posix_path_is_root_owned_and_restricted(path)

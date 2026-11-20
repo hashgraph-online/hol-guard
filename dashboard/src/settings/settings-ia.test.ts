@@ -1,4 +1,4 @@
-import { isLocalSettingsTabKey, localSettingsNavItems } from "./settings-ia";
+import { isLocalSettingsTabKey, localSettingsNavGroups, localSettingsNavItems } from "./settings-ia";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -6,7 +6,20 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-assert(localSettingsNavItems.length === 6, "local settings should expose six focused sections");
+assert(localSettingsNavItems.length === 7, "settings should expose six machine sections and one Guard Cloud section");
+assert(
+  localSettingsNavItems.filter((item) => item.group === "local").length === 6,
+  "machine settings should keep six focused sections",
+);
+assert(
+  localSettingsNavGroups.map((group) => group.key).join(",") === "local,cloud",
+  "Guard Cloud settings should sit after the machine's own settings",
+);
+assert(
+  localSettingsNavItems.at(-1)?.key === "cloud-actions" && localSettingsNavItems.at(-1)?.group === "cloud",
+  "Cloud actions should be the Guard Cloud section",
+);
+assert(isLocalSettingsTabKey("cloud-actions"), "Cloud actions should be a valid tab key");
 assert(
   localSettingsNavItems.some((item) => item.key === "protection"),
   "protection tab should exist",

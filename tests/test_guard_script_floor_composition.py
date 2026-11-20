@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import _runtime_artifact_policy_action
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action
 
 
 def _artifact(*risks: str) -> GuardArtifact:

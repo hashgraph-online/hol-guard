@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -210,6 +211,40 @@ def test_interrupted_object_publication_can_be_retried(generator, monkeypatch, t
     assert store.publish_object(tmp_path, digest, data)
 
 
+def test_republishing_repairs_an_object_left_with_two_links(generator, tmp_path):
+    """A crash between linking and removing the temporary leaves two links.
+
+    The runtime's bounded reader refuses a file whose link count is not one, so
+    that leftover would make a complete object unreadable. Republishing the same
+    bytes repairs the link count and keeps reporting the object as existing.
+    """
+    from codex_plugin_scanner.guard.catalog_delivery import pack_store as store
+
+    data = b"interrupted publication bytes"
+    digest = hashlib.sha256(data).hexdigest()
+    path = tmp_path / f"{digest}.json"
+    leftover = tmp_path / ".obj-leftover"
+    leftover.write_bytes(data)
+    os.link(leftover, path)
+    assert os.stat(path).st_nlink == 2
+
+    assert store.publish_object(tmp_path, digest, data) is False
+    assert os.stat(path).st_nlink == 1
+    assert path.read_bytes() == data
+    assert os.stat(leftover).st_nlink == 1
+    assert [entry.name for entry in tmp_path.glob(".obj-*")] == [".obj-leftover"]
+
+
+def test_republishing_different_bytes_still_refuses_the_existing_object(generator, tmp_path):
+    from codex_plugin_scanner.guard.catalog_delivery import pack_store as store
+
+    data = b"published bytes"
+    digest = hashlib.sha256(data).hexdigest()
+    (tmp_path / f"{digest}.json").write_bytes(b"other bytes")
+    with pytest.raises(ValueError, match="failed integrity"):
+        store.publish_object(tmp_path, digest, data)
+
+
 @pytest.mark.parametrize("target", ["relative-target", "/absolute-target"])
 def test_bootstrap_target_is_resolved_from_repository_not_calling_directory(generator, monkeypatch, tmp_path, target):
     calls = []
@@ -220,7 +255,7 @@ def test_bootstrap_target_is_resolved_from_repository_not_calling_directory(gene
     assert generator.bootstrap_compiler() == expected / "release" / executable
     command, options = calls[0]
     assert command[-2:] == ["-p", "guard-pack-compiler"]
-    assert "--locked" in command and "+1.88.0" in command
+    assert "--locked" in command and "+1.89.0" in command
     assert options == {"cwd": tmp_path, "check": True}
 
 

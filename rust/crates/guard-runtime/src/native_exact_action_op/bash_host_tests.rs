@@ -60,6 +60,57 @@ fn bash_final_host_context_replaces_hook_values_without_exposing_unrelated_expor
 }
 
 #[test]
+fn bash_final_host_context_marks_only_an_inert_node_options_value() {
+    let root = tempfile::tempdir().unwrap();
+    let intended = intended(root.path());
+    let stamp = |value: Option<&str>| {
+        let mut values = environment(root.path());
+        values.extend(value.map(|value| ("NODE_OPTIONS".into(), value.into())));
+        restamp(&intended, root.path(), values)
+            .unwrap()
+            .execution_environment
+    };
+    let inert = stamp(Some("--max-old-space-size=8192"));
+    let preload = stamp(Some("--max-old-space-size=8192 --require=./hook.js"));
+    assert!(inert.node_options_inert);
+    assert!(!preload.node_options_inert);
+    assert!(!stamp(None).node_options_inert);
+    assert!(!serde_json::to_string(&inert).unwrap().contains("8192"));
+    // Both carry the same names, so only the verdict separates their digests.
+    assert_ne!(inert.environment_digest, preload.environment_digest);
+}
+
+#[test]
+fn bash_final_host_context_marks_only_quote_path_git_config_entries() {
+    let root = tempfile::tempdir().unwrap();
+    let intended = intended(root.path());
+    let stamp = |key: &str| {
+        let mut values = environment(root.path());
+        values.extend([
+            ("GIT_CONFIG_COUNT".into(), "1".into()),
+            ("GIT_CONFIG_KEY_0".into(), key.into()),
+            ("GIT_CONFIG_VALUE_0".into(), "false".into()),
+        ]);
+        restamp(&intended, root.path(), values)
+            .unwrap()
+            .execution_environment
+    };
+    let inert = stamp("core.quotePath");
+    let pager = stamp("core.pager");
+    assert!(inert.git_config_environment_inert);
+    assert!(!pager.git_config_environment_inert);
+    assert!(
+        !restamp(&intended, root.path(), environment(root.path()))
+            .unwrap()
+            .execution_environment
+            .git_config_environment_inert
+    );
+    assert!(!serde_json::to_string(&inert).unwrap().contains("quotePath"));
+    // Both carry the same names, so only the verdict separates their digests.
+    assert_ne!(inert.environment_digest, pager.environment_digest);
+}
+
+#[test]
 fn bash_final_host_environment_refuses_ambiguous_and_unencodable_required_values() {
     let root = tempfile::tempdir().unwrap();
     let request = intended(root.path());

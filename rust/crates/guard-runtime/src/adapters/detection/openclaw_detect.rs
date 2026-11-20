@@ -1,7 +1,7 @@
 //! The OpenClaw detection kind (`openclaw_detect`): the gateway, channel and
-//! MCP server artifacts of the config Python loads (JSON, JSON5 and
-//! `$include` stay in `openclaw_config.py` and arrive as JSON text), plus
-//! the skill roots the config names (walked in `openclaw_skills`).
+//! MCP server artifacts of the config (loaded with its JSON5 and `$include`
+//! handling in `openclaw_config`), plus the skill roots the config names
+//! (walked in `openclaw_skills`).
 
 use std::path::{Path, PathBuf};
 
@@ -10,9 +10,10 @@ use serde_json::{json, Map, Value};
 use super::adapter_inventory::{Inventory, Request};
 use super::aibom_paths::{py_join, py_path};
 use super::context_digest::python_strip;
+use super::openclaw_config;
 use super::openclaw_mcp;
 use super::openclaw_skills;
-use super::pyjson::{parse_marking_lone_surrogates, PyVal};
+use super::pyjson::PyVal;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 use super::zcode_artifacts::{Fields, Scope};
@@ -232,15 +233,14 @@ fn skill_roots(request: &Request, payload: &PyVal) -> Vec<PathBuf> {
 pub(crate) fn detect(args: &Value) -> KindResult {
     let request = Request::parse(args, "openclaw")?;
     let config_path = request.path(args, "config_path")?;
-    let text = args_object(args)?
-        .get("payload")
-        .and_then(Value::as_str)
-        .ok_or(ERR_INVALID)?;
-    let payload = parse_marking_lone_surrogates(text).map_err(|_| ERR_INVALID)?;
-    if payload.as_dict().is_none() {
-        return Err(ERR_INVALID);
-    }
+    // The home Python's `expanduser` reads for an `$include` spelled with `~`.
+    let user_home = match args_object(args)?.get("user_home") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(home)) => Some(home.as_str()),
+        Some(_) => return Err(ERR_INVALID),
+    };
     let mut inventory = Inventory::new(&request);
+    let payload = openclaw_config::load(&inventory.fs(&config_path), user_home)?;
     if payload.truthy() {
         inventory.push_found(&config_path);
         let mcp = openclaw_mcp::inventory(&payload)?;

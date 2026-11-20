@@ -168,10 +168,7 @@ fn explicit_cancellation_has_no_success_exit_status() {
     let marker = std::env::temp_dir().join(format!(
         "guard-capture-ready-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cancel = Arc::new(AtomicBool::new(false));
     let stop = cancel.clone();

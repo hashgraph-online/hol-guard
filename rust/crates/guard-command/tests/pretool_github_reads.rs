@@ -91,6 +91,18 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("gh api -X DELETE repos/owner/repo -q .name", false),
             ("gh api -X GET repos/owner/repo/pulls/1", true),
             ("gh api --method=HEAD repos/owner/repo/commits/main", true),
+            // GitHub's search syntax writes its date and count bounds with
+            // comparison operators. They sit in the query string of a read, so
+            // the endpoint the capability is attributed from is unchanged.
+            ("gh api 'search/issues?q=repo:example-org/example-repo+created:>=2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+created:<2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+comments:>10'", true),
+            ("gh api -X GET 'search/issues?q=repo:example-org/example-repo+created:>2026-10-29'", true),
+            // An operator in the path, in a write, or behind an encoded `?`
+            // that never opens a query string keeps the endpoint unproven.
+            ("gh api 'repos/owner/re>po'", false),
+            ("gh api 'repos/owner/repo%3Fq=a>b'", false),
+            ("gh api -X POST 'repos/owner/repo/issues?q=a>b'", false),
             ("gh pr view 1 --json title,state", true),
             ("gh pr checks 4295 --repo hol-fake/example", true),
             ("gh pr view 4295 --repo hol-fake/example --json number,state,mergeable", true),
@@ -114,6 +126,30 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("git --exec-path=project -C project status", false),
             ("git -C .ssh status", false),
             ("git -C project status; cat .env", false),
+            (
+                "gh pr view 1 --json statusCheckRollup --jq '.statusCheckRollup[] | (.state // \"\") as $s | $s'",
+                true,
+            ),
+            (
+                "gh pr view 1 --json title --jq '. as $t | $t # \"\n| $ENV # \"'",
+                false,
+            ),
+            // jq reads a newline as a space, so a filter written over several
+            // lines settles exactly as it would on one.
+            (
+                "gh pr list --json number,author -q '\n[.[] |\n  . as $p |\n  ($p.author.login) as $a |\n  select($a != \"renovate[bot]\") |\n  \"\\($p.number)\\t\\($a)\"\n] | .[]'",
+                true,
+            ),
+            ("gh api repos/owner/repo/pulls --jq '.[] |\n  . as $p |\n  $p.number'", true),
+            ("gh api repos/owner/repo/pulls --jq '.[] |\n  .number'", true),
+            // A comment, the environment, a carriage return and a filter the
+            // shell expands keep their review across lines too.
+            ("gh api repos/owner/repo/pulls --jq '.[] # \"\n| @sh \"x\"'", false),
+            ("gh api repos/owner/repo/pulls --jq '.[] # note\n| .number'", false),
+            ("gh pr list --json number -q '.[] |\n  $ENV.HOME'", false),
+            ("gh api repos/owner/repo/pulls --jq '.[] |\n  env'", false),
+            ("gh pr list --json number -q '. as $p |\r  $p'", false),
+            ("gh pr list --json number -q \".[] |\n  . as $p | $p\"", false),
             ("gh pr view 1 --json title || echo unavailable", true),
             ("gh api repos/owner/repo/compare/base...main | head -1", true),
             ("gh api repos/owner/repo | jq .name", true),
@@ -126,7 +162,12 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("gh api repos/owner/repo | jq '.[0]name'", false),
             ("gh api repos/owner/repo | jq .name ordinary.json", false),
             ("gh api repos/owner/repo | jq --rawfile data .env .", false),
+            // jq may read an independently screened ordinary file bound by --slurpfile.
+            // The same binding to a credential file must still require review.
+            // Without a working directory or home context, an ordinary path
+            // could be a symlink to credentials: keep file bindings in review.
             ("gh api repos/owner/repo | jq --slurpfile data ordinary.json .", false),
+            ("gh api repos/owner/repo | jq --slurpfile data .env .", false),
             ("gh api repos/owner/repo | jq --from-file filter.jq", false),
             ("gh api repos/owner/repo | jq env", false),
             ("gh api repos/owner/repo | jq '$ENV'", false),

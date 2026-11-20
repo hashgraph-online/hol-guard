@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.catalog_delivery import authority
+from codex_plugin_scanner.guard.catalog_delivery import authority, lifecycle
 
 SOURCE = "ffa0eaa6ac9a1ca8daaa18cc587937dbd501cfd5"
 SUBJECT_DIGEST = "cdd0fb6a3cf407fc3947a5423747b7e5409479db5b02b1c3d441d9d9a4b501ac"
@@ -121,7 +122,7 @@ def test_authenticated_bytes_are_immutable_and_do_not_imply_activation(monkeypat
     [
         {"expires_at": 1499},
         {"issued_at": 1801},
-        {"expires_at": 1000 + authority.ROOT_VALIDITY_SECONDS + 1},
+        {"expires_at": 1000 + 7 * 24 * 60 * 60 + 1},
         {"issued_at": True},
         {"authority_epoch": 0},
         {"source_sha": "0" * 40},
@@ -148,3 +149,113 @@ def test_duplicate_keys_and_oversized_metadata_are_rejected_without_verifier():
         authority.verify_distribution(b'{"schema":1,"schema":2}', b"proof", expected_source_sha=SOURCE, now=1500)
     with pytest.raises(ValueError, match="byte limit"):
         authority.verify_distribution(b"x" * (65536 + 1), b"proof", expected_source_sha=SOURCE, now=1500)
+
+
+def test_expired_root_keeps_its_type_and_a_malformed_root_is_never_called_expired(monkeypatch):
+    monkeypatch.setattr(authority, "_verify_attested_artifact", lambda *args, **kwargs: None)
+    value = root_value()
+    value["expires_at"] = 1499
+    with pytest.raises(authority.ExpiredDistributionError, match="refresh before new activation"):
+        authority.verify_distribution(json.dumps(value).encode(), b"proof", expected_source_sha=SOURCE, now=1500)
+    value["authority_epoch"] = 0
+    with pytest.raises(ValueError, match="authority epoch invalid") as raised:
+        authority.verify_distribution(json.dumps(value).encode(), b"proof", expected_source_sha=SOURCE, now=1500)
+    assert not isinstance(raised.value, authority.ExpiredDistributionError)
+
+
+def test_accepted_root_reports_the_expiry_it_was_judged_against(monkeypatch):
+    monkeypatch.setattr(authority, "_verify_attested_artifact", lambda *args, **kwargs: None)
+    result = authority.verify_distribution(
+        json.dumps(root_value()).encode(), b"proof", expected_source_sha=SOURCE, now=1500
+    )
+    assert result.expires_at == 2000 and result.source_sha == SOURCE
+
+
+def test_root_that_is_not_utf8_is_an_encoding_failure_without_the_verifier():
+    with pytest.raises(ValueError, match="invalid release provenance encoding or depth"):
+        authority.verify_distribution(b"\xff\xfe{}", b"proof", expected_source_sha=SOURCE, now=1500)
+
+
+RUNTIME = Path(__file__).parents[1] / "rust/crates/guard-runtime/src/pack_lifecycle"
+UNMAPPED = {"distribution_request_invalid", "distribution_operation_invalid"}
+
+
+def native_reasons():
+    sources = [RUNTIME / "distribution.rs", *sorted((RUNTIME / "distribution").glob("*.rs"))]
+    return {code for path in sources for code in re.findall(r'"(distribution_[a-z_]+)"', path.read_text())}
+
+
+def test_every_native_reason_has_a_caller_message_and_none_is_dead():
+    codes = native_reasons()
+    assert codes - UNMAPPED == set(authority._REASONS)
+
+
+@pytest.mark.parametrize("code,message", sorted(authority._REASONS.items()))
+def test_native_reason_surfaces_as_the_legacy_error(monkeypatch, code, message):
+    def refuse(kind, **fields):
+        raise ValueError(f"native_pack_lifecycle_unavailable: source compiler returned invalid JSON: {code}")
+
+    monkeypatch.setattr(lifecycle, "invoke", refuse)
+    expected = authority.ExpiredDistributionError if code == "distribution_expired" else ValueError
+    with pytest.raises(expected) as raised:
+        authority._native("root", data="{}", source=SOURCE, now=1)
+    assert str(raised.value) == message
+    assert type(raised.value) is expected
+
+
+def test_an_unavailable_runtime_is_not_rewritten_as_a_root_failure(monkeypatch):
+    def unavailable(kind, **fields):
+        raise ValueError("native_pack_lifecycle_unavailable: packaged native resources are unavailable")
+
+    monkeypatch.setattr(lifecycle, "invoke", unavailable)
+    with pytest.raises(ValueError, match="native_pack_lifecycle_unavailable"):
+        authority.verify_distribution(json.dumps(root_value()).encode(), b"proof", expected_source_sha=SOURCE, now=1500)
+
+
+def statement(**changes):
+    value = {
+        "_type": "https://in-toto.io/Statement/v1",
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "subject": [{"name": "extension-distribution.v2.json", "digest": {"sha256": SUBJECT_DIGEST}}],
+        "predicate": {
+            "buildDefinition": {
+                "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+                "externalParameters": {
+                    "workflow": {
+                        "repository": authority.REPOSITORY_URI,
+                        "path": authority.WORKFLOW_PATH,
+                        "ref": authority.SOURCE_REF,
+                    }
+                },
+                "resolvedDependencies": [
+                    {
+                        "uri": "git+" + authority.REPOSITORY_URI + "@" + authority.SOURCE_REF,
+                        "digest": {"gitCommit": SOURCE},
+                    }
+                ],
+            },
+            "runDetails": {"builder": {"id": authority.WORKFLOW_ID}},
+        },
+    }
+    value.update(changes)
+    return value
+
+
+def attested(value, *, subject="extension-distribution.v2.json", source=SOURCE):
+    return authority._native(
+        "provenance-statement",
+        content_type="application/vnd.in-toto+json",
+        payload=json.dumps(value),
+        subject=subject,
+        digest=SUBJECT_DIGEST,
+        source=source,
+    )["attested"]
+
+
+def test_runtime_statement_policy_names_the_publisher_the_signature_policy_names():
+    # The signature policy reads these constants and the runtime holds its own
+    # copy of the same identity. A drift between them fails here, not in a release.
+    assert attested(statement()) is True
+    assert attested(statement(), subject="another-asset.json") is False
+    with pytest.raises(ValueError, match="source differs"):
+        attested(statement(), source="0" * 40)

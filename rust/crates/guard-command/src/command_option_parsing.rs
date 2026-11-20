@@ -15,8 +15,8 @@ mod unicode;
 
 pub(crate) use argument_assignments::ArgumentSemantics;
 use argument_assignments::{is_truthy, partition_assignment};
-pub use unicode::python_is_alphanumeric;
-pub(crate) use unicode::{python_is_alphabetic, python_is_whitespace};
+pub(crate) use unicode::python_is_whitespace;
+pub use unicode::{python_is_alphabetic, python_is_alphanumeric};
 
 pub(crate) const MAX_OPTION_PARSE_STATES: usize = 16_384;
 

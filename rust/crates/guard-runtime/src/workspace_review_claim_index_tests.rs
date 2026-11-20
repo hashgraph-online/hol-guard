@@ -1,15 +1,11 @@
 use super::*;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn root() -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "guard-claim-index-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     crate::resident_state::ensure_private_directory(&path, true).unwrap()
 }

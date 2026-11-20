@@ -36,10 +36,15 @@ def _install(monkeypatch: pytest.MonkeyPatch, reply: object, *, status: object |
     seen: list[dict[str, Any]] = []
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_: status or _status())
 
-    def run(path: Path, args: tuple[str, ...], *, input_text: str, timeout_seconds: float) -> str | None:
+    def run(
+        path: Path, args: tuple[str, ...], *, input_text: str, timeout_seconds: float, output_limit: int
+    ) -> str | None:
         assert args == (client.POLICY_EFFECTIVE_COMMAND, "--stdin")
         assert 0 < timeout_seconds <= client.POLICY_EFFECTIVE_TIMEOUT_SECONDS
-        seen.append(json.loads(input_text))
+        request = json.loads(input_text)
+        views = client._PUBLISH_VIEW_BYTES if request["op"] == "publish" else 0
+        assert output_limit == native_runtime._MAX_RESPONSE_BYTES + views
+        seen.append(request)
         return reply if isinstance(reply, str) or reply is None else json.dumps(reply)
 
     monkeypatch.setattr(native_runtime, "_run_native_process", run)
@@ -94,6 +99,16 @@ def test_compose_sends_every_config_in_order(monkeypatch) -> None:
     assert result == {"mode": "enforce"}
     assert seen[0]["op"] == "compose"
     assert [config["mode"] for config in seen[0]["configs"]] == ["enforce", "observe"]
+    assert "observed" not in seen[0]
+
+
+def test_compose_hands_the_stored_mcp_choices_to_the_composer(monkeypatch) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {"mode": "enforce"}})
+    observed = {"mcp_tool_actions": {"codex:mcp__server__read": "block"}, "mcp_provider_actions": {}}
+
+    client.compose_effective_native_policies((dict(_BASE),), observed=observed)
+
+    assert seen[0]["observed"] == observed
 
 
 def test_compose_requires_a_config(monkeypatch) -> None:
@@ -161,7 +176,7 @@ def test_same_path_with_a_new_digest_recomputes(monkeypatch: pytest.MonkeyPatch)
             capabilities=SimpleNamespace(features=(client.POLICY_EFFECTIVE_FEATURE,)),
         )
 
-    def run(_path: Path, _args: tuple[str, ...], *, input_text: str, timeout_seconds: float) -> str:
+    def run(_path: Path, _args: tuple[str, ...], *, input_text: str, timeout_seconds: float, output_limit: int) -> str:
         assert input_text
         assert timeout_seconds > 0
         return json.dumps(next(policies))
@@ -202,4 +217,56 @@ def test_mixed_loaded_and_mapping_configs_are_rejected(monkeypatch, tmp_path: Pa
     with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
         client.compose_effective_native_policies((GuardConfig(guard_home=tmp_path, workspace=None), dict(_BASE)))
 
+    assert seen == []
+
+
+_PUBLISH_STATUS = _status(features=(client.POLICY_EFFECTIVE_FEATURE, client.POLICY_PUBLISH_FEATURE))
+_VIEWS = {"blocked_request_mode": "ask", "mcp_relay_harnesses": {"codex": {"config": {}, "hash_config": {}}}}
+
+
+def test_publish_returns_the_policy_and_the_views_rust_derived(monkeypatch, tmp_path: Path) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {"mode": "enforce"}, "views": _VIEWS}, status=_PUBLISH_STATUS)
+    config = GuardConfig(guard_home=tmp_path, workspace=None, blocked_request_mode="ask")
+
+    policy, mode, harnesses = client.compose_native_publication((config,), observed={"mcp_tool_actions": {}})
+
+    assert (policy, mode, harnesses) == ({"mode": "enforce"}, "ask", _VIEWS["mcp_relay_harnesses"])
+    request = seen[0]
+    assert request["op"] == "publish"
+    assert request["guard_config"] is True
+    fields = request["configs"][0]
+    assert fields["blocked_request_mode"] == "ask"
+    assert fields["managed_policy_status"] == config.managed_policy_status
+    assert "managed_policy_hash" in fields
+
+
+def test_publish_needs_its_own_capability(monkeypatch, tmp_path: Path) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {}, "views": _VIEWS})
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_effective_unavailable"):
+        client.compose_native_publication((GuardConfig(guard_home=tmp_path, workspace=None),))
+    assert seen == []
+
+
+@pytest.mark.parametrize(
+    "views",
+    [
+        None,
+        [],
+        {"blocked_request_mode": "ask"},
+        {"blocked_request_mode": 1, "mcp_relay_harnesses": {}},
+        {"blocked_request_mode": None, "mcp_relay_harnesses": {"codex": []}},
+    ],
+)
+def test_malformed_views_fail_closed(monkeypatch, tmp_path: Path, views: object) -> None:
+    _install(monkeypatch, {"ok": True, "policy": {}, "views": views}, status=_PUBLISH_STATUS)
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_effective_invalid"):
+        client.compose_native_publication((GuardConfig(guard_home=tmp_path, workspace=None),))
+
+
+def test_publish_refuses_mapping_configs_before_spawning(monkeypatch) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {}, "views": _VIEWS}, status=_PUBLISH_STATUS)
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
+        client.compose_native_publication((dict(_BASE),))
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
+        client.compose_native_publication(())
     assert seen == []

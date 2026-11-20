@@ -96,6 +96,7 @@ def _schema_sql(path: Path) -> list[str]:
             row[0]
             for row in connection.execute(
                 "select sql from sqlite_master where sql is not null "
+                "and name not glob 'trg_extension_control_epoch_*' and name != 'extension_control_authority_epoch' "
                 f"and tbl_name in ({','.join('?' * len(VECTORS['order_by']))}) "
                 "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid",
                 tuple(VECTORS["order_by"]),

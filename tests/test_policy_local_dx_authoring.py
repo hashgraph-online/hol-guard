@@ -13,12 +13,15 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_dispatch_policy_dx import run_policy_file_command
-from codex_plugin_scanner.guard.policy_starters import POLICY_MODELINE, POLICY_STARTERS
+from codex_plugin_scanner.guard.policy_starters import POLICY_MODELINE
 
 SPEC = Path(__file__).resolve().parents[1] / "spec" / "guard-policy" / "v1alpha1"
 FIXTURES = SPEC / "fixtures"
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
-STARTER_IDS = [starter.id for starter in POLICY_STARTERS]
+STARTER_VECTORS = (
+    Path(__file__).resolve().parents[1] / "rust/crates/guard-command/testdata/policy_starters/starter_vectors.json"
+)
+STARTER_IDS = [item["id"] for item in json.loads(STARTER_VECTORS.read_text(encoding="utf-8"))["starters"]]
 
 
 def _run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str]:
@@ -489,10 +492,3 @@ def test_validate_does_not_tell_users_to_rename_valid_extension_keys(
     extra = next(item for item in payload["diagnostics"] if item["code"] == "schema_additionalProperties")
     assert "x-note" not in extra["suggestion"]
     assert "defaultAction" in extra["suggestion"]
-
-
-@pytest.mark.parametrize("starter", [item for item in POLICY_STARTERS if item.rules])
-def test_starter_summaries_do_not_promise_approval_prompts_their_block_rules_do_not_give(starter) -> None:
-    assert all(rule.effect == "block" for rule in starter.rules)
-    assert "ask" not in starter.summary.lower()
-    assert not any("approving" in rule.description for rule in starter.rules)

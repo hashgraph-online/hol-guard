@@ -6,6 +6,7 @@ the brief protected-cursor CAS lease. Failed preparation retains the old view.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import time
@@ -19,11 +20,62 @@ from ..native_command_control_authority_store import _key
 from . import active_security, lifecycle, lifecycle_store, transport
 from .authority import MAX_PROVENANCE_BYTES, VerifiedDistribution, verify_distribution
 from .discovery import prepare_discovery
+from .state_paths import resolved_guard_home
 
 PREFIX = "guard-command-discovery-current"
 STAMP = "guard-command-discovery-current-enrolled"
 COMPLETE = "guard-command-discovery-complete"
 ENROLLED = "guard.discovery-current-enrolled.v1"
+ENGINE_INCOMPATIBLE = "discovery_current_engine_incompatible"
+
+
+class PublicationEngineMismatchError(ValueError):
+    """The current publication was built for another catalog engine.
+
+    A released core meets this as soon as `main` publishes with a changed
+    compiler: the publication is authentic, just not for this core. It names
+    the publication so the caller can report it once per publication.
+    """
+
+    def __init__(self, data: bytes) -> None:
+        try:
+            root = json.loads(data)
+        except ValueError:
+            root = None
+        root = root if isinstance(root, dict) else {}
+        self.publication_id = str(root.get("publication_id") or "unknown")[:40]
+        self.source_sha = str(root.get("source_sha") or "")[:12]
+        self.engine = str(root.get("engine") or "")[:12]
+        super().__init__(ENGINE_INCOMPATIBLE)
+
+    def describe(self) -> str:
+        return f"publication={self.publication_id} source={self.source_sha} engine={self.engine}"
+
+
+@contextmanager
+def _engine_mismatch_named(authority):
+    """Name the publication a mismatch came from, whichever path met it.
+
+    The native selector answers `discovery_current_engine_incompatible` for a
+    publication built by another compiler, and the cached bytes a restore
+    reverifies go through that same selector. Both paths therefore have to
+    raise the named error, or the caller cannot tell an expected version skew
+    from a transport that stopped answering.
+    """
+
+    try:
+        yield
+    except ValueError as error:
+        if ENGINE_INCOMPATIBLE in str(error):
+            raise PublicationEngineMismatchError(authority.data) from error
+        raise
+
+
+def _cache(store, name):
+    # The prefix above the Guard home is resolved once so that a host which
+    # reaches it through a symlink still yields a path every checked_path below
+    # here accepts. Components at and below the Guard home stay checked.
+    return resolved_guard_home(store.guard_home) / "command-packs" / name
 
 
 def _read(store):
@@ -104,7 +156,7 @@ def refresh(store):
     """Fixed verified factory -> native monotonic cursor -> complete handle."""
     captured = _capture(store)
     _invoke(store, captured)
-    directory = store.guard_home / "command-packs" / "current-publication"
+    directory = _cache(store, "current-publication")
     provenance = []
     # A transport/verifier failure may restore only the protected completed
     # view. Cache files cannot nominate a newer Root through this update path.
@@ -117,7 +169,8 @@ def refresh(store):
     captured = _capture(store)
     fields: dict[str, Any] = dict(publication=authority.data.decode(), now=time.time())
     while True:
-        result = _invoke(store, captured, **fields)
+        with _engine_mismatch_named(authority):
+            result = _invoke(store, captured, **fields)
         if "lineage_kind" not in result:
             break
         floor = lifecycle.invoke("read", key=_key(store).hex(), floor=result["lineage_floor"])
@@ -147,7 +200,7 @@ def refresh(store):
     handle = prepare_discovery(
         store.guard_home,
         authority,
-        fetch=transport.cached_fetcher(store.guard_home / "command-packs" / "transfers"),
+        fetch=transport.cached_fetcher(_cache(store, "transfers")),
     )
     # A security update or activation racing preparation cannot publish a view
     # below its new floors. No network is performed during this final check.
@@ -173,13 +226,18 @@ def restore(store):
     captured = _capture(store)
     complete = store._get_policy_integrity_secret_from_store(store._build_scoped_secret_ref(COMPLETE))
     retained = _invoke(store, (captured[0], complete, captured[2]))["retained"]
-    directory = store.guard_home / "command-packs" / "current-publication"
+    directory = _cache(store, "current-publication")
     authority = _load(directory, retained, now=int(time.time()))
-    _invoke(store, captured, publication=authority.data.decode(), now=time.time(), restore=True, complete=complete)
-    handle = prepare_discovery(
-        store.guard_home, authority, fetch=transport.cached_fetcher(store.guard_home / "command-packs" / "transfers")
-    )
-    _invoke(
-        store, _capture(store), publication=authority.data.decode(), now=time.time(), restore=True, complete=complete
-    )
+    with _engine_mismatch_named(authority):
+        _invoke(store, captured, publication=authority.data.decode(), now=time.time(), restore=True, complete=complete)
+    handle = prepare_discovery(store.guard_home, authority, fetch=transport.cached_fetcher(_cache(store, "transfers")))
+    with _engine_mismatch_named(authority):
+        _invoke(
+            store,
+            _capture(store),
+            publication=authority.data.decode(),
+            now=time.time(),
+            restore=True,
+            complete=complete,
+        )
     return handle

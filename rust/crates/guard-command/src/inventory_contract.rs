@@ -24,6 +24,8 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 
 use crate::aibom_trust_metadata::normalize_inventory_datetime;
+use crate::inventory_fingerprints::fingerprint_mapping;
+use crate::inventory_redaction::{python_int_value, python_str, python_truthy};
 
 // ---------------------------------------------------------------------------
 // Model mirrors (`inventory_contract_models` dataclasses → structs).
@@ -54,7 +56,9 @@ pub struct GuardAgentInventoryFinding {
     pub title: String,
     pub artifact_id: String,
     pub check_id: String,
-    pub summary: String,
+    /// `None` is the dataclass default; an empty description stays `""`, and
+    /// both the contract JSON and the snapshot digest show the difference.
+    pub summary: Option<String>,
     pub evidence: Map<String, Value>,
     /// Remaining dataclass fields.
     pub extra: Map<String, Value>,
@@ -66,8 +70,10 @@ pub struct GuardInventorySource {
     pub source_id: String,
     pub source_type: String,
     pub status: String,
-    pub detail: String,
-    pub captured_at: String,
+    /// `str | None`, like [`GuardAgentInventoryFinding::summary`].
+    pub detail: Option<String>,
+    /// `str | None`, like [`GuardAgentInventoryFinding::summary`].
+    pub captured_at: Option<String>,
     /// Remaining dataclass fields.
     pub extra: Map<String, Value>,
 }
@@ -305,10 +311,6 @@ fn contract_value_json(key_camel: &str, value: &Value) -> Option<Value> {
 }
 
 /// `getattr(run, key)` → non-empty `str`.
-fn run_str<'a>(run: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
-    run.get(key).and_then(Value::as_str)
-}
-
 fn run_findings(run: &Map<String, Value>) -> &[Value] {
     run.get("findings")
         .and_then(Value::as_array)
@@ -351,15 +353,17 @@ pub fn _normalize_redaction_report(report: &Value) -> Map<String, Value> {
             return out;
         }
     };
-    let raw_secrets = report_obj
-        .get("rawSecretsIncluded")
-        .or_else(|| report_obj.get("raw_secret_values"))
-        .or_else(|| report_obj.get("raw_secrets_included"))
+    // Python walks these alternatives with `is None`, so a key that is present
+    // and null falls through to the next spelling instead of settling the
+    // answer. `get` alone returns `Some(Null)` and would stop the walk early.
+    let present = |key: &str| report_obj.get(key).filter(|value| !value.is_null());
+    let raw_secrets = present("rawSecretsIncluded")
+        .or_else(|| present("raw_secret_values"))
+        .or_else(|| present("raw_secrets_included"))
         .cloned()
         .unwrap_or(json!(false));
-    let redacted_fields = report_obj
-        .get("redactedFields")
-        .or_else(|| report_obj.get("redacted_fields"))
+    let redacted_fields = present("redactedFields")
+        .or_else(|| present("redacted_fields"))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
@@ -468,7 +472,11 @@ fn _inventory_finding_json(finding: &GuardAgentInventoryFinding) -> Value {
     obj.insert("title".into(), json!(finding.title));
     obj.insert("artifactId".into(), json!(finding.artifact_id));
     obj.insert("checkId".into(), json!(finding.check_id));
-    obj.insert("summary".into(), json!(finding.summary));
+    // `_OPTIONAL_ONLY_CONTRACT_KEYS`: Python drops `summary` when it is `None`
+    // and keeps an explicitly empty one.
+    if let Some(summary) = &finding.summary {
+        obj.insert("summary".into(), json!(summary));
+    }
     obj.insert("evidence".into(), Value::Object(finding.evidence.clone()));
     for (k, v) in &finding.extra {
         let camel = _snake_to_camel_case_key(k);
@@ -483,7 +491,7 @@ fn _inventory_source_json(source: &GuardInventorySource) -> Value {
     // Python `asdict(GuardInventorySource)` emits `captured_at`/`detail` as
     // `None` when unset and `_inventory_contract_json` keeps them in dataclass
     // field order (source_id, source_type, status, captured_at, detail). Mirror
-    // that: always emit both keys, `null` for empty, `capturedAt` before
+    // that: always emit both keys, `null` when unset, `capturedAt` before
     // `detail`, and run both through `_normalize_inventory_datetime`.
     let mut obj = Map::new();
     obj.insert("sourceId".into(), json!(source.source_id));
@@ -491,18 +499,16 @@ fn _inventory_source_json(source: &GuardInventorySource) -> Value {
     obj.insert("status".into(), json!(source.status));
     obj.insert(
         "capturedAt".into(),
-        if source.captured_at.is_empty() {
-            Value::Null
-        } else {
-            normalize_inventory_datetime(&json!(source.captured_at))
+        match &source.captured_at {
+            Some(captured_at) => normalize_inventory_datetime(&json!(captured_at)),
+            None => Value::Null,
         },
     );
     obj.insert(
         "detail".into(),
-        if source.detail.is_empty() {
-            Value::Null
-        } else {
-            json!(source.detail)
+        match &source.detail {
+            Some(detail) => json!(detail),
+            None => Value::Null,
         },
     );
     for (k, v) in &source.extra {
@@ -670,8 +676,8 @@ pub fn inventory_snapshot_from_detection(
                 ),
                 source_type: "config".into(),
                 status: "available".into(),
-                detail: redacted,
-                captured_at: generated_at.to_string(),
+                detail: Some(redacted),
+                captured_at: Some(generated_at.to_string()),
                 extra: Map::new(),
             }
         })
@@ -750,8 +756,8 @@ pub fn _source_status_for_cisco_status(status: &str) -> &'static str {
 
 /// `_cisco_source(run)`
 pub fn _cisco_source(run: &Map<String, Value>) -> Option<InventoryFindingSource> {
-    let source = run_str(run, "source").unwrap_or("");
-    match source {
+    let source = run.get("source").map(python_str).unwrap_or_default();
+    match source.as_str() {
         "cisco-mcp-scanner" => Some("cisco-mcp-scanner"),
         "cisco-skill-scanner" => Some("cisco-skill-scanner"),
         _ => None,
@@ -789,6 +795,18 @@ pub fn _score_delta_for_severity(severity: &str) -> i64 {
 }
 
 /// `_cisco_inventory_findings(cisco_runs, *, items, home_dir, workspace_dir)`
+///
+/// Every finding keeps the scanner's own severity: an unrecognised token
+/// normalizes down to `info` rather than up, and the score delta follows the
+/// normalized severity, so a scanner cannot move an inventory's score with a
+/// word Guard does not know. `confidence` records whether the scanner was
+/// actually enabled for the run, which keeps a finding from a failed or
+/// skipped scanner from reading as a confirmed one.
+///
+/// Every text that leaves here — the run message, each title and each
+/// description — goes through the redactor first, and the file path through
+/// the known-path redactor, so a scanner that quotes a local path or a
+/// credential cannot publish it through an inventory.
 pub fn _cisco_inventory_findings(
     cisco_runs: &[CiscoRun],
     deps: &InventoryDeps<'_>,
@@ -798,82 +816,92 @@ pub fn _cisco_inventory_findings(
 ) -> Vec<GuardAgentInventoryFinding> {
     let mut findings: Vec<GuardAgentInventoryFinding> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let empty = Map::new();
     for run in cisco_runs {
-        let source = match _cisco_source(run) {
-            Some(s) => s,
-            None => continue,
+        let Some(source) = _cisco_source(run) else {
+            continue;
         };
-        let run_status = run_str(run, "status").unwrap_or("unknown").to_string();
+        let run_status = run
+            .get("status")
+            .map(python_str)
+            .unwrap_or_else(|| "unknown".to_owned());
         let run_message = deps.redaction._safe_finding_text(
-            run_str(run, "message").unwrap_or(""),
+            &run.get("message").map(python_str).unwrap_or_default(),
             home_dir,
             workspace_dir,
         );
-        let duration_ms = run.get("duration_ms").cloned();
+        let duration_ms = python_int_value(run.get("duration_ms"));
+        // `tuple(getattr(run, "findings", ()) or ())` — a missing or falsy
+        // `findings` iterates as empty.
         for raw_finding in run_findings(run) {
-            let raw_finding = match raw_finding.as_object() {
-                Some(f) => f,
-                None => continue,
-            };
-            let rule_id = run_str(raw_finding, "rule_id")
-                .filter(|s| !s.is_empty())
-                .unwrap_or("cisco-finding")
-                .to_string();
+            let raw_finding = raw_finding.as_object().unwrap_or(&empty);
+            let rule_id = or_default(raw_finding.get("rule_id"), "cisco-finding");
             let title = deps.redaction._safe_finding_text(
-                run_str(raw_finding, "title")
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or("Cisco scanner finding"),
+                &or_default(raw_finding.get("title"), "Cisco scanner finding"),
                 home_dir,
                 workspace_dir,
             );
-            let file_path = run_str(raw_finding, "file_path");
-            let safe_path = match file_path {
-                Some(p) if !p.is_empty() => Some(deps.redaction._redact_known_path(
-                    p,
-                    home_dir,
-                    workspace_dir,
-                )),
+            let safe_path = match raw_finding.get("file_path") {
+                Some(Value::String(path)) if !path.is_empty() => Some(
+                    deps.redaction
+                        ._redact_known_path(path, home_dir, workspace_dir),
+                ),
                 _ => None,
             };
-            let line_number = run
-                .get("line_number")
-                .and_then(Value::as_i64)
-                .or_else(|| raw_finding.get("line_number").and_then(Value::as_i64));
-            let severity = _inventory_severity(raw_finding.get("severity").unwrap_or(&Value::Null));
-            let artifact_id = _artifact_id_for_cisco_finding(safe_path.as_deref(), items);
-            let finding_id = format!(
-                "{}:{}:{}:{}",
-                source,
-                artifact_id,
-                rule_id,
-                line_number
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| "0".into())
-            );
+            let line_number = python_int_value(raw_finding.get("line_number"));
+            let finding_hash = fingerprint_mapping(&json!({
+                "source": source,
+                "rule_id": rule_id,
+                "title": title,
+                "path": safe_path,
+                "line": line_number,
+            }));
+            let finding_id = format!("{source}:{rule_id}:{}", &finding_hash[..16]);
             if !seen.insert(finding_id.clone()) {
                 continue;
             }
+            let severity = _inventory_severity(
+                raw_finding
+                    .get("severity")
+                    .unwrap_or(&Value::String("info".to_owned())),
+            );
+            let confidence = if run_status == "enabled" {
+                "high"
+            } else {
+                "unknown"
+            };
+            let summary = deps.redaction._safe_finding_text(
+                &or_default(raw_finding.get("description"), ""),
+                home_dir,
+                workspace_dir,
+            );
             let mut evidence = Map::new();
-            evidence.insert("status".into(), json!(run_status));
-            evidence.insert("message".into(), json!(run_message));
-            if let Some(d) = duration_ms.clone() {
-                evidence.insert("durationMs".into(), d);
-            }
-            if let Some(p) = safe_path.clone() {
-                evidence.insert("filePath".into(), json!(p));
-            }
-            if let Some(ln) = line_number {
-                evidence.insert("lineNumber".into(), json!(ln));
-            }
+            evidence.insert("scannerStatus".into(), json!(run_status));
+            evidence.insert("scannerMessage".into(), json!(run_message));
+            evidence.insert(
+                "filePath".into(),
+                safe_path.clone().map_or(Value::Null, Value::String),
+            );
+            evidence.insert("lineNumber".into(), line_number);
+            evidence.insert("durationMs".into(), duration_ms.clone());
+            evidence.insert(
+                "riskComponent".into(),
+                json!({
+                    "source": source,
+                    "severity": severity,
+                    "confidence": confidence,
+                    "scoreDelta": _score_delta_for_severity(severity),
+                }),
+            );
             findings.push(GuardAgentInventoryFinding {
                 finding_id,
-                source: source.to_string(),
-                severity: severity.to_string(),
-                confidence: "high".into(),
+                source: source.to_owned(),
+                severity: severity.to_owned(),
+                confidence: confidence.to_owned(),
                 title,
-                artifact_id,
-                check_id: format!("aibom.{source}.{rule_id}"),
-                summary: run_message.clone(),
+                artifact_id: _artifact_id_for_cisco_finding(safe_path.as_deref(), items),
+                check_id: rule_id,
+                summary: Some(summary),
                 evidence,
                 extra: Map::new(),
             });
@@ -882,25 +910,42 @@ pub fn _cisco_inventory_findings(
     findings
 }
 
+/// `str(getattr(obj, key, default) or default)` — a missing or falsy attribute
+/// falls back before `str()` runs, so `None`, `""` and `0` all reach the
+/// default rather than their rendered form.
+fn or_default(value: Option<&Value>, default: &str) -> String {
+    match value {
+        Some(value) if python_truthy(value) => python_str(value),
+        _ => default.to_owned(),
+    }
+}
+
 /// `_cisco_inventory_sources(cisco_runs)`
+///
+/// A scanner that failed or timed out reports as `failed` and anything else
+/// Guard does not recognise as `missing`, so an inventory never shows a
+/// scanner as available on the strength of a status it cannot read.
 pub fn _cisco_inventory_sources(
     cisco_runs: &[CiscoRun],
     deps: &InventoryDeps<'_>,
 ) -> Vec<GuardInventorySource> {
     let mut sources = Vec::new();
     for run in cisco_runs {
-        let source = match _cisco_source(run) {
-            Some(s) => s,
-            None => continue,
+        let Some(source) = _cisco_source(run) else {
+            continue;
         };
-        let run_status = run_str(run, "status").unwrap_or("unknown").to_string();
+        let status = run
+            .get("status")
+            .map(python_str)
+            .unwrap_or_else(|| "unknown".to_owned());
         let detail = deps.redaction._safe_source_detail(run);
+        let digest = fingerprint_mapping(&json!({ "status": status, "detail": detail }));
         sources.push(GuardInventorySource {
-            source_id: format!("{source}:source:{run_status}"),
-            source_type: source.to_string(),
-            status: _source_status_for_cisco_status(&run_status).to_string(),
-            detail,
-            captured_at: run_str(run, "captured_at").unwrap_or("").to_string(),
+            source_id: format!("{source}:{}", &digest[..12]),
+            source_type: "scanner".to_owned(),
+            status: _source_status_for_cisco_status(&status).to_owned(),
+            captured_at: None,
+            detail: Some(detail),
             extra: Map::new(),
         });
     }
@@ -919,10 +964,15 @@ pub fn _symlink_findings_from_items(
             Some(s) => s,
             None => continue,
         };
-        let validation_state = source_of_truth
+        let Some(validation_state) = source_of_truth
             .get("validationState")
             .and_then(Value::as_str)
-            .unwrap_or("unknown");
+        else {
+            continue;
+        };
+        if validation_state == "valid" {
+            continue;
+        }
         let severity = if validation_state == "loop" || validation_state == "escape_blocked" {
             "high"
         } else {
@@ -952,9 +1002,9 @@ pub fn _symlink_findings_from_items(
             title: format!("Symlink source {}", validation_state.replace('_', " ")),
             artifact_id: item.item_id.clone(),
             check_id: format!("aibom.symlink.{validation_state}"),
-            summary: format!(
+            summary: Some(format!(
                 "Inventory item references a symlink source in state {validation_state}."
-            ),
+            )),
             evidence,
             extra: Map::new(),
         });

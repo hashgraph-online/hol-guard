@@ -224,18 +224,40 @@ fn risk_class(source: &str) -> &'static str {
 }
 
 /// Most restrictive of the configured actions for the signals' sources.
+///
+/// Each source's risk class is resolved from the sent configuration here, so
+/// the caller sends what it loaded and never resolves a class of its own.
 pub(crate) fn policy_action(query: &CiscoPolicyQueryV1) -> Result<Value, &'static str> {
-    let mut resolved = vec![Value::String("allow".to_owned())];
+    let mut configured = std::collections::BTreeMap::new();
     for source in &query.signal_sources {
-        let configured = query
-            .configured_actions
+        let class = risk_class(source);
+        configured.entry(class.to_owned()).or_insert_with(|| {
+            crate::risk_action::configured_risk_action(
+                &query.guard_config,
+                class,
+                query.harness.as_deref(),
+            )
+        });
+    }
+    compose_policy_action(&query.signal_sources, &configured)
+}
+
+/// The composed effect of the signals' sources under already-resolved
+/// actions. `None` means nothing configures that class, which adds no floor.
+pub(crate) fn compose_policy_action(
+    signal_sources: &[String],
+    configured_actions: &std::collections::BTreeMap<String, Option<String>>,
+) -> Result<Value, &'static str> {
+    let mut resolved = vec![Value::String("allow".to_owned())];
+    for source in signal_sources {
+        let configured = configured_actions
             .get(risk_class(source))
             .ok_or("missing configured action")?;
         if let Some(action) = configured {
             resolved.push(Value::String(action.clone()));
         }
     }
-    let action = if query.signal_sources.is_empty() {
+    let action = if signal_sources.is_empty() {
         GuardAction::Allow
     } else {
         most_restrictive_guard_action(&resolved, GuardAction::Review)

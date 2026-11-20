@@ -6,6 +6,7 @@
 //! `evaluate_command` receives.
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 use crate::canonical_command::CanonicalCommand;
@@ -312,4 +313,168 @@ fn non_string_executable_rejected() {
     assert!(
         validate_native_command_observations(&fixture["payload"]["command_extensions"]).is_none()
     );
+}
+
+// Malformed-wire and redaction vectors for the strict validator, built on a
+// minimal synthetic payload rather than a captured fixture.
+
+fn wire_evidence(segment_index: u64) -> Value {
+    serde_json::json!({
+        "segment_index": segment_index,
+        "executable": "ollama",
+        "detail": "Matched bounded structured command constraints.",
+    })
+}
+
+fn rehash(value: &mut Value) {
+    let mut receipt = serde_json::Map::new();
+    for key in [
+        "observations",
+        "permission_observations",
+        "evaluation_error",
+    ] {
+        receipt.insert(key.to_owned(), value[key].clone());
+    }
+    let canonical = serde_json::to_string(&Value::Object(receipt)).unwrap();
+    let mut hasher = Sha256::new();
+    hasher.update(b"hol-guard.native-command-observations.v1\x00");
+    hasher.update(canonical.as_bytes());
+    value["binding"]["observations_digest"] = Value::String(format!("{:x}", hasher.finalize()));
+}
+
+fn wire_observations() -> Value {
+    let mut value = serde_json::json!({
+        "schema": "guard.native-command-observations.v1",
+        "binding": {
+            "schema": "guard.native-command-receipt-binding.v1",
+            "program_digest": "a".repeat(64),
+            "catalog_digest": "b".repeat(64),
+            "trust_digest": "c".repeat(64),
+            "control_revision": 3,
+            "managed_control_revision": 5,
+            "control_effective_digest": "d".repeat(64),
+            "observations_digest": "",
+            "observation_count": 1,
+            "uncertainty_count": 0,
+        },
+        "observations": [{
+            "extension_id": "command.ollama",
+            "extension_version": "1.0.0",
+            "rule_id": "command.ollama.push",
+            "rule_version": "1.0.0",
+            "match_class": "unsafe",
+            "match_classes": ["unsafe"],
+            "matcher_evidence": [wire_evidence(0)],
+            "safe_variants": [],
+            "uncertainty_reasons": [],
+            "effective_segment_indexes": [0],
+        }],
+        "permission_observations": [],
+        "evaluation_error": null,
+    });
+    rehash(&mut value);
+    value
+}
+
+#[test]
+fn wire_observations_baseline_is_valid() {
+    assert!(validate_native_command_observations(&wire_observations()).is_some());
+}
+
+#[test]
+fn untrusted_evidence_is_rejected_even_with_recomputed_digest() {
+    let cases = [
+        ("segment_index", Value::Bool(true)),
+        ("segment_index", Value::from(128)),
+        ("segment_index", Value::from(-1)),
+        ("executable", Value::from("/private/ollama")),
+        ("executable", Value::from("secret token")),
+        ("detail", Value::from("raw secret command")),
+    ];
+    for (field, replacement) in cases {
+        let mut value = wire_observations();
+        value["observations"][0]["matcher_evidence"][0][field] = replacement.clone();
+        rehash(&mut value);
+        assert!(
+            validate_native_command_observations(&value).is_none(),
+            "{field}={replacement} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn safe_variant_suppression_is_exact_and_cannot_hide_other_segments() {
+    let mut value = wire_observations();
+    {
+        let item = &mut value["observations"][0];
+        item["matcher_evidence"]
+            .as_array_mut()
+            .unwrap()
+            .push(wire_evidence(1));
+        item["safe_variants"] = serde_json::json!([{
+            "match_class": "safe-variant",
+            "variant_id": "help",
+            "matcher_evidence": [wire_evidence(0)],
+        }]);
+        item["effective_segment_indexes"] = serde_json::json!([1]);
+    }
+    rehash(&mut value);
+    assert!(validate_native_command_observations(&value).is_some());
+    value["observations"][0]["effective_segment_indexes"] = serde_json::json!([]);
+    rehash(&mut value);
+    assert!(validate_native_command_observations(&value).is_none());
+}
+
+#[test]
+fn permission_only_evidence_and_uncertainty_cannot_disappear() {
+    let mut value = wire_observations();
+    let mut evidence = wire_evidence(0);
+    evidence["executable"] = Value::from("gh");
+    value["permission_observations"] = serde_json::json!([{
+        "extension_id": "command.github",
+        "permission_id": "command.github.permission.read-remote",
+        "matcher_evidence": [evidence],
+        "uncertainty_reasons": ["matcher-failure"],
+    }]);
+    value["binding"]["observation_count"] = Value::from(2);
+    value["binding"]["uncertainty_count"] = Value::from(1);
+    rehash(&mut value);
+    assert!(validate_native_command_observations(&value).is_some());
+    value["binding"]["uncertainty_count"] = Value::from(0);
+    assert!(validate_native_command_observations(&value).is_none());
+    value["binding"]["uncertainty_count"] = Value::from(1);
+    value["permission_observations"][0]["permission_id"] =
+        Value::from("command.ollama.permission.push");
+    rehash(&mut value);
+    assert!(validate_native_command_observations(&value).is_none());
+}
+
+#[test]
+fn unknown_fields_duplicates_limits_and_unbound_error_reject() {
+    let original = wire_observations();
+
+    let mut unknown = original.clone();
+    unknown["raw_command"] = Value::from("secret");
+    assert!(validate_native_command_observations(&unknown).is_none());
+
+    let mut duplicated = original.clone();
+    let observation = duplicated["observations"][0].clone();
+    duplicated["observations"]
+        .as_array_mut()
+        .unwrap()
+        .push(observation);
+    duplicated["binding"]["observation_count"] = Value::from(2);
+    rehash(&mut duplicated);
+    assert!(validate_native_command_observations(&duplicated).is_none());
+
+    let mut over_budget = original.clone();
+    over_budget["observations"][0]["matcher_evidence"] =
+        Value::Array(vec![wire_evidence(0); 8_193]);
+    rehash(&mut over_budget);
+    assert!(validate_native_command_observations(&over_budget).is_none());
+
+    let mut unbound_error = original;
+    unbound_error["evaluation_error"] = Value::from("native_command_evaluation_failed");
+    rehash(&mut unbound_error);
+    assert!(validate_native_command_observations(&unbound_error).is_none());
 }

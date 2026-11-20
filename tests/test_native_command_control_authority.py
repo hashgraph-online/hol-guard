@@ -45,6 +45,8 @@ from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePo
 READER_COUNT = 6
 
 KEY = b"k" * 32
+# The resident only digests a snapshot named by a real catalog digest.
+_CATALOG_DIGEST = "0" * 64
 
 
 def test_shared_python_rust_authority_vectors() -> None:
@@ -390,12 +392,12 @@ def test_lease_timeout_reports_unavailability_rather_than_a_verdict(tmp_path: Pa
 
 
 def _startup_view_with_store(store: object) -> object:
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHTTPServer
+    from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
     from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
-    server = object.__new__(_GuardDaemonHTTPServer)
+    server = object.__new__(ExtensionControlHost)
     server.store = store  # type: ignore[attr-defined]
-    return _GuardDaemonHTTPServer._startup_extension_control_view(server, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    return ExtensionControlHost._startup_view(server, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
 
 
 def test_daemon_startup_falls_back_to_a_shared_read_when_the_lease_is_busy() -> None:
@@ -410,7 +412,7 @@ def test_daemon_startup_falls_back_to_a_shared_read_when_the_lease_is_busy() -> 
         ExtensionControlAuthorityView,
     )
 
-    protected = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "digest", ())
+    protected = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, _CATALOG_DIGEST, ())
 
     class _Store:
         def __init__(self) -> None:
@@ -451,7 +453,7 @@ def test_daemon_startup_leaves_the_shared_fallback_a_span_to_run_in(monkeypatch:
         ExtensionControlAuthorityView,
     )
 
-    protected = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "digest", ())
+    protected = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, _CATALOG_DIGEST, ())
     clock = [1000.0]
     monkeypatch.setattr(time_module, "monotonic", lambda: clock[0])  # type: ignore[attr-defined]
 
@@ -490,7 +492,7 @@ def test_daemon_startup_reports_no_layers_when_no_lease_is_obtainable() -> None:
         ExtensionControlAuthorityView,
     )
 
-    unreadable = ExtensionControlAuthorityView(AuthorityHealth.DEGRADED_UNACKNOWLEDGED, 0, "digest", ())
+    unreadable = ExtensionControlAuthorityView(AuthorityHealth.DEGRADED_UNACKNOWLEDGED, 0, _CATALOG_DIGEST, ())
 
     class _Store:
         def read_extension_control_authority_for_registry(
@@ -518,7 +520,7 @@ def test_unreadable_authority_view_is_marked_unread() -> None:
         def __init__(self) -> None:
             self._extension_control_degraded_acknowledged = False
 
-    view = _Support().extension_control_authority_unreadable_view("digest")
+    view = _Support().extension_control_authority_unreadable_view(_CATALOG_DIGEST)
     assert view.unread is True
     assert not view.layers
     assert ExtensionControlRuntimeSnapshot.from_authority_view(view).unread is True
@@ -529,8 +531,8 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
 
     import pytest
 
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
-    from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
         AuthorityHealth,
         ExtensionControlAuthorityView,
@@ -549,14 +551,14 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
         service._runtime = _Runtime(ExtensionControlRuntimeSnapshot.from_authority_view(view))
         return service
 
-    unread = ExtensionControlAuthorityView(AuthorityHealth.DEGRADED_UNACKNOWLEDGED, 0, "digest", (), unread=True)
+    unread = ExtensionControlAuthorityView(AuthorityHealth.DEGRADED_UNACKNOWLEDGED, 0, _CATALOG_DIGEST, (), unread=True)
     with pytest.raises(ExtensionControlApiError) as unread_error:
         _ = _service(unread).acknowledge_degraded({})
     assert unread_error.value.status == 503
     assert unread_error.value.code == "authority_unread"
 
     # A read authority that really is degraded still reaches the grant check.
-    observed = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 3, "digest", ())
+    observed = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 3, _CATALOG_DIGEST, ())
     with pytest.raises(ExtensionControlApiError) as protected_error:
         _ = _service(observed).acknowledge_degraded({})
     assert protected_error.value.code == "authority_not_degraded"
@@ -565,7 +567,7 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
 def test_refresh_serves_the_held_snapshot_when_the_lease_is_busy(monkeypatch: pytest.MonkeyPatch) -> None:
     """A busy lease leaves the refresh without a reading; the route still answers."""
 
-    from codex_plugin_scanner.guard.daemon import extension_control_api as api_module
+    from codex_plugin_scanner.guard.extension_controls import extension_control_api as api_module
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
         AuthorityHealth,
         ExtensionControlAuthorityView,
@@ -573,7 +575,7 @@ def test_refresh_serves_the_held_snapshot_when_the_lease_is_busy(monkeypatch: py
     from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
     held = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 4, "digest", ())
+        ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 4, _CATALOG_DIGEST, ())
     )
 
     class _Runtime:
@@ -601,42 +603,3 @@ def test_refresh_serves_the_held_snapshot_when_the_lease_is_busy(monkeypatch: py
 
     assert service.refresh() == {"health": "protected"}
     assert served == [held]
-
-
-def test_github_workflow_hook_floors_a_busy_authority_lease(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A busy lease floors the workflow hook rather than raising out of it."""
-
-    from codex_plugin_scanner.guard.cli import commands_hook_github_workflow as hook_module
-    from codex_plugin_scanner.guard.models import GuardArtifact
-
-    class _Descriptor:
-        record = None
-
-    descriptor = _Descriptor()
-    monkeypatch.setattr(hook_module, "_runtime_github_workflow_descriptor", lambda *a, **k: descriptor)
-    monkeypatch.setattr(hook_module, "github_workflow_capability_required", lambda store, request_id: False)
-
-    class _Store:
-        def read_extension_control_authority_for_registry(self, registry: object, *, read_only: bool = False) -> None:
-            raise NativeCommandControlAuthorityUnavailableError(shared=read_only)
-
-    state = hook_module.prepare_github_workflow_hook_state(
-        GuardArtifact(
-            artifact_id="artifact-1",
-            name="build",
-            harness="github",
-            artifact_type="workflow",
-            source_scope="project",
-            config_path=".github/workflows/build.yml",
-            command="gh workflow run build.yml",
-        ),
-        workspace=None,
-        guard_home=Path("/nonexistent-guard-home"),
-        config=object(),
-        store=_Store(),
-        approval_request_id="request-1",
-    )
-
-    assert state.artifact.metadata["command_action_floor"] == "require-reapproval"
-    assert state.artifact.metadata["command_evaluation_status"] == "native_unavailable"
-    assert state.authorization_claimed is False

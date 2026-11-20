@@ -1,5 +1,5 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="HOL Guard" Manufacturer="Hashgraph Online" Version="$(env.HOL_GUARD_VERSION)"
+  <Package Name="HOL Guard" Manufacturer="HOL" Version="$(env.HOL_GUARD_VERSION)"
            UpgradeCode="B15D39B1-6395-4FEA-98A9-5D734DDC455D" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer HOL Guard version is already installed." />
     <MediaTemplate EmbedCab="yes" />

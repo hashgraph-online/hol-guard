@@ -1,5 +1,5 @@
 import { resolveHomeProtectionStatus, type HomeProtectionStatus } from "./home-protection-module";
-import type { GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { buildSupplyChainStats } from "./supply-chain-protection-stats";
 
 export type SupplyChainWorkspaceHeroState = {
@@ -11,7 +11,54 @@ export type SupplyChainWorkspaceHeroState = {
   stagedGuidance: string | null;
   tone: "green" | "blue" | "attention" | "slate";
   statLine: string;
+  /** Short status for the hero badge. */
+  badge: string;
+  /** The line under the HOL mark. */
+  liveLabel: string;
+  /** One-line facts under the hero copy. */
+  facts: string[];
 };
+
+const PROTECTION_BADGE: Record<HomeProtectionStatus, string> = {
+  protected: "Protected",
+  partial: "Partly protected",
+  staged: "Restart to finish",
+  unprotected: "Not protected",
+  unknown: "Checking",
+};
+
+function toolCount(count: number): string {
+  return `${count} tool${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Tool counts read from the same manager lists as the badge
+ * (resolveHomeProtectionStatus), so the hero never pairs a status with a
+ * count from a different source.
+ */
+function badgeManagerCounts(snapshot: GuardRuntimeSnapshot): { protectedCount: number; unprotectedCount: number } {
+  const protection = snapshot.supply_chain?.package_manager_protection;
+  return {
+    protectedCount: protection?.protected_managers.length ?? 0,
+    unprotectedCount: protection?.unprotected_managers.length ?? 0,
+  };
+}
+
+function protectionLiveLabel(
+  status: HomeProtectionStatus,
+  counts: { protectedCount: number; unprotectedCount: number },
+): string {
+  if (status === "protected") {
+    return `Guarding ${toolCount(counts.protectedCount)}`;
+  }
+  if (status === "staged") {
+    return "Restart pending";
+  }
+  if (status === "partial" || status === "unprotected") {
+    return counts.unprotectedCount > 0 ? `${counts.unprotectedCount} unprotected` : PROTECTION_BADGE[status];
+  }
+  return "Checking";
+}
 
 function protectionTitle(status: HomeProtectionStatus): string {
   if (status === "protected") {
@@ -77,18 +124,31 @@ function cloudLabel(snapshot: GuardRuntimeSnapshot): string {
   return label.trim().length > 0 ? label : "On this device only";
 }
 
+/** Counts setup steps, the unit the recovery summary and issue list use. */
+export function setupStepsLabel(count: number): string {
+  return `${count} step${count === 1 ? "" : "s"} to fix`;
+}
+
 export function resolveSupplyChainWorkspaceHero(
   snapshot: GuardRuntimeSnapshot,
-  options?: { openIssueCount?: number },
+  options?: { openIssueCount?: number; receipts?: readonly GuardReceipt[] | null },
 ): SupplyChainWorkspaceHeroState {
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
-  const stats = buildSupplyChainStats(snapshot);
+  const stats = buildSupplyChainStats(snapshot, options?.receipts);
   const preventedLabel =
     stats.preventedInstalls > 0
-      ? `${stats.preventedInstalls} blocked install${stats.preventedInstalls === 1 ? "" : "s"}`
+      ? `${stats.preventedInstalls} recent blocked install${stats.preventedInstalls === 1 ? "" : "s"}`
       : "No blocked installs yet";
   const stagedGuidance =
     protectionStatus === "staged" ? protectionDetail(snapshot, protectionStatus) : null;
+
+  const counts = badgeManagerCounts(snapshot);
+  const facts = [
+    counts.protectedCount > 0 ? `${toolCount(counts.protectedCount)} protected` : null,
+    counts.unprotectedCount > 0 ? `${toolCount(counts.unprotectedCount)} unprotected` : null,
+    preventedLabel,
+    cloudLabel(snapshot),
+  ].filter((fact): fact is string => fact !== null);
 
   const openIssueCount = options?.openIssueCount ?? 0;
   if (openIssueCount > 0) {
@@ -102,6 +162,9 @@ export function resolveSupplyChainWorkspaceHero(
       stagedGuidance,
       tone: protectionTone(protectionStatus),
       statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`,
+      badge: "Needs repair",
+      liveLabel: setupStepsLabel(openIssueCount),
+      facts,
     };
   }
 
@@ -114,6 +177,9 @@ export function resolveSupplyChainWorkspaceHero(
     stagedGuidance,
     tone: protectionTone(protectionStatus),
     statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`,
+    badge: PROTECTION_BADGE[protectionStatus],
+    liveLabel: protectionLiveLabel(protectionStatus, counts),
+    facts,
   };
 }
 

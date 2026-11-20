@@ -242,3 +242,45 @@ fn request_round_trips_unchanged_so_python_and_rust_digest_the_same_bytes() {
         serde_json::from_value(original.clone()).unwrap();
     assert_eq!(serde_json::to_value(&parsed).unwrap(), original);
 }
+
+#[test]
+fn a_windows_start_waits_for_the_runtime_it_has_to_unpack() {
+    let query = json!({"check": "start_timeouts", "desktop": true, "worker_ready_floor": 14.0});
+    let windows = decide(&request_on("nt", query.clone(), json!({})));
+    assert_eq!(windows, json!({"default": 75.0, "post_update": 75.0}));
+    let posix = decide(&request(query, json!({})));
+    assert_eq!(posix, json!({"default": 30.0, "post_update": 30.0}));
+}
+
+#[test]
+fn a_plain_windows_start_keeps_the_post_update_budget_for_an_update() {
+    let query = json!({"check": "start_timeouts", "desktop": false, "worker_ready_floor": 14.0});
+    let windows = decide(&request_on("nt", query.clone(), json!({})));
+    assert_eq!(windows, json!({"default": 60.0, "post_update": 75.0}));
+    let posix = decide(&request(query, json!({})));
+    assert_eq!(posix, json!({"default": 19.0, "post_update": 30.0}));
+}
+
+#[test]
+fn the_worker_ready_floor_still_outbids_a_shorter_budget() {
+    let query = json!({"check": "start_timeouts", "desktop": false, "worker_ready_floor": 90.0});
+    let windows = decide(&request_on("nt", query.clone(), json!({})));
+    assert_eq!(windows, json!({"default": 95.0, "post_update": 95.0}));
+    let posix = decide(&request(query, json!({})));
+    assert_eq!(posix, json!({"default": 95.0, "post_update": 95.0}));
+}
+
+#[test]
+fn start_progress_reads_the_same_budget_the_client_waits_out() {
+    let query = json!({
+        "check": "start_progress_live",
+        "record": {"pid": 7, "process_start_token": "t", "recorded_at_ns": 50_000_000_000i64},
+        "now_ns": 100_000_000_000i64,
+        "worker_ready_floor": 14.0,
+    });
+    let facts = json!({"pid_running:7": true, "start_token:7": "t", "matches_command:7": true});
+    let windows = decide(&request_on("nt", query.clone(), facts.clone()));
+    assert_eq!(windows, json!({"live": true}));
+    let posix = decide(&request(query, facts));
+    assert_eq!(posix, json!({"live": false}));
+}

@@ -6,7 +6,6 @@ from dataclasses import asdict, dataclass
 from typing import Literal, Protocol
 
 from ..native_rich_command_model import request
-from .shell_structure import ShellHeredoc
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,12 +88,4 @@ def build_command_security_identity(
             "redirects": [asdict(item) for item in redirects],
             "embedded_commands": [asdict(item) for item in embedded_commands],
         },
-    )
-
-
-def extract_command_redirects(command: str, heredocs: tuple[ShellHeredoc, ...]) -> tuple[CommandRedirect, ...]:
-    """Present native redirects with their original normalized spans."""
-    return tuple(
-        CommandRedirect(**value)
-        for value in request("redirects", {"command": command, "heredocs": [asdict(item) for item in heredocs]})
     )

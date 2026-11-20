@@ -1,4 +1,6 @@
-use super::{safe_export_segment, safe_kubectl_segment};
+use super::{
+    output_template_positions, safe_export_segment, safe_kubectl_segment, without_output_templates,
+};
 use crate::pretool::PathContext;
 
 fn model(command: &str) -> crate::CanonicalCommandV1 {
@@ -62,8 +64,55 @@ fn read_verbs_are_proven() {
         "kubectl logs -p web-0 -c app --limit-bytes 65536",
         "kubectl logs statefulset/db --all-containers --prefix",
         "kubectl logs -l app=web --max-log-requests 5 --tail=50",
+        "kubectl rollout status deployment/web",
+        "kubectl -n web rollout status deploy/web --timeout=5m",
+        "kubectl --context prod rollout history deploy/web",
+        "kubectl rollout history deploy/web --revision=3",
+        "kubectl rollout status deployment web",
+        "kubectl rollout history deploy web",
+        "kubectl wait --for=condition=available deployment/web --timeout=120s",
+        "kubectl -n web wait --for=condition=Ready pod -l app=web",
+        "kubectl wait --for=delete pod/web-0 --timeout=60s",
     ] {
         assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn usage_text_is_proven_for_every_builtin_verb() {
+    for command in [
+        "kubectl get --help",
+        "kubectl get pods --help",
+        "kubectl get pods -h",
+        "kubectl apply --help",
+        "kubectl delete --help",
+        "kubectl exec --help",
+        "kubectl rollout status --help",
+        "kubectl config view --help",
+        "kubectl logs deploy/web --help",
+        "kubectl options",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn usage_text_for_a_plugin_or_behind_an_operand_stays_reviewed() {
+    for command in [
+        // An unknown first word runs `kubectl-<verb>` from PATH, which would
+        // read the help flag itself.
+        "kubectl mycmd --help",
+        "kubectl krew --help",
+        // The flag has to be the last word.
+        "kubectl get --help pods",
+        "kubectl apply --help -f manifest.yaml",
+        // `options` prints the global list only on its own.
+        "kubectl options -o json",
+        // An option in front of the flag still names a server or a file.
+        "kubectl get --server https://cluster.example.test --help",
+        "kubectl get --kubeconfig /tmp/agent.yaml --help",
+    ] {
+        assert!(!proven(command), "{command}");
     }
 }
 
@@ -128,6 +177,18 @@ fn secrets_mutations_and_server_overrides_stay_reviewed() {
         "kubectl patch deploy web -p {}",
         "kubectl scale deploy web --replicas=0",
         "kubectl rollout restart deploy/web",
+        "kubectl rollout undo deploy/web",
+        "kubectl rollout undo deploy/web --to-revision=2",
+        "kubectl rollout pause deploy/web",
+        "kubectl rollout resume deploy/web",
+        "kubectl rollout status",
+        "kubectl rollout status deploy/web deploy/api",
+        "kubectl rollout status deployment",
+        "kubectl rollout history deploy",
+        "kubectl rollout status deploy/web api",
+        "kubectl wait",
+        "kubectl wait --for=condition=Ready -f ./pod.yaml",
+        "kubectl wait --for=condition=Ready secret/web",
         "kubectl label pod web-0 a=b",
         "kubectl annotate pod web-0 a=b",
         "kubectl drain node-1",
@@ -230,5 +291,53 @@ mod files {
         ] {
             assert!(!proven(&command), "{command}");
         }
+    }
+}
+
+/// The text a sensitive-location screen reads for `command`, with every
+/// `kubectl` output template set aside.
+fn without_templates(command: &str) -> Option<String> {
+    let model = model(command);
+    let segment = model.segments.first()?;
+    let positions = output_template_positions(segment);
+    (!positions.is_empty()).then(|| without_output_templates(segment, &positions))
+}
+
+#[test]
+fn an_output_template_is_set_aside_in_either_spelling() {
+    for command in [
+        "kubectl get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'",
+        "kubectl get deploy api -o=jsonpath='{.spec.template.spec.containers[0].env[*].name}'",
+        "kubectl get deploy api --output=jsonpath='{.spec.template.spec.containers[0].env[*].name}'",
+        "kubectl get deploy api -o jsonpath-as-json='{.spec.template.spec.containers[0].env}'",
+        "kubectl get deploy api -o custom-columns=ENV:.spec.template.spec.containers[0].env[0].name",
+        "kubectl get deploy api -o go-template='{{range .spec.template.spec.containers}}{{.env}}{{end}}'",
+    ] {
+        let rest = without_templates(command).unwrap_or_else(|| panic!("{command}"));
+        assert!(!rest.contains(".env"), "{command}: {rest}");
+        assert!(rest.starts_with("kubectl get deploy api"), "{command}: {rest}");
+    }
+}
+
+#[test]
+fn only_a_template_that_cannot_spell_a_path_or_a_credential_is_set_aside() {
+    for command in [
+        // Not a template format, so not a selector over the fetched object.
+        "kubectl get deploy api -o yaml",
+        "kubectl get deploy api -o json",
+        "kubectl get deploy api -o wide",
+        // A `*-file` spelling reads a local file, so its value is a path.
+        "kubectl get deploy api -o custom-columns-file=./columns.txt",
+        "kubectl get deploy api -o go-template-file=./template.tpl",
+        // A template holding a path separator or an expansion keeps its words.
+        "kubectl get deploy api -o jsonpath='{.metadata.annotations.kubernetes\\.io/x}'",
+        // A selector asking for a credential says what the command is for.
+        "kubectl get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name==\"PASSWORD\")].value}'",
+        // An empty template selects nothing and sheds nothing.
+        "kubectl get deploy api -o jsonpath=",
+        // Another program's option of the same name is not kubectl's.
+        "helm template api -o jsonpath='{.env}'",
+    ] {
+        assert!(without_templates(command).is_none(), "{command}");
     }
 }

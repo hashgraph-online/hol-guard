@@ -143,7 +143,8 @@ pub(crate) fn detection_statuses(values: &[String]) -> Reply {
         .iter()
         .map(|value| match value.as_str() {
             "protected" => "protected",
-            "found" => "observed",
+            // A broken Guard install is present but not protecting the app.
+            "found" | "needs_repair" => "observed",
             "not_found" => "inactive",
             _ => "unknown",
         })

@@ -18,7 +18,7 @@ pub(super) fn answer_in(
         &connection,
         "claude-code",
         &artifact_id,
-        &token,
+        Some(&token),
         action,
         "approval-gate",
     );
@@ -34,6 +34,7 @@ pub(super) fn answer_in(
             home_dir: vectors["home_dir"].as_str().unwrap(),
             guard_home: &guard_home,
             binding: answering,
+            hint: None,
         },
     )
 }

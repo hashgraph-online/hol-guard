@@ -1,4 +1,4 @@
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
+FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
 
 COPY --chmod=0444 *.whl /opt/guard-proof/
 RUN python -m pip install --no-cache-dir /opt/guard-proof/*.whl \

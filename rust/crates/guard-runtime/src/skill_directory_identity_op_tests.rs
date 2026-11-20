@@ -448,3 +448,107 @@ fn caller_limits_are_clamped_to_server_ceilings() {
     };
     assert_eq!(super::clamp_limits(&lower), lower);
 }
+
+/// The document-evidence command carries the caller's own path text, so the
+/// resident must read the same components the caller sees and anchor a
+/// relative one to the caller's directory rather than its own.
+#[test]
+fn document_evidence_reads_a_relative_path_against_the_callers_directory() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let base = TempBase::new("document-evidence");
+    let directory = base.0.join("skills").join("demo");
+    fs::create_dir_all(&directory).unwrap();
+    let body = "---\nname: demo\n---\n# Upload\ncurl https://api.example.test/v1/upload\n";
+    fs::write(directory.join("SKILL.md"), body).unwrap();
+
+    let reply = run(&SkillDirectoryIdentityRequestV1 {
+        schema: SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA.to_owned(),
+        request_id: "document-evidence".to_owned(),
+        guard_home: base.0.to_string_lossy().into_owned(),
+        command: SkillDirectoryCommandV1::DocumentEvidence {
+            skill_document_hex: hex::encode(
+                Path::new("skills")
+                    .join("demo")
+                    .join("SKILL.md")
+                    .as_os_str()
+                    .as_bytes(),
+            ),
+            process_directory_hex: hex::encode(base.0.as_os_str().as_bytes()),
+            safe_roots_hex: vec![hex::encode(base.0.as_os_str().as_bytes())],
+            path_encoding: "os_bytes".to_owned(),
+        },
+    });
+
+    assert_eq!(reply["status"], "ok", "{reply}");
+    let payload = &reply["payload"];
+    assert_eq!(payload["readability_status"], "readable", "{reply}");
+    assert_eq!(payload["byte_length"], body.len() as u64);
+    assert_eq!(payload["line_count"], 5);
+    assert_eq!(payload["heading_count"], 1);
+    assert_eq!(payload["frontmatter_present"], true);
+    assert_eq!(
+        payload["documented_network_capability"],
+        "explicit_http_client"
+    );
+}
+
+/// A resident that is asked about a path outside every safe root reports the
+/// refusal rather than the document.
+#[test]
+fn document_evidence_refuses_a_path_outside_every_safe_root() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let base = TempBase::new("document-evidence-outside");
+    let directory = base.0.join("skills").join("demo");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("SKILL.md"), "# Demo\n").unwrap();
+    let elsewhere = base.0.join("elsewhere");
+    fs::create_dir_all(&elsewhere).unwrap();
+
+    let reply = run(&SkillDirectoryIdentityRequestV1 {
+        schema: SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA.to_owned(),
+        request_id: "document-evidence-outside".to_owned(),
+        guard_home: base.0.to_string_lossy().into_owned(),
+        command: SkillDirectoryCommandV1::DocumentEvidence {
+            skill_document_hex: hex::encode(directory.join("SKILL.md").as_os_str().as_bytes()),
+            process_directory_hex: hex::encode(base.0.as_os_str().as_bytes()),
+            safe_roots_hex: vec![hex::encode(elsewhere.as_os_str().as_bytes())],
+            path_encoding: "os_bytes".to_owned(),
+        },
+    });
+
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"]["readability_status"], "outside_safe_roots");
+    assert_eq!(reply["payload"]["content_hash"], Value::Null);
+}
+
+/// A relative document path must not be rejected for the one reason the
+/// encoded commands enforce: only an absolute path is required there.
+#[test]
+fn document_evidence_rejects_a_relative_process_directory() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let base = TempBase::new("document-evidence-relative-cwd");
+    let reply = evaluate_skill_directory_identity_request(&SkillDirectoryIdentityRequestV1 {
+        schema: SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA.to_owned(),
+        request_id: "document-evidence-relative-cwd".to_owned(),
+        guard_home: base.0.to_string_lossy().into_owned(),
+        command: SkillDirectoryCommandV1::DocumentEvidence {
+            skill_document_hex: hex::encode(
+                Path::new("skills/demo/SKILL.md").as_os_str().as_bytes(),
+            ),
+            process_directory_hex: hex::encode(Path::new("relative").as_os_str().as_bytes()),
+            safe_roots_hex: Vec::new(),
+            path_encoding: "os_bytes".to_owned(),
+        },
+    })
+    .unwrap();
+    let reply: Value = serde_json::from_slice(&reply).unwrap();
+
+    assert_eq!(reply["status"], "error", "{reply}");
+    assert_eq!(
+        reply["code"], "native_skill_directory_identity_path_invalid",
+        "{reply}"
+    );
+}

@@ -359,15 +359,13 @@ pub fn assess_shell_reads(
                 continue;
             }
             let invocation = script_operand(&executable, &arguments);
-            if SHELLS.contains(&name.as_str())
+            let syntax_check = SHELLS.contains(&name.as_str())
                 && executable == name
                 && arguments.len() == 2
-                && arguments[0] == "-n"
-                && invocation.is_some()
-            {
+                && arguments[0] == "-n";
+            if let Some(inv) = invocation.as_ref().filter(|_| syntax_check) {
                 // Syntax checking reads this file but does not execute its
                 // body.
-                let inv = invocation.as_ref().unwrap();
                 if let Some(direct) = sensitive_path(&inv.0, effective_cwd.as_deref(), home_dir) {
                     sensitive.push(direct);
                 }

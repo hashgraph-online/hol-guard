@@ -1,0 +1,2081 @@
+{
+  "extension": {
+    "action_classes": [
+      "agentsocks API peer command",
+      "agentsocks agent installation command",
+      "agentsocks agent uninstallation command",
+      "agentsocks driver binding command",
+      "agentsocks gateway access command",
+      "agentsocks gateway listener command",
+      "agentsocks machine link command",
+      "agentsocks public gateway command",
+      "agentsocks remote classifier command",
+      "agentsocks session message command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews agentsocks commands that edit agent configuration and hooks, message other agent sessions, bind a driver, send message text to a remote classifier, start or expose the gateway, issue gateway tokens and access, link another machine, or add a paid API peer. Read-only commands such as list, status, stats, doctor, whoami, channels, tasks and top are not matched. Based on agentsocks 0.4.0.",
+    "ecosystem_ids": [
+      "agentsocks"
+    ],
+    "executables": [
+      "agentsocks",
+      "agentsocks.cmd",
+      "agentsocks.exe"
+    ],
+    "extension_id": "command.agentsocks",
+    "homepage": "https://github.com/Aelethion/agentsocks",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "agentsocks command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "agentsocks agent installation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks install`, which registers the agentsocks MCP server with Claude Code and Codex, adds hooks to Codex, and wires any other supported agent it finds. It edits those agents' configuration files, keeping backups, and marks the Codex hooks as trusted unless `--no-trust-hooks` is given. `--claude-listagents` also lets the broker write records into Claude Code's session registry. `--dry-run` shows the changes first.",
+        "example_command": "agentsocks install --codex",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks agent installation",
+        "permission_id": "command.agentsocks.permission.install",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks install --dry-run first to see which files change.",
+          "Name only the agents to wire, for example --claude or --codex, instead of wiring every agent found.",
+          "Use --no-trust-hooks to approve the Codex hooks yourself in /hooks."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks agent uninstallation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks uninstall`, which removes the agentsocks registrations and hooks from the agents' configuration files (backups are kept), stops the running broker, and revokes every gateway token, grant and API peer while archiving the gateway state. `--dry-run` shows what would be removed.",
+        "example_command": "agentsocks uninstall",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks agent uninstallation",
+        "permission_id": "command.agentsocks.permission.uninstall",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks uninstall --dry-run first to see what would be removed.",
+          "Run agentsocks gateway off to stop the gateway listeners without removing the agent registrations."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks session message command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks send`, which delivers a message to another agent session, to a `#channel`, or to a linked machine's session (`name@host`). The receiving agent reads the text through its own inbox, and a message cannot approve a permission prompt. When a remote peer or an API model peer is configured, the text can reach that peer and its provider as well.",
+        "example_command": "agentsocks send api-worker 'the migration is done'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks session message",
+        "permission_id": "command.agentsocks.permission.send-message",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks list to see which sessions are running before choosing a recipient.",
+          "Run agentsocks status <peer> to see what a session is doing before sending to it.",
+          "Send with --urgency fyi so the message is batched instead of interrupting the receiver."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks driver binding command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks driver`, which names the session whose instructions this session follows. The driver's messages reach the worker as instructions and everyone else's arrive as information only. The binding is coordination between one user's sessions, not a boundary.",
+        "example_command": "agentsocks driver api-worker",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks driver binding",
+        "permission_id": "command.agentsocks.permission.set-driver",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks driver none to clear the binding.",
+          "Run agentsocks status <peer> to see a session's driver and what is asked of it before binding to it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks remote classifier command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies commands that make agentsocks send message text to a classifier: `agentsocks classifier jev`, which turns on hosted TypeSafe Jev at api.typesafe.ai and can store its API key; `agentsocks classifier local <url> --allow-remote`, which allows a classifier on another host; and `agentsocks eval-router --own --allow-remote`, which replays rated messages through a classifier that is not on this machine. What leaves the machine is redacted message text and the receiver's task.",
+        "example_command": "agentsocks classifier jev --key-file ~/typesafe.env",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks remote classifier",
+        "permission_id": "command.agentsocks.permission.remote-classifier",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks classifier first to see the backend, URL and key source in effect.",
+          "Point agentsocks classifier local at a classifier on this machine, which sends nothing off it.",
+          "Run agentsocks classifier off to route by rules alone."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks gateway listener command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks gateway on`, which starts the gateway listener on 127.0.0.1 and prints the `tailscale serve` command that puts it on the owner's tailnet. `--serve` runs that command, and `--allow-unverified-local-source` starts the gateway where the source of a connection cannot be checked.",
+        "example_command": "agentsocks gateway on --serve",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks gateway listener",
+        "permission_id": "command.agentsocks.permission.gateway-listen",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks gateway status first to see the listeners, peers and source-check verdict.",
+          "Run agentsocks gateway on without --serve to listen on 127.0.0.1 only, and read the printed tailscale serve command before running it.",
+          "Run agentsocks gateway off to stop the listeners and undo the serve that agentsocks set up."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks public gateway command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks gateway public`, which starts a second listener for ChatGPT, Grok and other remote clients that authenticate with a bearer token or OAuth. It stays on 127.0.0.1 until the printed `tailscale funnel` or `cloudflared` command exposes it to the internet, and `--yes` runs the funnel command.",
+        "example_command": "agentsocks gateway public --via funnel --yes",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks public gateway",
+        "permission_id": "command.agentsocks.permission.gateway-public",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run agentsocks gateway public --via funnel without --yes and read the printed command before exposing anything.",
+          "Run agentsocks gateway public off to stop the public listener.",
+          "Run agentsocks gateway routes to see every route and how it is authenticated."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks gateway access command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks gateway token add`, which creates a bearer token for a remote peer; `gateway pair`, which prints the one-time code that lets ChatGPT complete OAuth consent; `gateway may`, which sets the session names a remote peer may message (`*` means every session); and `gateway allow`, which lets another machine or tailnet user use the gateway.",
+        "example_command": "agentsocks gateway token add grok --may-message api-worker",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks gateway access",
+        "permission_id": "command.agentsocks.permission.gateway-access",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks gateway status first to see peers, their may-message lists and token ids.",
+          "Keep --may-message lists short and name sessions instead of using *.",
+          "Run agentsocks gateway token revoke <id> or agentsocks gateway disallow to take access back."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks machine link command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks link <host>`, which links this machine's broker to another machine's gateway so that machine's sessions appear here as `name@host` and messages can be forwarded to them. The other machine must have run `gateway allow` for this one. `link --remove <host>` undoes a link and is not matched; a bare `link`, which lists links, is reviewed too.",
+        "example_command": "agentsocks link hetzner-lab",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks machine link",
+        "permission_id": "command.agentsocks.permission.link-machine",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run agentsocks link with no argument to list the linked machines.",
+          "Run agentsocks link --remove <host> to undo a link.",
+          "Treat a link as trust in that machine: a linked machine can message any Claude or Codex session here."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "agentsocks API peer command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentsocks peer add`, which makes a model behind the xAI or OpenAI API a peer. When a message arrives, the broker calls the provider with the key read from `--key-file`; each answer takes one to six paid calls, capped by `--max-calls-per-hour` (30 by default), and what is sent to the peer goes to the provider.",
+        "example_command": "agentsocks peer add grok --api xai --key-file ~/xai.env --may-message api-worker",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "agentsocks API peer",
+        "permission_id": "command.agentsocks.permission.add-api-peer",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Keep --may-message short and --max-calls-per-hour low.",
+          "Run agentsocks peer list to see the API peers and their call caps.",
+          "Run agentsocks peer remove <name> to stop its API calls."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Aelethion",
+      "id": "community.aelethion",
+      "url": "https://github.com/Aelethion/agentsocks"
+    },
+    "reference_urls": [
+      "https://github.com/Aelethion/agentsocks",
+      "https://github.com/Aelethion/agentsocks/blob/main/docs/GUIDE.md",
+      "https://github.com/Aelethion/agentsocks/blob/v0.4.0/SECURITY.md",
+      "https://github.com/Aelethion/agentsocks/blob/v0.4.0/src/commands/index.ts",
+      "https://www.npmjs.com/package/agentsocks"
+    ],
+    "required": false,
+    "risk_classes": [
+      "credential_access",
+      "data_flow_exfiltration",
+      "destructive_shell",
+      "execution",
+      "network_egress",
+      "network_exposure",
+      "permission_change",
+      "security_credential_provisioning"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "agentsocks agent installation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks install`, which registers the agentsocks MCP server with Claude Code and Codex, adds hooks to Codex, and wires any other supported agent it finds. It edits those agents' configuration files, keeping backups, and marks the Codex hooks as trusted unless `--no-trust-hooks` is given. `--claude-listagents` also lets the broker write records into Claude Code's session registry. `--dry-run` shows the changes first.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--claude",
+              "--claude-listagents",
+              "--codex",
+              "--codex-hooks",
+              "--copilot",
+              "--cursor",
+              "--dry-run",
+              "--gemini",
+              "--help",
+              "--hermes",
+              "--no-trust-hooks",
+              "--omp",
+              "--opencode",
+              "-h"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "install"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.install",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "rule_id": "command.agentsocks.install",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--claude",
+                  "--claude-listagents",
+                  "--codex",
+                  "--codex-hooks",
+                  "--copilot",
+                  "--cursor",
+                  "--dry-run",
+                  "--gemini",
+                  "--help",
+                  "--hermes",
+                  "--no-trust-hooks",
+                  "--omp",
+                  "--opencode",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "install"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks install dry run",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--claude",
+                  "--claude-listagents",
+                  "--codex",
+                  "--codex-hooks",
+                  "--copilot",
+                  "--cursor",
+                  "--dry-run",
+                  "--gemini",
+                  "--help",
+                  "--hermes",
+                  "--no-trust-hooks",
+                  "--omp",
+                  "--opencode",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "install"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--claude",
+                  "--claude-listagents",
+                  "--codex",
+                  "--codex-hooks",
+                  "--copilot",
+                  "--cursor",
+                  "--dry-run",
+                  "--gemini",
+                  "--help",
+                  "--hermes",
+                  "--no-trust-hooks",
+                  "--omp",
+                  "--opencode",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "install"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks install --dry-run first to see which files change.",
+          "Name only the agents to wire, for example --claude or --codex, instead of wiring every agent found.",
+          "Use --no-trust-hooks to approve the Codex hooks yourself in /hooks."
+        ],
+        "severity": "high",
+        "title": "agentsocks agent installation"
+      },
+      {
+        "action_classes": [
+          "agentsocks agent uninstallation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks uninstall`, which removes the agentsocks registrations and hooks from the agents' configuration files (backups are kept), stops the running broker, and revokes every gateway token, grant and API peer while archiving the gateway state. `--dry-run` shows what would be removed.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--dry-run",
+              "--help",
+              "-h"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "uninstall"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.uninstall",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.agentsocks.uninstall",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks uninstall dry run",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks uninstall --dry-run first to see what would be removed.",
+          "Run agentsocks gateway off to stop the gateway listeners without removing the agent registrations."
+        ],
+        "severity": "high",
+        "title": "agentsocks agent uninstallation"
+      },
+      {
+        "action_classes": [
+          "agentsocks session message command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks send`, which delivers a message to another agent session, to a `#channel`, or to a linked machine's session (`name@host`). The receiving agent reads the text through its own inbox, and a message cannot approve a permission prompt. When a remote peer or an API model peer is configured, the text can reach that peer and its provider as well.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "-h"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--urgency"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "send"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.send-message",
+        "risk_classes": [
+          "execution",
+          "data_flow_exfiltration"
+        ],
+        "rule_id": "command.agentsocks.send-message",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--urgency"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "send"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--urgency"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "send"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks list to see which sessions are running before choosing a recipient.",
+          "Run agentsocks status <peer> to see what a session is doing before sending to it.",
+          "Send with --urgency fyi so the message is batched instead of interrupting the receiver."
+        ],
+        "severity": "high",
+        "title": "agentsocks session message"
+      },
+      {
+        "action_classes": [
+          "agentsocks driver binding command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks driver`, which names the session whose instructions this session follows. The driver's messages reach the worker as instructions and everyone else's arrive as information only. The binding is coordination between one user's sessions, not a boundary.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "-h"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "driver"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.set-driver",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.agentsocks.set-driver",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "driver",
+                  "none"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks driver clear",
+            "variant_id": "clear"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "driver"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "driver"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks driver none to clear the binding.",
+          "Run agentsocks status <peer> to see a session's driver and what is asked of it before binding to it."
+        ],
+        "severity": "high",
+        "title": "agentsocks driver binding"
+      },
+      {
+        "action_classes": [
+          "agentsocks remote classifier command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies commands that make agentsocks send message text to a classifier: `agentsocks classifier jev`, which turns on hosted TypeSafe Jev at api.typesafe.ai and can store its API key; `agentsocks classifier local <url> --allow-remote`, which allows a classifier on another host; and `agentsocks eval-router --own --allow-remote`, which replays rated messages through a classifier that is not on this machine. What leaves the machine is redacted message text and the receiver's task.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--key",
+                  "--key-file"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "classifier",
+                  "jev"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--backend"
+                ],
+                "required_flags": [
+                  "--allow-remote"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "classifier",
+                  "local"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--backend",
+                  "--file"
+                ],
+                "required_flags": [
+                  "--allow-remote",
+                  "--own"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "eval-router"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.remote-classifier",
+        "risk_classes": [
+          "network_egress",
+          "data_flow_exfiltration"
+        ],
+        "rule_id": "command.agentsocks.remote-classifier",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentsocks",
+                      "agentsocks.cmd",
+                      "agentsocks.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--key",
+                      "--key-file"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "classifier",
+                      "jev"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentsocks",
+                      "agentsocks.cmd",
+                      "agentsocks.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--backend"
+                    ],
+                    "required_flags": [
+                      "--allow-remote",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "classifier",
+                      "local"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentsocks",
+                      "agentsocks.cmd",
+                      "agentsocks.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--backend",
+                      "--file"
+                    ],
+                    "required_flags": [
+                      "--allow-remote",
+                      "--own",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "eval-router"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "agentsocks classifier command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentsocks",
+                      "agentsocks.cmd",
+                      "agentsocks.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--key",
+                      "--key-file"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "classifier",
+                      "jev"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentsocks",
+                      "agentsocks.cmd",
+                      "agentsocks.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--backend"
+                    ],
+                    "required_flags": [
+                      "--allow-remote",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "classifier",
+                      "local"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentsocks",
+                      "agentsocks.cmd",
+                      "agentsocks.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--backend",
+                      "--file"
+                    ],
+                    "required_flags": [
+                      "--allow-remote",
+                      "--own",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "eval-router"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "agentsocks classifier command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks classifier first to see the backend, URL and key source in effect.",
+          "Point agentsocks classifier local at a classifier on this machine, which sends nothing off it.",
+          "Run agentsocks classifier off to route by rules alone."
+        ],
+        "severity": "high",
+        "title": "agentsocks remote classifier"
+      },
+      {
+        "action_classes": [
+          "agentsocks gateway listener command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks gateway on`, which starts the gateway listener on 127.0.0.1 and prints the `tailscale serve` command that puts it on the owner's tailnet. `--serve` runs that command, and `--allow-unverified-local-source` starts the gateway where the source of a connection cannot be checked.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--allow-unverified-local-source",
+              "--help",
+              "--serve",
+              "-h"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--port"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "gateway",
+              "on"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.gateway-listen",
+        "risk_classes": [
+          "network_exposure"
+        ],
+        "rule_id": "command.agentsocks.gateway-listen",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--allow-unverified-local-source",
+                  "--help",
+                  "--serve",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--port"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "gateway",
+                  "on"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--allow-unverified-local-source",
+                  "--help",
+                  "--serve",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--port"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "gateway",
+                  "on"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks gateway status first to see the listeners, peers and source-check verdict.",
+          "Run agentsocks gateway on without --serve to listen on 127.0.0.1 only, and read the printed tailscale serve command before running it.",
+          "Run agentsocks gateway off to stop the listeners and undo the serve that agentsocks set up."
+        ],
+        "severity": "high",
+        "title": "agentsocks gateway listener"
+      },
+      {
+        "action_classes": [
+          "agentsocks public gateway command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks gateway public`, which starts a second listener for ChatGPT, Grok and other remote clients that authenticate with a bearer token or OAuth. It stays on 127.0.0.1 until the printed `tailscale funnel` or `cloudflared` command exposes it to the internet, and `--yes` runs the funnel command.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--port",
+              "--url",
+              "--via"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "gateway",
+              "public"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.gateway-public",
+        "risk_classes": [
+          "network_exposure"
+        ],
+        "rule_id": "command.agentsocks.gateway-public",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "gateway",
+                  "public",
+                  "off"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks public gateway off",
+            "variant_id": "off"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--yes",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--port",
+                  "--url",
+                  "--via"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "gateway",
+                  "public"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--yes",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--port",
+                  "--url",
+                  "--via"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "gateway",
+                  "public"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks gateway public --via funnel without --yes and read the printed command before exposing anything.",
+          "Run agentsocks gateway public off to stop the public listener.",
+          "Run agentsocks gateway routes to see every route and how it is authenticated."
+        ],
+        "severity": "critical",
+        "title": "agentsocks public gateway"
+      },
+      {
+        "action_classes": [
+          "agentsocks gateway access command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks gateway token add`, which creates a bearer token for a remote peer; `gateway pair`, which prints the one-time code that lets ChatGPT complete OAuth consent; `gateway may`, which sets the session names a remote peer may message (`*` means every session); and `gateway allow`, which lets another machine or tailnet user use the gateway.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--name",
+              "--redirect-host",
+              "--user"
+            ],
+            "paths": [
+              [
+                "gateway",
+                "allow"
+              ],
+              [
+                "gateway",
+                "may"
+              ],
+              [
+                "gateway",
+                "pair"
+              ],
+              [
+                "gateway",
+                "token",
+                "add"
+              ]
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": []
+          },
+          "op": "executable-path-set.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.gateway-access",
+        "risk_classes": [
+          "security_credential_provisioning",
+          "permission_change"
+        ],
+        "rule_id": "command.agentsocks.gateway-access",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--name",
+                  "--redirect-host",
+                  "--user"
+                ],
+                "paths": [
+                  [
+                    "gateway",
+                    "allow"
+                  ],
+                  [
+                    "gateway",
+                    "may"
+                  ],
+                  [
+                    "gateway",
+                    "pair"
+                  ],
+                  [
+                    "gateway",
+                    "token",
+                    "add"
+                  ]
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            "title": "agentsocks gateway command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--name",
+                  "--redirect-host",
+                  "--user"
+                ],
+                "paths": [
+                  [
+                    "gateway",
+                    "allow"
+                  ],
+                  [
+                    "gateway",
+                    "may"
+                  ],
+                  [
+                    "gateway",
+                    "pair"
+                  ],
+                  [
+                    "gateway",
+                    "token",
+                    "add"
+                  ]
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            "title": "agentsocks gateway command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks gateway status first to see peers, their may-message lists and token ids.",
+          "Keep --may-message lists short and name sessions instead of using *.",
+          "Run agentsocks gateway token revoke <id> or agentsocks gateway disallow to take access back."
+        ],
+        "severity": "high",
+        "title": "agentsocks gateway access"
+      },
+      {
+        "action_classes": [
+          "agentsocks machine link command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks link <host>`, which links this machine's broker to another machine's gateway so that machine's sessions appear here as `name@host` and messages can be forwarded to them. The other machine must have run `gateway allow` for this one. `link --remove <host>` undoes a link and is not matched; a bare `link`, which lists links, is reviewed too.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--json",
+              "-h"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--remove"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "link"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.link-machine",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.agentsocks.link-machine",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--json",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--remove"
+                ],
+                "required_flags": [
+                  "--remove"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "link"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks link removal",
+            "variant_id": "remove"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--json",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--remove"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "link"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--json",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--remove"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "link"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run agentsocks link with no argument to list the linked machines.",
+          "Run agentsocks link --remove <host> to undo a link.",
+          "Treat a link as trust in that machine: a linked machine can message any Claude or Codex session here."
+        ],
+        "severity": "high",
+        "title": "agentsocks machine link"
+      },
+      {
+        "action_classes": [
+          "agentsocks API peer command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentsocks peer add`, which makes a model behind the xAI or OpenAI API a peer. When a message arrives, the broker calls the provider with the key read from `--key-file`; each answer takes one to six paid calls, capped by `--max-calls-per-hour` (30 by default), and what is sent to the peer goes to the provider.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "agentsocks",
+              "agentsocks.cmd",
+              "agentsocks.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--api",
+              "--base-url",
+              "--key-file",
+              "--max-calls-per-hour",
+              "--model"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "peer",
+              "add"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentsocks.permission.add-api-peer",
+        "risk_classes": [
+          "network_egress",
+          "credential_access"
+        ],
+        "rule_id": "command.agentsocks.add-api-peer",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--api",
+                  "--base-url",
+                  "--key-file",
+                  "--max-calls-per-hour",
+                  "--model"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "peer",
+                  "add"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentsocks",
+                  "agentsocks.cmd",
+                  "agentsocks.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--api",
+                  "--base-url",
+                  "--key-file",
+                  "--max-calls-per-hour",
+                  "--model"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "peer",
+                  "add"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "agentsocks command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Keep --may-message short and --max-calls-per-hour low.",
+          "Run agentsocks peer list to see the API peers and their call caps.",
+          "Run agentsocks peer remove <name> to stop its API calls."
+        ],
+        "severity": "high",
+        "title": "agentsocks API peer"
+      }
+    ],
+    "safer_alternatives": [
+      "Run agentsocks doctor, status and gateway status to inspect the install before changing it.",
+      "Use --dry-run with install and uninstall to preview the changes.",
+      "Set AGENTSOCKS_OFF=1 or touch ~/.config/agentsocks/off to stop sends, classifier calls, wakes and the gateway without uninstalling."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

@@ -8,13 +8,8 @@ use std::path::Path;
 
 use crate::codex_output_fs as pyfs;
 use crate::codex_output_py::PyPath;
-use crate::false_positive_rules::target_is_known_skill_doc_path;
+use crate::false_positive_rules::{target_is_known_skill_doc_path, KNOWN_AGENT_DOC_SUFFIXES};
 use crate::shell_execution_context::model_shell_execution_context;
-
-const AGENT_DOC_PATHS: &[&str] = &[
-    ".codex/docs/harness-engineering.md",
-    ".codex/docs/token-discipline.md",
-];
 
 /// `is_benign_agent_guidance_read`.
 pub(crate) fn is_benign_agent_guidance_read(
@@ -84,7 +79,7 @@ fn is_approved_agent_doc_target(target: &str, home_dir: &Path) -> bool {
         return target_is_known_skill_doc_path(target, Some(home_dir));
     }
     let home = PyPath::new(&home_dir.to_string_lossy());
-    let expected = AGENT_DOC_PATHS
+    let expected = KNOWN_AGENT_DOC_SUFFIXES
         .iter()
         .any(|path| target == format!("~/{path}") || target == home.join(path).to_string());
     expected

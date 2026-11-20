@@ -229,3 +229,151 @@ def test_retirement_checks_tar_link_name_and_target(
         archive.addfile(entry)
     with pytest.raises(RuntimeError, match="package artifact contains retired module"):
         check(retired_repository, (artifact,))
+
+
+def _declare_entry_point(root: Path, target: str, *, group: str | None = None) -> None:
+    (root / "src/example/live_cli.py").write_text("def main() -> int:\n    return 0\n", encoding="utf-8")
+    table = f'[project.entry-points."{group}"]\n' if group else "[project.scripts]\n"
+    manifest = f'[project]\nname = "example"\n{table}example = "{target}"\n'
+    (root / "pyproject.toml").write_text(manifest, encoding="utf-8")
+
+
+def test_entry_point_passes_when_its_module_and_attribute_survive(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:main")
+    assert len(check(retired_repository)) == 1
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        ("example.old_runtime:main", "retired module"),
+        ("example.absent_cli:main", "module that does not exist"),
+        ("example.live_cli:absent", "missing attribute"),
+        ("example.live_cli", "no module:attribute target"),
+    ],
+)
+def test_entry_point_must_resolve_after_a_retirement(
+    retired_repository: tuple[Path, dict[str, object]], target: str, message: str
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, target)
+    with pytest.raises(RuntimeError, match=message):
+        check(retired_repository)
+
+
+def test_entry_point_group_members_are_screened_like_console_scripts(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.old_runtime:main", group="guard.plugins")
+    with pytest.raises(RuntimeError, match="retired module"):
+        check(retired_repository)
+
+
+def _write_module(root: Path, relative: str, source: str) -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+
+
+@pytest.mark.parametrize("directory", ["tests", "scripts"])
+def test_entry_point_module_outside_the_packaged_root_does_not_count(
+    retired_repository: tuple[Path, dict[str, object]], directory: str
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.tool_cli:main")
+    _write_module(root, f"{directory}/example/tool_cli.py", "def main() -> int:\n    return 0\n")
+    with pytest.raises(RuntimeError, match="module that does not exist"):
+        check(retired_repository)
+
+
+def test_entry_point_nested_attribute_must_resolve(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:Command.absent")
+    _write_module(
+        root,
+        "src/example/live_cli.py",
+        "class Command:\n    def present(self) -> int:\n        return 0\n",
+    )
+    with pytest.raises(RuntimeError, match="missing attribute"):
+        check(retired_repository)
+
+
+def test_entry_point_nested_attribute_passes_when_the_class_still_defines_it(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:Command.main")
+    _write_module(
+        root,
+        "src/example/live_cli.py",
+        "class Command:\n    def main(self) -> int:\n        return 0\n",
+    )
+    assert len(check(retired_repository)) == 1
+
+
+def test_entry_point_annotation_without_a_value_is_not_an_attribute(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:main")
+    _write_module(
+        root,
+        "src/example/live_cli.py",
+        "from collections.abc import Callable\n\nmain: Callable[[], int]\n",
+    )
+    with pytest.raises(RuntimeError, match="missing attribute"):
+        check(retired_repository)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "def __getattr__(name: str) -> object:\n    raise AttributeError(name)\n",
+        "from example.exports import *\n",
+    ],
+)
+def test_entry_point_accepts_an_attribute_the_module_exports_dynamically(
+    retired_repository: tuple[Path, dict[str, object]], source: str
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:main")
+    _write_module(root, "src/example/exports.py", "def main() -> int:\n    return 0\n")
+    _write_module(root, "src/example/live_cli.py", source)
+    assert len(check(retired_repository)) == 1
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["class Command(Base):", "class Command(metaclass=Meta):"],
+)
+def test_entry_point_accepts_an_attribute_a_class_inherits(
+    retired_repository: tuple[Path, dict[str, object]], header: str
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:Command.main")
+    _write_module(
+        root,
+        "src/example/live_cli.py",
+        f"from example.base import Base, Meta\n\n\n{header}\n    pass\n",
+    )
+    assert len(check(retired_repository)) == 1
+
+
+def test_entry_point_class_getattr_does_not_rescue_a_missing_class_attribute(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    root, _ = retired_repository
+    _declare_entry_point(root, "example.live_cli:Command.absent")
+    _write_module(
+        root,
+        "src/example/live_cli.py",
+        "class Command:\n    def __getattr__(self, name: str) -> object:\n        raise AttributeError(name)\n",
+    )
+    with pytest.raises(RuntimeError, match="missing attribute"):
+        check(retired_repository)

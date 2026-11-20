@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   applyExtensionMutation,
+  ExtensionControlApiError,
   fetchEffectiveExtensionControls,
   previewExtensionMutation,
   type EffectiveExtensionControls,
@@ -26,6 +27,11 @@ import {
   type ExtensionPolicyRebaseConflict,
   type ExtensionPolicyRebaseResult,
 } from "./extension-policy-rebase";
+import {
+  authorityRecoverySentence,
+  knownProtectionChangeMessage,
+  protectionChangeErrorMessage,
+} from "./protection-center/protection-change-error";
 import {
   extensionPolicyRepairBase,
   isExtensionPolicyConflict,
@@ -183,14 +189,35 @@ export function useExtensionPolicyDraft(props: {
     return extensionPolicyRepairBase(base, latest);
   }, []);
 
-  const handleApiError = useCallback((caught: unknown, fallback: string) => {
+  // Read from the live projection rather than the draft's base, so a daemon
+  // that restarted at a new path is named correctly without re-seeding edits.
+  const terminalCommands = props.effective.terminal_commands;
+
+  /**
+   * Only apply can have committed before it failed, so only apply may say the
+   * outcome is unknown. Preview and rebase never write: they get a sentence for
+   * a code with a known meaning and their own wording otherwise, and the
+   * daemon's protocol code is never printed as the message.
+   */
+  const handleApiError = useCallback((caught: unknown, fallback: string, phase: "preview" | "apply" | "rebase") => {
     if (isExtensionPolicyConflict(caught)) {
       setStale(true);
       setError("The authoritative extension policy changed while this draft was open. Rebase the draft before applying; Guard will not silently overwrite security policy.");
       return;
     }
-    setError(caught instanceof Error ? caught.message : fallback);
-  }, []);
+    const command = terminalCommands?.recover_authority;
+    const shell = terminalCommands?.shell;
+    if (phase === "apply") {
+      setError(caught instanceof Error ? protectionChangeErrorMessage(caught, command, shell) : fallback);
+      return;
+    }
+    const known = phase === "preview"
+      ? knownProtectionChangeMessage(caught, command, shell)
+      : authorityRecoverySentence(caught, command, shell);
+    if (known) setError(phase === "rebase" ? `${fallback} ${known}` : known);
+    else if (caught instanceof ExtensionControlApiError && caught.code) setError(fallback);
+    else setError(caught instanceof Error && caught.message ? caught.message : fallback);
+  }, [terminalCommands]);
 
   const runPreview = useCallback(async () => {
     if (!dirty) return;
@@ -214,7 +241,7 @@ export function useExtensionPolicyDraft(props: {
       setPreview(next);
       setReviewOpen(true);
     } catch (caught) {
-      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.");
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.", "preview");
     } finally {
       setPreviewBusy(false);
     }
@@ -294,7 +321,7 @@ export function useExtensionPolicyDraft(props: {
         setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
       }
     } catch (caught) {
-      handleApiError(caught, "Guard could not apply this draft.");
+      handleApiError(caught, "Guard could not apply this draft.", "apply");
     } finally {
       setApplyBusy(false);
     }
@@ -368,11 +395,11 @@ export function useExtensionPolicyDraft(props: {
         setError(null);
       }
     } catch (caught) {
-      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not rebase this draft.");
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not rebase this draft.", "rebase");
     } finally {
       setPreviewBusy(false);
     }
-  }, [baseEffective, draftLayers]);
+  }, [baseEffective, draftLayers, handleApiError]);
 
   const keepConflicts = useCallback(() => {
     if (!pendingRebase) return;

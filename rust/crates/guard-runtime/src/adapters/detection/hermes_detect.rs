@@ -46,7 +46,7 @@ fn text(path: &Path) -> String {
 }
 
 /// `_hermes_home_has_artifacts`.
-fn home_has_artifacts(home: &Path) -> Result<bool, &'static str> {
+pub(crate) fn home_has_artifacts(home: &Path) -> Result<bool, &'static str> {
     for name in ["config.yaml", "config.toml"] {
         let path = home.join(name);
         if is_file(&path)

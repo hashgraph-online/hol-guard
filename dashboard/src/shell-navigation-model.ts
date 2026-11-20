@@ -2,17 +2,19 @@ import type { IconType } from "react-icons";
 import {
   HiMiniAdjustmentsHorizontal,
   HiMiniClipboardDocumentList,
+  HiMiniCircleStack,
   HiMiniDocumentText,
   HiMiniHome,
   HiMiniInbox,
   HiMiniInformationCircle,
   HiMiniPuzzlePiece,
+  HiMiniRocketLaunch,
   HiMiniShieldCheck,
   HiMiniSquares2X2,
 } from "react-icons/hi2";
 
 import type { AppView } from "./approval-center-primitives";
-import type { GuardUpdateChannelProof } from "./guard-api";
+import type { GuardUpdateChannelProof, GuardUpdateMode } from "./guard-api";
 import type {
   GuardApprovalGatePublicConfig,
   GuardCloudUserProfile,
@@ -21,7 +23,7 @@ import type {
 } from "./guard-types";
 
 export type NavigationGroup = "primary" | "manage" | "support";
-export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "protection-repair">;
+export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "workspaces" | "protection-repair">;
 
 export type ShellNavigationItem = {
   href: string;
@@ -31,6 +33,8 @@ export type ShellNavigationItem = {
   view: NavigationView;
   group: NavigationGroup;
   icon: IconType;
+  /** Short status chip rendered beside the label, e.g. a pre-release marker. */
+  badge?: string;
 };
 
 export type ShellNavigationProps = {
@@ -44,6 +48,7 @@ export type ShellNavigationProps = {
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
   updateError?: string | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
@@ -81,13 +86,24 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniShieldCheck,
   },
   {
-    href: "/evidence",
-    label: "Evidence",
-    shortLabel: "Evidence",
-    description: "Receipts, commands, and security insights",
-    view: "evidence",
+    href: "/swarm",
+    label: "Swarm",
+    shortLabel: "Swarm",
+    description: "Launch, follow, and direct local agents across projects",
+    view: "swarm",
     group: "primary",
-    icon: HiMiniDocumentText,
+    icon: HiMiniSquares2X2,
+    badge: "Alpha",
+  },
+  {
+    href: "/cigar",
+    label: "Context",
+    shortLabel: "Context",
+    description: "Local context, setup, sources, and AI app access",
+    view: "cigar",
+    group: "primary",
+    icon: HiMiniCircleStack,
+    badge: "Beta",
   },
   {
     href: "/extensions",
@@ -95,7 +111,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     shortLabel: "Extensions",
     description: "Tools and capabilities protected on this device",
     view: "extensions",
-    group: "manage",
+    group: "primary",
     icon: HiMiniPuzzlePiece,
   },
   {
@@ -126,6 +142,24 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniAdjustmentsHorizontal,
   },
   {
+    href: "/evidence",
+    label: "Evidence",
+    shortLabel: "Evidence",
+    description: "Receipts, commands, and security insights",
+    view: "evidence",
+    group: "manage",
+    icon: HiMiniDocumentText,
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    shortLabel: "Releases",
+    description: "Published versions and what each one changed",
+    view: "releases",
+    group: "support",
+    icon: HiMiniRocketLaunch,
+  },
+  {
     href: "/about",
     label: "About",
     shortLabel: "About",
@@ -136,7 +170,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
   },
 ] as const;
 
-const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "evidence"]);
+const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "cigar"]);
 
 export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: string }> = [
   { id: "primary", label: "Guard" },
@@ -146,7 +180,7 @@ export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: stri
 
 export function canonicalNavigationView(view: AppView): NavigationView {
   if (view === "app-detail") return "fleet";
-  if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "audit" || view === "feed-health" || view === "workspaces") return "supply-chain";
   if (view === "protection-repair") return "extensions";
   return view;
 }

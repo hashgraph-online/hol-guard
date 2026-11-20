@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.remote_pair_flow import (
     build_remote_pair_status_payload,
     claim_remote_pairing_intent,
     run_guard_remote_pair_command,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 

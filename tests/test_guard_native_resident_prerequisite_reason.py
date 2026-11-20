@@ -34,13 +34,18 @@ def test_prerequisite_provisioning_never_refreshes_policy_integrity(
     from codex_plugin_scanner.guard.store import GuardStore
 
     refreshed: list[bool] = []
+    original = GuardStore._refresh_policy_integrity_state  # pyright: ignore[reportPrivateUsage]
+    home = tmp_path / "prerequisite-home"
 
-    def refresh(*args: object, **kwargs: object) -> None:
+    # A policy publisher an earlier test left running refreshes its own
+    # store through the same class; only this home's store counts.
+    def refresh(store: GuardStore, *args: object, **kwargs: object) -> object:
+        if Path(store.guard_home) != home:
+            return original(store, *args, **kwargs)  # type: ignore[arg-type]
         refreshed.append(True)
         raise AssertionError("resident prerequisite must not refresh policy decisions")
 
     monkeypatch.setattr(GuardStore, "_refresh_policy_integrity_state", refresh)
-    home = tmp_path / "prerequisite-home"
     assert native_context.ensure_resident_prerequisite(home), prerequisite_failure_for_home(home)
     assert refreshed == []
     assert (home / "native-runtime" / "policy-verifier.key").is_file()

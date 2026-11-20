@@ -3,7 +3,7 @@
 //! `execute_contained` launcher.
 //!
 //! Every op validates `schema` before dispatch, delegates to
-//! `guard_command::contained_execution`, and returns `*ResultV1` via
+//! `guard_command::contained_execution`, and returns its `*Result*` via
 //! `crate::encode_response`. `None` results serialise to `Value::Null` so the
 //! Python caller distinguishes "not applicable" from transport failure.
 
@@ -12,9 +12,9 @@ use std::path::PathBuf;
 
 use guard_command::{contained_execution, contained_runner};
 use guard_contracts::{
-    ContainedExecuteRequestV1, ContainedExecuteResultV1, ContainedNodeExecuteRequestV1,
-    ContainedNodeExecuteResultV1, ContainedPackageScriptExecuteRequestV1,
-    ContainedPackageScriptExecuteResultV1, ContainedTypescriptExecuteRequestV1,
+    ContainedExecuteRequestV1, ContainedExecuteResultV1, ContainedNodeExecuteRequestV2,
+    ContainedNodeExecuteResultV2, ContainedPackageScriptExecuteRequestV1,
+    ContainedPackageScriptExecuteResultV1, ContainedTypescriptExecuteRequestV2,
     ContainedTypescriptExecuteResultV1, ContainedWorkspaceWriteExecuteRequestV1,
     ContainedWorkspaceWriteExecuteResultV1, ContainmentHealthProbeRequestV1,
     ContainmentHealthProbeResultV1, CONTAINED_EXECUTE_REQUEST_SCHEMA,
@@ -35,13 +35,16 @@ fn schema_err(schema: &str) -> String {
 // Per-op evaluators
 // ---------------------------------------------------------------------------
 
-/// Run one runner flow; any refusal (missing identity, drift, failed
-/// enforcement) is `null`, never a partial result, so the caller returns to
-/// Guard review instead of running uncontained.
-fn run_runner(
+/// Run one runner flow with the request's launch context. A request without
+/// a shim directory cannot pin its tools, so it never reaches the flow.
+///
+/// Any refusal inside a flow (missing identity, drift, failed enforcement) is
+/// `null`, never a partial result, so the caller returns to Guard review
+/// instead of running uncontained.
+fn run_runner<T>(
     request: &RunnerRequest<'_>,
-    flow: impl FnOnce(&contained_runner::RunnerLaunch<'_>) -> Result<serde_json::Value, String>,
-) -> Option<serde_json::Value> {
+    flow: impl FnOnce(&contained_runner::RunnerLaunch<'_>) -> T,
+) -> Option<T> {
     let shim_directory = PathBuf::from(request.shim_directory?);
     let workspace = PathBuf::from(request.workspace);
     let empty = BTreeMap::new();
@@ -53,7 +56,7 @@ fn run_runner(
         environment: request.environment.unwrap_or(&empty),
         timeout_seconds: request.timeout_seconds,
     };
-    flow(&launch).ok()
+    Some(flow(&launch))
 }
 
 struct RunnerRequest<'a> {
@@ -65,8 +68,11 @@ struct RunnerRequest<'a> {
     timeout_seconds: Option<f64>,
 }
 
+/// The resident parses the launch intent from `manager` and `argv` itself, so
+/// one request decides the whole launch, including whether an uncontained
+/// Vitest handoff must stop the shim instead of returning to review.
 pub(crate) fn evaluate_contained_node_execute(
-    request: &ContainedNodeExecuteRequestV1,
+    request: &ContainedNodeExecuteRequestV2,
 ) -> Result<Vec<u8>, String> {
     if request.schema != CONTAINED_NODE_EXECUTE_REQUEST_SCHEMA {
         return Err(schema_err(&request.schema));
@@ -79,18 +85,16 @@ pub(crate) fn evaluate_contained_node_execute(
         environment: request.environment.as_ref(),
         timeout_seconds: request.timeout_seconds,
     };
-    let execution = request.evidence.clone().unwrap_or(serde_json::Value::Null);
-    let result = run_runner(&runner, |launch| {
-        contained_runner::execute_node(launch, &execution)
-    });
-    crate::encode_response(&ContainedNodeExecuteResultV1 {
+    let outcome = run_runner(&runner, contained_runner::execute_node_command).unwrap_or_default();
+    crate::encode_response(&ContainedNodeExecuteResultV2 {
         schema: CONTAINED_NODE_EXECUTE_RESULT_SCHEMA.to_owned(),
-        result,
+        result: outcome.result,
+        refusal: outcome.refusal,
     })
 }
 
 pub(crate) fn evaluate_contained_typescript_execute(
-    request: &ContainedTypescriptExecuteRequestV1,
+    request: &ContainedTypescriptExecuteRequestV2,
 ) -> Result<Vec<u8>, String> {
     if request.schema != CONTAINED_TYPESCRIPT_EXECUTE_REQUEST_SCHEMA {
         return Err(schema_err(&request.schema));
@@ -103,10 +107,7 @@ pub(crate) fn evaluate_contained_typescript_execute(
         environment: request.environment.as_ref(),
         timeout_seconds: request.timeout_seconds,
     };
-    let execution = request.evidence.clone().unwrap_or(serde_json::Value::Null);
-    let result = run_runner(&runner, |launch| {
-        contained_runner::execute_typescript(launch, &execution)
-    });
+    let result = run_runner(&runner, contained_runner::execute_typescript_command).flatten();
     crate::encode_response(&ContainedTypescriptExecuteResultV1 {
         schema: CONTAINED_TYPESCRIPT_EXECUTE_RESULT_SCHEMA.to_owned(),
         result,
@@ -127,7 +128,7 @@ pub(crate) fn evaluate_contained_package_script_execute(
         environment: request.environment.as_ref(),
         timeout_seconds: request.timeout_seconds,
     };
-    let result = run_runner(&runner, contained_runner::execute_package_script);
+    let result = run_runner(&runner, contained_runner::execute_package_script).and_then(Result::ok);
     crate::encode_response(&ContainedPackageScriptExecuteResultV1 {
         schema: CONTAINED_PACKAGE_SCRIPT_EXECUTE_RESULT_SCHEMA.to_owned(),
         result,
@@ -228,3 +229,7 @@ pub(crate) fn evaluate_containment_health_probe(
         result: payload,
     })
 }
+
+#[cfg(test)]
+#[path = "contained_op_tests.rs"]
+mod tests;

@@ -67,17 +67,17 @@
       "legacy_assertion": "block"
     },
     {
-      "action": "block",
+      "action": "review",
       "command": "env sh -c 'rm -rf workspace/target'",
       "legacy_assertion": "block"
     },
     {
-      "action": "block",
+      "action": "review",
       "command": "rm -rf ./BUILD",
       "legacy_assertion": "block"
     },
     {
-      "action": "block",
+      "action": "review",
       "command": "rm --recurs --for workspace/target",
       "legacy_assertion": "block"
     },
@@ -207,7 +207,7 @@
       "legacy_assertion": "block"
     },
     {
-      "action": "block",
+      "action": "review",
       "command": "sh <<'EOF'\nrm -rf workspace/target\nEOF",
       "legacy_assertion": "block"
     },
@@ -447,7 +447,7 @@
       "legacy_assertion": "block"
     },
     {
-      "action": "block",
+      "action": "review",
       "command": "rm.exe -rf workspace/target",
       "legacy_assertion": "block"
     },

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +12,11 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
+    EFFECTIVE_LOCK_WAIT_SECONDS,
+    ExtensionControlApiService,
+)
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     hold_command_control_authority_lock,
     require_command_control_mutation_lease,
@@ -32,19 +37,19 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
     store = GuardStore(tmp_path / "guard-home")
     initial = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     server = cast(
-        _GuardDaemonHttpServer,
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
                 store=store,
-                extension_control_runtime=ExtensionControlRuntime(initial),
-                extension_control_api=SimpleNamespace(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest),
+                runtime=ExtensionControlRuntime(initial),
+                api=SimpleNamespace(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest),
                 _installed_authority_pending=False,
-                _extension_control_on_core_registry=False,
+                _on_core_registry=False,
             ),
         ),
     )
-    read_locked = store._read_extension_control_authority_locked
+    read_locked = store._read_authority_locked
     entered = threading.Event()
     release = threading.Event()
     attempts = 0
@@ -52,23 +57,31 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
     def paused_read(
         catalog_digest: str,
         *,
-        migration_registry: CommandSafetyExtensionRegistry | None = None,
-        allow_migration: bool = True,
-    ) -> ExtensionControlAuthorityView:
+        migration_registry: CommandSafetyExtensionRegistry | None,
+        allow_migration: bool,
+        roll_back_abandoned: bool = True,
+        compose: bool = False,
+    ) -> tuple[ExtensionControlAuthorityView, dict[str, object] | None]:
         nonlocal attempts
         attempts += 1
         if mutation_required:
             # This is the existing guard used before catalog migration and
             # authority recovery writes. A shared attempt must unwind first.
             require_command_control_mutation_lease(store.guard_home)
-        view = read_locked(catalog_digest, migration_registry=migration_registry, allow_migration=allow_migration)
+        read = read_locked(
+            catalog_digest,
+            migration_registry=migration_registry,
+            allow_migration=allow_migration,
+            roll_back_abandoned=roll_back_abandoned,
+            compose=compose,
+        )
         entered.set()
         assert release.wait(timeout=5)
-        return view
+        return read
 
-    monkeypatch.setattr(store, "_read_extension_control_authority_locked", paused_read)
+    monkeypatch.setattr(store, "_read_authority_locked", paused_read)
     with ThreadPoolExecutor(max_workers=1) as executor:
-        refresh = executor.submit(_GuardDaemonHttpServer.refresh_extension_control_runtime, server)
+        refresh = executor.submit(ExtensionControlHost.refresh, server)
         try:
             assert entered.wait(timeout=5)
             # A separate thread and file descriptor exercise the actual OS
@@ -113,27 +126,27 @@ def test_busy_refresh_retains_the_installed_authority_even_during_migration(
     runtime = ExtensionControlRuntime(initial)
     installed = runtime.current()
     server = cast(
-        _GuardDaemonHttpServer,
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
                 store=store,
-                extension_control_runtime=runtime,
+                runtime=runtime,
                 _installed_authority_pending=False,
-                _extension_control_on_core_registry=False,
+                _on_core_registry=False,
             ),
         ),
     )
     attempts = []
 
-    def busy(registry, *, read_only=False):
+    def busy(registry, *, read_only=False, **_kwargs):
         attempts.append((registry.catalog_digest, read_only))
         if mutation_required and read_only:
             raise NativeCommandControlMutationRequiredError()
         raise NativeCommandControlAuthorityUnavailableError(shared=read_only)
 
     monkeypatch.setattr(store, "read_extension_control_authority_for_registry", busy)
-    assert _GuardDaemonHttpServer.refresh_extension_control_runtime(server) is installed
+    assert ExtensionControlHost.refresh(server) is installed
     assert runtime.current() is installed
     assert attempts == [(initial.catalog_digest, True)] + (
         [(initial.catalog_digest, False)] if mutation_required else []
@@ -182,3 +195,35 @@ def test_authenticated_startup_retains_its_floor_under_a_live_native_reader(
                 result.result(timeout=5)
     assert lifecycle_store.read(store) == floor
     assert backend.get_secret(store._build_scoped_secret_ref(lifecycle_store.STAMP)) == stamp
+
+
+def test_effective_serves_the_installed_snapshot_while_a_writer_holds_the_lease(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    view = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    service = ExtensionControlApiService(
+        store=store, registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY, runtime=ExtensionControlRuntime(view)
+    )
+    expected = service.effective(reread=False)
+    held = threading.Event()
+    release = threading.Event()
+
+    def writer() -> None:
+        with hold_command_control_authority_lock(store.guard_home):
+            held.set()
+            assert release.wait(timeout=30)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        holding = executor.submit(writer)
+        assert held.wait(timeout=5)
+        try:
+            started = time.monotonic()
+            served = service.effective()
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+        holding.result(timeout=5)
+
+    # The dashboard's poll returns what the runtime holds instead of waiting
+    # out the writer's whole lease.
+    assert served == expected
+    assert elapsed < EFFECTIVE_LOCK_WAIT_SECONDS + 2.0

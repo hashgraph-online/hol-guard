@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action, update_guard_settings
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.runner import (
@@ -65,20 +65,12 @@ def test_managed_mode_floor_cannot_fake_watch_only_transition(
         ),
     )
     monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
-    _store, daemon = _with_daemon(guard_home)
-    try:
-        status, payload = _json_request(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/settings",
-            method="POST",
-            payload={"settings": {"mode": "observe", "sync": True, "desktop_notifications": False}},
+    # The daemon's settings write runs natively against the machine policy;
+    # the managed floor it applies is this config rule.
+    with pytest.raises(ValueError, match=r"Cloud sync requires a paid team plan\."):
+        update_guard_settings(
+            guard_home, {"mode": "observe", "sync": True, "desktop_notifications": False}, cloud_sync_entitled=False
         )
-    finally:
-        daemon.stop()
-
-    assert status == 400
-    assert payload["message"] == "Cloud sync requires a paid team plan."
 
 
 def test_managed_sync_cannot_be_persisted_by_watch_only_transition(
@@ -98,20 +90,10 @@ def test_managed_sync_cannot_be_persisted_by_watch_only_transition(
         ),
     )
     monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
-    _store, daemon = _with_daemon(guard_home)
-    try:
-        status, payload = _json_request(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/settings",
-            method="POST",
-            payload={"settings": {"mode": "observe", "sync": True}},
-        )
-    finally:
-        daemon.stop()
-
-    assert status == 400
-    assert payload["message"] == "Cloud sync requires a paid team plan."
+    # The daemon's settings write runs natively against the machine policy;
+    # the managed floor it applies is this config rule.
+    with pytest.raises(ValueError, match=r"Cloud sync requires a paid team plan\."):
+        update_guard_settings(guard_home, {"mode": "observe", "sync": True}, cloud_sync_entitled=False)
     assert "sync = true" not in (guard_home / "config.toml").read_text(encoding="utf-8")
 
 
@@ -295,13 +277,17 @@ def test_relaxed_security_level_persists_granular_risk_settings(tmp_path: Path) 
     assert settings["harness_risk_actions"]["codex"]["local_secret_read"] == "block"
 
 
-def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
-    patch_daemon_global(
-        monkeypatch,
-        "package_firewall_entitlement_or_denied",
-        lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
+def _seed_entitlement(store: GuardStore, tier: str) -> None:
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": tier, "workspace_id": "workspace-1"},
+        "2026-06-09T12:00:00.000Z",
     )
+
+
+def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
     _store, daemon = _with_daemon(tmp_path / "guard-home")
+    _seed_entitlement(_store, "team")
     try:
         update_status, _update_payload = _json_request(
             daemon.port,
@@ -364,11 +350,7 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": True, "sync": True}},
         )
-        patch_daemon_global(
-            monkeypatch,
-            "package_firewall_entitlement_or_denied",
-            lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
-        )
+        _seed_entitlement(_store, "team")
         allowed_status, allowed_payload = _json_request(
             daemon.port,
             daemon._server.auth_token,
@@ -376,11 +358,7 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": False, "sync": True}},
         )
-        patch_daemon_global(
-            monkeypatch,
-            "package_firewall_entitlement_or_denied",
-            lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
-        )
+        _seed_entitlement(_store, "free")
         _json_request(
             daemon.port,
             daemon._server.auth_token,
@@ -566,3 +544,148 @@ def test_policy_api_rejects_global_allow_without_target(tmp_path: Path) -> None:
     assert status == 400
     assert payload["saved"] is False
     assert payload["error"] == "broad_allow_requires_narrow_scope"
+
+
+def test_an_overflowing_pulse_cooldown_is_an_invalid_request(tmp_path: Path) -> None:
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}/v1/approval-gate/pulse/confirm",
+        # 1e309 parses as infinity, which int() cannot convert.
+        data=b'{"request_id": "azr_1", "cooldown_seconds": 1e309}',
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(request, timeout=5)
+    finally:
+        daemon.stop()
+    assert refused.value.code == 400
+    # The native daemon refuses a body it cannot read as JSON numbers before
+    # the Pulse route runs; the route itself refuses one it can.
+    assert json.loads(refused.value.read().decode("utf-8"))["error"] in {
+        "invalid_request_body",
+        "approval_gate_pulse_invalid_request",
+    }
+
+
+def test_the_pulse_route_refuses_an_overflowing_cooldown(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.routes import pulse_calls
+
+    reply = pulse_calls.approval_gate_pulse(
+        GuardStore(tmp_path / "guard-home"),
+        {"action": "confirm", "payload": {"request_id": "azr_1", "cooldown_seconds": float("inf")}},
+    )
+    assert reply["status"] == 400
+    assert reply["body"]["error"] == "approval_gate_pulse_invalid_request"
+
+
+def _raw_post(daemon: GuardDaemonServer, path: str, body: bytes, *, token: bool) -> tuple[int, dict[str, Any]]:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["X-Guard-Token"] = daemon._server.auth_token
+    request = urllib.request.Request(f"http://127.0.0.1:{daemon.port}{path}", data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            status, body = response.status, response.read()
+    except urllib.error.HTTPError as error:
+        status, body = error.code, error.read()
+    try:
+        return status, json.loads(body.decode("utf-8"))
+    except ValueError:
+        return status, {}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/approval-gate/pulse/enroll",
+        "/v1/approval-gate/pulse/x/enroll",
+        "/v1/approval-gate/pulse/x/poll",
+        "/v1/approval-gate/pulse/enroll/",
+    ],
+)
+def test_no_pulse_route_answers_without_the_daemon_token(tmp_path: Path, path: str) -> None:
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    try:
+        status, payload = _raw_post(daemon, path, b'{"password": "x", "step": "authorize"}', token=False)
+    finally:
+        daemon.stop()
+    assert status in {400, 401, 404}, (status, payload)
+    assert not str(payload.get("error", "")).startswith("approval_gate"), "no Pulse handler ran"
+
+
+def test_a_confirmed_setup_returns_its_recovery_code_even_if_the_settings_view_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import approval_gate, config
+    from codex_plugin_scanner.guard.routes import pulse_calls
+
+    monkeypatch.setattr(
+        approval_gate,
+        "confirm_pulse_enrollment",
+        lambda *_a, **_k: {"pulse_enabled": True, "recovery_code": "rc-once"},
+    )
+
+    def broken(_guard_home: object) -> object:
+        raise ValueError("config unreadable")
+
+    monkeypatch.setattr(config, "load_guard_config", broken)
+    reply = pulse_calls.approval_gate_pulse(
+        GuardStore(tmp_path / "guard-home"), {"action": "confirm", "payload": {"request_id": "azr_1"}}
+    )
+    assert reply["status"] == 200, reply
+    assert reply["body"]["pulse_recovery_code"] == "rc-once"
+    assert reply["body"]["approval_gate"]["pulse_enabled"] is True
+
+
+def test_a_settings_approval_is_bound_to_the_exact_settings_saved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Python settings save names the change (the native one is tested in Rust)."""
+    from codex_plugin_scanner.guard import approval_gate
+    from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
+    from codex_plugin_scanner.guard.routes import settings_calls
+
+    # The route names the change; the resident derives the binding from it.
+    changes: list[object] = []
+
+    def gate(*_args: object, **kwargs: object) -> None:
+        changes.append(kwargs.get("settings_change"))
+        raise ApprovalGateError("approval_gate_required", "stop here")
+
+    monkeypatch.setattr(approval_gate, "require_high_risk", gate)
+    store = GuardStore(tmp_path / "guard-home")
+    for settings in (
+        {"receipt_redaction_level": "none"},
+        {"receipt_redaction_level": "none"},
+        {"receipt_redaction_level": "strict"},
+    ):
+        settings_calls._apply_settings(
+            store, {"settings": settings, "approval_pulse_request_id": "azr_1"}, missing_error="invalid_settings"
+        )
+    assert len(changes) == 3
+    assert changes[0] == {"kind": "save", "settings": {"receipt_redaction_level": "none"}}
+    assert changes[0] == changes[1], "the same change is named the same way on resubmit"
+    assert changes[0] != changes[2], "a different change is named differently"
+
+
+def test_a_confirmed_setup_returns_its_recovery_code_even_if_the_response_cannot_be_encoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import approval_gate
+    from codex_plugin_scanner.guard.routes import pulse_calls
+
+    monkeypatch.setattr(
+        approval_gate,
+        "confirm_pulse_enrollment",
+        lambda *_a, **_k: {"pulse_enabled": True, "recovery_code": "rc-once"},
+    )
+    # A settings view json.dumps cannot encode.
+    monkeypatch.setattr(pulse_calls, "settings_response_payload", lambda *_a: {"settings": object()})
+    reply = pulse_calls.approval_gate_pulse(
+        GuardStore(tmp_path / "guard-home"), {"action": "confirm", "payload": {"request_id": "azr_1"}}
+    )
+    assert reply["status"] == 200, reply
+    assert reply["body"]["pulse_recovery_code"] == "rc-once"
+    assert reply["body"]["approval_gate"]["pulse_enabled"] is True

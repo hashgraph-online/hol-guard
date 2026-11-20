@@ -2,26 +2,31 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
+import base64
 import os
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from ..portable_command import portable_command_argument, render_portable_command
-from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
-from ..stable_digest import sha256_content_digest
-from ..store import GuardStore
-from .command_operation_classification import (
-    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
-    POLICY_MEMORY_COMMAND_OPERATIONS,
-    READ_ONLY_COMMAND_OPERATIONS,
-    REMOTE_STEP_UP_COMMAND_OPERATIONS,
-    STATE_CHANGING_COMMAND_OPERATIONS,
+from ..native_command_capability import (
+    CommandCapabilityUnavailableError,
+    native_command_capability,
+    native_command_capability_issue,
 )
+from ..native_command_envelope import (
+    CommandEnvelopeUnavailableError,
+    native_command_envelope,
+)
+from ..native_command_state import (
+    CommandStateRefusedError,
+    CommandStateUnavailableError,
+    native_command_state,
+)
+from ..portable_command import render_portable_command
+from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
+from ..store import GuardStore
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -30,9 +35,7 @@ COMMAND_LOCAL_APPROVALS_STATE_KEY = "guard_command_local_approvals_v1"
 COMMAND_REPLAY_STATE_KEY = "guard_command_replay_state_v1"
 COMMAND_QUEUE_RUNTIME_STATE_KEY = "guard_command_queue_state"
 COMMAND_CAPABILITY_VERSION = 1
-COMMAND_CAPABILITY_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
-COMMAND_REPLAY_MAX_ITEMS = 512
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
 
 
@@ -75,47 +78,61 @@ def command_environment_allows_queue(environ: Mapping[str, str] | None = None) -
 _parse_timestamp = parse_utc_timestamp
 
 
-def _canonical_bytes(payload: Mapping[str, object]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+def _envelope(
+    store: GuardStore,
+    action: str,
+    payload: object,
+    *,
+    create_key: bool = False,
+) -> object:
+    """One signed-envelope answer from the runtime, or its refusal raised.
 
+    The HMAC, the canonical bytes it covers and every comparison against them
+    live in the resident. This side reads the key out of the secret store and
+    decides when one has to be minted, which is provisioning, not a verdict.
+    """
 
-def _state_items(payload: object) -> list[dict[str, object]]:
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items")
-    if not isinstance(raw_items, list):
-        return []
-    return [{str(key): value for key, value in item.items()} for item in raw_items if isinstance(item, dict)]
-
-
-def _signing_material(store: GuardStore, *, create: bool) -> tuple[bytes, str]:
-    key, key_id = store._policy_integrity_secret_material(create=create)
-    if key is None or key_id is None:
-        raise CommandCapabilityError("local_signing_key_unavailable")
-    return key, key_id
+    home = _resident_home(store)
+    if action == "digest":
+        # The runtime digests the payload alone and never reads the key for
+        # this action, so reading the policy integrity secret out of the store
+        # and putting it on the socket for every replay row and approval match
+        # would spend the secret for nothing.
+        key_b64, key_id = None, None
+    else:
+        key_b64, key_id = _signing_material_for_resident(store, create=create_key)
+    try:
+        answer = native_command_envelope(
+            action=action,
+            payload=payload,
+            integrity_key_b64=key_b64,
+            integrity_key_id=key_id,
+            guard_home=home,
+        )
+    except CommandEnvelopeUnavailableError as error:
+        # Every caller of this module already reads a `CommandCapabilityError`
+        # as a fail-closed refusal: the queue poll records it on the job result
+        # and the CLI prints it as `{"status": "error"}` with exit code 2. A
+        # resident that gives no answer is the same refusal, so it reaches them
+        # as one and keeps its own code.
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason) from error
+    if not answer.get("accepted"):
+        raise CommandCapabilityError(str(answer.get("reason") or "signed_payload_missing"))
+    return answer.get("result")
 
 
 def _signed_payload(store: GuardStore, payload: dict[str, object], *, create_key: bool) -> dict[str, object]:
-    key, key_id = _signing_material(store, create=create_key)
-    unsigned = {**payload, "keyId": key_id}
-    signature = hmac.new(key, _canonical_bytes(unsigned), hashlib.sha256).hexdigest()
-    return {**unsigned, "signature": signature}
+    signed = _envelope(store, "sign", payload, create_key=create_key)
+    if not isinstance(signed, dict):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return {str(key): value for key, value in signed.items()}
 
 
 def _verify_signed_payload(store: GuardStore, payload: object) -> dict[str, object]:
-    if not isinstance(payload, dict):
-        raise CommandCapabilityError("signed_payload_missing")
-    signature = payload.get("signature")
-    if not isinstance(signature, str) or not signature:
-        raise CommandCapabilityError("signed_payload_missing_signature")
-    unsigned = {str(key): value for key, value in payload.items() if key != "signature"}
-    key, key_id = _signing_material(store, create=False)
-    if unsigned.get("keyId") != key_id:
-        raise CommandCapabilityError("signed_payload_key_mismatch")
-    expected = hmac.new(key, _canonical_bytes(unsigned), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(signature, expected):
-        raise CommandCapabilityError("signed_payload_invalid_signature")
-    return unsigned
+    unsigned = _envelope(store, "verify", payload)
+    if not isinstance(unsigned, dict):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return {str(key): value for key, value in unsigned.items()}
 
 
 def _oauth_target(store: GuardStore) -> tuple[str, str]:
@@ -146,21 +163,32 @@ def issue_command_capability(
     ttl_seconds: int = COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS,
     now: str | None = None,
 ) -> dict[str, object]:
-    """Issue and persist an exact local command capability."""
+    """Issue and persist an exact local command capability.
+
+    ``operations`` carries the ``--operations`` words as typed. The resident
+    reads the group name, the comma-joined lists and the spacing, and answers
+    with the exact operations the capability may carry or the code that refuses
+    it; nothing here decides what a grant can authorize.
+    """
 
     issued_at = _now_datetime(now)
-    if not issuer.strip():
-        raise CommandCapabilityError("capability_issuer_required")
-    if ttl_seconds <= 0 or ttl_seconds > COMMAND_CAPABILITY_MAX_TTL_SECONDS:
-        raise CommandCapabilityError("invalid_capability_ttl")
-    supported = frozenset(supported_operations)
-    normalized_operations = tuple(sorted(set(operations)))
-    if not normalized_operations:
-        raise CommandCapabilityError("capability_operations_required")
-    if set(normalized_operations) - supported or "guard.review.resolveExact" in operations:
+    try:
+        issued = native_command_capability_issue(
+            requested=operations,
+            supported_operations=supported_operations,
+            issuer=issuer,
+            ttl_seconds=ttl_seconds,
+            guard_home=_resident_home(store),
+        )
+    except CommandCapabilityUnavailableError as error:
+        raise CommandCapabilityError(error.reason) from None
+    if not issued.get("granted"):
+        reason = issued.get("reason")
+        raise CommandCapabilityError(str(reason) if reason else "unsupported_capability_operation")
+    granted_operations = issued.get("operations")
+    if not isinstance(granted_operations, list) or not granted_operations:
         raise CommandCapabilityError("unsupported_capability_operation")
-    if POLICY_MEMORY_COMMAND_OPERATIONS & set(normalized_operations) and len(normalized_operations) != 1:
-        raise CommandCapabilityError("policy_memory_capability_must_be_isolated")
+    normalized_operations = tuple(str(operation) for operation in granted_operations)
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
         store,
@@ -176,12 +204,9 @@ def issue_command_capability(
         },
         create_key=True,
     )
-    store.set_sync_payload(COMMAND_CAPABILITY_STATE_KEY, capability, issued_at.isoformat())
-    # Never inherit a result or active lease from the historical always-on
-    # queue or from an earlier revoked capability.
-    store.delete_sync_payload(COMMAND_QUEUE_RUNTIME_STATE_KEY)
-    store.delete_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY)
+    # The runtime installs it and, in the same transaction, drops any result,
+    # lease, grant or waiting job left by an earlier queue or capability.
+    _ledger(store, "issue", now=issued_at.isoformat(), capability=capability)
     _audit(
         store,
         "cloud_command.capability_issued",
@@ -197,71 +222,144 @@ def issue_command_capability(
     return command_capability_status(store, now=issued_at.isoformat())
 
 
-def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
-    capability = _verify_signed_payload(store, store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY))
-    if capability.get("version") != COMMAND_CAPABILITY_VERSION:
-        raise CommandCapabilityError("capability_version_unsupported")
-    issuer = capability.get("issuer")
-    if not isinstance(issuer, str) or not issuer.strip():
-        raise CommandCapabilityError("capability_issuer_invalid")
-    issued_at = _parse_timestamp(capability.get("issuedAt"))
-    if issued_at is None:
-        raise CommandCapabilityError("capability_issued_at_invalid")
-    expires_at = _parse_timestamp(capability.get("expiresAt"))
-    if expires_at is None:
-        raise CommandCapabilityError("capability_expiry_invalid")
-    current = _now_datetime(now)
-    if issued_at > current + timedelta(minutes=5):
-        raise CommandCapabilityError("capability_issued_in_future")
-    if expires_at <= issued_at:
-        raise CommandCapabilityError("capability_expiry_invalid")
-    if expires_at - issued_at > timedelta(seconds=COMMAND_CAPABILITY_MAX_TTL_SECONDS):
-        raise CommandCapabilityError("capability_ttl_exceeded")
-    if expires_at <= current:
-        raise CommandCapabilityError("capability_expired")
-    nonce = capability.get("nonce")
-    if not isinstance(nonce, str) or not nonce.strip():
-        raise CommandCapabilityError("capability_nonce_invalid")
-    device_id, workspace_id = _oauth_target(store)
-    if capability.get("deviceId") != device_id:
-        raise CommandCapabilityError("capability_device_mismatch")
-    if capability.get("workspaceId") != workspace_id:
-        raise CommandCapabilityError("capability_workspace_mismatch")
-    operations = capability.get("operations")
-    if not isinstance(operations, list) or not operations:
-        raise CommandCapabilityError("capability_operations_invalid")
-    validated_operations: list[str] = []
-    for operation in operations:
-        if not isinstance(operation, str) or not operation:
-            raise CommandCapabilityError("capability_operations_invalid")
-        validated_operations.append(operation)
-    if len(validated_operations) != len(set(validated_operations)):
-        raise CommandCapabilityError("capability_operations_invalid")
-    classified_operations = (
-        set(READ_ONLY_COMMAND_OPERATIONS)
-        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
-        | set(STATE_CHANGING_COMMAND_OPERATIONS)
+def _resident_home(store: GuardStore) -> Path:
+    """The Guard home the resident answers for, or no answer at all."""
+
+    guard_home = getattr(store, "guard_home", None)
+    if not isinstance(guard_home, Path):
+        raise CommandCapabilityUnavailableError
+    return guard_home
+
+
+def _signing_material_for_resident(store: GuardStore, *, create: bool = False) -> tuple[str | None, str | None]:
+    """The local signing secret as the resident takes it, or a missing pair.
+
+    A store with no key is not an error here: the resident answers
+    ``local_signing_key_unavailable`` itself, in the same place it would have
+    refused a key that does not match the envelope. ``create`` mints the key
+    for the one caller that issues a capability; whether the envelope it goes
+    on is genuine is still the runtime's answer.
+    """
+
+    key, key_id = store._policy_integrity_secret_material(create=create)
+    if not isinstance(key, bytes) or not isinstance(key_id, str):
+        return None, None
+    return base64.urlsafe_b64encode(key).rstrip(b"=").decode("ascii"), key_id
+
+
+def _binding_for_resident(store: GuardStore) -> tuple[str | None, str | None, str | None]:
+    """The device binding the capability must name, or the code that blocked it."""
+
+    try:
+        device_id, workspace_id = _oauth_target(store)
+    except CommandCapabilityError as error:
+        return None, None, error.code
+    return device_id, workspace_id, None
+
+
+def _replay_subject(subject: object) -> object:
+    """Send the replay lookup only the fields it filters on.
+
+    A job payload can be far larger than the ledger's request limit, and the
+    lookup reads nothing but the job id and the idempotency key.
+    """
+
+    if not isinstance(subject, Mapping):
+        return subject
+    return {key: subject[key] for key in ("id", "idempotencyKey") if key in subject}
+
+
+def _capability_verdict(
+    store: GuardStore,
+    *,
+    now: str | None = None,
+    job: Mapping[str, object] | None = None,
+    schema_versions: Mapping[str, int] | None = None,
+    replay_identity: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """The resident's verdict on the stored capability and what it was asked.
+
+    Every comparison - the envelope's signature, its clock and binding checks,
+    the job's identity and the replay rows - happens in the runtime. This side
+    only reads the inputs out of the store. Replay rows only change a job or
+    replay-identity answer, so an operations-only question ships none and a
+    job question ships only the rows that could name that job.
+    """
+
+    home = _resident_home(store)
+    key_b64, key_id = _signing_material_for_resident(store)
+    device_id, workspace_id, oauth_error = _binding_for_resident(store)
+    current = now if now is not None else datetime.now(timezone.utc).isoformat()
+    subject = job if job is not None else replay_identity
+    replay_items = (
+        _ledger_rows(
+            _ledger(
+                store,
+                "replay_rows",
+                now=current,
+                subject=_replay_subject(subject),
+            )
+        )
+        if subject is not None
+        else []
     )
-    # Project signed grants onto the current runtime operation set.
-    active_operations = set(validated_operations) & classified_operations
+    return native_command_capability(
+        capability=store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY),
+        integrity_key_b64=key_b64,
+        integrity_key_id=key_id,
+        device_id=device_id,
+        workspace_id=workspace_id,
+        oauth_error=oauth_error,
+        now=current,
+        job=job,
+        schema_versions=dict(schema_versions or {}),
+        replay_items=replay_items,
+        replay_identity=replay_identity,
+        guard_home=home,
+    )
+
+
+def _granted(verdict: Mapping[str, object]) -> dict[str, object]:
+    """The verified capability's own fields, or its refusal code raised."""
+
+    if not verdict.get("capability_valid"):
+        raise CommandCapabilityError(str(verdict.get("reason") or "signed_payload_missing"))
+    operations = verdict.get("operations")
     return {
-        **capability,
-        "operations": sorted(active_operations),
+        "issuer": verdict.get("issuer"),
+        "issuedAt": verdict.get("issued_at"),
+        "expiresAt": verdict.get("expires_at"),
+        "deviceId": verdict.get("device_id"),
+        "workspaceId": verdict.get("workspace_id"),
+        "operations": [str(operation) for operation in operations] if isinstance(operations, list) else [],
     }
 
 
+def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
+    return _granted(_capability_verdict(store, now=now))
+
+
 def command_capability_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
+    try:
+        waiting = pending_command_approvals(store, now=now)
+    except CommandCapabilityError:
+        # Status and revocation still answer while the ledger does not; they
+        # just cannot list what is waiting.
+        waiting = []
     pending_status = [
         {key: item[key] for key in ("id", "operation", "issuer", "expiresAt", "approveCommand") if key in item}
-        for item in pending_command_approvals(store, now=now)
+        for item in waiting
     ]
     try:
         capability = _verified_capability(store, now=now)
-    except CommandCapabilityError as error:
+    except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
+        # A runtime that gave no verdict reports as plainly as a refused
+        # capability: status shows what is enabled, and nothing is.
+        reason = error.code if isinstance(error, CommandCapabilityError) else CommandCapabilityUnavailableError.reason
         return {
             "enabled": False,
             "capability_valid": False,
-            "reason": error.code,
+            "reason": reason,
             "issuer": None,
             "expires_at": None,
             "operations": [],
@@ -290,7 +388,7 @@ def command_capability_status(store: GuardStore, *, now: str | None = None) -> d
 def command_capability_operations(store: GuardStore, *, now: str | None = None) -> tuple[str, ...]:
     try:
         capability = _verified_capability(store, now=now)
-    except CommandCapabilityError:
+    except (CommandCapabilityError, CommandCapabilityUnavailableError):
         return ()
     operations = capability.get("operations")
     return tuple(str(operation) for operation in operations) if isinstance(operations, list) else ()
@@ -301,11 +399,8 @@ def revoke_command_capability(
 ) -> dict[str, object]:
     revoked_at = _now_datetime(now).isoformat()
     previous = command_capability_status(store, now=revoked_at)
-    store.delete_sync_payload(COMMAND_CAPABILITY_STATE_KEY)
-    store.delete_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_REPLAY_STATE_KEY)
-    store.delete_sync_payload(COMMAND_QUEUE_RUNTIME_STATE_KEY)
+    # The capability and every ledger row go in one runtime transaction.
+    _ledger(store, "clear", now=revoked_at)
     _audit(
         store,
         "cloud_command.capability_revoked",
@@ -318,41 +413,6 @@ def revoke_command_capability(
     return command_capability_status(store, now=revoked_at)
 
 
-def command_job_identity(
-    job: Mapping[str, object],
-    *,
-    schema_versions: Mapping[str, int],
-) -> dict[str, object]:
-    operation = job.get("operation")
-    if not isinstance(operation, str) or operation not in schema_versions:
-        raise CommandCapabilityError("command_operation_unsupported")
-    required_strings = {
-        "id": "command_id_missing",
-        "deviceId": "command_device_missing",
-        "workspaceId": "command_workspace_missing",
-        "nonce": "command_nonce_missing",
-        "expiresAt": "command_expiry_missing",
-        "idempotencyKey": "command_idempotency_key_missing",
-    }
-    identity: dict[str, object] = {"operation": operation}
-    for field, error_code in required_strings.items():
-        value = job.get(field)
-        if not isinstance(value, str) or not value.strip():
-            raise CommandCapabilityError(error_code)
-        if field == "id" and not portable_command_argument(value.strip()):
-            raise CommandCapabilityError("command_id_invalid")
-        identity[field] = value.strip()
-    schema_version = job.get("schemaVersion")
-    if schema_version != schema_versions[operation]:
-        raise CommandCapabilityError("command_schema_version_mismatch")
-    identity["schemaVersion"] = schema_version
-    payload = job.get("payload")
-    if not isinstance(payload, dict):
-        raise CommandCapabilityError("command_payload_invalid")
-    identity["payloadDigest"] = sha256_content_digest(_canonical_bytes(payload))
-    return identity
-
-
 def authorize_command_job(
     store: GuardStore,
     job: Mapping[str, object],
@@ -362,37 +422,72 @@ def authorize_command_job(
 ) -> AuthorizedCommandJob:
     """Validate capability and complete source-to-target lease bindings."""
 
-    capability = _verified_capability(store, now=now)
-    identity = command_job_identity(job, schema_versions=schema_versions)
-    operation = str(identity["operation"])
-    operations = capability.get("operations")
-    if not isinstance(operations, list) or operation not in operations:
-        raise CommandCapabilityError("command_operation_not_granted")
-    if identity["deviceId"] != capability.get("deviceId"):
-        raise CommandCapabilityError("command_device_mismatch")
-    if identity["workspaceId"] != capability.get("workspaceId"):
-        raise CommandCapabilityError("command_workspace_mismatch")
-    expires_at = _parse_timestamp(identity["expiresAt"])
-    if expires_at is None:
-        raise CommandCapabilityError("command_expiry_invalid")
-    current = _now_datetime(now)
-    if expires_at <= current:
-        raise CommandCapabilityError("command_expired")
-    if expires_at > current + timedelta(hours=24):
-        raise CommandCapabilityError("command_expiry_too_distant")
-    if _command_job_seen(store, identity, now=current.isoformat()):
-        raise CommandCapabilityError("command_replayed")
+    verdict = _capability_verdict(store, now=now, job=job, schema_versions=schema_versions)
+    _granted(verdict)
+    authorization = verdict.get("authorization")
+    if not isinstance(authorization, dict):
+        raise CommandCapabilityUnavailableError
+    if not authorization.get("authorized"):
+        raise CommandCapabilityError(str(authorization.get("reason") or "command_operation_unsupported"))
+    identity = authorization.get("identity")
+    operation = authorization.get("operation")
+    if not isinstance(identity, dict) or not isinstance(operation, str):
+        raise CommandCapabilityUnavailableError
     return AuthorizedCommandJob(
-        identity=identity,
+        identity={str(key): value for key, value in identity.items()},
         operation=operation,
-        requires_local_approval=(
-            operation in STATE_CHANGING_COMMAND_OPERATIONS and operation not in REMOTE_STEP_UP_COMMAND_OPERATIONS
-        ),
+        requires_local_approval=bool(authorization.get("requires_local_approval")),
     )
 
 
-def _identity_digest(identity: Mapping[str, object]) -> str:
-    return sha256_content_digest(_canonical_bytes(identity))
+def _identity_digest(store: GuardStore, identity: Mapping[str, object]) -> str:
+    """The digest the replay rows and the approval grants name ``identity`` by.
+
+    It decides which stored grant answers for a job, so the runtime computes
+    it over its own canonical bytes rather than this side reproducing them.
+    """
+
+    digest = _envelope(store, "digest", dict(identity))
+    if not isinstance(digest, str) or not digest:
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return digest
+
+
+def _ledger(
+    store: GuardStore,
+    op: str,
+    *,
+    now: str,
+    signing: bool = False,
+    **fields: object,
+) -> object:
+    """One answer from the runtime's command ledger, or its refusal raised.
+
+    Pending approvals, local grants and replay rows are each read, changed and
+    written back whole. The runtime does that in one SQLite transaction, so
+    review drain threads and other processes cannot drop each other's rows.
+    ``signing`` passes the local signing secret for the operations that sign
+    or verify a grant; whether a grant is genuine is the runtime's answer.
+    """
+
+    if signing:
+        key_b64, key_id = _signing_material_for_resident(store, create=False)
+        fields = {**fields, "integrity_key_b64": key_b64, "integrity_key_id": key_id}
+    try:
+        return native_command_state(_resident_home(store), op, now=now, **fields)
+    except CommandStateUnavailableError as error:
+        # A ledger that gives no answer is the same fail-closed refusal as a
+        # resident that cannot sign: the queue posts it on the job result and
+        # the CLI prints it, keeping its own code.
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason) from error
+    except CommandStateRefusedError as error:
+        raise CommandCapabilityError(error.code) from error
+
+
+def _ledger_rows(answer: object) -> list[dict[str, object]]:
+    if not isinstance(answer, list):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return [{str(key): value for key, value in item.items()} for item in answer if isinstance(item, dict)]
 
 
 def register_pending_command(
@@ -403,34 +498,29 @@ def register_pending_command(
     now: str | None = None,
 ) -> dict[str, object]:
     recorded_at = _now_datetime(now).isoformat()
-    items = _state_items(store.get_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY))
     job_id = str(authorized.identity["id"])
-    items = [item for item in items if item.get("id") != job_id]
-    item = {
-        **authorized.identity,
-        "issuer": job.get("issuer") if isinstance(job.get("issuer"), str) else "Guard Cloud",
-        "recordedAt": recorded_at,
-        "approveCommand": render_portable_command(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
-    }
-    items.append(item)
-    store.set_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY, {"version": 1, "items": items[-64:]}, recorded_at)
+    issuer = job.get("issuer") if isinstance(job.get("issuer"), str) else "Guard Cloud"
+    item = _ledger(
+        store,
+        "register_pending",
+        now=recorded_at,
+        identity=dict(authorized.identity),
+        issuer=issuer,
+        approve_command=render_portable_command(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
+    )
+    if not isinstance(item, dict):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
     _audit(
         store,
         "cloud_command.local_approval_required",
-        {"job_id": job_id, "operation": authorized.operation, "issuer": item["issuer"]},
+        {"job_id": job_id, "operation": authorized.operation, "issuer": issuer},
         recorded_at,
     )
-    return item
+    return {str(key): value for key, value in item.items()}
 
 
 def pending_command_approvals(store: GuardStore, *, now: str | None = None) -> list[dict[str, object]]:
-    current = _now_datetime(now)
-    items = _state_items(store.get_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY))
-    return [
-        dict(item)
-        for item in items
-        if (expires_at := _parse_timestamp(item.get("expiresAt"))) is not None and expires_at > current
-    ]
+    return _ledger_rows(_ledger(store, "pending", now=_now_datetime(now).isoformat()))
 
 
 def approve_pending_command(
@@ -440,51 +530,28 @@ def approve_pending_command(
     issuer: str = "local-cli",
     now: str | None = None,
 ) -> dict[str, object]:
-    approved_at = _now_datetime(now)
-    pending = next(
-        (item for item in pending_command_approvals(store, now=approved_at.isoformat()) if item.get("id") == job_id),
-        None,
-    )
-    if pending is None:
-        raise CommandCapabilityError("pending_command_not_found")
-    identity = {
-        key: pending[key]
-        for key in (
-            "id",
-            "operation",
-            "schemaVersion",
-            "deviceId",
-            "workspaceId",
-            "nonce",
-            "expiresAt",
-            "idempotencyKey",
-            "payloadDigest",
-        )
-    }
-    grant = _signed_payload(
-        store,
-        {
-            "version": 1,
-            "identity": identity,
-            "identityDigest": _identity_digest(identity),
-            "issuer": issuer,
-            "approvedAt": approved_at.isoformat(),
-        },
-        create_key=False,
-    )
-    items = _state_items(store.get_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY))
-    items = [item for item in items if item.get("identityDigest") != grant["identityDigest"]]
-    items.append(grant)
-    store.set_sync_payload(
-        COMMAND_LOCAL_APPROVALS_STATE_KEY, {"version": 1, "items": items[-64:]}, approved_at.isoformat()
-    )
+    approved_at = _now_datetime(now).isoformat()
+    approved = _ledger(store, "approve", now=approved_at, signing=True, job_id=job_id, issuer=issuer)
+    if not isinstance(approved, dict):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
     _audit(
         store,
         "cloud_command.local_approval_granted",
-        {"job_id": job_id, "operation": identity["operation"], "issuer": issuer},
-        approved_at.isoformat(),
+        {"job_id": job_id, "operation": approved.get("operation"), "issuer": issuer},
+        approved_at,
     )
-    return {"approved": True, "job_id": job_id, "operation": identity["operation"], "issuer": issuer}
+    return {str(key): value for key, value in approved.items()}
+
+
+def command_identity_digest(store: GuardStore, authorized: AuthorizedCommandJob) -> str:
+    """The runtime's digest for ``authorized``, for a caller that needs it twice.
+
+    Spending a grant and recording the replay row both name the job by this
+    digest. The ledger checks a digest it is handed against its own, so a
+    caller that names the job once cannot spend one job's grant for another.
+    """
+
+    return _identity_digest(store, authorized.identity)
 
 
 def consume_local_command_approval(
@@ -492,35 +559,33 @@ def consume_local_command_approval(
     authorized: AuthorizedCommandJob,
     *,
     now: str | None = None,
+    identity_digest: str | None = None,
+    record_replay: bool = False,
 ) -> bool:
+    """Spend the job's local grant and, when asked, record its replay row.
+
+    The runtime spends the grant and writes the replay row in one
+    transaction, so a spent grant always has its replay row. A job that needs
+    no local approval only records the row.
+    """
+
     if not authorized.requires_local_approval:
+        if record_replay:
+            mark_command_job_consumed(store, authorized, now=now, identity_digest=identity_digest)
         return True
-    items = _state_items(store.get_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY))
-    identity_digest = _identity_digest(authorized.identity)
-    matched_index: int | None = None
-    for index, item in enumerate(items):
-        if item.get("identityDigest") != identity_digest:
-            continue
-        try:
-            verified = _verify_signed_payload(store, item)
-        except CommandCapabilityError:
-            continue
-        if verified.get("identity") == authorized.identity:
-            matched_index = index
-            break
-    if matched_index is None:
-        return False
-    del items[matched_index]
-    timestamp = _now_datetime(now).isoformat()
-    store.set_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY, {"version": 1, "items": items}, timestamp)
-    pending_items = _state_items(store.get_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY))
-    remaining_pending = [item for item in pending_items if item.get("id") != authorized.identity["id"]]
-    store.set_sync_payload(
-        COMMAND_PENDING_APPROVALS_STATE_KEY,
-        {"version": 1, "items": remaining_pending},
-        timestamp,
+    consumed = _ledger(
+        store,
+        "consume",
+        now=_now_datetime(now).isoformat(),
+        signing=True,
+        identity=dict(authorized.identity),
+        identity_digest=identity_digest,
+        operation=authorized.operation if record_replay else None,
+        record_replay=True if record_replay else None,
     )
-    return True
+    if not isinstance(consumed, bool):
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+    return consumed
 
 
 def mark_command_job_consumed(
@@ -528,43 +593,28 @@ def mark_command_job_consumed(
     authorized: AuthorizedCommandJob,
     *,
     now: str | None = None,
+    identity_digest: str | None = None,
 ) -> None:
-    consumed_at = _now_datetime(now)
-    raw_items = _state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY))
-    items = [
-        item
-        for item in raw_items
-        if (expires_at := _parse_timestamp(item.get("expiresAt"))) is not None and expires_at > consumed_at
-    ]
-    items.append(
-        {
-            "identityDigest": _identity_digest(authorized.identity),
-            "jobId": authorized.identity["id"],
-            "idempotencyKey": authorized.identity["idempotencyKey"],
-            "operation": authorized.operation,
-            "expiresAt": authorized.identity["expiresAt"],
-            "consumedAt": consumed_at.isoformat(),
-        }
-    )
-    store.set_sync_payload(
-        COMMAND_REPLAY_STATE_KEY, {"version": 1, "items": items[-COMMAND_REPLAY_MAX_ITEMS:]}, consumed_at.isoformat()
+    _ledger(
+        store,
+        "mark_consumed",
+        now=_now_datetime(now).isoformat(),
+        identity=dict(authorized.identity),
+        identity_digest=identity_digest,
+        operation=authorized.operation,
     )
 
 
 def _command_job_seen(store: GuardStore, identity: Mapping[str, object], *, now: str | None = None) -> bool:
-    current = _now_datetime(now)
-    items = _state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY))
-    identity_digest = _identity_digest(identity)
-    return any(
-        (
-            item.get("identityDigest") == identity_digest
-            or item.get("jobId") == identity["id"]
-            or item.get("idempotencyKey") == identity["idempotencyKey"]
-        )
-        and (expires_at := _parse_timestamp(item.get("expiresAt"))) is not None
-        and expires_at > current
-        for item in items
-    )
+    """Whether the replay rows already hold ``identity``, per the runtime.
+
+    A caller that authorized its own operation still asks the runtime this
+    question, so one evaluator decides replay for every leased job.
+    """
+
+    verdict = _capability_verdict(store, now=now, replay_identity=identity)
+    replayed = verdict.get("replayed")
+    return replayed if isinstance(replayed, bool) else True
 
 
 def audit_command_decision(
@@ -601,10 +651,6 @@ def _audit(store: GuardStore, event_name: str, payload: dict[str, object], now: 
 
 __all__ = [
     "COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS",
-    "COMMAND_CAPABILITY_MAX_TTL_SECONDS",
-    "LOCAL_CONFIRMATION_COMMAND_OPERATIONS",
-    "READ_ONLY_COMMAND_OPERATIONS",
-    "STATE_CHANGING_COMMAND_OPERATIONS",
     "AuthorizedCommandJob",
     "CommandCapabilityError",
     "approve_pending_command",
@@ -613,7 +659,6 @@ __all__ = [
     "command_capability_operations",
     "command_capability_status",
     "command_environment_allows_queue",
-    "command_job_identity",
     "consume_local_command_approval",
     "issue_command_capability",
     "mark_command_job_consumed",

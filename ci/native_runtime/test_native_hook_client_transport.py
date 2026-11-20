@@ -129,6 +129,8 @@ def test_native_hook_client_recovers_only_stale_startup_lock(
 ) -> None:
     runtime, state_dir = native_runtime
     _initialize_protected_scope(runtime, state_dir)
+    # Build the request first: its store read must not meet the stale lock.
+    request = _request(runtime, state_dir.parent)
     lock = state_dir / "startup.lock"
     runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
     stale_marker = f"999999:stale:{runtime_digest}:{'0' * 64}"
@@ -137,7 +139,7 @@ def test_native_hook_client_recovers_only_stale_startup_lock(
         lock.chmod(0o600)
     old = time.time() - 15
     os.utime(lock, (old, old))
-    response = _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
+    response = _invoke(runtime, state_dir, request)
     assert response["authority"] == "rust"
     lock_stat = lock.lstat()
     assert stat.S_ISREG(lock_stat.st_mode)

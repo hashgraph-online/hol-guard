@@ -22,6 +22,12 @@ MUTATION_CASE = "approved-bash-script-mutation"
 DENIAL_CASE = "approved-bash-script-denial"
 CONCURRENCY_CASE = "approved-bash-script-concurrency"
 BASH_LIFECYCLE_CASES = frozenset({ONCE_CASE, PERSISTENT_RESTART_CASE, MUTATION_CASE, DENIAL_CASE, CONCURRENCY_CASE})
+# Guard binds an approved script's content to the run it approved only through the native
+# Bash owner, which takes over the shell call through Oh My Pi's input rewrite or Pi's input
+# mutation. Other harnesses have no such execution binding, so Guard contains the script
+# instead of offering a content-bound approval (docs/guard/approval-invariant.md), and the
+# grant-and-journal oracle can never hold there.
+BASH_OWNER_HARNESSES = frozenset({"omp", "pi"})
 
 _SCRIPT = f"""#!/bin/bash
 set -euo pipefail

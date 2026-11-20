@@ -14,8 +14,6 @@ CommandTransport = Literal["shell_string", "argv", "embedded_script"]
 ParseConfidence = Literal["exact", "fallback", "uncertain"]
 
 MAX_COMMAND_BYTES = 32_768
-MAX_COMMAND_SEGMENTS = 128
-MAX_COMMAND_TOKENS = 2_048
 
 
 @dataclass(frozen=True, slots=True)

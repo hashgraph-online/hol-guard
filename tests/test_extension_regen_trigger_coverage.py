@@ -59,6 +59,7 @@ def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
         "rust/Cargo.lock",
         "rust/build_support/command_identity.rs",
         "rust/crates/guard-command/build.rs",
+        "rust/crates/guard-command-catalog-data/build.rs",
         "contracts/extensions/trust-class-map.v1.json",
         "contributions/command-sources/command.future.json",
         "contributions/mcp-servers/mcp.future.json",

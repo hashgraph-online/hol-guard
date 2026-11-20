@@ -19,8 +19,8 @@ import pytest
 
 from codex_plugin_scanner.guard import native_catalog_read as native
 from codex_plugin_scanner.guard.catalog_delivery import current_refresh, discovery, installed_bundle
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics
 
 
 @pytest.fixture
@@ -28,7 +28,9 @@ def prepared(tmp_path, monkeypatch):
     """Isolated discovery module state that starts no background IO of its own."""
 
     home = (tmp_path / "home").absolute()
-    for field, value in dict(_home=home, _worker=None, _handle=None, _retry_after=0.0, _failures=0).items():
+    for field, value in dict(
+        _home=home, _worker=None, _handle=None, _retry_after=0.0, _failures=0, _noted_engine_mismatch=None
+    ).items():
         monkeypatch.setattr(discovery, field, value)
     monkeypatch.setattr(discovery, "_cached", None)
     monkeypatch.setattr(discovery, "request_refresh", lambda *_args, **_kwargs: None)
@@ -140,7 +142,7 @@ def test_recorded_detail_is_bounded(prepared, recorded, monkeypatch) -> None:
 def test_a_failure_reaches_the_daemon_log(prepared, tmp_path, sink, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    diagnostics = DaemonDiagnostics(guard_home, start_worker=False, rotate=False)
+    diagnostics = DaemonDiagnostics(guard_home)
     sink(diagnostics.record_background)
     fail_preparation(monkeypatch, ValueError("source compiler manifest size does not match the executable"))
 
@@ -165,8 +167,47 @@ def test_a_publication_refresh_failure_is_recorded(prepared, recorded, monkeypat
 
     discovery._refresh(prepared, SimpleNamespace())
 
-    assert [event for event, _detail in recorded] == ["catalog_publication_refresh_failed"]
+    assert [event for event, _detail in recorded] == [
+        "catalog_publication_refresh_failed",
+        "catalog_publication_restore_failed",
+    ]
     assert discovery._refresh_worker is None
+
+
+def test_the_refresh_cause_is_recorded_when_restore_also_fails(prepared, recorded, monkeypatch) -> None:
+    def refresh_fails(_store):
+        raise ValueError("discovery_current_authenticated_publication_required")
+
+    def nothing_retained(_store):
+        raise ValueError("discovery_current_cached_publication_unavailable")
+
+    monkeypatch.setattr(current_refresh, "refresh", refresh_fails)
+    monkeypatch.setattr(current_refresh, "restore", nothing_retained)
+
+    discovery._refresh(prepared, SimpleNamespace())
+
+    assert recorded == [
+        (
+            "catalog_publication_refresh_failed",
+            "error=ValueError detail=discovery_current_authenticated_publication_required",
+        ),
+        (
+            "catalog_publication_restore_failed",
+            "error=ValueError detail=discovery_current_cached_publication_unavailable",
+        ),
+    ]
+
+
+def test_a_restored_view_records_nothing(prepared, recorded, monkeypatch) -> None:
+    def refresh_fails(_store):
+        raise ValueError("offline")
+
+    monkeypatch.setattr(current_refresh, "refresh", refresh_fails)
+    monkeypatch.setattr(current_refresh, "restore", lambda _store: None)
+
+    discovery._refresh(prepared, SimpleNamespace())
+
+    assert recorded == []
 
 
 def test_a_cold_start_still_reports_preparing(prepared, recorded, monkeypatch) -> None:

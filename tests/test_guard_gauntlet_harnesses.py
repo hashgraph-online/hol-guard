@@ -99,6 +99,25 @@ def test_claude_stream_pairs_tool_use_with_result(tmp_path):
     assert [(call["tool"], call["is_error"]) for call in transcript["calls"]] == [("bash", True)]
 
 
+def test_claude_stream_reads_past_a_permission_denial_with_a_text_message(tmp_path):
+    # Claude Code reports a hook denial as a system event whose ``message`` is plain text.
+    stream = write_stream(
+        tmp_path / "claude.jsonl",
+        [
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]},
+            },
+            {"type": "system", "subtype": "permission_denied", "tool_use_id": "t1", "message": "HOL Guard review"},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "is_error": True}]}},
+            {"type": "result", "subtype": "success", "is_error": False},
+        ],
+    )
+    transcript = read_transcript("claude-code", stream)
+    assert transcript["terminal"] is True and transcript["failed"] is False
+    assert [(call["tool"], call["is_error"]) for call in transcript["calls"]] == [("bash", True)]
+
+
 def test_codex_stream_reads_command_status_and_exit_code(tmp_path):
     item = {"id": "i1", "type": "command_execution", "command": "cat a", "status": "completed", "exit_code": 1}
     stream = write_stream(
@@ -108,6 +127,21 @@ def test_codex_stream_reads_command_status_and_exit_code(tmp_path):
     transcript = read_transcript("codex", stream)
     assert transcript["terminal"] is True
     assert [(call["tool"], call["is_error"]) for call in transcript["calls"]] == [("bash", True)]
+
+
+def test_codex_recoverable_error_does_not_fail_a_completed_turn(tmp_path):
+    item = {"id": "i1", "type": "command_execution", "command": "ls", "status": "completed", "exit_code": 0}
+    retry = {"type": "error", "message": "Reconnecting... 1/5"}
+    completed = write_stream(
+        tmp_path / "completed.jsonl",
+        [retry, {"type": "item.started", "item": item}, {"type": "item.completed", "item": item}, {"type": "turn.completed"}],
+    )
+    transcript = read_transcript("codex", completed)
+    assert (transcript["terminal"], transcript["failed"]) == (True, False)
+    failed = write_stream(tmp_path / "failed.jsonl", [retry, {"type": "turn.failed", "error": {"message": "x"}}])
+    assert (read_transcript("codex", failed)["terminal"], read_transcript("codex", failed)["failed"]) == (True, True)
+    abandoned = write_stream(tmp_path / "abandoned.jsonl", [retry])
+    assert read_transcript("codex", abandoned)["terminal"] is False
 
 
 def test_cursor_stream_ignores_sibling_keys_and_marks_rejections(tmp_path):
@@ -168,9 +202,9 @@ def test_observed_stop_callback_is_not_an_off_route_answer():
 
 def test_judge_knows_every_lifecycle_event_guard_only_observes():
     from ci.gauntlet.harness_judge import _LIFECYCLE_EVENTS
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import LIFECYCLE_OBSERVE_EVENTS
+    from codex_plugin_scanner.guard.hook_review.hook_availability_policy import _LIFECYCLE_OBSERVE_EVENTS
 
-    assert LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
+    assert _LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
 
 
 def test_block_with_extra_requests_is_not_exercised():
@@ -497,9 +531,7 @@ def test_installed_lane_refuses_a_runner_without_the_user_database_before_any_se
 
 @pytest.mark.skipif(os.name == "nt", reason="the account home comes from the POSIX user database")
 @pytest.mark.parametrize(("harness", "refused"), [("codex", True), ("claude-code", True), ("cursor", True)])
-def test_every_managed_harness_lane_needs_the_user_database(
-    monkeypatch, tmp_path, capsys, harness, refused
-):
+def test_every_managed_harness_lane_needs_the_user_database(monkeypatch, tmp_path, capsys, harness, refused):
     import pwd
 
     from ci.gauntlet import harness_suite

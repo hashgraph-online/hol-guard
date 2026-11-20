@@ -64,6 +64,13 @@ pub(crate) fn begin_totp_enrollment_locked(
             403,
         ));
     }
+    if crate::approval_gate_pulse::pulse_enabled(&state) {
+        return Err(err(
+            "approval_gate_pulse_enabled",
+            "Pulse is the approval factor. Disable Pulse before adding an authenticator.",
+            409,
+        ));
+    }
     let now_epoch = epoch(now);
     raise_if_locked(&state, now_epoch)?;
     let gate_input = approval_gate_input.cloned().unwrap_or_default();
@@ -340,10 +347,7 @@ mod tests {
         let h = std::env::temp_dir().join(format!(
             "gate-enr-{tag}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         std::fs::create_dir_all(&h).unwrap();
         h

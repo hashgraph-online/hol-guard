@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from codex_plugin_scanner.guard.mdm.cloud_control import (
+ROOT = Path(__file__).parents[1]
+LAB = ROOT / "scripts" / "mdm" / "cloud-lab"
+sys.path.insert(0, str(LAB))
+
+from cloud_control import (  # noqa: E402
     ACK_SCHEMA,
     ENROLL_SCHEMA,
     HEALTH_SCHEMA,
@@ -19,11 +23,6 @@ from codex_plugin_scanner.guard.mdm.cloud_control import (
     public_pem,
     utcnow,
 )
-
-ROOT = Path(__file__).parents[1]
-LAB = ROOT / "scripts" / "mdm" / "cloud-lab"
-sys.path.insert(0, str(LAB))
-
 from device_runtime import Device  # noqa: E402
 from lab_common import Store, atomic  # noqa: E402
 

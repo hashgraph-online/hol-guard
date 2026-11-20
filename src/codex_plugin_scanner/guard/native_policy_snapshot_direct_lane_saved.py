@@ -12,12 +12,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .native_policy_snapshot_direct_lane import DIRECT_HOOK_SAVED_DECISION_FEATURE
 from .runtime.extension_control_runtime import current_extension_control_binding_digest
 from .store_base import _now
 
@@ -35,10 +34,6 @@ _STATE_FIELDS = frozenset(
 )
 
 
-def saved_decision_bound(features: Iterable[str]) -> bool:
-    return DIRECT_HOOK_SAVED_DECISION_FEATURE in set(features)
-
-
 def _utf8_len(value: str) -> int | None:
     try:
         return len(value.encode("utf-8"))
@@ -47,7 +42,7 @@ def _utf8_len(value: str) -> int | None:
 
 
 def _environment() -> dict[str, str] | None:
-    # ``native_exact_action`` sends every text entry of ``os.environ``.
+    # The edge's review evidence query sends every text entry of ``os.environ``.
     environment = {name: value for name, value in os.environ.items() if isinstance(value, str)}
     if len(environment) > _MAX_ENVIRONMENT_ENTRIES:
         return None
@@ -137,21 +132,26 @@ def with_saved_decision_state(
     binding: Mapping[str, object] | None,
     *,
     store: object,
-    features: Iterable[str],
 ) -> dict[str, object] | None:
     """Add the exact-action state, for a resident that answers saved decisions."""
 
     if binding is None:
         return None
     bound = dict(binding)
-    if not saved_decision_bound(features):
-        return bound
     environment = _environment()
+    if environment is None:
+        return bound
+    # The environment binds on its own, because every resident lane that
+    # resolves a command against the daemon's home and PATH needs it, not only
+    # a saved decision: without it a workspace with a custom block rule sends
+    # back every allowed PreToolUse. A saved decision still needs the control
+    # digest, the integrity state and the integrity key before the resident
+    # answers one, so publishing the environment alone allows nothing new.
+    bound["exact_action_environment"] = environment
     digest = current_extension_control_binding_digest()
     state = _integrity_state(store)
-    if environment is None or state is None or not _state_field_valid(digest):
+    if state is None or not _state_field_valid(digest):
         return bound
-    bound["exact_action_environment"] = environment
     bound["exact_action_control_digest"] = digest
     bound["policy_integrity_state"] = state
     return bound
@@ -176,11 +176,11 @@ class NativePolicySnapshotSavedStateMixin:
     _direct_lane_integrity_state: dict[str, object] | None = None
     _integrity_checked_stamp: tuple[tuple[int, int] | None, ...] | None = None
 
-    def _bind_relay_and_saved_state(self, binding: object, features: Iterable[str]) -> None:
+    def _bind_relay_and_saved_state(self, binding: object) -> None:
         """Record the relay view and the integrity state an ACKed binding carries."""
 
         publisher = cast("NativePolicySnapshotPublisher", self)
-        publisher._bind_mcp_relay_view(binding, features)
+        publisher._bind_mcp_relay_view(binding)
         state = binding.get("policy_integrity_state") if isinstance(binding, Mapping) else None
         self._direct_lane_integrity_state = (
             dict(cast(Mapping[str, object], state)) if isinstance(state, Mapping) else None
@@ -189,10 +189,11 @@ class NativePolicySnapshotSavedStateMixin:
     def _recheck_direct_lane_saved_state(self) -> None:
         """Refresh after a database write and rebind once the state moved.
 
-        Only a write can move the state, so an unchanged database costs two
-        stats. The stamp is taken before the refresh, so a write that lands
-        during or after it is refreshed on the next reconcile. A refresh that
-        wrote the row costs one more refresh, which writes nothing.
+        On POSIX an unchanged database costs two stats. Windows can retain the
+        same last-write time and size while an open SQLite connection reuses
+        WAL pages, so its background reconcile must read the state every time.
+        The stamp is taken before the refresh, so a later write is refreshed
+        on the next reconcile. An unchanged state never queues another rebind.
         """
 
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -200,7 +201,7 @@ class NativePolicySnapshotSavedStateMixin:
         if bound is None or publisher._direct_lane_ack_target is None:
             return
         stamp = _database_stamp(publisher.guard_home)
-        if stamp == self._integrity_checked_stamp:
+        if os.name != "nt" and stamp == self._integrity_checked_stamp:
             return
         if _refresh_integrity_state(publisher.store) is None:
             return

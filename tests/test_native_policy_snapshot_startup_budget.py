@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher_transport import _publish_snapshot_v3
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .native_policy_snapshot_test_fixtures import _ack, _config, _status
+from .native_policy_snapshot_test_fixtures import _ack, _config, _resident_generation_for_home, _status
 
 
 @pytest.mark.parametrize("cold,replacement", [(True, False), (False, False), (False, True)])
@@ -42,11 +42,16 @@ def test_publication_budget_matches_cold_or_warm_resident(tmp_path: Path, cold: 
         remaining = deadline - time.monotonic()
         assert expected - 0.5 < remaining <= expected
         calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
-    authority = NativePolicySnapshotPublisher(store=GuardStore(publisher.guard_home), status_provider=_status)
+    store = GuardStore(publisher.guard_home)
+    authority = NativePolicySnapshotPublisher(store=store, status_provider=_status)
     try:
+        # Reading the controls asks the resident, which provisions its verifier
+        # from this store's integrity material; publish under the same key.
         controls = authority._compiled_command_extensions()
+        master_key = store._policy_integrity_secret_material(create=False)[0]
+        assert master_key is not None
         if replacement:
             authority._snapshot = {"generation": 1}
             authority._resident_startup_required = False
@@ -69,10 +74,10 @@ def test_publication_budget_matches_cold_or_warm_resident(tmp_path: Path, cold: 
         capabilities=status.capabilities,
         config=_config(),
         command_extensions=controls,
-        master_key=b"k" * 32,
+        master_key=master_key,
         client=client,
         renew_after_generation=None,
     )
     assert snapshot["generation"] > 0
-    assert generation == 1
+    assert generation == (_resident_generation_for_home(publisher.guard_home) or 1)
     assert len(calls) == 1

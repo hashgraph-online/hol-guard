@@ -1,0 +1,398 @@
+{
+  "extract_aibom_metadata_extensions": [
+    {
+      "expected": {},
+      "metadata": {}
+    },
+    {
+      "expected": {
+        "versionInfo": {
+          "v": "1"
+        }
+      },
+      "metadata": {
+        "ignored": "drop-me",
+        "versionInfo": {
+          "v": "1"
+        }
+      }
+    },
+    {
+      "expected": {
+        "sourceLinks": [
+          {
+            "url": "https://example.test/a"
+          }
+        ],
+        "sourceOfTruth": {
+          "url": "https://example.test/a"
+        }
+      },
+      "metadata": {
+        "sourceOfTruth": {
+          "url": "https://example.test/a"
+        }
+      }
+    },
+    {
+      "expected": {
+        "sourceLinks": [
+          "kept"
+        ],
+        "sourceOfTruth": {
+          "url": "https://example.test/a"
+        }
+      },
+      "metadata": {
+        "sourceLinks": [
+          "kept"
+        ],
+        "sourceOfTruth": {
+          "url": "https://example.test/a"
+        }
+      }
+    },
+    {
+      "expected": {
+        "sourceOfTruth": "not-an-object"
+      },
+      "metadata": {
+        "sourceOfTruth": "not-an-object"
+      }
+    },
+    {
+      "expected": {
+        "instructionRole": {
+          "k": "instructionRole"
+        },
+        "localSecurity": {
+          "k": "localSecurity"
+        },
+        "registryIdentity": {
+          "k": "registryIdentity"
+        },
+        "skillDirectoryIdentity": {
+          "k": "skillDirectoryIdentity"
+        },
+        "trustLayers": {
+          "k": "trustLayers"
+        },
+        "trustResolution": {
+          "k": "trustResolution"
+        },
+        "unverifiedAdapterEvidence": {
+          "k": "unverifiedAdapterEvidence"
+        },
+        "versionInfo": {
+          "k": "versionInfo"
+        }
+      },
+      "metadata": {
+        "instructionRole": {
+          "k": "instructionRole"
+        },
+        "localSecurity": {
+          "k": "localSecurity"
+        },
+        "registryIdentity": {
+          "k": "registryIdentity"
+        },
+        "skillDirectoryIdentity": {
+          "k": "skillDirectoryIdentity"
+        },
+        "trustLayers": {
+          "k": "trustLayers"
+        },
+        "trustResolution": {
+          "k": "trustResolution"
+        },
+        "unverifiedAdapterEvidence": {
+          "k": "unverifiedAdapterEvidence"
+        },
+        "versionInfo": {
+          "k": "versionInfo"
+        }
+      }
+    }
+  ],
+  "normalize_inventory_datetime": [
+    {
+      "expected": null,
+      "value": null
+    },
+    {
+      "expected": 42,
+      "value": 42
+    },
+    {
+      "expected": "",
+      "value": ""
+    },
+    {
+      "expected": "   ",
+      "value": "   "
+    },
+    {
+      "expected": "not-a-date",
+      "value": "not-a-date"
+    },
+    {
+      "expected": "2026-10-21T13:24:55Z",
+      "value": "2026-10-21T13:24:55Z"
+    },
+    {
+      "expected": "2026-10-21T13:24:55Z",
+      "value": "2026-10-21T13:24:55+00:00"
+    },
+    {
+      "expected": "2026-10-21T13:24:55Z",
+      "value": "2026-10-21T13:24:55"
+    },
+    {
+      "expected": "2026-10-21T13:24:55.123456Z",
+      "value": "2026-10-21T13:24:55.123456Z"
+    },
+    {
+      "expected": "2026-10-21T13:24:55Z",
+      "value": "2026-10-21T08:24:55-05:00"
+    },
+    {
+      "expected": "2026-10-21T00:00:00Z",
+      "value": "2026-10-21"
+    },
+    {
+      "expected": "2026-13-99T99:99:99Z",
+      "value": "2026-13-99T99:99:99Z"
+    }
+  ],
+  "normalize_redaction_report": [
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": null
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": "not-a-dict"
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": 7
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": []
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": {}
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": true,
+        "redactedFields": []
+      },
+      "report": {
+        "rawSecretsIncluded": true
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": {
+        "rawSecretsIncluded": false
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": {
+        "rawSecretsIncluded": "yes"
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": true,
+        "redactedFields": []
+      },
+      "report": {
+        "raw_secret_values": true
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": true,
+        "redactedFields": []
+      },
+      "report": {
+        "raw_secrets_included": true
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": {
+        "raw_secret_values": false,
+        "raw_secrets_included": true
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": [
+          "a",
+          "b"
+        ]
+      },
+      "report": {
+        "redactedFields": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": [
+          "x",
+          "y"
+        ]
+      },
+      "report": {
+        "redacted_fields": [
+          "x",
+          "y"
+        ]
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": []
+      },
+      "report": {
+        "redactedFields": "nope"
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": false,
+        "redactedFields": [
+          "fallback"
+        ]
+      },
+      "report": {
+        "redactedFields": null,
+        "redacted_fields": [
+          "fallback"
+        ]
+      }
+    },
+    {
+      "expected": {
+        "rawSecretsIncluded": true,
+        "redactedFields": []
+      },
+      "report": {
+        "rawSecretsIncluded": null,
+        "raw_secret_values": null,
+        "raw_secrets_included": true
+      }
+    }
+  ],
+  "snake_to_camel_case_key": [
+    {
+      "expected": "harness",
+      "key": "harness"
+    },
+    {
+      "expected": "agentType",
+      "key": "agent_type"
+    },
+    {
+      "expected": "generatedAt",
+      "key": "generated_at"
+    },
+    {
+      "expected": "runtimeVersion",
+      "key": "runtime_version"
+    },
+    {
+      "expected": "firstSeenAt",
+      "key": "first_seen_at"
+    },
+    {
+      "expected": "a",
+      "key": "a"
+    },
+    {
+      "expected": "",
+      "key": ""
+    },
+    {
+      "expected": "",
+      "key": "_"
+    },
+    {
+      "expected": "",
+      "key": "__"
+    },
+    {
+      "expected": "a",
+      "key": "a_"
+    },
+    {
+      "expected": "A",
+      "key": "_a"
+    },
+    {
+      "expected": "aB",
+      "key": "a__b"
+    },
+    {
+      "expected": "mcpToolItemsFromArtifact",
+      "key": "mcp_tool_items_from_artifact"
+    },
+    {
+      "expected": "trustAttestationContext",
+      "key": "trust_attestation_context"
+    },
+    {
+      "expected": "alreadyCamelCaseKey",
+      "key": "already_camelCase_key"
+    },
+    {
+      "expected": "UPPERSNAKE",
+      "key": "UPPER_SNAKE"
+    },
+    {
+      "expected": "x1Y",
+      "key": "x_1_y"
+    },
+    {
+      "expected": "aBCD",
+      "key": "a_b_c_d"
+    }
+  ]
+}

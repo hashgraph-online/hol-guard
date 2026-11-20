@@ -30,9 +30,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_connectors import allow_ready_cli
@@ -40,8 +40,10 @@ from tests.benign_fp_gate_fixture import BenignFixture, build_fixture
 from tests.benign_fp_gate_projects import host_tool_path
 
 # Round trips one CLI PreToolUse hook may spend on its own path. A new port
-# must fold its work into these or memoize it for the invocation.
-_RESIDENT_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK = 24
+# must fold its work into these or memoize it for the invocation. The runtime
+# snapshot digest is one such memoized call: the resident computes it once per
+# hook process, however many times the hook builds the snapshot.
+_RESIDENT_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK = 25
 
 # Work the hook does not drive request by request: the direct-hook evidence
 # drain pages on its own wake-ups and the snapshot publisher runs on its own
@@ -104,10 +106,8 @@ def _assert_background_growth(samples: list[Counter[str]]) -> None:
     """Each background operation answers to its own ceiling, not to a total."""
 
     ceilings = {
-        "policy_snapshot_push": _BATCH * _PUBLICATIONS_PER_CLI_PRE_TOOL_HOOK
-        + _PUBLICATION_JITTER_PER_BATCH,
-        "hook_direct_evidence_drain": _BATCH * _DRAIN_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK
-        + _DRAIN_JITTER_PER_BATCH,
+        "policy_snapshot_push": _BATCH * _PUBLICATIONS_PER_CLI_PRE_TOOL_HOOK + _PUBLICATION_JITTER_PER_BATCH,
+        "hook_direct_evidence_drain": _BATCH * _DRAIN_ROUND_TRIPS_PER_CLI_PRE_TOOL_HOOK + _DRAIN_JITTER_PER_BATCH,
     }
     for name, ceiling in ceilings.items():
         _assert_growth_within([Counter({name: sample[name]}) for sample in samples], ceiling)
@@ -188,7 +188,9 @@ def _run_hook(fixture: BenignFixture, store: GuardStore, index: int) -> None:
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "git status --short"},
+        # Two commands in turn: the same command six times in a row within a
+        # session is a stuck loop, which Guard stops on purpose.
+        "tool_input": {"command": ("git status --short", "git diff --stat")[index % 2]},
         "session_id": "cli-hook-rpc-budget",
         "tool_call_id": f"cli-rpc-{index}",
         "cwd": str(cwd),
@@ -299,9 +301,7 @@ def test_publication_growth_answers_to_the_background_ceiling(tmp_path: Path, ex
     """
 
     added = b"" if extra == "none" else b"policy_snapshot_push\n"
-    _, background = _replay(
-        tmp_path / "resident-requests.log", extra=added, once=extra == "one-more-publication"
-    )
+    _, background = _replay(tmp_path / "resident-requests.log", extra=added, once=extra == "one-more-publication")
     if extra == "per-request":
         with pytest.raises(AssertionError):
             _assert_background_growth(background)

@@ -12,10 +12,15 @@ from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     payload_hash_for_remote_approval_envelope,
 )
+from codex_plugin_scanner.guard.runtime.command_queue_protocol import result_payload
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
+    EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
+    _capability_digest,
     _oauth_metadata,
+    _verify,
 )
+from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_transport_job
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_oauth_token_support import oauth_binding_access_token
 from tests.guard_review_signing_helpers import (
@@ -120,9 +125,19 @@ def remote_approval(
     expires_at = expires_at or issued_at + timedelta(minutes=5)
     if authority == "workspace_admin_mfa":
         capability_id = "ab" * 32
-    else:
-        assert isinstance(advertisement, dict)
+    elif isinstance(advertisement, dict):
         capability_id = advertisement["capabilityId"]
+    else:
+        # The claim only advertises a capability whose window is still open,
+        # but the Cloud issues a receipt while that window is open and the
+        # local clock may have passed it by the time a test builds one. Bind
+        # the receipt to the stored capability itself so the expiry is judged
+        # where it belongs, in the write transaction. The digest the apply path
+        # compares against is taken over the verified capability, which is the
+        # stored payload without its signature.
+        capability_id = _capability_digest(
+            _verify(store, store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY))
+        )
     envelope: dict[str, object] = {
         "actionEnvelopeHash": claim["actionEnvelopeHash"],
         "approvalId": claim["approvalId"],
@@ -220,3 +235,13 @@ __all__ = [
     "remote_approval",
     "review_request",
 ]
+
+
+def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
+    """The exact Review result the runtime posts for ``job``, which must be valid."""
+
+    payload = result_payload(exact_transport_job(job), execution)
+    assert payload["status"] == "succeeded", payload
+    result = payload["result"]
+    assert isinstance(result, dict)
+    return result

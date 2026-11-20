@@ -16,6 +16,14 @@ attempt, and a `push` or `workflow_dispatch` on `main` or `release/3.0`. The eve
 and live run must agree on the immutable source SHA, branch, and event type.
 The release-skip marker remains authoritative.
 
+Release Please dispatches each stable publication on its tag, so GitHub reports
+`vX.Y.Z` as that run's branch. The verifier accepts a canonical stable tag only for
+a `workflow_dispatch` run, requires the tag to point at the run's exact SHA
+(following an annotated tag to its commit), and then treats the release as a
+`main` release: the SHA must be on `main` and both main publication jobs must have
+succeeded. The gate outputs that tag, and both consumers publish
+exactly it rather than the highest tag at the SHA.
+
 A branch name in a run payload is not enough. GitHub's compare API must show that
 the exact SHA is an ancestor of, or identical to, the named release branch. A
 fork, unmerged commit, rewritten-away commit, other workflow, rerun, malformed
@@ -23,6 +31,19 @@ response, API error, or missing evidence stops the gate without emitting outputs
 Redirects are rejected rather than forwarding credentials. This trust policy
 relies on write access to the two allowlisted release branches being restricted
 to trusted maintainers; it does not replace branch protection or code review.
+
+A maintainer can republish a release that the consumers missed by dispatching
+either workflow from `main` with `publication_run_id`, the ID of the successful
+`Publish to PyPI` run. The verifier reads that run, the repository identity and
+the latest release from GitHub; nothing else comes from the dispatcher, and the
+rebuilt event goes through every check above. Only the current latest stable
+release qualifies, so a dispatch cannot move the MCP Registry back to an older
+version. The dispatch runs trusted `main` code, as a `workflow_run` does.
+Each stable tag run has its own Registry concurrency group, repair dispatches queue
+in a separate group, and each branch push run is alone, because GitHub keeps one
+pending run per group and drops the older one. Ordering is not what protects the
+Registry: the publish job checks that its tag is still the latest stable release
+just before it publishes, so a delayed run never replaces a newer version.
 
 The three release checkouts depend on the successful gate and consume only its
 validated outputs. They do not fall back to event data or the latest branch tip.

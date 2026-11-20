@@ -1,6 +1,9 @@
 #![cfg(unix)]
 //! `git push [-u] origin <branch>` proceeds only when the registered runtime
 //! verdict accepts the repository; the shape screen runs before it.
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 use guard_command::pretool::{
     evaluate_pre_tool_envelope_with_execution_context, install_git_push_verdict, GitPushRequest,
     PathContext,
@@ -31,10 +34,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for directory in ["ready", "other", "ready/src"] {
@@ -53,7 +53,7 @@ fn environment(home: &Path, names: &[&str]) -> guard_contracts::GuardExecutionEn
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 

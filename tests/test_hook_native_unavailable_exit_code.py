@@ -1,129 +1,110 @@
-"""Coverage for the verdict-derived native-hook exit-code contract.
+"""The Python side of the native-hook exit code: the request it sends and the outage table.
 
-Exercises both the shared ``native_hook_verdict_exit_code`` table and the
-availability wrapper ``_native_unavailable_exit_code`` that feeds an emitted
-deny/allow envelope through it.
+The verdict-to-exit-code table is native; its cases live in
+`rust/crates/guard-runtime/src/hook_exit_code_op_tests.rs`.
 """
 
-import argparse
+import json
+import sys
+from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_hook_native_availability import (
-    _availability_response_is_deny,
-    _native_unavailable_exit_code,
+from codex_plugin_scanner.guard.cli import native_hook_exit_code as module
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
+
+_TARGET = "codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer"
+
+
+class _Runtime:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None) -> None:
+        self.answer = answer
+        self.requests: list[dict[str, object]] = []
+        monkeypatch.setattr(_TARGET, self)
+
+    def __call__(self, feature, command, request, *, output_limit, timeout_seconds=None, **_):
+        assert feature == "native-hook-exit-code-v1" and command == "hook-exit-code"
+        assert isinstance(request, str)
+        self.requests.append(json.loads(request))
+        return self.answer
+
+
+@pytest.fixture(autouse=True)
+def _protection_is_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
+    monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+
+def test_the_runtime_answer_is_the_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = _Runtime(monkeypatch, {"exit_code": 1})
+    assert native_hook_verdict_exit_code("codex", "block", "PostToolUse") == 1
+    assert runtime.requests == [
+        {"harness": "codex", "policy_action": "block", "event_name": "PostToolUse", "recording_only": False}
+    ]
+
+
+@pytest.mark.parametrize(
+    "answer", [None, {}, {"exit_code": "2"}, {"exit_code": True}, {"exit_code": -1}, {"exit_code": 256}]
 )
-from codex_plugin_scanner.guard.cli.native_hook_exit_code import (
-    native_hook_verdict_exit_code,
-)
+def test_without_the_runtime_the_outage_table_answers_as_the_runtime_would(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
+) -> None:
+    _Runtime(monkeypatch, answer)
+    blocking = ("review", "require-reapproval", "sandbox-required", "block", "unheard-of", None)
+    for action in blocking:
+        assert native_hook_verdict_exit_code("opencode", action, "PreToolUse") == 1
+        assert native_hook_verdict_exit_code("cursor", action, "PreToolUse") == 2
+        assert native_hook_verdict_exit_code("grok", action) == 2
+        assert native_hook_verdict_exit_code("codex", action, "PreToolUse") == 0
+        assert native_hook_verdict_exit_code("codex", action, "PostToolUse") == 1
+        assert native_hook_verdict_exit_code("unknown-harness", action) == 1
+    for action in ("allow", "warn"):
+        for harness in ("opencode", "cursor", "grok", "codex", "unknown-harness"):
+            assert native_hook_verdict_exit_code(harness, action, "PostToolUse") == 0
+    assert native_hook_verdict_exit_code("zcode", "review", "PreToolUse") == 0
+    assert native_hook_verdict_exit_code("zcode", "block", "PreToolUse") == 2
 
 
-def _args(harness):
-    return argparse.Namespace(harness=harness)
+def test_an_action_json_cannot_carry_is_sent_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = _Runtime(monkeypatch, {"exit_code": 2})
+    assert native_hook_verdict_exit_code("cursor", float("nan")) == 2
+    assert native_hook_verdict_exit_code("cursor", object()) == 2
+    assert [request["policy_action"] for request in runtime.requests] == [None, None]
 
 
-class TestAvailabilityResponseIsDeny:
-    def test_non_mapping_is_not_deny(self):
-        assert _availability_response_is_deny("deny") is False
-        assert _availability_response_is_deny(None) is False
-        assert _availability_response_is_deny(2) is False
-
-    def test_cursor_permission_deny(self):
-        assert _availability_response_is_deny({"permission": "deny"}) is True
-        assert _availability_response_is_deny({"permission": "DENY"}) is True
-        assert _availability_response_is_deny({"permission": "allow"}) is False
-        assert _availability_response_is_deny({"permission": "ask"}) is False
-
-    def test_hook_specific_output_permission_decision(self):
-        assert _availability_response_is_deny({"hookSpecificOutput": {"permissionDecision": "deny"}}) is True
-        assert _availability_response_is_deny({"hookSpecificOutput": {"permissionDecision": "allow"}}) is False
-
-    def test_hook_specific_output_decision(self):
-        for verdict in ("deny", "block", "review"):
-            assert _availability_response_is_deny({"hookSpecificOutput": {"decision": verdict}}) is True, verdict
-        assert _availability_response_is_deny({"hookSpecificOutput": {"decision": "allow"}}) is False
-
-    def test_policy_action_blocking_set(self):
-        for action in ("deny", "block", "review", "require-reapproval", "sandbox-required"):
-            assert _availability_response_is_deny({"policy_action": action}) is True, action
-        for action in ("allow", "warn", "observe"):
-            assert _availability_response_is_deny({"policy_action": action}) is False, action
-
-    def test_empty_response_not_deny(self):
-        assert _availability_response_is_deny({}) is False
-        assert _availability_response_is_deny({"reason_code": "x"}) is False
+def test_grok_sends_whether_protection_is_off(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = _Runtime(monkeypatch, {"exit_code": 0})
+    monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / ".hol-guard"))
+    monkeypatch.setattr(module, "_grok_recording_only", lambda: True)
+    assert native_hook_verdict_exit_code("grok", "block") == 0
+    assert runtime.requests[-1]["recording_only"] is True
+    assert native_hook_verdict_exit_code("codex", "block", "PreToolUse") == 0
+    assert runtime.requests[-1]["recording_only"] is False
 
 
-class TestVerdictExitCodeContract:
-    """The shared table every emit path delegates to."""
+def test_an_unreadable_grok_config_keeps_protection_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import config
+    from codex_plugin_scanner.guard.config_file_io import ConfigFileTrustError
 
-    @pytest.mark.parametrize("h", ("cursor", "devin", "kimi", "hermes"))
-    def test_rc_block_is_two(self, h):
-        assert native_hook_verdict_exit_code(h, "block") == 2
-        assert native_hook_verdict_exit_code(h, "allow") == 0
-        assert native_hook_verdict_exit_code(h, "review") == 2
+    def untrusted(_guard_home: Path) -> None:
+        raise ConfigFileTrustError("config_untrusted")
 
-    @pytest.mark.parametrize("h", ("opencode", "superagent"))
-    def test_rc_block_is_one(self, h):
-        # rc-driven generic contract: exitCode 1 -> block, 0 -> allow.
-        assert native_hook_verdict_exit_code(h, "block") == 1
-        assert native_hook_verdict_exit_code(h, "allow") == 0
-
-    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
-    def test_envelope_driven_deny_rc0(self, h):
-        # Deny rides the decision envelope (permissionDecision / decision);
-        # a nonzero PREEMPTIVE rc would read as a hook error and permit the
-        # action.  Gauntlet-verified for omp.
-        assert native_hook_verdict_exit_code(h, "block", "PreToolUse") == 0
-        assert native_hook_verdict_exit_code(h, "block", "UserPromptSubmit") == 0
-        assert native_hook_verdict_exit_code(h, "block", "PermissionRequest") == 0
-        assert native_hook_verdict_exit_code(h, "allow", "PreToolUse") == 0
-
-    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
-    def test_envelope_post_tool_block_rc1(self, h):
-        # PostToolUse cannot preempt (the tool already ran) — a blocking
-        # verdict flags the violation on the exit status instead.
-        assert native_hook_verdict_exit_code(h, "block", "PostToolUse") == 1
-        assert native_hook_verdict_exit_code(h, "allow", "PostToolUse") == 0
-
-    def test_unknown_harness_fails_safe(self):
-        assert native_hook_verdict_exit_code("some-future-harness", "block") == 1
-        assert native_hook_verdict_exit_code("some-future-harness", "allow") == 0
+    runtime = _Runtime(monkeypatch, {"exit_code": 2})
+    monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / ".hol-guard"))
+    monkeypatch.setattr(config, "load_guard_config", untrusted)
+    assert native_hook_verdict_exit_code("grok", "block") == 2
+    assert runtime.requests[-1]["recording_only"] is False
 
 
-class TestNativeUnavailableExitCode:
-    """The availability wrapper must route deny->block and allow->allow."""
+def test_grok_names_the_guard_home_from_its_argument(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
 
-    def test_cursor_deny_rc2_allow_rc0(self):
-        assert _native_unavailable_exit_code(_args("cursor"), {"permission": "deny"}, "PreToolUse") == 2
-        assert _native_unavailable_exit_code(_args("cursor"), {"permission": "allow"}, "PreToolUse") == 0
+    from codex_plugin_scanner.guard import config
 
-    def test_grok_uses_adapter(self, monkeypatch):
-        from codex_plugin_scanner.guard.adapters import grok_hooks
-
-        monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "block")
-        assert _native_unavailable_exit_code(_args("grok"), {"policy_action": "block"}, "PreToolUse") == 2
-        monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "allow")
-        assert _native_unavailable_exit_code(_args("grok"), {"policy_action": "allow"}, "PreToolUse") == 0
-
-    def test_zcode_block(self):
-        assert _native_unavailable_exit_code(_args("zcode"), {"policy_action": "block"}, "PreToolUse") == 2
-        assert _native_unavailable_exit_code(_args("zcode"), {"policy_action": "allow"}, "PreToolUse") == 0
-
-    def test_devin(self):
-        assert _native_unavailable_exit_code(_args("devin"), {"policy_action": "block"}, "PreToolUse") == 2
-
-    def test_envelope_driven_deny_rc0(self):
-        for h in ("codex", "claude-code"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
-
-    def test_envelope_harnesses_deny_rc0(self):
-        for h in ("pi", "omp"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
-
-    def test_rc_driven_deny_rc1(self):
-        for h in ("opencode", "superagent"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 1, h
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
+    runtime = _Runtime(monkeypatch, {"exit_code": 0})
+    monkeypatch.setattr(sys, "argv", ["hol-guard", "--guard-home", str(tmp_path / ".hol-guard")])
+    monkeypatch.setattr(
+        config, "load_guard_config", lambda _home: SimpleNamespace(protection_posture="watch", mode="enforce")
+    )
+    assert native_hook_verdict_exit_code("grok", "block") == 0
+    assert runtime.requests[-1]["recording_only"] is True

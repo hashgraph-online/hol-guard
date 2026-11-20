@@ -8,17 +8,22 @@ pub mod staged_scanner;
 
 mod code_cursor;
 mod code_expression;
+mod code_shapes;
 mod code_value;
 mod continuation;
 mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod payment_key;
 mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
+mod url_credential;
+mod wiped_read;
 
 pub use match_spans::scan_match_spans;
+pub use payment_key::holds_live_payment_key;
 
 use guard_rules::{CONTEXT_CHARS, MAX_MATCHES, MAX_SCAN_BYTES};
 use regex::{Regex, RegexBuilder};
@@ -104,6 +109,17 @@ const PATTERNS: &[PatternDef] = &[
         multi_line: false,
     },
     PatternDef {
+        classifier: "stripe-secret-key",
+        family: "Stripe secret key",
+        sensitivity: "high",
+        reason: "Guard found a Stripe live secret key pattern.",
+        // Live keys only: `sk_test_` and `rk_test_` keys fill Stripe's own
+        // documentation and move no money.
+        pattern: r"\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b",
+        case_insensitive: false,
+        multi_line: false,
+    },
+    PatternDef {
         classifier: "hedera-private-key",
         family: "Hedera private key",
         sensitivity: "critical",
@@ -144,9 +160,24 @@ const PATTERNS: &[PatternDef] = &[
         family: "credential assignment",
         sensitivity: "medium",
         reason: "Guard found credential-looking assignment text.",
-        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
+        // `pass` and `pwd` count only after `_` or `-` (`DB_PASS`, `WEBDAV_PWD`), so
+        // `bypass`, `compass`, test tallies (`"pass": 12`) and the shell's
+        // `PWD=`/`OLDPWD=` paths stay clean.
+        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password|passwd|passphrase|access[_-]?key|[_-]pass|[_-]pwd)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
         case_insensitive: true,
         multi_line: true,
+    },
+    PatternDef {
+        classifier: "url-credential",
+        family: "URL credential",
+        sensitivity: "high",
+        reason: "Guard found a password inside a URL.",
+        // `scheme://user:password@host`, as `git remote -v`, `.git/config`, a
+        // database URL or a sync script prints it. `git@host:repo` has no
+        // scheme and `ssh://git@host:22/` has no password, so neither matches.
+        pattern: r#"\b[a-z][a-z0-9+.-]{1,31}://[^\s:/?#@'"<>]{0,128}:[^\s/?#@"<>]{1,256}@[^\s/?#@'"<>]"#,
+        case_insensitive: true,
+        multi_line: false,
     },
 ];
 
@@ -225,7 +256,10 @@ fn inert_code_expression_regex() -> &'static Regex {
 }
 
 fn suppressible(classifier: &str) -> bool {
-    matches!(classifier, "credential-assignment" | "generic-bearer-token")
+    matches!(
+        classifier,
+        "credential-assignment" | "generic-bearer-token" | "url-credential"
+    )
 }
 
 fn has_long_alphanumeric_run(token: &str) -> bool {
@@ -268,11 +302,16 @@ fn is_sample(
     if !suppressible(classifier) {
         return false;
     }
+    if classifier == "url-credential" {
+        // Only a whole-password stand-in carries no secret. Sample wording in
+        // the account, host or part of the password (`test:…@`, `@example.com`,
+        // `test-Kq7…`) proves nothing.
+        return url_credential::password(matched).is_some_and(url_credential::is_placeholder);
+    }
     if classifier == "credential-assignment"
         && (field_copy::is_field_copy(matched, rest_of_line)
             || guard_link::is_guard_link(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
-            || prose_answer_value::is_prose_answer(matched, rest_of_line, preceding)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
@@ -316,11 +355,46 @@ fn counted_matches<'t>(
     documentation_sample_context: bool,
 ) -> impl Iterator<Item = regex::Match<'t>> {
     let classifier = PATTERNS[index].classifier;
+    // A prose answer is read here rather than inside `is_sample`, because it
+    // needs the line's last credential-shaped token, which this scan resolves
+    // once per line.
+    let answers = classifier == "credential-assignment";
     let mut line_end = 0;
+    let mut last_value = None;
     compiled()[index].find_iter(text).filter(move |matched| {
+        // A stand-in such as `sk_live_xxxxxxxx...` is a placeholder; a
+        // Stripe key body mixes digits with both letter cases.
+        if classifier == "stripe-secret-key" && !payment_key::mixed_key_body(matched.as_str()) {
+            return false;
+        }
         if matched.end() > line_end {
             let rest = &text[matched.end()..];
             line_end = matched.end() + rest.find(['\r', '\n']).unwrap_or(rest.len());
+            last_value = answers
+                .then(|| prose_answer_value::last_value_offset(&text[matched.end()..line_end]))
+                .flatten()
+                .map(|offset| matched.end() + offset);
+        }
+        if answers
+            && prose_answer_value::is_prose_answer(
+                matched.as_str(),
+                &text[matched.end()..line_end],
+                &text[..matched.start()],
+                last_value.is_some_and(|start| start >= matched.end()),
+            )
+        {
+            return false;
+        }
+        // The parameter list is read from the lines after this one, which
+        // `is_sample` does not see.
+        if answers
+            && code_shapes::opens_typed_parameter_list(
+                matched.as_str(),
+                &text[matched.end()..line_end],
+                &text[line_end..],
+            )
+        {
+            return false;
         }
         !is_sample(
             classifier,
@@ -478,9 +552,86 @@ pub fn scan_chunks<'a>(
 mod tests {
     use super::*;
 
+    /// A pytest traceback has no file path of its own, so the only evidence
+    /// that its credential-shaped values are fixtures is the surrounding text.
+    #[test]
+    fn keeps_a_test_runner_traceback_with_fixture_credentials_readable() {
+        let text = concat!(
+            "tests/test_guard_approval_gate.py:742: AssertionError\n",
+            "kwargs = {'params': {'enabled': True, 'new_",
+            "password': 'correct-",
+            "password', 'confirm_",
+            "password': 'correct-",
+            "password'}}\n",
+            "    assert payload.get(\"resolved\") is not True\n",
+        );
+        let result = scan_text(text, true, true, MAX_SCAN_BYTES, None);
+        assert!(
+            result.matches.is_empty(),
+            "fixture traceback was treated as a secret: {:?}",
+            result
+                .matches
+                .iter()
+                .map(|matched| matched.classifier)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// The pathless fixture allowance must not cover a real credential that
+    /// happens to sit next to test wording.
+    #[test]
+    fn still_blocks_a_real_looking_credential_beside_test_wording() {
+        let value = ["Zq7Z4vK9rT", "2mXb8LpW3sNh"].concat();
+        let text = format!(
+            "tests/test_login.py:12: AssertionError\n    assert client.api_{} == 200\n    api_{}: '{value}'\n",
+            "status", "password"
+        );
+        let result = scan_text(&text, true, true, MAX_SCAN_BYTES, None);
+        assert!(
+            !result.matches.is_empty(),
+            "a high-entropy credential in a traceback was allowed through"
+        );
+    }
+
     fn github_like_token() -> String {
         let prefix = ["gh", "p_"].concat();
         format!("{prefix}{}", "a".repeat(30))
+    }
+
+    #[test]
+    fn detects_a_stripe_live_key_but_not_a_test_key_or_stand_in() {
+        let live = ["sk_", "live_", "dx6YHRDb2BC8G4NQr2TyUskf"].concat();
+        let result = scan_text(
+            &format!("Leaked config dump:\n{live}"),
+            false,
+            false,
+            MAX_SCAN_BYTES,
+            None,
+        );
+        assert!(result
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "stripe-secret-key"));
+        for clean in [
+            ["sk_", "test_", "dx6YHRDb2BC8G4NQr2TyUskf"].concat(),
+            ["sk_", "live_", "xxxxxxxxxxxxxxxxxxxxxxxx"].concat(),
+            ["sk_", "live_", "..."].concat(),
+        ] {
+            let result = scan_text(
+                &format!("Set STRIPE_KEY to {clean}"),
+                false,
+                false,
+                MAX_SCAN_BYTES,
+                None,
+            );
+            assert!(
+                !result
+                    .matches
+                    .iter()
+                    .any(|matched| matched.classifier == "stripe-secret-key"),
+                "{clean}"
+            );
+        }
     }
 
     #[test]
@@ -556,6 +707,50 @@ mod tests {
                     .any(|matched| matched.classifier == "credential-assignment"),
                 "{text:?}"
             );
+        }
+    }
+
+    fn credential_assignment(text: &str) -> bool {
+        scan_text(text, true, true, MAX_SCAN_BYTES, None)
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "credential-assignment")
+    }
+
+    #[test]
+    fn password_names_a_secret_search_looks_for_are_credentials() {
+        let value = ["Kq7Xr2", "mWp9Lq4z"].concat();
+        for name in [
+            "PASSWD",
+            "PASSPHRASE",
+            "DB_PASS",
+            "_PASS",
+            "_PWD",
+            "SMTP-PASS",
+            "WEBDAV_PWD",
+            "S3_ACCESS_KEY",
+            "accessKey",
+        ] {
+            for text in [
+                format!("{name}={value}"),
+                format!("config.env:6:{name}={value}"),
+                format!("\"{name}\": \"{value}\""),
+            ] {
+                assert!(credential_assignment(&text), "{text:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn pass_and_pwd_need_a_separator_before_them() {
+        for text in [
+            "PWD=/home/alice/notes",
+            "OLDPWD=/home/alice",
+            "bypass=true",
+            "compass: north",
+            "{\"pass\": 12, \"fail\": 0}",
+        ] {
+            assert!(!credential_assignment(text), "{text:?}");
         }
     }
 

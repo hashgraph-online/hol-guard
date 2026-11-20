@@ -4,12 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cline as cline_module
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_detection import ClineHostDetection
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.cli.install_commands import _apply_adapter_management
+from codex_plugin_scanner.guard.cli.install_commands import _selected_surface
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -21,77 +18,35 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
 
 
-class _RecordingCline(ClineHarnessAdapter):
-    seen: tuple[str, str] | None = None
-
-    def install(self, context: HarnessContext, *, surface: str = "auto") -> dict[str, object]:
-        del context
-        self.seen = ("install", surface)
-        return {"harness": "cline", "active": True, "surface": surface}
-
-    def uninstall(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
-        del context
-        self.seen = ("uninstall", surface)
-        return {"harness": "cline", "active": False, "surface": surface}
-
-
-class _RecordingCursor(CursorHarnessAdapter):
-    seen: tuple[str, str] | None = None
-
-    def install(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
-        del context
-        self.seen = ("install", surface)
-        return {"harness": "cursor", "active": True, "surface": surface}
-
-    def uninstall(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
-        del context
-        self.seen = ("uninstall", surface)
-        return {"harness": "cursor", "active": False, "surface": surface}
-
-
-class _RecordingClaude(HarnessAdapter):
-    harness = "claude-code"
-    seen: str | None = None
-
-    def detect(self, context: HarnessContext):
-        raise AssertionError("detection is not part of surface dispatch")
-
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        del context
-        self.seen = "install"
-        return {"harness": self.harness, "active": True}
-
-
 def test_cline_explicit_plugin_surface_reaches_adapter(tmp_path: Path) -> None:
-    adapter = _RecordingCline()
-    result = _apply_adapter_management(adapter, _context(tmp_path), active=True, surface="plugin")
-    assert adapter.seen == ("install", "plugin")
-    assert result["surface"] == "plugin"
+    assert _selected_surface("cline", _context(tmp_path), "plugin") == "plugin"
 
 
-def test_frozen_cline_auto_transport_uses_durable_plugin(monkeypatch) -> None:
-    monkeypatch.setattr(cline_module, "is_frozen_guard_runtime", lambda: True)
-    hosts = ClineHostDetection(cli_executable=None, cli_version=None, vscode_versions=(), jetbrains_paths=())
+def test_frozen_cline_auto_transport_uses_durable_plugin(tmp_path: Path) -> None:
+    plan = ask(
+        "install_plan",
+        _context(tmp_path),
+        harness="cline",
+        surface="auto",
+        frozen=True,
+        cli={"path": None, "output": ""},
+    )
 
-    assert ClineHarnessAdapter()._auto_transport(hosts) == "plugin"
+    assert (plan["transport"], plan["fallback"]) == ("plugin", True)
 
 
 def test_cline_uninstall_surface_reaches_adapter(tmp_path: Path) -> None:
-    adapter = _RecordingCline()
-    result = _apply_adapter_management(adapter, _context(tmp_path), active=False, surface="hooks")
-    assert adapter.seen == ("uninstall", "hooks")
-    assert result["surface"] == "hooks"
+    assert _selected_surface("cline", _context(tmp_path), "hooks") == "hooks"
+
+
+def test_cline_without_a_surface_leaves_the_default_to_the_runtime(tmp_path: Path) -> None:
+    assert _selected_surface("cline", _context(tmp_path), None) is None
 
 
 def test_cursor_implicit_surface_keeps_existing_all_default(tmp_path: Path) -> None:
-    adapter = _RecordingCursor()
-    result = _apply_adapter_management(adapter, _context(tmp_path), active=True, surface=None)
-    assert adapter.seen == ("install", "all")
-    assert result["surface"] == "all"
+    assert _selected_surface("cursor", _context(tmp_path), None) == "all"
 
 
 def test_unsupported_surface_is_rejected_before_other_adapter_mutation(tmp_path: Path) -> None:
-    adapter = _RecordingClaude()
     with pytest.raises(ValueError, match="Unsupported Claude Code surface: plugin"):
-        _apply_adapter_management(adapter, _context(tmp_path), active=True, surface="plugin")
-    assert adapter.seen is None
+        _selected_surface("claude-code", _context(tmp_path), "plugin")

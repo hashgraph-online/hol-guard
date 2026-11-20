@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::sfrs_quote_parsing::{
     bounded_current_workspace_source_edit_execution_context,
     gh_pr_env_split_string_payloads_with_substitution, literal_cd_execution_context,
@@ -28,9 +28,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
     fn trusted_path_command(&self, command: &str, cwd: &str, _: &str) -> bool {
         matches!(command, "bun" | "head" | "tail") && !cwd.contains("untrusted")

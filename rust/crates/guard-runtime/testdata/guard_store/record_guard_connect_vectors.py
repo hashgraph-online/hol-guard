@@ -26,8 +26,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
-os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+# `auto` selects the runtime bundled beside the imported package and nothing
+# else, so a `HOL_GUARD_NATIVE_BINARY` left in the environment is read by
+# nothing here and needs no clearing.
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from codex_plugin_scanner.guard import store_oauth
@@ -68,6 +70,7 @@ def schema_sql_for_tables(path: Path, tables: tuple[str, ...]) -> list[str]:
             row[0]
             for row in connection.execute(
                 f"select sql from sqlite_master where sql is not null and tbl_name in ({','.join('?' * len(tables))}) "
+                "and name not glob 'trg_extension_control_epoch_*' and name != 'extension_control_authority_epoch' "
                 "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid",
                 tables,
             )

@@ -1,0 +1,1841 @@
+{
+ "now": "2026-03-04T12:00:00+00:00",
+ "order_by": {
+  "local_cli_grant": "cli_id",
+  "local_cli_observation": "cli_id",
+  "local_cli_schema_migration": "singleton",
+  "local_mcp_catalog": "cli_id",
+  "local_mcp_provider_action": "cli_id, identity_hash, provider, tool_slug",
+  "local_mcp_provider_authority": "cli_id, identity_hash",
+  "local_mcp_provider_grant": "cli_id, identity_hash, tool_slug",
+  "local_mcp_workflow_proposal": "cli_id, identity_hash, proposal_id"
+ },
+ "scenarios": [
+  {
+   "name": "provider_choices_empty",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "no connections",
+     "method": "read_mcp_provider_choices",
+     "native_payload": {},
+     "post_changed": {},
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "provider_choices_saved_deny",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_provider_grant": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "state": "block",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "state": "review",
+        "tool_slug": "GITHUB_LIST_ISSUES",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, 1, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "allowed",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_grant (cli_id, identity_hash, tool_slug, state, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "block",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_grant (cli_id, identity_hash, tool_slug, state, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_LIST_ISSUES",
+        "review",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "only the saved denial is replayed",
+     "method": "read_mcp_provider_choices",
+     "native_payload": {
+      "claude-code:mcp__linear__:composio:all-accounts:GITHUB_CREATE_ISSUE": "block"
+     },
+     "post_changed": {},
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "provider_choices_undecided_connection",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_provider_grant": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "state": "block",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_grant (cli_id, identity_hash, tool_slug, state, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "block",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "a connection with no grant contributes nothing",
+     "method": "read_mcp_provider_choices",
+     "native_payload": {},
+     "post_changed": {},
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "provider_authority_hash_absent",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "no authority rows",
+     "method": "read_mcp_provider_authority_hash",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "provider_authority_hash_present",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_authority (cli_id, identity_hash, digest) values (?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "one observed connection",
+     "method": "read_mcp_provider_authority_hash",
+     "native_payload": "133b00094d3d97a5bc203f7abb432cd29a677f0476e62577e2e6260cd06e7a94",
+     "post_changed": {},
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "provider_authority_hash_unobserved",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-0123456789abcdef",
+        "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_mcp_provider_authority (cli_id, identity_hash, digest) values (?, ?, ?)",
+       [
+        "local-cli.mcp-0123456789abcdef",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "an authority row with no observation",
+     "method": "read_mcp_provider_authority_hash",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "provider_actions_page",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "5af28738f6c82ed2a584098910fd70680e9ac4b617a3fe27a951755812d2b565",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "description": "Open an issue",
+        "full_schema": 1,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "input_schema_json": "{\"type\": \"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "COMPOSIO_SEARCH",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "toolkit": "github",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       },
+       {
+        "authority_hash": "272ebf75af647a0ef88a55fbe5c45f5d31a2a7ab57fb1c2fdb3e58799a37fcca",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "description": "List issues",
+        "full_schema": 0,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "input_schema_json": "{\"type\": \"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "COMPOSIO_SEARCH",
+        "tool_slug": "GITHUB_LIST_ISSUES",
+        "toolkit": "github",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       },
+       {
+        "authority_hash": "bf6e72c781a14b1cfe6741a41dbfe09c577b4801124e586bf9f83e25b1c56f29",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "description": "Create a ticket",
+        "full_schema": 1,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "input_schema_json": "{\"type\": \"object\"}",
+        "provider": "composio",
+        "revision": 2,
+        "source_tool": "COMPOSIO_SEARCH",
+        "tool_slug": "LINEAR_CREATE_TICKET",
+        "toolkit": "linear",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_grant": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "state": "block",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, 'COMPOSIO_SEARCH', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "github",
+        "Open an issue",
+        "{\"type\": \"object\"}",
+        "5af28738f6c82ed2a584098910fd70680e9ac4b617a3fe27a951755812d2b565",
+        1,
+        1,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, 'COMPOSIO_SEARCH', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_LIST_ISSUES",
+        "github",
+        "List issues",
+        "{\"type\": \"object\"}",
+        "272ebf75af647a0ef88a55fbe5c45f5d31a2a7ab57fb1c2fdb3e58799a37fcca",
+        0,
+        1,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, 'COMPOSIO_SEARCH', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "LINEAR_CREATE_TICKET",
+        "linear",
+        "Create a ticket",
+        "{\"type\": \"object\"}",
+        "bf6e72c781a14b1cfe6741a41dbfe09c577b4801124e586bf9f83e25b1c56f29",
+        1,
+        2,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_grant (cli_id, identity_hash, tool_slug, state, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "block",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "first page",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": {
+      "declarations": [
+       {
+        "full_schema": true,
+        "name": "GITHUB_CREATE_ISSUE",
+        "provider": "composio",
+        "schema": {
+         "type": "object"
+        }
+       },
+       {
+        "full_schema": false,
+        "name": "GITHUB_LIST_ISSUES",
+        "provider": "composio",
+        "schema": {
+         "type": "object"
+        }
+       }
+      ],
+      "page": {
+       "actions": [
+        {
+         "account_binding": "unverified",
+         "allow_supported": false,
+         "description": "Open an issue",
+         "full_schema": true,
+         "permission_state": "block",
+         "revision": 1,
+         "source": "observed-provider-result",
+         "tool_slug": "GITHUB_CREATE_ISSUE",
+         "toolkit": "github",
+         "updated_at": "2026-03-04T12:00:00+00:00"
+        },
+        {
+         "account_binding": "unverified",
+         "allow_supported": false,
+         "description": "List issues",
+         "full_schema": false,
+         "permission_state": "review",
+         "revision": 1,
+         "source": "observed-provider-result",
+         "tool_slug": "GITHUB_LIST_ISSUES",
+         "toolkit": "github",
+         "updated_at": "2026-03-04T12:00:00+00:00"
+        }
+       ],
+       "catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",
+       "coverage": "discovery-subset",
+       "next_offset": 2
+      }
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_token": null,
+      "limit": 2,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": null,
+     "label": "second page",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": {
+      "declarations": [
+       {
+        "full_schema": true,
+        "name": "LINEAR_CREATE_TICKET",
+        "provider": "composio",
+        "schema": {
+         "type": "object"
+        }
+       }
+      ],
+      "page": {
+       "actions": [
+        {
+         "account_binding": "unverified",
+         "allow_supported": false,
+         "description": "Create a ticket",
+         "full_schema": true,
+         "permission_state": "review",
+         "revision": 2,
+         "source": "observed-provider-result",
+         "tool_slug": "LINEAR_CREATE_TICKET",
+         "toolkit": "linear",
+         "updated_at": "2026-03-04T12:00:00+00:00"
+        }
+       ],
+       "catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",
+       "coverage": "discovery-subset",
+       "next_offset": null
+      }
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_token": null,
+      "limit": 2,
+      "offset": 2,
+      "search": ""
+     }
+    },
+    {
+     "error": null,
+     "label": "search narrows to one toolkit",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": {
+      "declarations": [
+       {
+        "full_schema": true,
+        "name": "LINEAR_CREATE_TICKET",
+        "provider": "composio",
+        "schema": {
+         "type": "object"
+        }
+       }
+      ],
+      "page": {
+       "actions": [
+        {
+         "account_binding": "unverified",
+         "allow_supported": false,
+         "description": "Create a ticket",
+         "full_schema": true,
+         "permission_state": "review",
+         "revision": 2,
+         "source": "observed-provider-result",
+         "tool_slug": "LINEAR_CREATE_TICKET",
+         "toolkit": "linear",
+         "updated_at": "2026-03-04T12:00:00+00:00"
+        }
+       ],
+       "catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",
+       "coverage": "discovery-subset",
+       "next_offset": null
+      }
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_token": null,
+      "limit": 100,
+      "offset": 0,
+      "search": "linear"
+     }
+    },
+    {
+     "error": null,
+     "label": "a wildcard in the search is literal",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": {
+      "declarations": [],
+      "page": {
+       "actions": [],
+       "catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",
+       "coverage": "discovery-subset",
+       "next_offset": null
+      }
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_token": null,
+      "limit": 100,
+      "offset": 0,
+      "search": "%"
+     }
+    }
+   ]
+  },
+  {
+   "name": "provider_actions_refusals",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "5af28738f6c82ed2a584098910fd70680e9ac4b617a3fe27a951755812d2b565",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "description": "",
+        "full_schema": 1,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "input_schema_json": "{\"type\": \"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "COMPOSIO_SEARCH",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "toolkit": "github",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, 'COMPOSIO_SEARCH', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "github",
+        "",
+        "{\"type\": \"object\"}",
+        "5af28738f6c82ed2a584098910fd70680e9ac4b617a3fe27a951755812d2b565",
+        1,
+        1,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "provider_catalog_changed",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "a stale token refuses the page",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_token": "0000000000000000000000000000000000000000000000000000000000000000",
+      "limit": 10,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "provider connection not found",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "an unknown connection",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-0123456789abcdef",
+      "expected_token": null,
+      "limit": 10,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "invalid provider catalog page",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "a page wider than the ceiling",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_token": null,
+      "limit": 101,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "invalid provider connection",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "a malformed id",
+     "method": "read_local_mcp_provider_actions",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "not-a-cli-id",
+      "expected_token": null,
+      "limit": 10,
+      "offset": 0,
+      "search": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "workflow_proposals_page",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "5af28738f6c82ed2a584098910fd70680e9ac4b617a3fe27a951755812d2b565",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "description": "",
+        "full_schema": 1,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "input_schema_json": "{\"type\": \"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "COMPOSIO_SEARCH",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "toolkit": "github",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       },
+       {
+        "authority_hash": "272ebf75af647a0ef88a55fbe5c45f5d31a2a7ab57fb1c2fdb3e58799a37fcca",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "description": "",
+        "full_schema": 0,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "input_schema_json": "{\"type\": \"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "COMPOSIO_SEARCH",
+        "tool_slug": "GITHUB_LIST_ISSUES",
+        "toolkit": "github",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_grant": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "state": "block",
+        "tool_slug": "GITHUB_CREATE_ISSUE",
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "proposal_id": "p-1",
+        "proposal_json": "{\"guidance_present\": true, \"primary\": [\"GITHUB_CREATE_ISSUE\"], \"supporting\": [\"GITHUB_LIST_ISSUES\", \"SLACK_POST\"]}",
+        "seen_at": "2026-03-04T12:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "proposal_id": "p-2",
+        "proposal_json": "{\"guidance_present\": true, \"primary\": [\"SLACK_POST\"], \"supporting\": []}",
+        "seen_at": "2026-03-03T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, 'COMPOSIO_SEARCH', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "github",
+        "",
+        "{\"type\": \"object\"}",
+        "5af28738f6c82ed2a584098910fd70680e9ac4b617a3fe27a951755812d2b565",
+        1,
+        1,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, 'COMPOSIO_SEARCH', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_LIST_ISSUES",
+        "github",
+        "",
+        "{\"type\": \"object\"}",
+        "272ebf75af647a0ef88a55fbe5c45f5d31a2a7ab57fb1c2fdb3e58799a37fcca",
+        0,
+        1,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_grant (cli_id, identity_hash, tool_slug, state, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "GITHUB_CREATE_ISSUE",
+        "block",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_workflow_proposal (cli_id, identity_hash, proposal_id, proposal_json, seen_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "p-1",
+        "{\"guidance_present\": true, \"primary\": [\"GITHUB_CREATE_ISSUE\"], \"supporting\": [\"GITHUB_LIST_ISSUES\", \"SLACK_POST\"]}",
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_workflow_proposal (cli_id, identity_hash, proposal_id, proposal_json, seen_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "p-2",
+        "{\"guidance_present\": true, \"primary\": [\"SLACK_POST\"], \"supporting\": []}",
+        "2026-03-03T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "every requirement state",
+     "method": "read_local_mcp_workflows",
+     "native_payload": {
+      "next_offset": null,
+      "proposals": [
+       {
+        "account_binding": "unverified",
+        "guidance_present": true,
+        "permissions_granted": false,
+        "proposal_id": "p-1",
+        "requirements": [
+         {
+          "action_revision": 1,
+          "role": "primary",
+          "schema_observed": true,
+          "state": "saved-deny",
+          "tool_slug": "GITHUB_CREATE_ISSUE"
+         },
+         {
+          "action_revision": 1,
+          "role": "supporting",
+          "schema_observed": false,
+          "state": "ask",
+          "tool_slug": "GITHUB_LIST_ISSUES"
+         },
+         {
+          "action_revision": null,
+          "role": "supporting",
+          "schema_observed": false,
+          "state": "unresolved",
+          "tool_slug": "SLACK_POST"
+         }
+        ],
+        "requirements_complete": false,
+        "seen_at": "2026-03-04T12:00:00+00:00",
+        "source": "composio-search-guidance"
+       },
+       {
+        "account_binding": "unverified",
+        "guidance_present": true,
+        "permissions_granted": false,
+        "proposal_id": "p-2",
+        "requirements": [
+         {
+          "action_revision": null,
+          "role": "primary",
+          "schema_observed": false,
+          "state": "unresolved",
+          "tool_slug": "SLACK_POST"
+         }
+        ],
+        "requirements_complete": false,
+        "seen_at": "2026-03-03T12:00:00+00:00",
+        "source": "composio-search-guidance"
+       }
+      ]
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "offset": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "workflow_proposals_refusals",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "invalid_provider_workflow_page",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "an offset past the ceiling",
+     "method": "read_local_mcp_workflows",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "offset": 51
+     }
+    },
+    {
+     "error": {
+      "message": "provider_connection_unavailable",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "an unknown connection",
+     "method": "read_local_mcp_workflows",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-0123456789abcdef",
+      "offset": 0
+     }
+    },
+    {
+     "error": {
+      "message": "invalid provider connection",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "a malformed id",
+     "method": "read_local_mcp_workflows",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "not-a-cli-id",
+      "offset": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "skill_page",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_catalog": [
+       {
+        "catalog_json": "{\"complete\": true, \"skills_catalog\": {\"entries\": [{\"connection_identity_hash\": \"3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab\", \"description\": \"Weekly summary\", \"name\": \"Zebra report\", \"uri\": \"mcp://linear/zebra\"}, {\"connection_identity_hash\": \"3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab\", \"description\": \"Daily digest\", \"name\": \"Alpha brief\", \"uri\": \"mcp://linear/alpha\"}, {\"connection_identity_hash\": \"3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab\", \"description\": \"Sort the inbox\", \"name\": \"Triage\", \"uri\": \"mcp://linear/triage\"}]}, \"tools\": []}",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "last_complete_at": null,
+        "revision": 3,
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog (cli_id, identity_hash, catalog_json, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "{\"complete\": true, \"skills_catalog\": {\"entries\": [{\"connection_identity_hash\": \"3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab\", \"description\": \"Weekly summary\", \"name\": \"Zebra report\", \"uri\": \"mcp://linear/zebra\"}, {\"connection_identity_hash\": \"3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab\", \"description\": \"Daily digest\", \"name\": \"Alpha brief\", \"uri\": \"mcp://linear/alpha\"}, {\"connection_identity_hash\": \"3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab\", \"description\": \"Sort the inbox\", \"name\": \"Triage\", \"uri\": \"mcp://linear/triage\"}]}, \"tools\": []}",
+        3,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "sorted by name",
+     "method": "read_local_mcp_skills",
+     "native_payload": {
+      "activation_supported": false,
+      "entries": [
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Daily digest",
+        "name": "Alpha brief",
+        "uri": "mcp://linear/alpha"
+       },
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Sort the inbox",
+        "name": "Triage",
+        "uri": "mcp://linear/triage"
+       },
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Weekly summary",
+        "name": "Zebra report",
+        "uri": "mcp://linear/zebra"
+       }
+      ],
+      "known_count": 3,
+      "matched_count": 3,
+      "next_offset": null,
+      "revision": 3
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": null,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": null,
+     "label": "search matches a description",
+     "method": "read_local_mcp_skills",
+     "native_payload": {
+      "activation_supported": false,
+      "entries": [
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Daily digest",
+        "name": "Alpha brief",
+        "uri": "mcp://linear/alpha"
+       }
+      ],
+      "known_count": 3,
+      "matched_count": 1,
+      "next_offset": null,
+      "revision": 3
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": null,
+      "offset": 0,
+      "search": "DIGEST"
+     }
+    },
+    {
+     "error": null,
+     "label": "the recorded revision still matches",
+     "method": "read_local_mcp_skills",
+     "native_payload": {
+      "activation_supported": false,
+      "entries": [
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Daily digest",
+        "name": "Alpha brief",
+        "uri": "mcp://linear/alpha"
+       },
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Sort the inbox",
+        "name": "Triage",
+        "uri": "mcp://linear/triage"
+       },
+       {
+        "connection_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "description": "Weekly summary",
+        "name": "Zebra report",
+        "uri": "mcp://linear/zebra"
+       }
+      ],
+      "known_count": 3,
+      "matched_count": 3,
+      "next_offset": null,
+      "revision": 3
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": 3,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "mcp_skill_catalog_changed",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "a changed revision refuses the page",
+     "method": "read_local_mcp_skills",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": 2,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": null,
+     "label": "an offset past the end",
+     "method": "read_local_mcp_skills",
+     "native_payload": {
+      "activation_supported": false,
+      "entries": [],
+      "known_count": 3,
+      "matched_count": 3,
+      "next_offset": null,
+      "revision": 3
+     },
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": null,
+      "offset": 900,
+      "search": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "skill_page_refusals",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "mcp_skills_unavailable",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "no catalog recorded",
+     "method": "read_local_mcp_skills",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": null,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "mcp_skills_unavailable",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "an unknown connection",
+     "method": "read_local_mcp_skills",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-0123456789abcdef",
+      "expected_revision": null,
+      "offset": 0,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "invalid_mcp_skill_page",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "an offset past the ceiling",
+     "method": "read_local_mcp_skills",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": null,
+      "offset": 1001,
+      "search": ""
+     }
+    },
+    {
+     "error": {
+      "message": "mcp_skills_unavailable",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "a malformed id",
+     "method": "read_local_mcp_skills",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "not-a-cli-id",
+      "expected_revision": null,
+      "offset": 0,
+      "search": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "skill_page_foreign_entry",
+   "seed": {
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "0027071f481228a23c973fce376729e61d005ebd593b20d81101323c5a197f76",
+      "singleton": 1,
+      "version": 14
+     }
+    ],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_provider_grant": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "declared_sources_json": null,
+        "example_label": "mcp__linear__",
+        "first_blocked_cause": null,
+        "help_status": null,
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_context_at": null,
+        "last_harness": null,
+        "last_seen_at": "2026-03-04T12:00:00+00:00",
+        "last_trigger_summary": null,
+        "last_why_now": null,
+        "last_workspace_label": null,
+        "name": "mcp__linear__",
+        "observed_count": 1,
+        "remote_origin": null,
+        "server_args_hash": null,
+        "server_command": "observed-mcp:claude:mcp__linear__",
+        "server_identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_catalog": [
+       {
+        "catalog_json": "{\"complete\": true, \"skills_catalog\": {\"entries\": [{\"connection_identity_hash\": \"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\", \"description\": \"\", \"name\": \"Alpha brief\", \"uri\": \"mcp://linear/alpha\"}]}, \"tools\": []}",
+        "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+        "identity_hash": "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "last_complete_at": null,
+        "revision": 3,
+        "updated_at": "2026-03-04T12:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command) values (?, ?, 'executable', ?, ?, 1, ?, 'mcp', ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "mcp__linear__",
+        "mcp__linear__",
+        "2026-03-04T12:00:00+00:00",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "observed-mcp:claude:mcp__linear__"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog (cli_id, identity_hash, catalog_json, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-3bb499da3ac9c61f",
+        "3bb499da3ac9c61f5d9388a07e7a4397287c500fac2d42258b7a2bbcda5887ab",
+        "{\"complete\": true, \"skills_catalog\": {\"entries\": [{\"connection_identity_hash\": \"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\", \"description\": \"\", \"name\": \"Alpha brief\", \"uri\": \"mcp://linear/alpha\"}]}, \"tools\": []}",
+        3,
+        "2026-03-04T12:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "mcp_skills_unavailable",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "an entry bound to another connection refuses the snapshot",
+     "method": "read_local_mcp_skills",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.mcp-3bb499da3ac9c61f",
+      "expected_revision": null,
+      "offset": 0,
+      "search": ""
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-mcp-provider-read-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE local_cli_schema_migration (\n            singleton integer primary key check (singleton = 1),\n            version integer not null,\n            checksum text not null\n        )",
+  "CREATE TABLE local_cli_observation (\n            cli_id text primary key,\n            identity_hash text not null,\n            kind text not null check (kind in ('executable', 'script')),\n            name text not null,\n            interpreter_name text,\n            example_label text not null,\n            observed_count integer not null check (observed_count >= 1),\n            last_seen_at text not null,\n            source_path text,\n            help_status text,\n            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),\n            server_identity_hash text,\n            server_command text,\n            server_args_hash text,\n            source_label text,\n            remote_origin text,\n            declared_sources_json text\n        , first_blocked_cause text, last_trigger_summary text, last_why_now text, last_harness text, last_workspace_label text, last_context_at text)",
+  "CREATE TABLE local_cli_grant (\n            cli_id text primary key,\n            identity_hash text not null,\n            state text not null check (state in ('allowed', 'blocked')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null\n        )",
+  "CREATE TABLE local_mcp_workflow_proposal (\n            cli_id text not null, identity_hash text not null, proposal_id text not null,\n            proposal_json text not null, seen_at text not null,\n            primary key (cli_id, identity_hash, proposal_id)\n        )",
+  "CREATE TABLE local_mcp_catalog (\n            cli_id text primary key,\n            identity_hash text not null,\n            catalog_json text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            last_complete_at text\n        )",
+  "CREATE TABLE local_mcp_provider_grant (\n            cli_id text not null,\n            identity_hash text not null,\n            tool_slug text not null,\n            state text not null check (state in ('review', 'block')),\n            updated_at text not null,\n            primary key (cli_id, identity_hash, tool_slug)\n        )",
+  "CREATE TABLE local_mcp_provider_authority (\n            cli_id text not null, identity_hash text not null, digest text not null,\n            primary key (cli_id, identity_hash)\n        )",
+  "CREATE TABLE local_mcp_provider_action (\n            cli_id text not null,\n            identity_hash text not null,\n            provider text not null check (provider = 'composio'),\n            tool_slug text not null,\n            toolkit text not null,\n            description text not null,\n            input_schema_json text not null,\n            authority_hash text not null,\n            full_schema integer not null check (full_schema in (0, 1)),\n            source_tool text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            primary key (cli_id, identity_hash, provider, tool_slug)\n        )"
+ ],
+ "source": "guard"
+}

@@ -115,10 +115,7 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
             .join(format!(
                 "fixture-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                crate::unique_nanos::unique_nanos()
             ));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("ordinary.txt"), "fixture").unwrap();
@@ -140,23 +137,29 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
             );
             assert_eq!(result.minimum_action == "allow", expected, "{path}");
         }
-        let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
-            "omp",
-            "PreToolUse",
-            &serde_json::json!({"tool_name":"bash", "tool_input":{
-                "command":"git push origin main; cat ordinary.txt"
-            }}),
-            Some(&controls),
-            None,
-            root.to_str(),
-            root.to_str(),
-        );
-        assert_ne!(
-            result.minimum_action, "allow",
-            "earlier approved execution may change a file target"
-        );
+        // Each step is judged as a command of its own: a read that passes
+        // alone passes after a step the user allowed, and a read of a link to
+        // a secret is still stopped wherever it sits.
+        for (path, expected) in [("ordinary.txt", true), ("alias.txt", false)] {
+            let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+                "omp",
+                "PreToolUse",
+                &serde_json::json!({"tool_name":"bash", "tool_input":{
+                    "command":format!("git push origin main; cat {path}")
+                }}),
+                Some(&controls),
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                expected,
+                "push; cat {path}"
+            );
+        }
         for (command, expected) in [
-            ("ls -la; git push origin main", false),
+            ("ls -la; git push origin main", true),
             ("ls -la ordinary.txt; git push origin main", true),
         ] {
             let result = crate::pretool::evaluate_pre_tool_envelope_with_context(

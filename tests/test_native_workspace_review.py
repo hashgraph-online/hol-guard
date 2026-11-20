@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import stat
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -13,7 +12,6 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard.adapters.grok_approval_resume import wait_for_grok_live_approval
 from codex_plugin_scanner.guard.approvals import wait_for_approval_requests
 from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_review import _run_guard_cloud_review_command
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -174,35 +172,20 @@ def test_native_delivery_selects_matching_authenticated_upload(tmp_path: Path, m
         )
 
 
-def test_windows_staging_uses_acl_bound_atomic_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_windows_staging_uses_the_runtime_private_state_writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _Store(_request())
-    ensured: list[Path] = []
-    bindings: list[Path] = []
-
-    @contextmanager
-    def bind_directory(path: Path):
-        path.mkdir(parents=True, exist_ok=True)
-        bindings.append(path)
-        yield SimpleNamespace(path=path, handle=object(), handles=[])
-
-    def ensure_private_directory(path: Path) -> None:
-        ensured.append(path)
-        path.mkdir(parents=True, exist_ok=True)
+    writes: list[dict[str, object]] = []
 
     def write_atomic(**kwargs: object) -> None:
-        assert kwargs["maximum_bytes"] == native._MAX_REQUEST_STATE_BYTES
-        assert kwargs["kind"] == "workspace_review_request"
-        destination = cast(Path, kwargs["parent_path"]) / cast(str, kwargs["destination_name"])
+        writes.append(kwargs)
+        destination = cast(Path, kwargs["directory"]) / cast(str, kwargs["name"])
+        destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(cast(bytes, kwargs["payload"]))
 
     monkeypatch.setattr(
         native,
         "_native_policy_snapshot",
-        SimpleNamespace(
-            _windows_ensure_private_directory=ensure_private_directory,
-            _windows_private_directory_binding=bind_directory,
-            _windows_write_private_file_atomic=write_atomic,
-        ),
+        SimpleNamespace(_windows_write_private_file_atomic=write_atomic),
     )
     monkeypatch.setattr(native.os, "name", "nt")
     for function_name in ("fchmod", "open", "fsync"):
@@ -217,8 +200,9 @@ def test_windows_staging_uses_acl_bound_atomic_writer(tmp_path: Path, monkeypatc
     expected = native._canonical_json_bytes(native._request_state("request-1", _request()))
     assert path.read_bytes() == expected
     assert _staged_digest(tmp_path, "request-1") == hashlib.sha256(expected).hexdigest()
-    assert ensured == [tmp_path, tmp_path / "native-runtime", path.parent]
-    assert bindings == [path.parent]
+    assert [(write["directory"], write["name"], write["private_root"], write["maximum_bytes"]) for write in writes] == [
+        (path.parent, "request-1.json", tmp_path, native._MAX_REQUEST_STATE_BYTES)
+    ]
 
 
 def test_apply_reconciles_native_claim_into_local_queue(
@@ -338,18 +322,6 @@ def test_signed_deny_is_block_to_real_waiter_and_grok_harness(
     assert isinstance(waited_items, list)
     assert isinstance(waited_items[0], dict)
     assert waited_items[0]["resolution_action"] == "block"
-    payload: dict[str, object] = {"approval_requests": [{"request_id": "request-deny"}]}
-    assert (
-        wait_for_grok_live_approval(
-            event_name="PreToolUse",
-            policy_action="require-reapproval",
-            response_payload=payload,
-            store=store,
-            timeout_seconds=1,
-            json_mode=False,
-        )
-        == "block"
-    )
 
 
 def test_staged_snapshot_substitution_is_rejected_before_sqlite_application(

@@ -2,161 +2,36 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
-import json
 import os
+import shutil
 import sys
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from ci.gauntlet import host_process
+from ci.gauntlet import host_process, host_shims
 from ci.gauntlet.case_helpers import _fixture_replacements
-from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.contained_core import PROOF_SCHEMA, _sandbox_refused, contained_calls, request_proofs
 from ci.gauntlet.evidence import assess_case, reconcile
-from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.host_process import clean_environment, python_shim
 from ci.gauntlet.input_evidence import input_digest
-from tests.test_guard_gauntlet_workflow_boundaries import _case
+from tests.gauntlet_contained_helpers import (
+    CALL,
+    ORIGINAL,
+    SCENARIO,
+    _capture_log,
+    _contained,
+    _end,
+    _executable,
+    _pre,
+    _request,
+    fixture,
+)
 
-SCENARIO = {scenario.id: scenario for scenario in load_catalog()}["omp-native-shell-build-and-test"]
-REASON = "native_python_eval_readonly_containment_required"
-PROFILE = "python-eval-readonly-v1"
-ORIGINAL = {"command": "python3 test_calc.py"}
-CALL = "call-2"
-
-
-def _executable(path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("#!/bin/sh\n")
-    path.chmod(0o755)
-    return path
-
-
-def _request(workspace: Path, call_id: str = CALL, tool_input: object = ORIGINAL, **overrides) -> bytes:
-    payload = {"hook_event_name": "PreToolUse", "tool_call_id": call_id, "tool_name": "bash", "tool_input": tool_input}
-    request = {"schema": "guard-contained-test-request.v1", "workspace": str(workspace), "payload": payload}
-    request.update(overrides)
-    return json.dumps(request).encode()
-
-
-def _capture_log(path: Path, *captures: tuple[str, bytes]) -> Path:
-    rows = [{"type": "tool_execution_start", "toolCallId": CALL}]
-    rows += [
-        {"type": "contained_request_capture", "toolCallId": call_id, "request": base64.b64encode(raw).decode()}
-        for call_id, raw in captures
-    ]
-    path.write_text("\n".join(json.dumps(row) for row in rows))
-    return path
-
-
-WINDOWS_SINK = [
-    "C:\\candidate\\.venv\\Scripts\\python.exe",
-    "-I",
-    "-c",
-    "import sys;sys.path.insert(0, 'C:/candidate/.venv/Lib/site-packages');"
-    "from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))",
-    "guard",
-]
-
-
-def _wrapper(
-    request_sha256: str,
-    *,
-    guard_home: str = "{{fixture}}/guard-home",
-    home: str | None = "{{home}}",
-    windows: bool = False,
-) -> str:
-    argv = [
-        *(WINDOWS_SINK if windows else ["/candidate/.venv/bin/hol-guard"]),
-        "execute-contained-test",
-        "--guard-home",
-        guard_home,
-        "--workspace",
-        "{{workspace}}",
-        "--request-file",
-        (
-            "C:\\Users\\agent\\AppData\\Local\\Temp\\hol-guard-contained-test-abc123\\request.json"
-            if windows
-            else "/tmp/hol-guard-contained-test-abc123/request.json"
-        ),
-        "--request-sha256",
-        request_sha256,
-        *(["--home", home] if home is not None else []),
-    ]
-    # Redaction folds a quoted Windows fixture path into a bare placeholder.
-    bare = {"{{workspace}}", "{{home}}"} if windows else set()
-    return " ".join(value if value in bare else "'" + value.replace("'", "'\\''") + "'" for value in argv)
-
-
-@pytest.fixture
-def fixture(tmp_path):
-    return create_fixture(tmp_path / "fixture")
-
-
-def _contained(fixture, tmp_path, **wrapper_options):
-    """A fully bound contained run of the scenario's third command."""
-    raw = _request(fixture.workspace)
-    proofs = request_proofs(
-        _capture_log(tmp_path / "host.jsonl", (CALL, raw)), fixture.workspace, _fixture_replacements(fixture)
-    )
-    wrapper = _wrapper(hashlib.sha256(raw).hexdigest(), **wrapper_options)
-    case = _case(SCENARIO, filesystem_checks(fixture, SCENARIO.oracle, SCENARIO.id))
-    case["contained_request_proofs"] = proofs
-    for event in case["events"]:
-        if event["type"] == "model_turn" and event["calls"][0]["id"] == CALL:
-            event["calls"][0]["arguments"] = {"command": wrapper}
-        elif event.get("toolCallId") == CALL and event["type"] == "tool_execution_start":
-            event["args"] = {"command": wrapper}
-        elif event.get("toolCallId") == CALL and event["type"] == "tool_execution_end":
-            presentation = {
-                "schema": "guard-contained-test-presentation.v1",
-                "toolCallId": CALL,
-                "input": dict(ORIGINAL),
-                "command": wrapper,
-            }
-            event["result"] = {"content": [], "details": {"exitCode": 0, "holGuardContainedTest": presentation}}
-    for row in case["guard_observations"]:
-        if row["tool_call_id"] != CALL:
-            continue
-        if row["event"] == "PreToolUse":
-            row.update(
-                decision="deny",
-                reason_code=REASON,
-                policy_action="sandbox-required",
-                probe_request_id="request-7",
-                native_observation={
-                    "schema": "guard-native-observation.v1",
-                    "required_execution_profile": PROFILE,
-                    "native_receipt": {
-                        "authority": "rust",
-                        "harness": "omp",
-                        "event_name": "PreToolUse",
-                        "decision": "deny",
-                        "policy_action": "sandbox-required",
-                        "reason_code": REASON,
-                        "request_id": "request-7",
-                        "decision_id": "decision-7",
-                        "command_extensions": {
-                            key: "d" * 64 for key in ("program_digest", "catalog_digest", "trust_digest")
-                        },
-                    },
-                },
-            )
-        else:
-            row.update(input={"command": wrapper}, input_sha256=input_digest({"command": wrapper}))
-    return case
-
-
-def _pre(case):
-    return next(r for r in case["guard_observations"] if r["tool_call_id"] == CALL and r["event"] == "PreToolUse")
-
-
-def _end(case):
-    return next(e for e in case["events"] if e.get("toolCallId") == CALL and e["type"] == "tool_execution_end")
+__all__ = ["fixture"]
 
 
 @pytest.fixture
@@ -193,6 +68,23 @@ def test_shim_links_first_trusted_python3_outside_virtualenvs(tmp_path, trusted)
     assert all(os.readlink(Path(shim) / name) == str(system) for name in ("python", "python3"))
 
 
+def test_shim_uses_the_installations_own_unversioned_python(tmp_path, trusted):
+    """Homebrew ships ``python`` in ``libexec/bin``; no link directory under the work root is needed."""
+    if os.name != "posix":
+        pytest.skip("the shim is POSIX-only")
+    prefix = tmp_path.resolve() / "system/Cellar/python/3.14"
+    framework = _executable(prefix / "Frameworks/Python.framework/Versions/3.14/bin/python3.14")
+    real = prefix / "bin/python3"
+    real.parent.mkdir(parents=True)
+    real.symlink_to(framework)
+    _executable(prefix / "libexec/bin/python")
+    (tmp_path / "system/bin").mkdir(parents=True)
+    (tmp_path / "system/bin/python3").symlink_to(real)
+    shim = python_shim(tmp_path / "shim", str(tmp_path / "system/bin"))
+    assert shim == os.pathsep.join([str(prefix / "libexec/bin"), str(prefix / "bin")])
+    assert not (tmp_path / "shim").exists()
+
+
 def test_shim_is_skipped_without_a_trusted_outside_python3(tmp_path, trusted):
     venv = tmp_path / "system/tool-venv"
     (venv / "pyvenv.cfg").parent.mkdir(parents=True)
@@ -221,6 +113,32 @@ def test_agent_path_keeps_candidate_hol_guard_after_the_shim(tmp_path, monkeypat
         str(tmp_path / "system/bin"),
     ]
     assert sorted(os.listdir(entries[0])) == ["python", "python3"]
+
+
+def test_agent_path_drops_the_host_guard_package_shims(tmp_path, monkeypatch, trusted):
+    """A host Guard's Bun shim must not stand in front of the SDK's `#!/usr/bin/env bun` launcher."""
+    if os.name != "posix":
+        pytest.skip("the shim is POSIX-only")
+    _executable(tmp_path / "host/.hol-guard/package-shims/bin/bun")
+    _executable(tmp_path / "system/bin/bun")
+    monkeypatch.setenv(
+        "PATH", os.pathsep.join([str(tmp_path / "host/.hol-guard/package-shims/bin"), str(tmp_path / "system/bin")])
+    )
+    # The candidate interpreter's directory leads PATH; keep a host Bun out of it.
+    _executable(tmp_path / "candidate/bin/python3")
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "candidate/bin/python3"))
+    environment = clean_environment(tmp_path / "home", tmp_path / "agent/pi", "canary")
+    entries = environment["PATH"].split(os.pathsep)
+    assert str(tmp_path / "host/.hol-guard/package-shims/bin") not in entries
+    assert shutil.which("bun", path=environment["PATH"]) == str(tmp_path / "system/bin/bun")
+
+
+def test_shim_filter_ignores_case_and_leaves_no_empty_path_entry(monkeypatch):
+    monkeypatch.setattr(host_shims.os.path, "normcase", str.lower)
+    assert host_shims.without_package_shims(os.pathsep.join(["/h/PACKAGE-SHIMS/BIN", "/usr/bin"])) == "/usr/bin"
+    assert host_shims.without_package_shims("/h/.hol-guard/package-shims/bin") == ""
+    assert host_shims.prepend_path("/candidate", "") == "/candidate"
+    assert host_shims.prepend_path("/candidate", "/usr/bin") == "/candidate" + os.pathsep + "/usr/bin"
 
 
 def test_request_proofs_bind_only_this_workspace_call_and_schema(fixture, tmp_path):
@@ -257,6 +175,36 @@ def test_windows_sink_run_passes_and_stays_bound_to_this_installation(fixture, t
     assert assessment["interruptions"]["events"] == []
     posix_home = _contained(fixture, tmp_path, windows=True)
     assert assess_case(SCENARIO, posix_home)["reason"] == "contained wrapper guard-home binding is malformed"
+
+
+def test_windows_sink_under_the_redacted_operator_home_passes(fixture, tmp_path):
+    """Guard's Python and the request file live under the home that evidence redaction hides."""
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home", operator_home=True)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "pass", assessment["reason"]
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("'{{operator_home}}\\hgw-gauntlet", "'{{fixture}}\\hgw-gauntlet"),
+        ("'{{operator_home}}\\hgw-gauntlet", "'{{OPERATOR_HOME}}\\hgw-gauntlet"),
+        ("'{{operator_home}}/hgw-gauntlet", "'{{fixture}}/hgw-gauntlet"),
+        ("'{{operator_home}}\\AppData", "'{{workspace}}\\AppData"),
+        ("'{{operator_home}}\\AppData", "'AppData"),
+    ],
+)
+def test_windows_sink_root_must_be_a_drive_or_the_operator_home(fixture, tmp_path, old, new):
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home", operator_home=True)
+    for event in case["events"]:
+        for call in event.get("calls", []):
+            if call["id"] == CALL:
+                call["arguments"]["command"] = call["arguments"]["command"].replace(old, new)
+        if event.get("toolCallId") == CALL and "args" in event:
+            event["args"]["command"] = event["args"]["command"].replace(old, new)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"].startswith("contained wrapper")
 
 
 @pytest.mark.parametrize(
@@ -300,7 +248,8 @@ def test_workspace_sandbox_rewrite_is_judged_like_other_containment(fixture, tmp
     pre["reason_code"] = workspace_reason
     pre["native_observation"]["required_execution_profile"] = "workspace-contained-v1"
     pre["native_observation"]["native_receipt"]["reason_code"] = workspace_reason
-    assessment = assess_case(SCENARIO, case)
+    # The case drove the workspace route here, so it is the workspace route it declares.
+    assessment = assess_case(replace(SCENARIO, decision_paths=(workspace_reason,)), case)
     assert assessment["outcome"] == "pass", assessment["reason"]
 
 
@@ -480,3 +429,39 @@ def test_unbound_containment_deny_still_interrupts(fixture, tmp_path):
 def test_a_silent_curl_network_exit_counts_as_a_sandbox_refusal(command, exit_code, refused):
     call = {"result": {"content": [{"type": "text", "text": "000"}]}}
     assert _sandbox_refused(call, {"exitCode": exit_code}, {"command": command}) is refused
+
+
+@pytest.mark.parametrize(("exit_code", "excused"), [(1, True), (2, True), (126, False), (127, False)])
+def test_a_declared_benign_exit_survives_the_contained_rerun(fixture, tmp_path, exit_code, excused):
+    """A command the catalog declares as answering by failing keeps that answer under containment."""
+    case = _contained(fixture, tmp_path)
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = exit_code
+    calls, _ = reconcile(case["events"])
+    _, found = contained_calls("allow", case, calls, benign_exit=frozenset({ORIGINAL["command"]}))
+    if excused:
+        assert found is None
+    else:
+        assert found == ("false-positive", f"Guard's contained run of ordinary work failed (exit {exit_code})")
+
+
+def test_an_undeclared_command_still_fails_on_its_own_exit(fixture, tmp_path):
+    """The declaration names one command; another command's failure is still Guard interrupting work."""
+    case = _contained(fixture, tmp_path)
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = 1
+    calls, _ = reconcile(case["events"])
+    _, found = contained_calls("allow", case, calls, benign_exit=frozenset({"pytest -q"}))
+    assert found == ("false-positive", "Guard's contained run of ordinary work failed (exit 1)")
+
+
+def test_the_catalog_declaration_reaches_the_contained_judge(fixture, tmp_path):
+    """``assess_case`` carries ``benign_exit_commands`` through, so the lane and the host agree."""
+    case = _contained(fixture, tmp_path)
+    end = _end(case)
+    end["isError"] = True
+    end["result"]["details"]["exitCode"] = 1
+    scenario = replace(SCENARIO, benign_exit_commands=(ORIGINAL["command"],))
+    assert assess_case(scenario, case)["reason"] != "Guard's contained run of ordinary work failed (exit 1)"

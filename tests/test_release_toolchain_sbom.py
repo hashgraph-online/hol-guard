@@ -91,8 +91,14 @@ def test_publish_workflow_limits_ambient_credentials_and_has_no_version_sync() -
 
     assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
     # The build job reads commit statuses to tell a repair dispatch whether the
-    # release was already recorded as published; it gets no write scopes.
-    assert jobs["build"]["permissions"] == {"contents": "read", "pull-requests": "read", "statuses": "read"}
+    # release was already recorded as published, and check runs to read the
+    # Cargo audit back for the commit it resolves; it gets no write scopes.
+    assert jobs["build"]["permissions"] == {
+        "checks": "read",
+        "contents": "read",
+        "pull-requests": "read",
+        "statuses": "read",
+    }
     assert "sync-repository-version" not in jobs
     assert "ACTION_REPO_TOKEN" not in (ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
 

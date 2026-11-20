@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_worker as worker_module
+from codex_plugin_scanner.guard.hook_review import hook_worker as worker_module
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.store import GuardStore
 

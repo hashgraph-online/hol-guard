@@ -1,22 +1,27 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { HiMiniEye, HiMiniShieldCheck } from "react-icons/hi2";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { SectionLabel } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
-import { fetchSettings, updateSettings, type GuardSettingsUpdate } from "./guard-api";
+import { fetchSettings, guardAwareHref, updateSettings } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardProtectionCapability, GuardSettings } from "./guard-types";
 import {
   globalPosture,
-  harnessPostureOptions,
-  harnessPosturePatch,
   harnessPostureRows,
-  harnessRowStatus,
   harnessRowTone,
-  selectHarnessPosture,
   type HarnessPostureChoice,
   type HarnessPostureRow,
 } from "./harness-posture-ui";
-import { HarnessPostureChoiceLabel } from "./harness-posture-card";
+import {
+  appModes,
+  appModesStatusMessage,
+  appModesUpdate,
+  cigarUnavailableReason,
+  cigarReady,
+  cigarSupported,
+  guardOffPrompt,
+  needsConfirm,
+  type AppModes,
+} from "./fleet-app-modes";
+import { FleetAppModeSwitch } from "./fleet-app-mode-switch";
 import { SettingsSaveProofModal, type SettingsSaveProofCredentials } from "./settings-save-proof-modal";
 import { PROTECTION_POSTURE_COPY, type ProtectionPosture } from "./protection-posture-copy";
 
@@ -28,11 +33,12 @@ type FleetPostureState =
   | { kind: "error"; message: string }
   | { kind: "ready"; settings: GuardSettings; capabilities: GuardProtectionCapability[] };
 
-type ProofRequest = {
+type ModeChange = {
   harness: string;
-  displayName: string;
-  choice: HarnessPostureChoice;
+  next: AppModes;
 };
+
+type ProofRequest = ModeChange & { displayName: string };
 
 export type GateProofUpdate = GuardApprovalGatePublicConfig & { current_password?: string; totp_code?: string };
 
@@ -90,10 +96,6 @@ export function fleetManagedRows(rows: HarnessPostureRow[], apps: FleetPostureAp
   return [...watching, ...rest];
 }
 
-export function fleetInactiveAppCount(apps: FleetPostureApp[]): number {
-  return apps.filter((app) => !app.active).length;
-}
-
 /** Plain-language confirmation for a saved posture change. */
 export function fleetPostureStatusMessage(choice: HarnessPostureChoice, displayName: string): string {
   return choice === "watch" ? `Guard is only recording in ${displayName}.` : `Protection restored in ${displayName}.`;
@@ -120,22 +122,39 @@ export function gateProofUpdate(
   };
 }
 
-type FleetAppProtectionProps = {
+type FleetAppPostureOptions = {
   apps: FleetPostureApp[];
   /** Called after a saved posture change so the parent can refresh the runtime snapshot. */
   onChanged?: () => Promise<void> | void;
 };
 
+export type FleetAppPosture = {
+  kind: FleetPostureState["kind"];
+  /** Posture row for an app Guard manages, or undefined when its hooks are not Guard's. */
+  rowFor: (harness: string) => HarnessPostureRow | undefined;
+  /** The per-app Guard and CIGAR switches for one managed app, or null when it has none. */
+  control: (harness: string) => ReactNode;
+  /** Inline confirmation for turning Guard off, under the app it affects, or null. */
+  watchConfirm: (harness: string) => ReactNode;
+  /** Machine posture and Watch count for the section header, or null before settings load. */
+  summary: ReactNode;
+  /** Settings as last loaded or saved, for row notes; null before they load. */
+  settings: GuardSettings | null;
+  /** Save errors, the organization lock note, the live region and the proof modal. */
+  footer: ReactNode;
+};
+
 /**
- * Compact per-app protection control for the Protect screen. Only apps whose
- * hooks Guard actually manages appear, so the card never claims Protected for
- * an app that is not intercepted. Choices save right away; Watch confirms
- * inline first and the approval gate uses the existing proof modal.
+ * Per-app Guard and CIGAR for the Protect screen's App coverage list. Only
+ * apps whose hooks Guard actually manages get switches, so the list never
+ * claims Protected for an app that is not intercepted. Changes save right
+ * away; turning Guard off confirms inline first and the approval gate uses
+ * the existing proof modal.
  */
-export function FleetAppProtection(props: FleetAppProtectionProps) {
+export function useFleetAppPosture(props: FleetAppPostureOptions): FleetAppPosture {
   const { onChanged } = props;
   const [state, setState] = useState<FleetPostureState>({ kind: "loading" });
-  const [pendingWatch, setPendingWatch] = useState<string | null>(null);
+  const [pendingWatch, setPendingWatch] = useState<ModeChange | null>(null);
   const [savingHarness, setSavingHarness] = useState<string | null>(null);
   const [proofRequest, setProofRequest] = useState<ProofRequest | null>(null);
   const [proofPending, setProofPending] = useState(false);
@@ -174,16 +193,14 @@ export function FleetAppProtection(props: FleetAppProtectionProps) {
     );
   }, [state, props.apps]);
 
-  const commit = useCallback(async (harness: string, choice: HarnessPostureChoice, proof?: SettingsSaveProofCredentials): Promise<string | null> => {
+  const commit = useCallback(async (harness: string, next: AppModes, proof?: SettingsSaveProofCredentials): Promise<string | null> => {
     if (state.kind !== "ready") return "App protection is still loading.";
     const saved = state.settings;
-    const next = selectHarnessPosture(saved, harness, choice);
-    const patch = harnessPosturePatch(next, saved);
-    if (patch === null) {
+    const update = appModesUpdate(saved, harness, next);
+    if (update === null) {
       setPendingWatch(null);
       return null;
     }
-    const update: GuardSettingsUpdate = { harness_postures: patch };
     if (gateEnabled) {
       update.approval_gate = gateProofUpdate(saved.approval_gate, proof);
     }
@@ -195,55 +212,54 @@ export function FleetAppProtection(props: FleetAppProtectionProps) {
         ? { ...current, settings: payload.settings }
         : current);
       const name = rows.find((row) => row.harness === harness)?.displayName ?? harness;
-      setStatusMessage(fleetPostureStatusMessage(choice, name));
+      setStatusMessage(appModesStatusMessage(next, name));
       setPendingWatch(null);
       onChanged?.();
       return null;
     } catch (cause: unknown) {
-      return cause instanceof Error ? cause.message : "Unable to change protection for this app.";
+      return cause instanceof Error ? cause.message : "Unable to change Guard or CIGAR for this app.";
     } finally {
       setSavingHarness(null);
     }
   }, [state, gateEnabled, rows, onChanged]);
 
-  const handleChoice = useCallback((harness: string, choice: HarnessPostureChoice) => {
-    if (state.kind !== "ready" || state.settings.harness_postures_locked === true) return;
-    setError(null);
-    setStatusMessage(null);
-    if (choice === "watch") {
-      setPendingWatch(harness);
-      return;
-    }
-    setPendingWatch(null);
+  const save = useCallback((change: ModeChange) => {
     if (gateEnabled) {
-      const displayName = rows.find((row) => row.harness === harness)?.displayName ?? harness;
+      const displayName = rows.find((row) => row.harness === change.harness)?.displayName ?? change.harness;
       setProofError(null);
-      setProofRequest({ harness, displayName, choice });
+      setProofRequest({ ...change, displayName });
       return;
     }
-    void commit(harness, choice).then((failure) => {
-      if (failure !== null) setError(failure);
-    });
-  }, [state, gateEnabled, rows, commit]);
-
-  const handleConfirmWatch = useCallback((harness: string) => {
-    setPendingWatch(null);
-    if (gateEnabled) {
-      const displayName = rows.find((row) => row.harness === harness)?.displayName ?? harness;
-      setProofError(null);
-      setProofRequest({ harness, displayName, choice: "watch" });
-      return;
-    }
-    void commit(harness, "watch").then((failure) => {
+    void commit(change.harness, change.next).then((failure) => {
       if (failure !== null) setError(failure);
     });
   }, [gateEnabled, rows, commit]);
+
+  const handleToggle = useCallback((harness: string, part: keyof AppModes) => {
+    if (state.kind !== "ready") return;
+    const current = appModes(state.settings, harness);
+    const next = { ...current, [part]: !current[part] };
+    if (part === "guard" && state.settings.harness_postures_locked === true) return;
+    setError(null);
+    setStatusMessage(null);
+    if (needsConfirm(current, next, state.settings.harness_postures_locked === true)) {
+      setPendingWatch({ harness, next });
+      return;
+    }
+    setPendingWatch(null);
+    save({ harness, next });
+  }, [state, save]);
+
+  const handleConfirmWatch = useCallback((change: ModeChange) => {
+    setPendingWatch(null);
+    save(change);
+  }, [save]);
 
   const handleProofConfirm = useCallback(async (proof: SettingsSaveProofCredentials) => {
     if (proofRequest === null) return;
     setProofPending(true);
     setProofError(null);
-    const failure = await commit(proofRequest.harness, proofRequest.choice, proof);
+    const failure = await commit(proofRequest.harness, proofRequest.next, proof);
     setProofPending(false);
     if (failure === null) {
       setProofRequest(null);
@@ -254,146 +270,137 @@ export function FleetAppProtection(props: FleetAppProtectionProps) {
 
   const handleCancelWatch = useCallback(() => setPendingWatch(null), []);
 
-  if (state.kind === "loading") {
-    return <div className="guard-skeleton h-14 w-full" aria-hidden="true" />;
-  }
-  if (state.kind === "error") {
-    return (
-      <p className="rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-xs text-slate-500">
-        App protection settings are unavailable right now.
-      </p>
-    );
-  }
-  // Nothing is intercepted yet: the coverage list and setup guide own that
-  // story, and a posture switch here would protect nothing.
-  if (rows.length === 0) return null;
+  const rowFor = useCallback((harness: string) => rows.find((row) => row.harness === harness), [rows]);
 
-  const locked = state.settings.harness_postures_locked === true;
+  if (state.kind !== "ready") {
+    return {
+      kind: state.kind,
+      rowFor,
+      control: () => null,
+      watchConfirm: () => null,
+      summary: null,
+      settings: null,
+      footer: state.kind === "error" ? (
+        <p className="mt-3 text-xs text-slate-500">Per-app protection settings are unavailable right now.</p>
+      ) : null,
+    };
+  }
+
+  const settings = state.settings;
+  const locked = settings.harness_postures_locked === true;
   const watchingCount = rows.filter((row) => harnessRowTone(row) === "watch").length;
-  const inactiveCount = fleetInactiveAppCount(props.apps);
-  const pendingRow = pendingWatch !== null
-    ? rows.find((row) => row.harness === pendingWatch)
-    : undefined;
 
-  return (
-    <section
-      className="overflow-hidden rounded-2xl border border-slate-100 bg-white"
-      data-testid="fleet-app-protection"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 pb-2 pt-3">
-        <SectionLabel>Protection by app</SectionLabel>
-        <p className="text-xs text-slate-500">
-          Machine:{" "}
-          <span className="font-semibold text-brand-dark">{fleetMachinePostureLabel(state.settings)}</span>
-          {watchingCount > 0 ? (
-            <span className="font-semibold text-brand-attention"> · {watchingCount} in Watch</span>
-          ) : null}
-        </p>
+  const control = (harness: string): ReactNode => {
+    const row = rowFor(harness);
+    if (!row) return null;
+    const saving = savingHarness === harness;
+    const modes = appModes(settings, harness);
+    const cigarReason = cigarUnavailableReason(settings, harness, row.displayName);
+    return (
+      <div
+        role="group"
+        aria-label={`Guard and CIGAR in ${row.displayName}`}
+        className="flex shrink-0 items-center gap-3"
+        data-testid="fleet-app-modes"
+      >
+        <FleetAppModeSwitch
+          label="Guard"
+          accessibleName={`Guard in ${row.displayName}`}
+          checked={modes.guard}
+          disabled={saving || locked}
+          unavailableReason={locked ? "Your organization manages protection for this app." : undefined}
+          attentionWhenOff
+          onToggle={() => handleToggle(harness, "guard")}
+          testId={`fleet-app-guard-${harness}`}
+        />
+        <FleetAppModeSwitch
+          label="CIGAR"
+          accessibleName={`CIGAR in ${row.displayName}`}
+          checked={modes.cigar}
+          disabled={saving || cigarReason !== undefined}
+          unavailableReason={cigarReason}
+          onToggle={() => handleToggle(harness, "cigar")}
+          testId={`fleet-app-cigar-${harness}`}
+        />
+        {saving ? <span className="text-xs font-medium text-slate-500">Saving…</span> : null}
       </div>
+    );
+  };
 
+  const watchConfirm = (harness: string): ReactNode => {
+    if (pendingWatch?.harness !== harness) return null;
+    const row = rowFor(harness);
+    if (!row) return null;
+    const change = pendingWatch;
+    const guardWasOn = appModes(settings, harness).guard;
+    const confirmLabel = guardWasOn ? "Turn Guard off" : "Turn CIGAR on";
+    return (
+      <div
+        className="mt-2 flex flex-col gap-2 rounded-xl bg-brand-attention/[0.06] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+        role="alertdialog"
+        aria-label={guardWasOn ? `Turn Guard off in ${row.displayName}` : `Turn CIGAR on in ${row.displayName}`}
+      >
+        <p className="text-sm text-brand-dark">
+          {guardOffPrompt(settings, harness, change.next, row.displayName)}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleConfirmWatch(change)}
+            className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white"
+          >
+            {confirmLabel}
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelWatch}
+            className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark"
+          >
+            {guardWasOn ? "Keep Guard on" : "Cancel"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const summary = rows.length === 0 ? null : (
+    <p className="text-xs text-slate-500" data-testid="fleet-machine-posture">
+      Machine:{" "}
+      <span className="font-semibold text-brand-dark">{fleetMachinePostureLabel(settings)}</span>
+      {watchingCount > 0 ? (
+        <span className="font-semibold text-brand-attention"> · Guard off in {watchingCount}</span>
+      ) : null}
+    </p>
+  );
+
+  const footer = (
+    <>
       {error !== null ? (
-        <p role="alert" className="border-t border-brand-attention/20 bg-brand-attention/[0.05] px-4 py-2 text-xs text-brand-dark">
+        <p role="alert" className="mt-3 rounded-lg bg-brand-attention/[0.05] px-3 py-2 text-xs text-brand-dark">
           {error}
         </p>
       ) : null}
-
-      <ul className="divide-y divide-slate-100 border-t border-slate-100">
-        {rows.map((row) => {
-          const tone = harnessRowTone(row);
-          const saving = savingHarness === row.harness;
-          const options = harnessPostureOptions(state.settings, row.harness);
-          return (
-            <Fragment key={row.harness}>
-              <li
-                className={`flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between ${
-                  tone === "watch" ? "bg-brand-attention/[0.05]" : ""
-                }`}
-                data-harness={row.harness}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  {tone === "watch"
-                    ? <HiMiniEye className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
-                    : <HiMiniShieldCheck className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />}
-                  <span className="truncate text-sm font-semibold text-brand-dark">{row.displayName}</span>
-                  <span className="hidden truncate text-xs text-slate-400 lg:inline">{harnessRowStatus(row)}</span>
-                  {saving ? <span className="text-xs text-slate-400">Saving…</span> : null}
-                </div>
-                <fieldset className="border-0 p-0">
-                  <legend className="sr-only">{`Protection for ${row.displayName}`}</legend>
-                  <div className="inline-flex gap-1 rounded-xl bg-slate-100 p-1">
-                    {options.map((option) => (
-                      <HarnessPostureChoiceLabel
-                        key={option.choice}
-                        groupName={`fleet-posture-${row.harness}`}
-                        choice={option.choice}
-                        label={option.label}
-                        selected={row.selected === option.choice}
-                        disabled={locked || saving}
-                        harness={row.harness}
-                        onChoose={handleChoice}
-                        compact
-                      />
-                    ))}
-                  </div>
-                </fieldset>
-              </li>
-              {pendingRow?.harness === row.harness ? (
-                <li
-                  className="bg-brand-attention/[0.06]"
-                  role="alertdialog"
-                  aria-label={`Switch ${pendingRow.displayName} to Watch`}
-                >
-                  <div className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-brand-dark">
-                      Guard will only record in {pendingRow.displayName} until you switch it back.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleConfirmWatch(pendingRow.harness)}
-                        className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white"
-                      >
-                        Switch to Watch
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelWatch}
-                        className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark"
-                      >
-                        Keep protection on
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </ul>
-
-      {inactiveCount > 0 ? (
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
-          {inactiveCount === 1
-            ? "1 more app isn't connected yet — see App coverage below."
-            : `${inactiveCount} more apps aren't connected yet — see App coverage below.`}
+      {!cigarReady(settings) && rows.some((row) => cigarSupported(row.harness)) ? (
+        <p className="mt-3 text-xs text-slate-500" data-testid="fleet-cigar-setup">
+          CIGAR is off on this machine, so it can't add project context or save tokens in any app yet.{" "}
+          <a className="font-medium text-brand-blue underline underline-offset-2" href={guardAwareHref("/cigar")}>
+            Set up CIGAR
+          </a>
         </p>
       ) : null}
-
-      {locked ? (
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
-          Your organization manages protection for each app, so these choices can't be changed here.
+      {locked && rows.length > 0 ? (
+        <p className="mt-3 text-xs text-slate-400">
+          Your organization manages Guard for each app, so Guard can't be turned on or off here. CIGAR can still be changed.
         </p>
       ) : null}
-
       <div aria-live="polite" aria-atomic="true" className="sr-only">{statusMessage ?? ""}</div>
-
       {proofRequest !== null ? (
         <SettingsSaveProofModal
           open
           mode="verify-save"
           gate={gate}
-          title="Confirm before changing protection"
-          detail={`Enter your approval proof to switch ${proofRequest.displayName}.`}
+          title="Confirm before changing Guard or CIGAR"
+          detail={`Enter your approval proof to change ${proofRequest.displayName}.`}
           confirmLabel="Save change"
           error={proofError}
           pending={proofPending}
@@ -405,6 +412,8 @@ export function FleetAppProtection(props: FleetAppProtectionProps) {
           onConfirm={handleProofConfirm}
         />
       ) : null}
-    </section>
+    </>
   );
+
+  return { kind: "ready", rowFor, control, watchConfirm, summary, settings, footer };
 }

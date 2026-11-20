@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.gigamail",
+  "version": "1.0.0",
+  "name": "GigaMail",
+  "description": "Local stdio server that connects an agent to the user's own mailbox, calendar and files (Microsoft 365 through Graph, or any IMAP server). Guard matches only the executable basename gigamail-server. Its 10 outbound or destructive tools (send, reply, move, delete, calendar, Zoom, Drive) already wait for the user's approval out of band in GigaMail itself; Guard defaults every write to review, subject to the user's grants and policy. Reads stay on Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.adecubed",
+    "displayName": "Adecubed",
+    "url": "https://github.com/adecubed"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#E0409A"
+  },
+  "homepage": "https://gigamail.ai",
+  "license": "AGPL-3.0-or-later",
+  "launch": {
+    "kind": "direct-command",
+    "command": "gigamail-server"
+  },
+  "riskClasses": [
+    "external-content-ingestion",
+    "account-mailbox-write",
+    "external-message-egress",
+    "external-content-deletion",
+    "external-shared-state-write",
+    "external-filesystem-write"
+  ],
+  "tools": [
+    {
+      "name": "list_accounts",
+      "state": "inherit"
+    },
+    {
+      "name": "get_identity",
+      "state": "inherit"
+    },
+    {
+      "name": "list_knowledge_files",
+      "state": "inherit"
+    },
+    {
+      "name": "read_knowledge_file",
+      "state": "inherit"
+    },
+    {
+      "name": "search_knowledge",
+      "state": "inherit"
+    },
+    {
+      "name": "list_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "list_unread",
+      "state": "inherit"
+    },
+    {
+      "name": "read_message",
+      "state": "inherit"
+    },
+    {
+      "name": "read_attachment",
+      "state": "inherit"
+    },
+    {
+      "name": "list_folders",
+      "state": "inherit"
+    },
+    {
+      "name": "search_mail",
+      "state": "inherit"
+    },
+    {
+      "name": "sender_history",
+      "state": "inherit"
+    },
+    {
+      "name": "observer_context",
+      "state": "inherit"
+    },
+    {
+      "name": "memory_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "list_events",
+      "state": "inherit"
+    },
+    {
+      "name": "find_free_slots",
+      "state": "inherit"
+    },
+    {
+      "name": "drive_list_files",
+      "state": "inherit"
+    },
+    {
+      "name": "drive_read_file",
+      "state": "inherit"
+    },
+    {
+      "name": "mark_read",
+      "state": "review"
+    },
+    {
+      "name": "create_folder",
+      "state": "review"
+    },
+    {
+      "name": "save_draft",
+      "state": "review"
+    },
+    {
+      "name": "move_message",
+      "state": "review"
+    },
+    {
+      "name": "send_mail",
+      "state": "review"
+    },
+    {
+      "name": "reply_mail",
+      "state": "review"
+    },
+    {
+      "name": "delete_message",
+      "state": "review"
+    },
+    {
+      "name": "delete_folder",
+      "state": "review"
+    },
+    {
+      "name": "create_event",
+      "state": "review"
+    },
+    {
+      "name": "delete_event",
+      "state": "review"
+    },
+    {
+      "name": "create_zoom_meeting",
+      "state": "review"
+    },
+    {
+      "name": "drive_upload_file",
+      "state": "review"
+    },
+    {
+      "name": "drive_delete_file",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/adecubed/gigamail",
+    "https://github.com/adecubed/gigamail/blob/main/SECURITY.md",
+    "https://github.com/adecubed/gigamail/blob/main/MAPPA_MCP.md",
+    "https://gigamail.ai/mcp-map.html"
+  ],
+  "saferAlternatives": [
+    "Use list_messages, search_mail, read_message, list_events and find_free_slots to read without changing the mailbox.",
+    "A send, reply, move or delete first returns an inert request_id; it runs only after the user approves it out of band (Windows Hello, Touch ID or a local PIN).",
+    "Mail reaches the agent as visible text only; hidden text is withheld and flagged. Still treat inbound mail as untrusted.",
+    "Accounts and reply rules are set up from the GigaMail CLI or console only; no MCP tool changes them."
+  ]
+}

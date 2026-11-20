@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.roslyngate",
+  "version": "1.0.0",
+  "name": "RoslynGate",
+  "description": "Answers .NET symbol questions with Roslyn instead of text search: definitions, semantic references, type hierarchies, name search, and reload_workspace. Returns compact, deterministic JSON. Built for medium and large solutions; on a couple of projects the MCP overhead can cost more than it saves. Opening a solution runs MSBuild evaluation, which can execute logic defined by the repository. It does not edit files or run tests. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.sammybytes",
+    "displayName": "SammyBytes",
+    "url": "https://github.com/SammyBytes"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0B0F14" },
+  "homepage": "https://github.com/SammyBytes/RoslynGate",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "roslyngate"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-filesystem-read",
+    "package-or-source-installation"
+  ],
+  "tools": [
+    { "name": "get_symbol_definition", "state": "inherit" },
+    { "name": "find_symbol_references", "state": "inherit" },
+    { "name": "get_type_hierarchy", "state": "inherit" },
+    { "name": "search_symbols", "state": "inherit" },
+    { "name": "reload_workspace", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/SammyBytes/RoslynGate",
+    "https://www.npmjs.com/package/roslyngate",
+    "https://github.com/SammyBytes/RoslynGate/blob/main/docs/BENCHMARKS.md"
+  ],
+  "saferAlternatives": [
+    "All five tools are read-only and return JSON; the server does not edit files or run tests.",
+    "It evaluates the solution with MSBuild, which can execute tasks and targets defined by the repository. Only open solutions you trust; treat project files as code.",
+    "Guard matches this entry by package name, so the launch stays on roslyngate. To run a fixed release, configure the server as npx -y roslyngate@0.2.2; the selector changes the installed version, not the matched package.",
+    "The .cs watcher is on by default and applies edits incrementally; pass --no-watch to disable it.",
+    "If the workspace changed on disk, a call can return stale=true with empty results. Call reload_workspace and retry; that is not a missing symbol."
+  ]
+}

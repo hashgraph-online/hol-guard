@@ -68,8 +68,8 @@ def test_windows_ack_withdrawal_failure_closes_the_lease(tmp_path: Path, monkeyp
     publisher._publish_direct_lane_ack({"generation": 3, "policy_digest": DIGEST})
     assert publisher._direct_lane_lease_expires_at_ms > 0
 
-    def refuse(_path: Path) -> None:
-        raise NativePolicySnapshotError("native_policy_windows_temporary_cleanup_failed")
+    def refuse(_guard_home: Path, _path: Path) -> None:
+        raise NativePolicySnapshotError("native_resident_windows_access_denied")
 
     monkeypatch.setattr(direct_lane, "unlink_windows_ack", refuse)
     publisher._acked = False

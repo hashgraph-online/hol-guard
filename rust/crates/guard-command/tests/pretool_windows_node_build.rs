@@ -16,10 +16,7 @@ const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 /// A repository with a flat install of Vite, which is the install the direct
 /// build sink stages, and the declared home beside it.
 fn project() -> (PathBuf, PathBuf) {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!("guard-win-build-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -66,15 +63,7 @@ fn a_resolved_node_image_takes_the_same_route_as_the_bare_name() {
             harness,
             "node node_modules/vite/bin/vite.js build",
         );
-        // Only harnesses whose shell runs the POSIX-quoted sink take the
-        // build receipt on Windows; Codex has a PowerShell sink for the
-        // Python profile alone, so its build keeps the review prompt.
-        if harness == "codex" {
-            assert_eq!(bare.2, "native_command_review_required", "{harness}");
-            assert_ne!(bare.1, "sandbox-required", "{harness}");
-        } else {
-            assert_eq!(bare.2, NODE_BUILD, "{harness}");
-        }
+        assert_eq!(bare.2, NODE_BUILD, "{harness}");
         for spelling in [
             "node.exe node_modules/vite/bin/vite.js build",
             "node.EXE node_modules/vite/bin/vite.js build",

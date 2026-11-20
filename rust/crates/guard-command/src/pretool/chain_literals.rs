@@ -111,8 +111,10 @@ pub(super) fn rejudge(
     };
     // A value producer counts only when it would be allowed as a command of
     // its own, so lockdown, managed policy and extension controls on it hold.
+    // A bare `cat` is the exception (`inert::cat_unrefused`).
     let allowed = |body: &str| {
-        evaluate(&super::payload_with_command(payload, &command, body)).minimum_action == "allow"
+        let verdict = evaluate(&super::payload_with_command(payload, &command, body));
+        verdict.minimum_action == "allow" || (body == "cat" && inert::cat_unrefused(&verdict))
     };
     let opened = inert::project(&command, allowed);
     // A fresh `mktemp -d` directory expanded later in its `&&` chain is

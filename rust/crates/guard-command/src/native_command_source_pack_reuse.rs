@@ -150,6 +150,7 @@ impl<F: FnMut(&str) -> Result<Vec<u8>, &'static str>> PackReleaseReuse<F> {
             implementation_digest: env!("GUARD_COMMAND_SOURCE_IMPLEMENTATION").to_owned(),
             catalog_projection_kind: "complete".to_owned(),
             base_program_digest: None,
+            cloud_bindings: None,
         }))
     }
 }

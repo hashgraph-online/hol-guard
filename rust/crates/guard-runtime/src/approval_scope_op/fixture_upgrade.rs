@@ -14,9 +14,27 @@ const GUARD_CONTROL_ACTION_TYPES: [&str; 4] = [
 ];
 
 /// Apply only the specified changes to recorded contracts: unavailable
-/// delivery for unbound native reviews, and approvable Guard-control reviews.
-/// All other permission expectations remain the historical fixture oracle.
+/// delivery for unbound native reviews, approvable Guard-control reviews, and
+/// the exact action as the default allow scope. All other permission
+/// expectations remain the historical fixture oracle.
 pub(crate) fn upgrade_recorded_contract(item: &ApprovalScopeItemV1, want: &mut Value) {
+    upgrade_permission_scopes(item, want);
+    default_to_exact_action(want);
+}
+
+/// The recommended allow scope is the exact action whenever it is offered;
+/// broader scopes stay available but are never preselected. The recommendation
+/// is outside the contract digest, so no redigest is needed.
+fn default_to_exact_action(want: &mut Value) {
+    let offers_exact = want["allowed_scopes_by_action"]["allow"]
+        .as_array()
+        .is_some_and(|scopes| scopes.contains(&json!("artifact")));
+    if offers_exact {
+        want["recommended_scope_by_action"]["allow"] = json!("artifact");
+    }
+}
+
+fn upgrade_permission_scopes(item: &ApprovalScopeItemV1, want: &mut Value) {
     if upgrade_guard_control(item, want) {
         return;
     }

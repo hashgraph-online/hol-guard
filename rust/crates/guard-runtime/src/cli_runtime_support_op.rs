@@ -180,6 +180,13 @@ pub(crate) fn dispatch(args: &Value) -> Result<Value, &'static str> {
 
 pub(super) fn evaluate(operation: &str, params: &Value) -> Result<Value, &'static str> {
     let result = match operation {
+        "harness_protection_contract" => crate::harness_protection_contract::check_payload_at(
+            params.get("now").and_then(Value::as_str),
+        )?,
+        "harness_claim_promotion" => crate::harness_protection_contract::promotion_payload(params)?,
+        "native_readiness" => {
+            crate::native_readiness::readiness_payload(text(params, "reason_code")?)
+        }
         "resolve_tool" => crate::cli_copilot_resolution::resolve_tool(params)?,
         "server_identity" => crate::cli_copilot_resolution::server_identity(params)?,
         "workspace_root" => crate::cli_copilot_resolution::workspace_root(params)?,
@@ -188,6 +195,37 @@ pub(super) fn evaluate(operation: &str, params: &Value) -> Result<Value, &'stati
             .and_then(Value::as_str)
             .and_then(guard_command::normalized_remote_mcp_url)
             .map_or(Value::Null, Value::String),
+        "remote_endpoint_identity" => params
+            .get("value")
+            .and_then(Value::as_str)
+            .and_then(guard_command::normalized_remote_mcp_url)
+            .map(|url| match url.split_once('?') {
+                Some((endpoint, _)) => endpoint.to_owned(),
+                None => url,
+            })
+            .map_or(Value::Null, Value::String),
+        "remote_server_name" => params
+            .get("value")
+            .and_then(Value::as_str)
+            .and_then(guard_command::contributed_mcp_decision::normalized_remote_server_name)
+            .map_or(Value::Null, Value::String),
+        "direct_command_name" => params
+            .get("value")
+            .and_then(Value::as_str)
+            .and_then(guard_command::contributed_mcp_decision::direct_mcp_command_name)
+            .map_or(Value::Null, Value::String),
+        "fd_exec_request" => Value::Bool(
+            guard_command::false_positive_rules::fd_arg_requests_exec(text(params, "value")?),
+        ),
+        "skill_doc_path" => {
+            let home = params.get("home_dir").and_then(Value::as_str);
+            Value::Bool(
+                guard_command::false_positive_rules::target_is_known_skill_doc_path(
+                    text(params, "value")?,
+                    home.map(Path::new),
+                ),
+            )
+        }
         "server_fields" => server_fields(params.get("config").ok_or(INVALID)?)?,
         "tool_metadata" => tool_metadata(params)?,
         "tool_token" => {

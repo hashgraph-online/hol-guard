@@ -108,10 +108,7 @@ fn current_python_managed_bun_shims_are_trusted_and_tampering_is_refused() {
                 let _ = fs::remove_dir_all(&self.0);
             }
         }
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let root = std::env::temp_dir()
             .canonicalize()
             .unwrap()

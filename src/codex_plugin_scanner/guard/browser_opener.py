@@ -50,6 +50,42 @@ def open_browser_url(url: str) -> bool:
         return False
 
 
+_APP_LINK_VERDICT_SECONDS = 1.5
+
+
+def open_app_url(url: str) -> bool:
+    """Open an app link such as ``hol-guard-desktop://...`` and report whether an app took it.
+
+    Unlike a web link, nothing may own the scheme. ``open`` and ``xdg-open`` then
+    exit non-zero, so the launcher is waited for a bounded time; one still running
+    at the deadline counts as accepted. Mirrors ``browser_open::open_app_url``.
+    """
+
+    if _browser_launch_suppressed_for_tests():
+        return False
+    system = platform.system()
+    if system == "Darwin":
+        command = ["/usr/bin/open", url]
+    elif system == "Linux" and _has_linux_graphical_session(os.environ):
+        command = ["xdg-open", url]
+    else:
+        return open_browser_url(url)
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return False
+    try:
+        return process.wait(timeout=_APP_LINK_VERDICT_SECONDS) == 0
+    except subprocess.TimeoutExpired:
+        return True
+
+
 def _open_linux_browser_url(url: str, *, environ: Mapping[str, str] | None = None) -> bool:
     if not _has_linux_graphical_session(environ or os.environ):
         return False

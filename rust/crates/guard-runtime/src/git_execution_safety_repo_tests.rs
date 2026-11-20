@@ -14,9 +14,7 @@ fn temp_root(label: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-git-safety-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.as_nanos())
+        crate::unique_nanos::unique_nanos()
     ));
     std::fs::create_dir_all(&root).unwrap();
     std::fs::canonicalize(root).unwrap()

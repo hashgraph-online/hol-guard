@@ -3,7 +3,9 @@
 Rust owns what an approval resolution actually covers: whether the scope a
 client chose is one the request offers for that action, whether a client
 resolving against a superseded contract is still heard, and whether a legacy
-client's wider choice is narrowed to the artifact or refused outright. This
+client's wider choice is narrowed to the artifact or refused outright, and,
+when asked, whether the decision at the applied scope may be remembered and
+can reach an execution. This
 module only narrows the request to the fields the contract reads, ships the
 contract version and digest the client echoed back, binds the reply by
 ``request_id`` plus ``request_sha256`` and hands the answer back. Nothing is
@@ -23,6 +25,11 @@ from .native_execution import _resident_request
 from .native_store_policy import _payload
 
 APPROVAL_SCOPE_SELECT_FEATURE = "approval-scope-select-v1"
+# Adds the persistence question, so one ask settles a whole resolution.
+APPROVAL_SCOPE_SELECT_PERSIST_FEATURE = "approval-scope-select-v2"
+# Marks a selection that does not ask the persistence question; ``None`` is a
+# real answer to it (the client offered no choice).
+PERSIST_NOT_ASKED = object()
 _REQUEST_SCHEMA = "guard-approval-scope-select-request.v1"
 _RESULT_SCHEMA = "guard-approval-scope-select-result.v1"
 _TIMEOUT_SECONDS = 10.0
@@ -36,6 +43,7 @@ def native_approval_scope_selection(
     requested_scope: str,
     contract_version: str | None,
     contract_digest: str | None,
+    persist_policy: object = PERSIST_NOT_ASKED,
     guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Resolve one approval selection in the resident; raise when it cannot.
@@ -43,7 +51,9 @@ def native_approval_scope_selection(
     ``item`` carries every name in ``REQUEST_FIELDS`` plus ``workspace_target``,
     exactly as the ``approval_scope`` op takes it. The answer is the resident's
     payload: a selection with the scope it applied, or a refusal naming the
-    condition, each with the contract the resident derived.
+    condition, each with the contract the resident derived. A
+    ``persist_policy`` of ``None`` or a bool also asks whether the decision is
+    remembered, answered as ``persist_policy`` on a selection.
     """
 
     home = Path(_resolve_digest_home(guard_home))
@@ -58,13 +68,17 @@ def native_approval_scope_selection(
         "contract_version": contract_version,
         "contract_digest": contract_digest,
     }
+    required_feature = APPROVAL_SCOPE_SELECT_FEATURE
+    if persist_policy is not PERSIST_NOT_ASKED:
+        wire["persist"] = {"persist_policy": persist_policy}
+        required_feature = APPROVAL_SCOPE_SELECT_PERSIST_FEATURE
     try:
         response = _resident_request(
             operation="approval_scope_select",
             request=wire,
             guard_home=home,
             timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=APPROVAL_SCOPE_SELECT_FEATURE,
+            required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,

@@ -12,13 +12,20 @@ fn directory(name: &str) -> PathBuf {
     root.canonicalize().unwrap()
 }
 
-// `project` substitutes only a POSIX absolute directory (`literal_directory`),
-// so a Windows working directory is never projected.
-#[cfg(unix)]
+/// The absolute path an agent spells. A Windows canonical path carries the
+/// verbatim prefix and backslashes; neither reaches a shell command.
+fn spelled(path: &std::path::Path) -> String {
+    path.to_str()
+        .unwrap()
+        .trim_start_matches(r"\\?\")
+        .replace('\\', "/")
+}
+
 #[test]
 fn uses_before_any_directory_change_take_the_working_directory() {
     let cwd = directory("uses");
-    let d = cwd.to_str().unwrap();
+    let spelling = spelled(&cwd);
+    let d = spelling.as_str();
     for (command, expected) in [
         (
             "git worktree add ../wt -b report && ln -s \"$(pwd)/node_modules\" ../wt/node_modules && cd ../wt && npm run report".to_owned(),
@@ -394,4 +401,63 @@ fn a_repository_git_refuses_as_a_worktree_keeps_the_root_unknown() {
         super::repository_root(sub.to_str().unwrap()).as_deref(),
         plain.to_str()
     );
+}
+
+#[test]
+fn a_drive_letter_is_the_only_text_allowed_before_an_absolute_root() {
+    for path in ["C:/Users/dev", "c:/users/dev", "Z:/"] {
+        assert_eq!(super::drive_prefix(path), 2, "{path}");
+    }
+    for path in ["/home/dev", "", "/", "CC:/x", ":/x", "1:/x", "C/x"] {
+        assert_eq!(super::drive_prefix(path), 0, "{path}");
+    }
+}
+
+#[test]
+fn a_drive_path_reaches_the_command_with_forward_slashes() {
+    // The envelope declares a POSIX dialect, where `C:\Users\dev` lexes as
+    // `C:Usersdev`. The forward-slash spelling names the same directory.
+    assert_eq!(super::host_spelling(r"C:\Users\dev"), "C:/Users/dev");
+    assert_eq!(super::host_spelling("C:/Users/dev"), "C:/Users/dev");
+    assert_eq!(super::host_spelling("C:\\Users\\dev\\"), "C:/Users/dev/");
+    // A POSIX path keeps every character it has; a backslash there is the
+    // shell's own escape, not a separator.
+    assert_eq!(super::host_spelling(r"/home/de\v"), r"/home/de\v");
+}
+
+#[test]
+fn a_parent_keeps_the_drive_its_path_names() {
+    assert_eq!(super::parent("C:/Users/dev"), Some("C:/Users".to_owned()));
+    // `C:` alone names that drive's current directory, not its root.
+    assert_eq!(super::parent("C:/Users"), Some("C:/".to_owned()));
+    assert_eq!(super::parent("C:/"), Some("C:/".to_owned()));
+    assert_eq!(super::parent("/home/dev"), Some("/home".to_owned()));
+    assert_eq!(super::parent("/home"), Some("/".to_owned()));
+    assert_eq!(super::parent("/"), Some("/".to_owned()));
+    // A spelling the shell would not have produced has no known parent.
+    assert_eq!(super::parent("C:/Users/./dev"), None);
+    assert_eq!(super::parent("C://Users"), None);
+}
+
+#[test]
+fn a_climbing_drive_path_is_not_a_literal_path() {
+    assert!(!super::literal_path("C:/Users/../Windows"));
+    assert!(!super::literal_path("C:Users/dev"));
+    assert!(!super::literal_path(r"C:\Users\dev"));
+    assert!(!super::literal_path("/home/../etc"));
+}
+
+#[cfg(windows)]
+#[test]
+fn a_drive_path_is_a_literal_path_where_the_host_reads_it_as_absolute() {
+    assert!(super::literal_path("C:/Users/dev"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_drive_path_is_relative_on_a_posix_host_and_is_refused() {
+    // `a:/b` names a directory under the working directory here, so it must
+    // not stand in for an absolute one.
+    assert!(!super::literal_path("a:/b"));
+    assert!(super::literal_path("/home/dev"));
 }

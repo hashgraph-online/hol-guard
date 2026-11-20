@@ -9,10 +9,7 @@ impl TestRoot {
             .join("../../target")
             .join(name);
         std::fs::create_dir_all(&base).unwrap();
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let mut attempt = 0;
         loop {
             let root = base.join(format!("run-{}-{nonce}-{attempt}", std::process::id()));

@@ -10,19 +10,16 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, Badge, EmptyState, SectionLabel } from "./approval-center-primitives";
 import {
-  buildRetryAfterApprovalCopy,
-  formatRelativeTime,
   harnessDisplayName,
   isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
 import {
   oneTimeRetryWindowMinutes,
-  receiptDescribesRequest,
   retryCannotReuseApproval,
   retryCannotReuseApprovalHint,
 } from "./approval-retry-guidance";
-import { GuardRequestResolutionError } from "./guard-api";
+import { GuardRequestResolutionError, guardAwareHref } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
   approvalDecisionContractKey,
@@ -34,38 +31,28 @@ import {
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   taskCapabilityExplanation,
-  willPersistExactAction,
 } from "./approval-scopes";
 import { ApprovalGateRecommendationNotice, approvalGateNeedsSetup } from "./approval-proof-inline";
-import { guardAwareHref } from "./guard-api";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
 import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { guardActionPresentation } from "./guard-action";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
-import {
-  allowButtonLabel,
-  blockButtonLabel,
-  ReviewScopeControls,
-} from "./review-scope-controls";
-import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
+import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
+import { ReviewDecisionControls } from "./review-decision-controls";
+import { decisionButtonLabels, resolvedActionCopy } from "./review-decision-labels";
+import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
-import { approvalLeftActionStopped } from "./evidence/approval-outcome";
+import { ReviewDecisionSignIn } from "./review-decision-sign-in";
+import { ContextReviewPanel } from "./context-assistance/review-panel";
+import { ReviewLastTimeCard } from "./review-last-time-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
-
-function resolvedActionCopy(
-  item: GuardApprovalRequest | null,
-  action: "allow" | "block",
-  persistedExactAction: boolean,
-): string {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
-  if (action === "allow") return "Approved: action can proceed";
-  return "Blocked: action stopped";
-}
 
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
@@ -116,7 +103,9 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     if (item) {
-      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      // The two plain choices are "just this once" and "always allow this call", both on the exact call.
+      // A broader recommended scope would leave neither card selected, so it never starts selected here.
+      setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : (recommendedScopeForAction(item, "allow") ?? "artifact"));
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setRememberExactAction(false);
     }
@@ -140,6 +129,7 @@ export function ReviewDecisionCard(props: {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -147,10 +137,12 @@ export function ReviewDecisionCard(props: {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown,
   } = useReviewDecisionResolve({
@@ -214,7 +206,8 @@ export function ReviewDecisionCard(props: {
   const nativeDisplayOnly = item.native_business_review_display_only === true;
   const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
+  const mcpCall = nativeDisplayOnly ? null : explainMcpCall(item);
+  const harnessName = mcpCall?.requester ?? harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
   const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
   const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
@@ -228,20 +221,12 @@ export function ReviewDecisionCard(props: {
     sectionLabel = "Watch-only finding";
     badgeLabel = "Would have stopped";
   }
-  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
-  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
-  if (watchOnlyObservation) {
-    resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow && !versionBoundScript) {
-    resolvedAllowButtonLabel = "Approve and remember";
-  } else if (retryCannotReuseApproval(item)) {
-    resolvedAllowButtonLabel = "Choose an available approval duration";
-  }
-  let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
-  if (watchOnlyObservation || persistExactBlock) {
-    resolvedBlockButtonLabel = "Stop this next time";
-  }
+  const simpleMcp = simpleMcpChoiceApplies(item);
+  const {
+    persistExactAllow,
+    allowLabel: resolvedAllowButtonLabel,
+    blockLabel: resolvedBlockButtonLabel,
+  } = decisionButtonLabels({ item, allowScope, blockScope, rememberExactAction, watchOnlyObservation, simpleMcp });
   return (
     <div className="min-w-0 space-y-5">
       {resolved && (
@@ -269,9 +254,12 @@ export function ReviewDecisionCard(props: {
           <div className="min-w-0 flex-1">
             {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
             <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              From {harnessName}
-            </p>
+            {/* An MCP headline already names the app that asked. */}
+            {mcpCall === null && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                From {harnessName}
+              </p>
+            )}
           </div>
           <Badge tone={item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone}>
             {badgeLabel}
@@ -285,7 +273,8 @@ export function ReviewDecisionCard(props: {
             {retryCannotReuseApprovalHint(item, harnessName)}
           </p>
         ) : null}
-        {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
+        {/* An MCP card says this itself, next to what the approval covers. */}
+        {mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
           </p>
@@ -344,7 +333,7 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+        {resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && (
           <ApprovalExtensionRecommendationCard
             key={item.request_id}
             item={item}
@@ -358,8 +347,21 @@ export function ReviewDecisionCard(props: {
           />
         )}
 
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionCoverageCard
+            coverage={item.extension_coverage}
+            linkedPatterns={
+              item.extension_recommendation?.permissions.map((permission) => ({
+                extension_id: permission.extension_id,
+                rule_id: permission.rule_id,
+              })) ?? []
+            }
+          />
+        )}
+
         {resolutionBlockReason === null && resolved === null && (
-          <ReviewScopeControls
+          <ReviewDecisionControls
+            simpleMcp={simpleMcp}
             commonScopeOptions={commonScopeOptions}
             broaderScopeOptions={broaderScopeOptions}
             advancedScopeOptions={advancedScopeOptions}
@@ -396,7 +398,8 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolutionBlockReason === null && resolved === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {resolutionBlockReason === null && resolved === null && signInReason !== null && <ReviewDecisionSignIn requestId={item.request_id} reason={signInReason} onRecheck={handleSignInRecheck} />}
+        {resolutionBlockReason === null && resolved === null && signInReason === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {hasAllowScope && <ActionButton
             ref={allowButtonRef}
             variant="success"
@@ -461,37 +464,20 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {detail.receipt && receiptDescribesRequest(item, detail.receipt) && (
-        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
-          <SectionLabel>Last time</SectionLabel>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {approvalLeftActionStopped(detail.receipt) ? (
-              <>
-                You approved a similar action once {formatRelativeTime(detail.receipt.timestamp)}, but it stayed
-                stopped.
-              </>
-            ) : (
-              <>
-                You previously {pastDecisionVerb(detail.receipt.policy_decision)} a similar action{" "}
-                {formatRelativeTime(detail.receipt.timestamp)}.
-              </>
-            )}
-          </p>
-          {detail.diff && detail.diff.changed_fields.length > 0 && (
-            <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-brand-dark">What changed since then:</p>
-              <ul className="mt-2 space-y-1">
-                {detail.diff.changed_fields.map((field) => (
-                  <li key={field} className="flex items-center gap-2 text-sm text-brand-dark">
-                    <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-blue" aria-hidden="true" />
-                    {field}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+      {mcpCall === null ? (
+        <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      ) : (
+        // The MCP card answers the question on its own; extra context is there for anyone who wants it.
+        <details className="rounded-xl border border-slate-100 px-4 py-3 sm:px-5">
+          <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80">
+            Prepare more context for this decision
+          </summary>
+          <div className="mt-3">
+            <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+          </div>
+        </details>
       )}
+      <ReviewLastTimeCard detail={detail} />
 
       {pendingAction !== null && approvalGate !== null && (
         <ApprovalPasswordModal
@@ -504,6 +490,7 @@ export function ReviewDecisionCard(props: {
           onUseCooldownChange={handleUseCooldownChange}
           onSubmit={handleModalSubmit}
           busy={submitting !== null}
+          requireFreshTotp={freshCodeRequired}
           onCancel={handleModalCancel}
           submitLabel={pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel}
         />

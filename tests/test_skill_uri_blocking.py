@@ -1,12 +1,29 @@
 """Tests for skill:// URI handling in target_is_known_skill_doc_path."""
 
-from codex_plugin_scanner.guard.runtime.false_positive_rules import (
-    target_is_known_skill_doc_path,
-)
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    is_explicitly_benign_native_file_read_request,
-)
-from codex_plugin_scanner.guard.runtime.source_paths import source_path_is_allowed
+import os
+from pathlib import Path
+
+from codex_plugin_scanner.guard.native_cli_runtime_support import cli_runtime_support
+from tests.resident_probe_support import native_benign_file_read
+
+
+def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -> bool:
+    """Ask the native runtime whether ``target`` names a known local skill doc."""
+
+    home = str(home_dir) if home_dir is not None else str(Path.home())
+    result = cli_runtime_support("skill_doc_path", {"value": target, "home_dir": home})
+    assert isinstance(result, bool)
+    return result
+
+
+def is_explicitly_benign_native_file_read_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
+    return native_benign_file_read(tool_name, arguments, cwd=cwd, home_dir=home_dir)
 
 
 def test_skill_uri_existing(tmp_path):
@@ -146,6 +163,8 @@ def test_native_read_rejects_ambiguous_missing_and_sensitive_targets(tmp_path):
 
 def test_known_skill_paths_reject_sensitive_glob_and_traversal_targets(tmp_path):
     home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
     skill = home / ".claude" / "skills" / "safe"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("# Safe\n")
@@ -153,15 +172,32 @@ def test_known_skill_paths_reject_sensitive_glob_and_traversal_targets(tmp_path)
     (skill / "notes.md").write_text("notes\n")
     (skill / "credentials").mkdir()
     (skill / "credentials" / "config.ts").write_text("export const value = 1\n")
+    # Give the glob and traversal targets real files, so only their syntax can
+    # make the read unsafe.
+    (skill.parent / "secret.py").write_text("value = 1\n")
+    (skill / "{notes}.md").write_text("notes\n")
+    if os.name != "nt":
+        (skill / "*.md").write_text("notes\n")
 
+    assert is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"file_path": str(skill / "SKILL.md")},
+        cwd=workspace,
+        home_dir=home,
+    )
     for target in (
         "~/.claude/skills/safe/.env",
         "~/.claude/skills/safe/*.md",
+        "~/.claude/skills/safe/{notes}.md",
         "~/.claude/skills/safe/../secret.py",
         "~/.claude/skills/safe/credentials/config.ts",
     ):
-        decision = source_path_is_allowed(target, cwd=tmp_path / "workspace", home_dir=home)
-        assert not decision.allowed
+        assert not is_explicitly_benign_native_file_read_request(
+            "Read",
+            {"file_path": target},
+            cwd=workspace,
+            home_dir=home,
+        )
 
 
 def test_native_read_rejects_symlinked_skill_root(tmp_path):

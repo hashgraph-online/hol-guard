@@ -13,6 +13,11 @@ pub(crate) const POST_TOOL_USE: &str = "PostToolUse";
 pub(crate) const FAIL_CLOSED_REASON: &str = "HOL Guard could not authenticate the local daemon. \
 Run `hol-guard daemon repair` from a terminal, then retry.";
 
+pub(crate) const UNAVAILABLE_REASON: &str = "HOL Guard could not authenticate the local daemon \
+(daemon_unavailable). Run `hol-guard daemon repair` from a terminal, then retry. \
+`hol-guard doctor`, `hol-guard daemon status` and `hol-guard daemon repair` stay runnable \
+while the daemon recovers; every other action stays blocked until it answers.";
+
 const EVENT_KEYS: [&str; 6] = [
     "event",
     "eventName",
@@ -88,9 +93,26 @@ pub(crate) fn is_permission_request(event_name: &str) -> bool {
     )
 }
 
+/// The answer for a tool call the daemon gave no verdict on, naming the
+/// state and the way out. It keeps the sentence Codex users already know and
+/// adds the typed state `daemon_unavailable`, the recovery command, and the
+/// commands that stay runnable while the daemon recovers. Events other than a
+/// tool or permission call carry no tool to block and keep `fail_closed`.
+pub(crate) fn unavailable(event_name: &str) -> String {
+    if event_name == PRE_TOOL_USE || is_permission_request(event_name) {
+        fail_closed_with(event_name, UNAVAILABLE_REASON)
+    } else {
+        fail_closed(event_name)
+    }
+}
+
 /// `json.dumps(_fail_closed(event_name), separators=(",", ":"))`.
 pub(crate) fn fail_closed(event_name: &str) -> String {
-    let reason = json_string(FAIL_CLOSED_REASON, true, false);
+    fail_closed_with(event_name, FAIL_CLOSED_REASON)
+}
+
+fn fail_closed_with(event_name: &str, reason: &str) -> String {
+    let reason = json_string(reason, true, false);
     if is_permission_request(event_name) {
         format!(
             "{{\"hookSpecificOutput\":{{\"hookEventName\":\"PermissionRequest\",\

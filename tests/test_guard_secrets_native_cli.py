@@ -19,6 +19,7 @@ import pytest
 
 from codex_plugin_scanner import cli as guard_cli
 from codex_plugin_scanner.guard import native_runtime
+from codex_plugin_scanner.guard.secrets import cli as secrets_cli
 from codex_plugin_scanner.guard.secrets.cli import main as standalone_secrets_main
 
 
@@ -146,6 +147,69 @@ def test_cli_rules_lists_detector_catalog(capsys: pytest.CaptureFixture[str]) ->
     assert exit_code == 0
     assert "HOL Guard Secrets detector" in captured.out
     assert "GitHub token" in captured.out
+
+
+def test_rules_text_and_json_render_one_live_catalog() -> None:
+    """Both forms of ``secrets rules`` describe the detector that actually runs.
+
+    The listing used to be a literal checked into the Python package, so a rule
+    renamed or added in the detector left the published catalog describing a
+    detector that no longer existed. Both forms are now rendered from the one
+    reply the native runtime sends, so they cannot disagree with it or with
+    each other.
+    """
+
+    json_code, json_output, json_error = _run_native(["secrets", "rules", "--json"])
+    text_code, text_output, text_error = _run_native(["secrets", "rules"])
+
+    assert (json_code, json_error) == (0, "")
+    assert (text_code, text_error) == (0, "")
+    payload = json.loads(json_output)
+    assert payload["schema"] == "guard-secret-rules.v1"
+    assert payload["rules"]
+
+    assert text_output.endswith("\n\n")
+    lines = text_output.rstrip("\n").splitlines()
+    assert lines[0] == f"HOL Guard Secrets detector {payload['detector_version']}"
+    assert len(lines) == 1 + len(payload["rules"])
+    for line, rule in zip(lines[1:], payload["rules"], strict=True):
+        # A family confirmed by a provider check says so; one accepted on its
+        # shape alone must not claim a validation it never runs.
+        if rule["validation"] == "none":
+            assert line == f"- {rule['family']} ({rule['severity']})"
+        else:
+            assert line == f"- {rule['family']} ({rule['severity']}, validates via {rule['validation']})"
+    assert "validates via none" not in text_output
+
+
+def test_rules_discloses_no_detector_pattern() -> None:
+    """The catalog names families; the bytes that find them stay in the runtime."""
+
+    _, output, _ = _run_native(["secrets", "rules", "--json"])
+
+    payload = json.loads(output)
+    public_fields = {"description", "family", "rule_id", "severity", "strong_format", "validation"}
+    for rule in payload["rules"]:
+        assert set(rule) == public_fields, rule["rule_id"]
+    assert "(?" not in output and "\\b" not in output
+
+
+def test_rules_fails_closed_when_the_native_runtime_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With no runtime to ask there is no catalog, and none is invented."""
+
+    def unavailable(_request: object) -> dict[str, object]:
+        raise secrets_cli.SecretsNativeError("native runtime unavailable")
+
+    monkeypatch.setattr(secrets_cli, "_native_request", unavailable)
+    exit_code = standalone_secrets_main(["rules"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "native runtime unavailable" in captured.err
 
 
 def test_native_staged_scan_fails_on_findings_without_printing_secret(tmp_path: Path) -> None:

@@ -1,7 +1,6 @@
 use super::*;
 use std::fs;
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Start a child that waits on stdin, so the test controls when it exits.
 fn stdin_bound_child() -> std::process::Child {
@@ -23,10 +22,7 @@ fn stop_retires_only_generations_whose_resident_exited() {
     let scope = std::env::temp_dir().join(format!(
         "hol-guard-managed-exited-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     crate::resident_state::ensure_private_directory(&scope, true)
         .expect("test directory should be created");

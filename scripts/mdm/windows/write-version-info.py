@@ -33,7 +33,7 @@ def main() -> int:
     OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
-      StringStruct('CompanyName', 'Hashgraph Online'),
+      StringStruct('CompanyName', 'HOL'),
       StringStruct('FileDescription', 'HOL Guard'),
       StringStruct('FileVersion', '{version}'),
       StringStruct('InternalName', 'hol-guard'),

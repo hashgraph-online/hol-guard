@@ -67,6 +67,33 @@ fn a_ref_that_shadows_origins_branch_keeps_the_merge_reviewed() {
 }
 
 #[test]
+fn an_all_remote_fetch_holds_while_any_other_remote_is_defined() {
+    const ALL: &str = "git fetch --all";
+    let session = session("fetch-all-remotes");
+    let wt = session.worktree.clone();
+    assert_refresh(&session, ALL, &wt);
+    // Git builds a remote from any key in its subsection. Without a URL it
+    // takes the name as a local path, and `uploadpack` or `vcs` names a
+    // program `--all` would then run.
+    for key in ["remote.x.uploadpack", "remote.x.vcs", "remote.x.fetch"] {
+        session.config(&[key, "payload"]);
+        assert_eq!(reason(&session, ALL, &wt), None, "{key}");
+        session.config(&["--unset", key]);
+        assert_refresh(&session, ALL, &wt);
+    }
+    // A file under the common directory defines a remote too, and the
+    // configuration listing never shows it.
+    let remotes = session.primary.join(".git/remotes");
+    std::fs::create_dir_all(&remotes).unwrap();
+    std::fs::write(
+        remotes.join("upstream"),
+        "URL: https://github.com/example-org/other.git\n",
+    )
+    .unwrap();
+    assert_eq!(reason(&session, ALL, &wt), None);
+}
+
+#[test]
 fn a_pager_the_merge_or_fetch_would_start_keeps_the_review() {
     let session = session("merge-ff-pager");
     let wt = session.worktree.clone();

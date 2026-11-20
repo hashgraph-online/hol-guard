@@ -18,12 +18,10 @@ from typing import cast
 from .. import native_context
 from ..models import GuardAction
 from ..native_command_effect import (
-    COMMAND_EFFECT_BATCH_MAX_ITEMS,
     NATIVE_COMMAND_CONTROL_BINDING_SCHEMA,
     CommandEffectItem,
     NativeCommandEffectMalformedError,
     NativeCommandEffectRejectedError,
-    command_effect_decide_batch_native,
     command_effect_decide_native,
     wire_canonical_command,
 )
@@ -63,7 +61,6 @@ from .extension_control_contract import (
 from .extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     _layer_payload,  # pyright: ignore[reportPrivateUsage]
-    current_extension_control_snapshot,
 )
 from .github_workflow_authorization import GitHubWorkflowAuthorization
 from .native_command_extension_evidence import (
@@ -80,7 +77,7 @@ _Obj = Mapping[str, object]
 
 @dataclass(frozen=True)
 class CommandEvaluationInput:
-    """One command's inputs for ``evaluate_commands_batch``."""
+    """One command's inputs, as ``evaluate_command`` binds them to the wire."""
 
     command_text: str
     canonical_command: CanonicalCommand
@@ -146,7 +143,7 @@ def evaluate_command(
     authenticated one the native evidence is bound to.
     """
 
-    snapshot = extension_control_snapshot or current_extension_control_snapshot()
+    snapshot = extension_control_snapshot
     if native_extension_evidence is None:
         raise NativeCommandExtensionEvidenceError("native_command_extension_evidence_required")
     if canonical_command is None:
@@ -185,37 +182,6 @@ def evaluate_command(
     if payload is None:
         raise NativeCommandExtensionEvidenceError(_UNAVAILABLE)
     return _project_payload(payload, canonical_command, snapshot)
-
-
-def evaluate_commands_batch(
-    entries: Sequence[CommandEvaluationInput],
-    *,
-    guard_home: Path | None = None,
-) -> tuple[CompositeCommandEvaluation, ...]:
-    """Evaluate many commands in few resident round trips, for offline corpora.
-
-    Each command is judged by the single-op rules and projected exactly as
-    ``evaluate_command`` projects it; any refusal or unavailable resident
-    raises the same error the single path raises. Hook callers do not use this.
-    """
-
-    if not entries:
-        return ()
-    home = _resolve_home(guard_home)
-    results: list[CompositeCommandEvaluation] = []
-    # One wire group at a time: request bytes and parsed payloads are released
-    # as each group is projected, so peak memory tracks the group, not the list.
-    for start in range(0, len(entries), COMMAND_EFFECT_BATCH_MAX_ITEMS):
-        group = entries[start : start + COMMAND_EFFECT_BATCH_MAX_ITEMS]
-        outcomes = command_effect_decide_batch_native([_wire_item(entry)[0] for entry in group], guard_home=home)
-        if outcomes is None:
-            raise NativeCommandExtensionEvidenceError(_UNAVAILABLE)
-        for entry, outcome in zip(group, outcomes, strict=True):
-            if isinstance(outcome, NativeCommandEffectRejectedError):
-                raise NativeCommandExtensionEvidenceError(outcome.code) from outcome
-            results.append(_project_payload(outcome, entry.canonical_command, entry.extension_control_snapshot))
-        del outcomes
-    return tuple(results)
 
 
 def _project_payload(

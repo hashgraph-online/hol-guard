@@ -1,1 +1,0 @@
-"""Internal devin adapter helpers."""

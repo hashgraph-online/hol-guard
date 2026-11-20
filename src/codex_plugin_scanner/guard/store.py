@@ -9,7 +9,6 @@ from .store_base import (
     _is_runtime_scoped_exact_match_key,
     _runtime_scoped_exact_match_key,
     runtime_tool_action_exact_match_context,
-    runtime_tool_action_policy_artifact_id,
     runtime_tool_action_portable_match_context,
 )
 from .store_approval_facade import StoreApprovalsMixin
@@ -21,7 +20,6 @@ from .store_command_activity_api import StoreCommandActivityApiMixin
 from .store_command_activity_lifecycle import StoreCommandActivityLifecycleMixin
 from .store_command_activity_maintenance import StoreCommandActivityMaintenanceMixin
 from .store_command_activity_privacy import StoreCommandActivityPrivacyMixin
-from .store_command_shadow import StoreCommandShadowMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_continuation import StoreContinuationMixin
 from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
@@ -78,7 +76,6 @@ class GuardStore(
     StoreCommandActivityMaintenanceMixin,
     StoreCommandActivityPrivacyMixin,
     StoreStorageMaintenanceMixin,
-    StoreCommandShadowMixin,
     StoreInventoryMixin,
     StorePortableProjectMemoryMixin,
     StorePolicyMixin,

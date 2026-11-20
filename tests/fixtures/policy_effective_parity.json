@@ -41,6 +41,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -54,7 +56,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -108,6 +111,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -121,7 +126,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -175,6 +181,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -188,7 +196,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -242,6 +251,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -255,7 +266,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -309,6 +321,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -322,7 +336,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -376,6 +391,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -389,7 +406,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -443,6 +461,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -456,7 +476,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -510,6 +531,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -523,7 +546,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -577,6 +601,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -590,7 +616,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -644,6 +671,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -657,7 +686,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -711,6 +741,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -724,7 +756,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -778,6 +811,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -791,7 +826,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -845,6 +881,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -858,7 +896,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -912,6 +951,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -925,7 +966,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -979,6 +1021,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -992,7 +1036,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1046,6 +1091,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1059,7 +1106,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1113,6 +1161,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1126,7 +1176,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1180,6 +1231,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1193,7 +1246,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1247,6 +1301,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1260,7 +1316,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1314,6 +1371,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1327,7 +1386,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1381,6 +1441,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1394,7 +1456,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1448,6 +1511,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1461,7 +1526,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1515,6 +1581,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1528,7 +1596,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1582,6 +1651,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1595,7 +1666,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1649,6 +1721,8 @@
      "destructive_shell": "block",
      "encoded_execution": "block",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "block",
      "low_trust_artifact": "block",
@@ -1662,7 +1736,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1716,6 +1791,8 @@
      "destructive_shell": "block",
      "encoded_execution": "block",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "block",
      "low_trust_artifact": "block",
@@ -1729,7 +1806,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1783,6 +1861,8 @@
      "destructive_shell": "block",
      "encoded_execution": "block",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "block",
      "low_trust_artifact": "block",
@@ -1796,7 +1876,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1850,6 +1931,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1863,7 +1946,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1917,6 +2001,8 @@
      "destructive_shell": "block",
      "encoded_execution": "block",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "block",
      "low_trust_artifact": "block",
@@ -1930,7 +2016,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1984,6 +2071,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -1997,7 +2086,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -2051,6 +2141,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2064,7 +2156,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2118,6 +2211,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2131,7 +2226,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2185,6 +2281,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2198,7 +2296,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2252,6 +2351,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2265,7 +2366,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2319,6 +2421,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2332,7 +2436,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2386,6 +2491,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2399,7 +2506,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2455,6 +2563,8 @@
      "destructive_shell": "warn",
      "encoded_execution": "warn",
      "encoded_exfiltration": "warn",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "warn",
      "local_secret_read": "warn",
      "low_trust_artifact": "warn",
@@ -2468,7 +2578,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -2525,6 +2636,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "block",
      "low_trust_artifact": "require-reapproval",
@@ -2538,7 +2651,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -2780,6 +2894,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2793,7 +2909,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "strict",
     "security_level": "balanced",
@@ -2869,6 +2986,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -2882,7 +3001,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -2988,6 +3108,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -3001,7 +3123,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3414,6 +3537,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3427,7 +3552,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3436,6 +3562,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3449,7 +3577,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3463,6 +3592,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -3476,7 +3607,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3531,6 +3663,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3544,7 +3678,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3553,6 +3688,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3566,7 +3703,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3580,6 +3718,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -3593,7 +3733,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3648,6 +3789,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3661,7 +3804,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3670,6 +3814,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3683,7 +3829,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3697,6 +3844,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -3710,7 +3859,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3765,6 +3915,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3778,7 +3930,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3792,6 +3945,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -3805,7 +3960,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3860,6 +4016,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3873,7 +4031,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3882,6 +4041,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3895,7 +4056,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3909,6 +4071,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -3922,7 +4086,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3977,6 +4142,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -3990,7 +4157,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4004,6 +4172,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4017,7 +4187,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4076,6 +4247,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4089,7 +4262,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4144,6 +4318,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -4157,7 +4333,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -4166,6 +4343,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -4179,7 +4358,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4193,6 +4373,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4206,7 +4388,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4265,6 +4448,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4278,7 +4463,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4334,6 +4520,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -4347,7 +4535,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4361,6 +4550,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4374,7 +4565,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4430,6 +4622,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "block",
       "low_trust_artifact": "require-reapproval",
@@ -4443,7 +4637,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4457,6 +4652,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4470,7 +4667,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4524,6 +4722,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "require-reapproval",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -4537,7 +4737,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -5179,6 +5380,8 @@
       "destructive_shell": "require-reapproval",
       "encoded_execution": "require-reapproval",
       "encoded_exfiltration": "block",
+      "git_hook_bypass": "allow",
+      "git_stage_all": "allow",
       "guard_bypass": "block",
       "local_secret_read": "require-reapproval",
       "low_trust_artifact": "require-reapproval",
@@ -5192,7 +5395,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "mode": "enforce",
@@ -5207,6 +5411,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -5220,7 +5426,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -5324,6 +5531,8 @@
      "destructive_shell": "require-reapproval",
      "encoded_execution": "require-reapproval",
      "encoded_exfiltration": "block",
+     "git_hook_bypass": "allow",
+     "git_stage_all": "allow",
      "guard_bypass": "block",
      "local_secret_read": "require-reapproval",
      "low_trust_artifact": "require-reapproval",
@@ -5337,7 +5546,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",

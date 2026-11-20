@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 from ..native_resident_client import _state_files, retire_native_resident_for_update
+from ..native_resident_update_lock import NativeResidentUpdateLockError
 from ..native_runtime import _bundled_runtime_candidate, _isolated_environment, _runtime_candidates
 
 NATIVE_RESIDENT_RETIREMENT_ATTEMPTS = 3
@@ -50,7 +52,12 @@ def resident_stop_executable() -> Path:
     return _bundled_runtime_candidate()
 
 
-def retire_native_resident_for_home(guard_home: Path) -> bool:
+def retire_native_resident_for_home(
+    guard_home: Path,
+    *,
+    hold_install_lock: bool = False,
+    attempt_barrier: Callable[[], AbstractContextManager[object]] | None = None,
+) -> bool:
     """Stop this Guard home's native resident while its runtime is still intact.
 
     Both callers need it gone for the same reason: the resident is a long-lived
@@ -58,6 +65,11 @@ def retire_native_resident_for_home(guard_home: Path) -> bool:
     and a removal has to delete it — on Windows neither is possible while the
     process is alive, so a resident left running survives the command that was
     supposed to end it.
+
+    ``attempt_barrier`` is entered around each attempt rather than around the
+    whole retry. A caller that holds the update barrier's exclusive side blocks
+    every resident request, including an install releasing its lease, so the
+    barrier has to drop between rounds for that install to finish.
     """
 
     executable = resident_stop_executable()
@@ -66,16 +78,23 @@ def retire_native_resident_for_home(guard_home: Path) -> bool:
     # warning after several retries.
     if not executable.is_file() and _resident_state_absent(guard_home):
         return True
+
+    def attempt(timeout_seconds: float) -> bool:
+        try:
+            with attempt_barrier() if attempt_barrier is not None else nullcontext():
+                return retire_native_resident_for_update(
+                    executable=executable,
+                    guard_home=guard_home,
+                    environment=_isolated_environment(),
+                    timeout_seconds=timeout_seconds,
+                    hold_install_lock=hold_install_lock,
+                )
+        except NativeResidentUpdateLockError:
+            # Another update or removal holds the barrier; try the next round.
+            return False
+
     try:
-        return retire_with_retry(
-            lambda timeout_seconds: retire_native_resident_for_update(
-                executable=executable,
-                guard_home=guard_home,
-                environment=_isolated_environment(),
-                timeout_seconds=timeout_seconds,
-            ),
-            sleep=time.sleep,
-        )
+        return retire_with_retry(attempt, sleep=time.sleep)
     except Exception:
         # A failed preflight must leave the current installation untouched.
         return False

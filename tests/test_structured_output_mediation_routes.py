@@ -1,3 +1,10 @@
+"""The daemon's outage-only structured-output adapter behavior.
+
+The Rust edge resolves the authenticated direct-lane binding and mediates the
+content. Native mediation semantics live in the Rust edge and content
+sensitivity tests. These tests cover the daemon's fail-safe overlay.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,38 +12,41 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
-from codex_plugin_scanner.guard.runtime.structured_output_mediation import (
-    StructuredOutputBinding,
-    mediate_native_post_tool_content,
-    resolve_managed_structured_output_resolution,
+from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import (
+    read_structured_view,
+    structured_destination_required,
 )
+from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
+from codex_plugin_scanner.guard.native_content_sensitivity import NativeContentSensitivityError
 from tests.structured_output_mediation_support import (
-    _binding,
+    WITHHOLD,
     _config,
-    _LoadErrorNativeRouteFixture,
+    _DenyingNativeRouteFixture,
+    _mediation,
     _native_result,
     _NativeRouteFixture,
     _ObserveNativeRouteFixture,
     _real_observe_managed_config,
     _receipt,
+    _review,
+    _UnavailableLoadErrorNativeRouteFixture,
     _UnavailableNativeRouteFixture,
 )
 
+_VIEW_KEYS = {"managed_policy_status", "managed_policy_hash", "managed_locked_settings", "managed_policy"}
 
-def test_required_authority_failure_withholds_after_native_receipt() -> None:
-    result = mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result=_native_result(),
-        validated_receipt=_receipt(),
-        structured_output_json=None,
-        binding=None,
-        required_reason_code="structured_managed_authority_unavailable",
-    )
-    assert result is not None
-    assert result.action == "withhold"
-    assert result.reason_code == "structured_managed_authority_unavailable"
+
+class _Metrics:
+    def record_route(self, _route: str) -> None:
+        return None
+
+
+def _without_native_edge(fixture: _NativeRouteFixture) -> _NativeRouteFixture:
+    """The fixture, with the daemon's route metrics and activity log stubbed."""
+
+    fixture.metrics = _Metrics()  # type: ignore[attr-defined]
+    fixture.activity_writer = None  # type: ignore[attr-defined]
+    return fixture
 
 
 @pytest.mark.parametrize("status", ["invalid", "inaccessible", "tampered"])
@@ -52,176 +62,59 @@ def test_load_config_fail_closed_floor_keeps_structured_authority_required(
     assert config.mode == "enforce"
     assert config.default_action == "block"
     assert config.managed_policy is not None
-    resolution = resolve_managed_structured_output_resolution(config, harness="pi")
-    assert resolution.required is True
-    assert resolution.reason_code == "structured_managed_authority_unavailable"
+    view = read_structured_view(lambda: config)
+    assert set(view) == _VIEW_KEYS
+    assert structured_destination_required(view, harness="pi") is True
 
 
-@pytest.mark.parametrize("error_type", [ValueError, OSError])
-def test_binding_recheck_failure_withholds_without_logging_callback_details(
-    error_type: type[Exception],
-    caplog: pytest.LogCaptureFixture,
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+def test_the_edge_uses_the_authenticated_managed_view_and_passes_its_answer_through(
+    tmp_path: Path,
+    harness: str,
 ) -> None:
-    def fail_recheck() -> StructuredOutputBinding | None:
-        raise error_type("untrusted callback detail")
-
-    native_result = _native_result()
-    result = mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result=native_result,
-        validated_receipt=_receipt(),
-        structured_output_json='{"employee":{"email":"","id":7},"note":"x"}',
-        binding=_binding(),
-        recheck_binding=fail_recheck,
-    )
-    assert result is not None
-    assert result.action == "withhold"
-    assert result.content_sha256 is None
-    assert native_result == _native_result()
-    assert "untrusted callback detail" not in caplog.text
-    assert "untrusted callback detail" not in str(result.to_harness_json())
-    if error_type is OSError:
-        assert result.reason_code == "structured_binding_recheck_failed"
-        assert "OSError" in caplog.text
-    else:
-        assert result.reason_code == "structured_binding_changed"
-        assert not caplog.records
-
-
-def test_match_unsupported_deadline_missing_receipt_and_native_deny_withhold() -> None:
-    binding = _binding("omp")
-    cases = (
-        ("{'employee': {'email': 'person@example.test', 'id': 7}, 'note': 'x'}", "structured_content_unproved"),
-        ('{"employee":{"email":"person@example.test","id":7},"note":"x"}', "structured_declared_schema_scan"),
-        ('{"employee":{"email":"","id":7},"note":"x"}', "structured_receipt_missing"),
-    )
-    for candidate, expected_reason in cases:
-        result = mediate_native_post_tool_content(
-            harness="omp",
-            event_name="PostToolUse",
-            native_result=_native_result(),
-            validated_receipt=None if expected_reason == "structured_receipt_missing" else _receipt(),
-            structured_output_json=candidate,
-            binding=binding,
-            recheck_binding=lambda: binding,
-        )
-        assert result is not None
-        assert result.action == "withhold"
-        assert result.reason_code == expected_reason
-        assert result.content_sha256 is None
-
-    denied = mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result=_native_result(decision="deny", model_output_action="block"),
-        validated_receipt=_receipt(decision="deny"),
-        structured_output_json='{"employee":{"email":"","id":7},"note":"x"}',
-        binding=binding,
-        recheck_binding=lambda: binding,
-    )
-    assert denied is None
-
-    expired = mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result=_native_result(),
-        validated_receipt=_receipt(),
-        structured_output_json='{"employee":{"email":"","id":7},"note":"x"}',
-        binding=_binding("pi"),
-        recheck_binding=lambda: _binding("pi"),
-        deadline_monotonic=-1,
-    )
-    assert expired is not None
-    assert expired.reason_code == "structured_review_deadline_exceeded"
-
-
-def test_native_route_attaches_adapter_field_after_receipt_without_mutating_native_result(tmp_path: Path) -> None:
-    fixture = _NativeRouteFixture(_config())
-    native = fixture._review_native_edge_with_snapshot(
-        payload={
-            "hook_event_name": "PostToolUse",
-            "structured_output_json": '{"employee":{"email":"","id":7},"note":"x"}',
-        },
-        harness="pi",
-        event_name="PostToolUse",
-        default_harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard",
-        workspace=tmp_path,
-        deadline=None,
-        policy_snapshot={"mode": "enforce"},
-        recording_only=False,
-    )
-    response, native_used = native
+    fixture = _NativeRouteFixture(_config(), mediation=WITHHOLD)
+    response, native_used = _review(fixture, tmp_path, harness=harness)
     assert native_used is True
-    mediation = response["structured_content_mediation"]
-    assert isinstance(mediation, dict)
-    # The route fixture supplies an unsigned claimed receipt. Compiled native
-    # tests cover authenticated forwarding; this route must fail closed.
-    assert mediation["action"] == "withhold"
-    assert mediation["reason_code"] == "structured_managed_authority_unavailable"
+    (request,) = fixture.captured
+    assert "structured_output_config" not in request
+    # The edge's disposition is what the harness sees, and its verdict is
+    # untouched by the projection. The managed view comes from the
+    # authenticated Rust direct-lane binding, so the daemon sends no copy.
+    assert response["structured_content_mediation"] == WITHHOLD
     assert response["decision"] == "allow"
     assert response["policy_action"] == "allow"
+    assert fixture.raw_result == _native_result()
+    assert fixture.recorded_receipt == _receipt()
+    assert fixture.reads == 0
+
+
+def test_a_hook_the_edge_does_not_mediate_carries_no_view(tmp_path: Path) -> None:
+    fixture = _NativeRouteFixture(_config())
+    response, _native_used = _review(fixture, tmp_path, harness="codex")
+    (request,) = fixture.captured
+    assert "structured_output_config" not in request
+    assert "structured_content_mediation" not in response
+    assert fixture.reads == 0
 
 
 def test_native_denial_does_not_bypass_revoked_structured_authority_on_next_allow(tmp_path: Path) -> None:
-    class _ChangingNativeRouteFixture(_NativeRouteFixture):
-        denied = True
-
-        def _review_raw_hook_native(self, **_kwargs: object) -> dict[str, object]:
-            if not self.denied:
-                return super()._review_raw_hook_native(**_kwargs)
-            result = _native_result(
-                decision="deny",
-                model_output_action="block",
-                policy_action="block",
-                reason_code="native_secret_detected",
-            )
-            return {
-                "event_name": "PostToolUse",
-                "harness": "pi",
-                "result": result,
-                "receipt": _receipt(decision="deny"),
-                "harness_response": dict(result),
-            }
-
-    fixture = _ChangingNativeRouteFixture(_config())
-
-    def review() -> dict[str, object]:
-        response, _native_used = fixture._review_native_edge_with_snapshot(
-            payload={
-                "hook_event_name": "PostToolUse",
-                "structured_output_json": '{"employee":{"email":"","id":7},"note":"x"}',
-            },
-            harness="pi",
-            event_name="PostToolUse",
-            default_harness="pi",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard",
-            workspace=tmp_path,
-            deadline=None,
-            policy_snapshot={"mode": "enforce"},
-            recording_only=False,
-        )
-        return response
-
-    denied = review()
+    fixture = _DenyingNativeRouteFixture(_config())
+    denied, _native_used = _review(fixture, tmp_path)
     assert denied["decision"] == "deny"
     assert denied["policy_action"] == "block"
     assert denied["reason_code"] == "native_secret_detected"
     assert "structured_content_mediation" not in denied
 
+    # The next hook uses the newly acknowledged Rust direct-lane binding.
     fixture.config = _config(status="revoked")
-    fixture.denied = False
-    allowed = review()
+    allowing = _NativeRouteFixture(
+        fixture.config,
+        mediation=_mediation("withhold", "structured_managed_authority_revoked"),
+    )
+    allowed, _native_used = _review(allowing, tmp_path)
     assert allowed["decision"] == "allow"
-    assert allowed["policy_action"] == "allow"
-    mediation = allowed["structured_content_mediation"]
-    assert isinstance(mediation, dict)
-    assert mediation["action"] == "withhold"
-    assert mediation["reason_code"] == "structured_managed_authority_revoked"
-    assert "content_sha256" not in mediation
+    assert allowed["structured_content_mediation"]["reason_code"] == "structured_managed_authority_revoked"  # type: ignore[index]
+    assert "content_sha256" not in allowed["structured_content_mediation"]  # type: ignore[operator]
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -229,25 +122,8 @@ def test_native_unavailable_required_structured_route_withholds_model_output(
     tmp_path: Path,
     harness: str,
 ) -> None:
-    class _Metrics:
-        def record_route(self, _route: str) -> None:
-            return None
-
-    fixture = _UnavailableNativeRouteFixture(_config())
-    fixture.metrics = _Metrics()
-    fixture.activity_writer = None
-    response, native_used = fixture._review_native_edge_with_snapshot(
-        payload={"hook_event_name": "PostToolUse"},
-        harness=harness,
-        event_name="PostToolUse",
-        default_harness=harness,
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard",
-        workspace=tmp_path,
-        deadline=None,
-        policy_snapshot={"mode": "enforce"},
-        recording_only=False,
-    )
+    fixture = _without_native_edge(_UnavailableNativeRouteFixture(_config()))
+    response, native_used = _review(fixture, tmp_path, harness=harness)
 
     assert native_used is False
     assert response["decision"] == "allow"
@@ -260,161 +136,61 @@ def test_native_unavailable_required_structured_route_withholds_model_output(
     }
 
 
-def test_native_route_load_error_attaches_fail_closed_mediation(tmp_path: Path) -> None:
-    fixture = _LoadErrorNativeRouteFixture(_config())
-    response, native_used = fixture._review_native_edge_with_snapshot(
-        payload={
-            "hook_event_name": "PostToolUse",
-            "structured_output_json": '{"employee":{"email":"","id":7},"note":"x"}',
-        },
-        harness="pi",
-        event_name="PostToolUse",
-        default_harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard",
-        workspace=tmp_path,
-        deadline=None,
-        policy_snapshot={"mode": "enforce"},
-        recording_only=False,
-    )
-    assert native_used is True
-    mediation = response["structured_content_mediation"]
-    assert isinstance(mediation, dict)
-    assert mediation["action"] == "withhold"
-    assert mediation["reason_code"] == "structured_managed_authority_unavailable"
+def test_native_unavailable_route_with_an_unreadable_config_withholds(tmp_path: Path) -> None:
+    fixture = _without_native_edge(_UnavailableLoadErrorNativeRouteFixture(_config()))
+    response, native_used = _review(fixture, tmp_path)
+    assert native_used is False
+    assert response["structured_content_mediation"]["reason_code"] == "structured_native_edge_unavailable"  # type: ignore[index]
 
 
-@pytest.mark.parametrize(
-    ("candidate", "expected_action"),
-    (
-        ('{"employee":{"email":"","id":7},"note":"x"}', "forward"),
-        ('{"employee":{"email":"person@example.test","id":7},"note":"x"}', "withhold"),
-    ),
-)
-def test_recording_only_cannot_bypass_real_managed_structured_policy(
-    tmp_path: Path,
-    candidate: str,
-    expected_action: str,
-) -> None:
+def test_recording_only_hands_the_edge_the_real_managed_policy(tmp_path: Path) -> None:
     config = _real_observe_managed_config(tmp_path)
-    fixture = _ObserveNativeRouteFixture(config)
-    response, native_used = fixture._review_native_edge_with_snapshot(
-        payload={
-            "hook_event_name": "PostToolUse",
-            "structured_output_json": candidate,
-        },
-        harness="pi",
-        event_name="PostToolUse",
-        default_harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path,
-        deadline=None,
-        policy_snapshot={"mode": "observe"},
-        recording_only=True,
-    )
+    fixture = _ObserveNativeRouteFixture(config, mediation=WITHHOLD)
+    response, native_used = _review(fixture, tmp_path, recording_only=True)
     assert native_used is True
+    (request,) = fixture.captured
+    assert request["observe_mode"] is True
+    assert "structured_output_config" not in request
     assert response["observe_mode"] is True
     assert fixture.raw_result == _native_result(observe_mode=True)
-    assert fixture.raw_receipt == _receipt()
     assert fixture.recorded_receipt == _receipt()
-    assert response["decision"] == fixture.raw_result["decision"]
-    mediation = response["structured_content_mediation"]
-    assert isinstance(mediation, dict)
-    assert mediation["action"] == "withhold"
-    if expected_action == "forward":
-        assert mediation["reason_code"] == "structured_managed_authority_unavailable"
+    assert response["decision"] == fixture.raw_result["decision"]  # type: ignore[index]
+    assert response["structured_content_mediation"] == WITHHOLD
 
 
 def test_recording_only_unconfigured_route_keeps_existing_watch_behavior(tmp_path: Path) -> None:
-    fixture = _ObserveNativeRouteFixture(_config(status="absent", locked=()))
-    response, native_used = fixture._review_native_edge_with_snapshot(
-        payload={
-            "hook_event_name": "PostToolUse",
-            "structured_output_json": '{"employee":{"email":"person@example.test","id":7},"note":"x"}',
-        },
-        harness="pi",
-        event_name="PostToolUse",
-        default_harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard",
-        workspace=tmp_path,
-        deadline=None,
-        policy_snapshot={"mode": "observe"},
-        recording_only=True,
-    )
+    config = _config(status="absent", locked=())
+    fixture = _ObserveNativeRouteFixture(config)
+    response, native_used = _review(fixture, tmp_path, recording_only=True)
     assert native_used is True
+    (request,) = fixture.captured
+    assert "structured_output_config" not in request
     assert response["observe_mode"] is True
     assert "structured_content_mediation" not in response
 
 
-@pytest.mark.parametrize(
-    ("harness", "event_name", "native_overrides", "binding", "required_reason"),
-    [
-        ("codex", "PostToolUse", {}, "pi", None),
-        ("pi", "PreToolUse", {}, "pi", None),
-        ("pi", "PostToolUse", {"observe_mode": True}, "pi", None),
-        ("pi", "PostToolUse", {}, None, None),
-        ("omp", "PostToolUse", {}, "pi", None),
-    ],
-    ids=[
-        "codex-PostToolUse-native_overrides0-binding0-None",
-        "pi-PreToolUse-native_overrides1-binding1-None",
-        "pi-PostToolUse-native_overrides2-binding2-None",
-        "pi-PostToolUse-native_overrides3-None-None",
-        "omp-PostToolUse-native_overrides4-binding4-None",
-    ],
-)
-def test_mediation_early_exits_preserve_native_authority(
-    harness: str,
-    event_name: str,
-    native_overrides: dict[str, object],
-    binding: str | None,
-    required_reason: str | None,
+def test_the_unavailable_overlay_withholds_only_what_native_resolution_requires(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    native_result = _native_result(**native_overrides)
-    original_result = dict(native_result)
-    result = mediate_native_post_tool_content(
-        harness=harness,
-        event_name=event_name,
-        native_result=native_result,
-        validated_receipt=_receipt(),
-        structured_output_json='{"employee":{"email":"","id":7},"note":"x"}',
-        binding=_binding(binding) if binding is not None else None,
-        required_reason_code=required_reason,
-    )
-    assert result is None
-    assert native_result == original_result
+    answers = iter([{"binding": None, "required": False, "reason_code": None}, NativeContentSensitivityError("down")])
+    queries: list[tuple[str, object]] = []
 
+    def resolve(query: str, body: dict[str, object]) -> object:
+        queries.append((query, body["harness"]))
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
-@pytest.mark.parametrize(
-    ("native_overrides", "expected_reason", "cancelled", "recheck"),
-    [
-        ({"model_output_action": "review"}, "structured_content_unproved", False, "present"),
-        ({}, "structured_review_cancelled", True, "present"),
-        ({}, "structured_binding_recheck_missing", False, "missing"),
-    ],
-)
-def test_mediation_withholds_unproved_or_cancelled_content_without_native_rewrite(
-    native_overrides: dict[str, object],
-    expected_reason: str,
-    cancelled: bool,
-    recheck: str,
-) -> None:
-    native_result = _native_result(**native_overrides)
-    original_result = dict(native_result)
-    result = mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result=native_result,
-        validated_receipt=_receipt(),
-        structured_output_json='{"employee":{"email":"","id":7},"note":"x"}',
-        binding=_binding(),
-        cancelled=cancelled,
-        recheck_binding=(lambda: _binding()) if recheck == "present" else None,
-    )
-    assert result is not None
-    assert result.action == "withhold"
-    assert result.reason_code == expected_reason
-    assert result.content_sha256 is None
-    assert native_result == original_result
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker_unavailable.content_query", resolve)
+    fixture = _UnavailableNativeRouteFixture(_config())
+    overlay = fixture._apply_structured_unavailable_overlay
+    kwargs = {"harness": "omp", "event_name": "PostToolUse", "guard_home": tmp_path, "workspace": None}
+    assert overlay({"decision": "allow"}, **kwargs) == {"decision": "allow"}
+    withheld = overlay({"decision": "allow"}, **kwargs)
+    assert withheld["structured_content_mediation"]["reason_code"] == "structured_native_edge_unavailable"  # type: ignore[index]
+    assert queries == [("resolution", "omp"), ("resolution", "omp")]
+    # No managed destination, no query.
+    assert overlay({"decision": "allow"}, **{**kwargs, "event_name": "PreToolUse"}) == {"decision": "allow"}
+    assert len(queries) == 2

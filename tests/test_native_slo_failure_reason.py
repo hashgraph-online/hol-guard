@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from scripts import bench_guard_native_installed_slo as benchmark
-from scripts.native_slo_failure_reason import annotate_failure_reason, contract_failure_reason
+from scripts.native_slo_failure_reason import annotate_failure_reason, contract_failure_reason, exception_chain_summary
 
 
 def test_contract_failure_names_the_failed_check_in_report_and_stderr(
@@ -80,3 +80,14 @@ def test_reason_labels_stay_bounded_and_privacy_safe(message: str, label: str) -
     result: dict[str, object] = {"failure": {"category": "benchmark_contract"}}
     assert annotate_failure_reason(result, RuntimeError(message)) == label
     assert len(label) <= 96
+
+
+def test_exception_chain_summary_names_types_and_errno_without_messages() -> None:
+    try:
+        try:
+            raise OSError(66, "Directory not empty", "/private/var/folders/secret-name")
+        except OSError as cleanup_error:
+            raise RuntimeError("token=do-not-print") from cleanup_error
+    except RuntimeError as error:
+        summary = exception_chain_summary(error)
+    assert summary == "RuntimeError<-OSError[errno=66]"

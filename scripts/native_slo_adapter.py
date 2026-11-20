@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.native_slo_contract import SAFE_ROUTE_NAMES
-from scripts.native_slo_process_tree import process_tree_rss_bytes
+from scripts.native_slo_process_tree import process_tree_rss_bytes, rss_observation_active
 
 _MAX_CASES = 2_048
 _SIZE_BYTES = {"1k": 1 * 1024, "250k": 250 * 1024, "1m": 1 * 1024 * 1024, "5m": 5 * 1024 * 1024}
@@ -134,7 +134,7 @@ def process_resources(pid: int | None = None) -> ProcessResources | None:
         # process reading is not an equivalent measurement, so report the
         # resource as unavailable when process-tree enumeration is missing.
         # Other supported POSIX platforms retain their existing root fallback.
-        if sys.platform.startswith("linux"):
+        if sys.platform.startswith("linux") or rss_observation_active():
             return None
         rss_bytes = _single_process_rss_bytes(resolved_pid)
     else:

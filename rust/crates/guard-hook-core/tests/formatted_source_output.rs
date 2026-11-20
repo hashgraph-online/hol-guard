@@ -1,3 +1,6 @@
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 use guard_contracts::NativeHookRequestV1;
 use guard_hook_core::review_post_tool;
 use serde_json::json;
@@ -7,10 +10,7 @@ struct TestRoot(std::path::PathBuf);
 
 impl TestRoot {
     fn new() -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let mut attempt = 0;
         let root = loop {
             let root = std::env::temp_dir().join(format!(

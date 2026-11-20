@@ -1,11 +1,12 @@
 //! Read-only Homebrew status queries.
 //!
-//! `brew list`, `brew info`, `brew desc`, `brew deps`, `brew uses --installed`,
-//! `brew leaves`, `brew --prefix`, `brew --cellar`, `brew --version` and
-//! `brew services list|info` print what is installed or what a formula
-//! declares. None installs, upgrades, taps, links, cleans up, starts a service
-//! or runs `brew update`. `brew info` may fetch formula metadata from the
-//! Homebrew API, which it verifies and only prints.
+//! `brew list`, `brew info`, `brew desc`, `brew search`, `brew deps`,
+//! `brew uses --installed`, `brew leaves`, `brew --prefix`, `brew --cellar`,
+//! `brew --version` and `brew services list|info` print what is installed or
+//! what a formula declares. None installs, upgrades, taps, links, cleans up,
+//! starts a service or runs `brew update`. `brew info` and `brew search` may
+//! fetch formula metadata from the Homebrew API, which Homebrew verifies and
+//! only prints.
 //!
 //! None of these reads the working directory: Homebrew's configuration lives
 //! in its prefix and in the home directory, so writing it is itself a
@@ -21,6 +22,12 @@
 //! - `services start|stop|restart|run|kill|cleanup`.
 //! - any option not listed below, such as `info --github` (opens a browser),
 //!   `deps --graph`, and `--eval-all` (evaluates every tap formula).
+//! - `search --pull-request`, which queries GitHub for the formula's pull
+//!   requests, and `search --repology|--macports|--fink|--opensuse|--ubuntu|
+//!   --debian|--fedora|--archlinux`, each of which opens another package
+//!   site in a browser.
+//! - a `search` term written as `/REGEX/`, whose slashes this reading cannot
+//!   tell from the ones that name a tap or a path.
 //! - operands that name a path, URL, tap or Ruby file: Homebrew loads a
 //!   `.rb` path or a tap-qualified name as formula code, and may tap a
 //!   missing tap first.
@@ -84,6 +91,10 @@ const LEAVES_FLAGS: &[&str] = &[
     "-p",
 ];
 
+/// `--desc` matches a formula's description rather than its name. Every other
+/// `search` option leaves Homebrew's own index for a browser or GitHub.
+const SEARCH_FLAGS: &[&str] = &["--desc"];
+
 const SERVICES_LIST_FLAGS: &[&str] = &["--json"];
 
 const SERVICES_INFO_FLAGS: &[&str] = &["--json", "--all"];
@@ -105,6 +116,9 @@ pub(super) fn safe_brew_arguments(arguments: &[String]) -> bool {
         ["list" | "ls", rest @ ..] => query(rest, &[LIST_FLAGS, KIND_FLAGS], true),
         ["info" | "abv", rest @ ..] => query(rest, &[INFO_FLAGS, KIND_FLAGS], true),
         ["desc", rest @ ..] => query(rest, &[KIND_FLAGS], true) && names(rest) > 0,
+        // With no term `search` prints every name Homebrew knows, which is the
+        // same index the search itself reads.
+        ["search", rest @ ..] => query(rest, &[SEARCH_FLAGS, KIND_FLAGS], true),
         // Without a name or `--installed`, `deps` evaluates every available
         // formula and cask, tap definitions included.
         ["deps", rest @ ..] => {
@@ -180,6 +194,11 @@ mod tests {
             "info wget",
             "info --json=v2 --installed",
             "desc wget python@3.12",
+            "search",
+            "search node",
+            "search --desc json",
+            "search --cask docker",
+            "search --formula --quiet postgresql@16",
             "--prefix",
             "--prefix postgresql@16",
             "--cellar",
@@ -228,6 +247,14 @@ mod tests {
             "info formula.rb",
             "info acme/tools/widget",
             "info https://example.invalid/widget.rb",
+            "search --pull-request wget",
+            "search --open wget",
+            "search --closed wget",
+            "search --debian wget",
+            "search --repology wget",
+            "search --eval-all --desc json",
+            "search /^py.*/",
+            "search acme/tools/widget",
             "deps --graph wget",
             "uses openssl@3",
             "desc",

@@ -458,6 +458,61 @@ fn grant_lookups_off_still_record_the_observation() {
 }
 
 #[test]
+fn observe_only_records_without_reading_a_grant() {
+    // The resident's off-path observer records the launch and the catalog,
+    // and a store with no grant row still answers.
+    let fixture = Fixture::new("observe-only");
+    let identity = fixture.identity();
+    let request = fixture.request("npm run build", "allow", false);
+    assert_eq!(observe_only(&request), Ok(()));
+    let observations = fixture.observations();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].0, identity.cli_id);
+    assert_eq!(observations[0].1, "package-scripts");
+    assert!(fixture
+        .commands(&identity.cli_id)
+        .iter()
+        .any(|(id, _)| id == "build"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_launched_script_keeps_the_file_the_agent_ran() {
+    // Load commands reads a script's help at this file, so the operator is
+    // never asked for a path the hook already resolved.
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new("observe-script");
+    let script = std::path::Path::new(&fixture.workspace).join("approve-merge.sh");
+    fs::write(&script, "#!/bin/sh\necho ready\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    let script = fs::canonicalize(&script).unwrap();
+    let mut request = fixture.request(&format!("{} status", script.display()), "allow", false);
+    request
+        .env
+        .insert("PATH".to_owned(), "/usr/bin:/bin".to_owned());
+    assert_eq!(observe_only(&request), Ok(()));
+    let observations = fixture.observations();
+    assert_eq!(observations.len(), 1, "{observations:?}");
+    assert_eq!(observations[0].1, "cli");
+    assert_eq!(observations[0].2, script.to_string_lossy().into_owned());
+}
+
+#[test]
+fn observe_only_refuses_a_store_outside_the_guard_home() {
+    let fixture = Fixture::new("observe-only-path");
+    let mut request = fixture.request("npm run build", "allow", false);
+    request.store_path = std::env::temp_dir()
+        .join("elsewhere.db")
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(
+        observe_only(&request),
+        Err("native_local_cli_hook_path_invalid")
+    );
+    assert!(fixture.observations().is_empty());
+}
+
+#[test]
 fn a_non_refinable_action_is_never_changed() {
     let fixture = Fixture::new("non-refinable");
     let identity = fixture.identity();
@@ -550,7 +605,8 @@ fn an_unset_review_names_the_connector_to_set_up() {
     }
     // A grant recorded for an older identity is not a decision for this one.
     fixture.grant(&identity.cli_id, &"0".repeat(64), "allowed");
-    assert!(run_with_connector(&request).unwrap().1.is_some());
+    let changed = run_with_connector(&request).unwrap().1.unwrap();
+    assert_eq!(changed["allowed_earlier_version"], true);
 }
 
 #[test]
@@ -566,3 +622,7 @@ fn a_decided_connector_is_never_sent_back_to_setup() {
 
 #[path = "local_cli_hook_op_grant_lift_tests.rs"]
 mod grant_lift;
+
+#[cfg(unix)]
+#[path = "local_cli_hook_op_compound_tests.rs"]
+mod compound;

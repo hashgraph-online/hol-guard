@@ -12,12 +12,23 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
+use source_lines::code_lines;
 
 mod argv;
+mod destructive_git;
+pub(in crate::pretool) mod fed;
+pub(in crate::pretool) mod host_reach;
 mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+mod source_lines;
+mod system_files;
+
+pub(in crate::pretool) use destructive_git::{
+    keeps_destructive_git_review, text_spells_destructive_git,
+};
+pub(in crate::pretool) use system_files::{keeps_system_file_review, text_names_system_file};
 
 pub(crate) use argv::{argv_script, ArgvScript};
 
@@ -60,9 +71,10 @@ pub(in crate::pretool) enum Language {
 /// Network clients a script imports or calls.
 static PYTHON_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
     let clients = "socket|ssl|http|urllib|urllib3|requests|httpx|aiohttp|websocket|websockets|smtplib|ftplib|poplib|imaplib|telnetlib|xmlrpc|paramiko|asyncssh|pycurl|httplib2|boto3|botocore|googleapiclient|google\\.cloud|google\\.analytics|google\\.auth\\.transport|openai|anthropic|grpc|kubernetes|psycopg|psycopg2|pymysql|MySQLdb|redis|pymongo|slack_sdk|github|gql|stripe";
-    // `from client import x`, or `client` anywhere in an `import a, b` list.
+    // `from client import x`, or `client` anywhere in an `import a, b` list,
+    // at the start of a line or after the colon of `if x: import client`.
     Regex::new(&format!(
-        r"(?m)^[ \t]*(?:from[ \t]+(?:{clients})\b|import[ \t]+(?:[\w.]+(?:[ \t]+as[ \t]+\w+)?[ \t]*,[ \t]*)*(?:{clients})\b)"
+        r"(?m)(?:^|:)[ \t]*(?:from[ \t]+(?:{clients})\b|import[ \t]+(?:[\w.]+(?:[ \t]+as[ \t]+\w+)?[ \t]*,[ \t]*)*(?:{clients})\b)"
     ))
     .unwrap()
 });
@@ -112,8 +124,14 @@ pub(super) struct Findings {
     /// only network use is loopback HTTP, the literal ports the workspace
     /// sandbox grants it.
     pub(super) loopback: Option<BTreeSet<u16>>,
+    /// Python fed on standard input as text that reaches past the
+    /// workspace, itself or through a local module it imports
+    /// (`host_reach`).
+    pub(super) host_reach: bool,
     /// The program's source and the local modules read with it.
     pub(super) sources: Vec<String>,
+    /// The language the program is written in.
+    pub(super) language: Option<Language>,
 }
 
 /// What each script this command launches does, one entry per program whose
@@ -138,13 +156,227 @@ fn structure(
     if model.confidence == "exact" {
         return Some((model.normalized_text.clone(), model.segments.clone()));
     }
-    let structured = crate::critical_floor_context::parse_floor_command(
-        &model.normalized_text,
-        context.cwd.map(Path::new),
-        context.home_dir.map(Path::new),
-    );
-    (structured.confidence == "exact" && structured.wrapper_chain.is_empty())
-        .then_some((structured.normalized_text, structured.segments))
+    text_structure(&model.normalized_text, context)
+}
+
+/// Whether `text`, read the way an uncertain command is read above, is
+/// commands this scan models exactly.
+pub(crate) fn models_exactly(text: &str, context: PathContext<'_>) -> bool {
+    read_paths::verified_path_context(context.home_dir, context.cwd)
+        && text_structure(text, context).is_some()
+}
+
+fn text_structure(
+    text: &str,
+    context: PathContext<'_>,
+) -> Option<(String, Vec<crate::CommandSegmentV1>)> {
+    let parse = |text: &str| {
+        let structured = crate::critical_floor_context::parse_floor_command(
+            text,
+            context.cwd.map(Path::new),
+            context.home_dir.map(Path::new),
+        );
+        (structured.confidence == "exact" && structured.wrapper_chain.is_empty())
+            .then_some((structured.normalized_text, structured.segments))
+    };
+    parse(text)
+        .or_else(|| {
+            (!background_moves_shell(text)).then_some(())?;
+            parse(&sequential_jobs(text)?)
+        })
+        .or_else(|| parse(crate::native_command_controls::launcher_body(text)?))
+}
+
+/// The text of a command whose only unreadable part is the `&` that
+/// backgrounds it.
+///
+/// Backgrounding runs exactly the programs the foreground text names, which is
+/// how the floor above already reads it: `node server.js &` runs the file
+/// `node server.js` runs, in this directory and as this user. The parser
+/// leaves a background job uncertain, so the launch lost its segments and with
+/// them the script file it names, and an interpreter with no file left looked
+/// like a program nobody read. A `&` anywhere else joins two commands
+/// (`&&`), separates jobs, or belongs to a redirect such as `2>&1`, and none
+/// of those is answered by dropping it, so only a single trailing one is read
+/// this way.
+pub(crate) fn foreground_job(text: &str) -> Option<&str> {
+    let stripped = text.trim_end().strip_suffix('&')?;
+    // `cmd foo\&` passes a literal `&` and runs in the foreground. The
+    // backslashes in front of the `&` have to pair off for it to be the
+    // operator that backgrounds the command, so an odd run of them leaves the
+    // text as it arrived.
+    if stripped
+        .chars()
+        .rev()
+        .take_while(|value| *value == '\\')
+        .count()
+        % 2
+        == 1
+    {
+        return None;
+    }
+    let body = stripped.trim_end();
+    (!body.is_empty() && !body.contains('&')).then_some(body)
+}
+
+/// The command list with every job-ending `&` read as the `;` that ends a
+/// foreground command, or `None` when the text has no such `&`.
+///
+/// `node server.js & echo started` starts the server and prints a line: the
+/// programs `node server.js; echo started` runs, in the same directory and as
+/// the same user. The parser leaves any background job uncertain, so a launch
+/// followed by another command lost its segments, and the interpreter looked
+/// like a program nobody read, exactly as the trailing `&` above once did.
+/// The jobs are found by the parser's own split, so a quoted `&`, the `&&` of
+/// a list and the `&` of a redirect such as `2>&1` stay what they are.
+pub(crate) fn sequential_jobs(text: &str) -> Option<String> {
+    let (mut chars, separators) = job_separators(text)?;
+    let last = *separators.last()?;
+    let trailing = chars[last + 1..].iter().all(|c| c.is_whitespace());
+    for &index in &separators {
+        chars[index] = ';';
+    }
+    if trailing {
+        chars.truncate(last);
+    }
+    let list: String = chars.into_iter().collect();
+    let list = list.trim();
+    (!list.is_empty()).then(|| list.to_owned())
+}
+
+/// Whether a job that runs before another one could change the shell the
+/// later one runs in, were it read in the foreground.
+///
+/// A background job runs in a subshell, so `cd app && npm start & curl ...`
+/// leaves `curl` in the starting directory. Read as a list, the `cd` would
+/// move every command after it, and the paths those commands name would
+/// resolve somewhere the shell never looks. Any such builtin or assignment in
+/// command position ahead of the last job keeps the text uncertain.
+fn background_moves_shell(text: &str) -> bool {
+    let Some((chars, separators)) = job_separators(text) else {
+        return false;
+    };
+    let ahead = separators
+        .iter()
+        .copied()
+        .filter(|&index| !chars[index + 1..].iter().all(|c| c.is_whitespace()))
+        .max()
+        .unwrap_or(0);
+    let prefix: String = chars[..ahead].iter().collect();
+    // Splitting ignores quoting, so it can only add candidate command words,
+    // never hide one that follows a real separator.
+    prefix
+        .split([';', '&', '|', '(', ')', '{', '}', '\n'])
+        .any(|command| command_word(command).is_some_and(moves_shell))
+}
+
+/// The word in command position of one simple command, past reserved words
+/// and the `command` and `builtin` wrappers that still run the builtin.
+fn command_word(command: &str) -> Option<&str> {
+    let mut wrapped = false;
+    command.split_whitespace().find(|word| {
+        if matches!(*word, "command" | "builtin" | "time") {
+            wrapped = true;
+            return false;
+        }
+        // `command -p cd` and `time -p cd` still run the builtin.
+        if wrapped && word.starts_with('-') {
+            return false;
+        }
+        !matches!(
+            *word,
+            "!" | "if" | "then" | "else" | "elif" | "do" | "while" | "until"
+        )
+    })
+}
+
+fn moves_shell(word: &str) -> bool {
+    // The shell strips quotes and escapes before it looks a builtin up, and a
+    // substitution can expand to one, so `'cd'`, `c\d` and `$(echo cd)` may
+    // all move the shell. Such a word is not unquoted here; it stays uncertain.
+    word.contains(['\'', '"', '\\', '`', '$'])
+        || matches!(
+            word,
+            "cd" | "pushd"
+                | "popd"
+                | "source"
+                | "."
+                | "set"
+                | "shopt"
+                | "umask"
+                | "export"
+                | "unset"
+                | "alias"
+                | "declare"
+                | "typeset"
+                | "readonly"
+                | "local"
+                | "eval"
+                | "exec"
+                | "trap"
+                | "ulimit"
+                | "hash"
+                | "enable"
+        )
+        || word.split_once('=').is_some_and(|(name, _)| {
+            name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+}
+
+/// The characters of `text` and the indices of the `&`s that end a job.
+fn job_separators(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
+    let segments =
+        crate::parser_segments::split_pipelines_including_background(text, cfg!(windows)).ok()?;
+    let chars: Vec<char> = text.chars().collect();
+    let mut separators: Vec<usize> = segments
+        .iter()
+        .filter_map(|segment| {
+            let index = segment.end
+                + chars
+                    .get(segment.end..)?
+                    .iter()
+                    .position(|c| !c.is_whitespace())?;
+            (chars[index] == '&' && chars.get(index + 1) != Some(&'&')).then_some(index)
+        })
+        .collect();
+    separators.sort_unstable();
+    separators.dedup();
+    Some((chars, separators))
+}
+
+/// Whether backgrounding is the only part of this command the scan could not
+/// read: the same text without its trailing `&` is one exactly modelled
+/// command.
+///
+/// `node server.js &` runs the file `node server.js` runs, in this directory
+/// and as this user, and the modelled path reads and routes that one. The
+/// floor above holds no script file either way, but refusing the backgrounded
+/// spelling outright left a dev server blocked with no approval to give it,
+/// while the same text without the `&` ran.
+pub(crate) fn backgrounded_launch(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
+    model.uncertainty_reason.as_deref() == Some("background_job_not_yet_supported")
+        && model.wrapper_chain.is_empty()
+        && !model.path_overridden
+        && sequential_jobs(&model.normalized_text).is_some()
+        && structure(model, context).is_some()
+}
+
+/// Whether the command is a scheduling or buffering prefix in front of a
+/// program this scan can read, such as `nohup node server.js`.
+///
+/// The parser leaves the whole text unmodelled at that prefix, so the
+/// interpreter behind it looks like one naming a file nobody read, and the
+/// command blocked with no approval to give it - while the same words without
+/// the prefix modelled exactly and ran. The prefix changes scheduling,
+/// buffering or a hangup, never the program, the user or the directory, so the
+/// owners are the owners of the command the text already names.
+pub(crate) fn prefixed_launch(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
+    model.uncertainty_reason.as_deref() == Some("transparent_wrapper_not_yet_supported")
+        && model.wrapper_chain.is_empty()
+        && !model.path_overridden
+        && crate::native_command_controls::launcher_body(&model.normalized_text).is_some()
+        && structure(model, context).is_some()
 }
 
 /// The sources of the program, when the command is one interpreter launch,
@@ -199,13 +431,7 @@ pub(crate) fn sourced_program_sources(
         // expansion or a glob builds, and a wrapper or environment prefix
         // each leave the file unknown, and an unknown file is unread.
         let target = sourced_file(segment)?;
-        // An earlier directory change moves a relative path out of reach.
-        let moved = segments[..index].iter().any(|prior| {
-            prior.executable.as_deref().is_some_and(|value| {
-                matches!(super::executable_basename(value), "cd" | "pushd" | "popd")
-            })
-        });
-        if moved && !Path::new(target).is_absolute() {
+        if moved_out_of_reach(&segments[..index], target) {
             return None;
         }
         sources.push(read_text(&resolve(target, context)?)?);
@@ -213,22 +439,186 @@ pub(crate) fn sourced_program_sources(
     sourcing.then_some(sources)
 }
 
-/// The text of every file the command sources, when sourcing is the only
-/// nesting the command does.
+/// The texts of the files a sourcing-only command sources, when sourcing is
+/// the only nesting it does and every file it sources is named in the text.
 ///
-/// [`sourced_program_sources`] answers for the files a command sources and
-/// says nothing about the rest of it, which is what a floor wants once the
-/// shape is already known to be reviewable. Deciding that shape needs the
-/// stricter question: `eval evil && source ok.sh` sources a file this scan
-/// reads, and reading it bounds nothing, because `eval` runs words that are
-/// not in the text at all. Any other nested executor in the command is
-/// refused here, so only sourcing is read through.
-pub(crate) fn sole_sourcing_sources(
+/// This is the relaxed half of [`sourced_program_sources`], which answers the
+/// shape question together with whether every file could be read and returns
+/// `None` for either refusal. That reads a command running words this text
+/// does not hold the same way as one sourcing a file the read screen keeps out
+/// of reach. `~/.nvm/nvm.sh` is the second kind: a hidden home path the shell
+/// reads and this scan may not, sitting in a shape as plain as the
+/// `.venv/bin/activate` beside it. A floor that hands an unread file an
+/// ordinary review card, the way `bash FILE` has always been reviewed, has to
+/// tell the two apart.
+///
+/// Only the file that could not be read is given up, never the owners of the
+/// one beside it that could: `source ./a.sh && source ~/.nvm/nvm.sh` returns
+/// the text of `./a.sh`, so every program it names still joins the owners and
+/// a block floor it carries still stands. The file has to be named here as
+/// well: `source $INIT` runs a path the text does not hold at all, and
+/// `eval evil && source ok.sh` runs words from nowhere.
+///
+/// A path the filesystem does not hold is the third kind, and it holds no
+/// words to miss: a shell sourcing it only reports that it could not read it.
+/// Giving up the whole command over that left an ordinary
+/// `source venv/bin/activate && pytest -q`, run in a checkout whose virtualenv
+/// has not been created yet, a block with no approval to give it, while the
+/// same command one `python -m venv venv` later reviewed behind a card. A file
+/// that exists and could not be read is not that case: padding one past the
+/// read bound or writing a byte that is not UTF-8 hides its words, and a
+/// checkout this agent did not write controls both. Neither is a file an
+/// earlier segment of this same command names - `printf '...' > run.sh &&
+/// . ./run.sh` sources words written after the scan looked, so both keep the
+/// evaluation failure they have today.
+pub(crate) fn sourcing_bounded_sources(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<Vec<String>> {
     let (_, segments) = structure(model, context)?;
-    let nested = segments.iter().any(|segment| {
+    if !sourcing_is_the_only_nesting(&segments) {
+        return None;
+    }
+    let mut sources = Vec::new();
+    let mut sourcing = false;
+    for (index, segment) in segments.iter().enumerate() {
+        if !sources_a_file(segment) {
+            continue;
+        }
+        let target = sourced_file(segment)?;
+        if moved_out_of_reach(&segments[..index], target) {
+            return None;
+        }
+        match resolve(target, context).as_deref().and_then(read_text) {
+            Some(text) => sources.push(text),
+            // A file this scan does not hold the words of bounds nothing, but
+            // it does not take the owners of its neighbours with it either.
+            None if reviewable_unread(target, context, &segments[..index]) => {}
+            None => return None,
+        }
+        sourcing = true;
+    }
+    sourcing.then_some(sources)
+}
+
+/// Whether a sourced file whose words this scan does not have may still stand
+/// behind an approval card.
+///
+/// A path the read screen keeps out of reach is already given up by the floor
+/// this feeds, and a path that holds no file hides nothing - unless an earlier
+/// segment of the same command names it, which is the command writing the words
+/// it then runs.
+fn reviewable_unread(
+    target: &str,
+    context: PathContext<'_>,
+    prior: &[crate::CommandSegmentV1],
+) -> bool {
+    if outside_the_workspace(target, context) {
+        return true;
+    }
+    absent(target, context) && !named_earlier(prior, target)
+}
+
+/// Whether the path a sourcing names holds no file at all.
+///
+/// The read screen is not asked: a path it keeps out of reach is already given
+/// up by [`outside_the_workspace`], and the only question left here is whether
+/// there is anything to read.
+fn absent(target: &str, context: PathContext<'_>) -> bool {
+    guard_secure_fs::resolve_candidate(
+        target,
+        context.cwd.map(Path::new),
+        Path::new(context.home_dir.unwrap_or_default()),
+    )
+    .is_ok_and(|path| !path.exists())
+}
+
+/// Whether an earlier segment of the same command names the file a later one
+/// sources, which is the command writing the words it then runs.
+fn named_earlier(prior: &[crate::CommandSegmentV1], target: &str) -> bool {
+    let name = Path::new(target)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(target);
+    prior.iter().any(|segment| segment.text.contains(name))
+}
+
+/// Whether an earlier directory change moves a relative sourced path out of
+/// reach. The shell reads the file from the directory it moved to, which is
+/// not the one this scan resolves against, so the text it runs is not the text
+/// that was read.
+fn moved_out_of_reach(prior: &[crate::CommandSegmentV1], target: &str) -> bool {
+    if Path::new(target).is_absolute() {
+        return false;
+    }
+    prior.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|value| {
+            matches!(super::executable_basename(value), "cd" | "pushd" | "popd")
+        })
+    })
+}
+
+/// Whether the file a sourcing names lives outside the directory the command
+/// runs in.
+///
+/// The two refusals [`sourced_program_sources`] folds together are not worth
+/// the same. A hidden home path is out of this scan's reach by the read screen
+/// alone, and nothing in the workspace decides that. A file in the workspace
+/// that this scan could not read is a different story: padding it past the
+/// read bound or writing one byte that is not UTF-8 is enough to make it
+/// unreadable, and a checkout this agent did not write controls both. That
+/// file keeps the failure a command running words this text does not hold has
+/// always had, so an unreadable workspace file cannot trade a block floor for
+/// a review card.
+fn outside_the_workspace(target: &str, context: PathContext<'_>) -> bool {
+    let Some(cwd) = context.cwd.map(Path::new) else {
+        return false;
+    };
+    let Ok(candidate) = guard_secure_fs::resolve_candidate(
+        target,
+        Some(cwd),
+        Path::new(context.home_dir.unwrap_or_default()),
+    ) else {
+        return false;
+    };
+    let Some(candidate) = canonical_through_existing(&candidate) else {
+        return false;
+    };
+    let workspace = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    !candidate.starts_with(&workspace)
+}
+
+/// `path` with its nearest existing ancestor canonicalized.
+///
+/// A file the command has not written yet does not canonicalize, and its raw
+/// spelling never matches a canonical workspace that is reached through a
+/// link or a short name: `/var/...` on macOS is `/private/var/...`, and a
+/// Windows temp directory canonicalizes to a verbatim path. Read that way,
+/// `cp seed.sh run.sh && . ./run.sh` sourced a file "outside the workspace"
+/// and lost the failure a file this command writes keeps.
+///
+/// `None` when nothing resolves or the missing part climbs with `..`: once the
+/// command creates those directories, a climb from behind a link can land back
+/// in the workspace, so where it ends is not known here.
+fn canonical_through_existing(path: &Path) -> Option<PathBuf> {
+    let (canonical, missing) = path.ancestors().find_map(|ancestor| {
+        Some((
+            std::fs::canonicalize(ancestor).ok()?,
+            path.strip_prefix(ancestor).ok()?,
+        ))
+    })?;
+    missing
+        .components()
+        .all(|component| matches!(component, std::path::Component::Normal(_)))
+        .then(|| canonical.join(missing))
+}
+
+/// Whether no segment other than the shell's `source` builtin runs words of
+/// its own. `eval evil && source ok.sh` sources a file this scan reads, and
+/// reading it bounds nothing, because `eval` runs words that are not in the
+/// text at all.
+fn sourcing_is_the_only_nesting(segments: &[crate::CommandSegmentV1]) -> bool {
+    !segments.iter().any(|segment| {
         !sources_a_file(segment)
             && segment.executable.as_deref().is_some_and(|executable| {
                 crate::parser_executables::is_nested_command_executor(
@@ -236,11 +626,7 @@ pub(crate) fn sole_sourcing_sources(
                     &segment.arguments,
                 )
             })
-    });
-    if nested {
-        return None;
-    }
-    sourced_program_sources(model, context)
+    })
 }
 
 /// Whether the segment runs the shell's `source` builtin, whatever file it
@@ -306,6 +692,7 @@ fn assess_programs(
                 .flatten()
         };
         let inline = matches!(program, Program::Inline(_)) && !remote;
+        let mut fed_text = false;
         let script_file = matches!(program, Program::Script(_));
         let entry = match program {
             Program::Script(script) if scripts && !remote && reachable(script) => {
@@ -320,10 +707,13 @@ fn assess_programs(
                 directory: imports_from(),
             },
             Program::Stdin => match stdin.source(segments, index) {
-                Some(Fed::Text(source)) => Entry::Text {
-                    source,
-                    directory: imports_from(),
-                },
+                Some(Fed::Text(source)) => {
+                    fed_text = true;
+                    Entry::Text {
+                        source,
+                        directory: imports_from(),
+                    }
+                }
                 Some(Fed::File(file)) if reachable(&file) => {
                     let Some(path) = resolve(&file, context) else {
                         continue;
@@ -353,6 +743,7 @@ fn assess_programs(
             }
             Entry::Text { .. } => false,
         };
+        let fed_python = fed_text && language == Language::Python;
         let Some((sources, complete)) = read_graph(language, entry) else {
             continue;
         };
@@ -364,11 +755,15 @@ fn assess_programs(
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
+            found.host_reach |= fed_python && host_reach::python_reaches_host(source);
         }
+        // A local module the graph left unread could reach the host too.
+        found.host_reach |= fed_python && !complete;
         if (inline || workspace_script) && complete && language == Language::Node {
             found.loopback = loopback::program_ports(&sources, context.home_dir);
         }
         found.sources = sources;
+        found.language = Some(language);
         findings.push(found);
     }
     findings
@@ -393,29 +788,7 @@ pub(in crate::pretool) fn standalone_clean(language: Language, path: &Path) -> b
     let [source] = sources.as_slice() else {
         return false;
     };
-    let code = code_lines(language, source);
-    let network = match language {
-        Language::Python => python_network(&code),
-        Language::Node => NODE_NETWORK.is_match(&code),
-    };
-    !network && !CREDENTIAL_STORE.is_match(&code)
-}
-
-/// Whether a program this command launches uses the network.
-pub(super) fn uses_network(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
-    assess(model, context).iter().any(|found| found.network)
-}
-
-/// Whether a program the POSIX shell text `command` launches uses the
-/// network, for a caller that judges a projection of the text.
-pub(super) fn text_uses_network(command: &str, context: PathContext<'_>) -> bool {
-    crate::parse_command(&crate::CommandModelRequestV1 {
-        command: command.to_owned(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "guard-shell".to_owned(),
-    })
-    .is_ok_and(|model| uses_network(&model, context))
+    fed::source_clean(language, source)
 }
 
 /// Whether inline source or a program fed on standard input uses the
@@ -780,77 +1153,13 @@ fn python_imports(source: &str, root: &Path, directory: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The source without its comments, so a path named in a note is not read
-/// as one the script opens. Only whole-line comments, block comments that
-/// open a line and comments after whitespace are dropped; a comment marker
-/// inside a string can drop the rest of that line, which only lowers what
-/// the scan finds.
-fn code_lines(language: Language, source: &str) -> String {
-    let marker = match language {
-        Language::Python => "#",
-        Language::Node => "//",
-    };
-    let mut code = String::with_capacity(source.len());
-    let mut in_block = false;
-    for line in source.lines() {
-        let trimmed = line.trim_start();
-        if language == Language::Node && (in_block || trimmed.starts_with("/*")) {
-            in_block = !trimmed.contains("*/");
-            if in_block || trimmed.trim_end().ends_with("*/") {
-                continue;
-            }
-        }
-        if trimmed.starts_with(marker) {
-            continue;
-        }
-        let end = line
-            .match_indices(marker)
-            .find(|(at, _)| line[..*at].ends_with([' ', '\t']))
-            .map_or(line.len(), |(at, _)| at);
-        // `python -c 'import os; import socket'` puts statements on one line.
-        match language {
-            Language::Python => code.push_str(&split_statements(&line[..end])),
-            Language::Node => code.push_str(&line[..end]),
-        }
-        code.push('\n');
-    }
-    code
-}
-
-/// A Python line with each `;` outside a string literal starting a new line.
-/// A line whose strings this cannot follow, with a triple quote, an f-string
-/// field or a string left open, splits at every `;`, which only finds more.
-fn split_statements(line: &str) -> String {
-    let everywhere = || line.replace(';', "\n");
-    if line.contains("\"\"\"") || line.contains("'''") || line.contains('{') {
-        return everywhere();
-    }
-    let mut split = String::with_capacity(line.len());
-    let (mut quote, mut escaped) = (None, false);
-    for character in line.chars() {
-        match quote {
-            Some(_) if escaped => escaped = false,
-            Some(_) if character == '\\' => escaped = true,
-            Some(open) if character == open => quote = None,
-            Some(_) => {}
-            None if matches!(character, '\'' | '"') => quote = Some(character),
-            None if character == ';' => {
-                split.push('\n');
-                continue;
-            }
-            None => {}
-        }
-        split.push(character);
-    }
-    if quote.is_some() {
-        return everywhere();
-    }
-    split
-}
-
 fn extension(path: &Path) -> String {
     path.extension()
         .and_then(|value| value.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase()
 }
+
+#[cfg(test)]
+#[path = "script_content/jobs_tests.rs"]
+mod jobs_tests;

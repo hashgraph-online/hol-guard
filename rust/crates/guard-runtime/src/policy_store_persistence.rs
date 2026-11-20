@@ -257,12 +257,28 @@ fn surfaced_persist_error(kind: &str, suffix: &str, error: &str) -> String {
     }
 }
 
-pub(super) fn read_private_json(
+pub(crate) fn read_private_json(
     path: &Path,
     maximum_bytes: u64,
     kind: &str,
     private_root: &Path,
 ) -> Result<Option<(Value, Vec<u8>)>, String> {
+    let Some(bytes) = read_private_file(path, maximum_bytes, kind, private_root)? else {
+        return Ok(None);
+    };
+    let value = crate::strict_json_value(&bytes)
+        .map_err(|_| format!("native_policy_snapshot_{kind}_invalid"))?;
+    Ok(Some((value, bytes)))
+}
+
+/// The bytes of one private file, held to the same ownership, mode and size
+/// checks [`read_private_json`] applies before it parses them.
+pub(crate) fn read_private_file(
+    path: &Path,
+    maximum_bytes: u64,
+    kind: &str,
+    private_root: &Path,
+) -> Result<Option<Vec<u8>>, String> {
     #[cfg(not(windows))]
     let _ = private_root;
     #[cfg(windows)]
@@ -328,12 +344,10 @@ pub(super) fn read_private_json(
     if bytes.len() as u64 > maximum_bytes {
         return Err(format!("native_policy_snapshot_{kind}_invalid"));
     }
-    let value = crate::strict_json_value(&bytes)
-        .map_err(|_| format!("native_policy_snapshot_{kind}_invalid"))?;
-    Ok(Some((value, bytes)))
+    Ok(Some(bytes))
 }
 
-pub(super) fn persist_private_bytes(
+pub(crate) fn persist_private_bytes(
     path: &Path,
     bytes: &[u8],
     maximum_bytes: u64,

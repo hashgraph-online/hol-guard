@@ -148,10 +148,7 @@ fn authentication_does_not_invent_approval_or_raw_action_material() {
 #[test]
 fn private_request_loading_rejects_forged_origin_and_preserves_legacy_review() {
     use std::io::Write;
-    let suffix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let path = std::env::temp_dir().join(format!(
         "guard-origin-request-{}-{suffix}",
         std::process::id()

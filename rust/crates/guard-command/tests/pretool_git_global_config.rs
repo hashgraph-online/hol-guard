@@ -73,10 +73,7 @@ fn session(label: &str) -> Session {
     let home = std::fs::canonicalize(base).unwrap().join(format!(
         "guard-git-session-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(home.clone());
     let org = home.join("org");

@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 
+use guard_contracts::MAX_NATIVE_RESPONSE_BYTES;
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
@@ -122,11 +123,27 @@ fn receipt_dict(row: &Row, include_rowid: bool) -> StoreResult<Value> {
     Ok(Value::Object(result))
 }
 
+/// A receipt list stops here so one long history cannot build a reply the
+/// resident has to refuse, which the caller only ever sees as the store being
+/// unavailable. The slack covers the envelope the reply is framed in. Every
+/// list below is ordered, so truncation drops the far end: the oldest rows of
+/// a newest-first read, and rows a cursor page returns on its next call.
+const LIST_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
+
 fn receipts(rows: &[Row], include_rowid: bool) -> StoreResult<Value> {
-    rows.iter()
-        .map(|row| receipt_dict(row, include_rowid))
-        .collect::<StoreResult<Vec<_>>>()
-        .map(Value::Array)
+    let mut listed = Vec::new();
+    let mut bytes = 0;
+    for row in rows {
+        let item = receipt_dict(row, include_rowid)?;
+        bytes += serde_json::to_vec(&item).map_or(0, |encoded| encoded.len());
+        // One row over the budget still comes back, so a cursor page always
+        // advances past it rather than stalling on a receipt it cannot skip.
+        if !listed.is_empty() && bytes > LIST_BUDGET_BYTES {
+            break;
+        }
+        listed.push(item);
+    }
+    Ok(Value::Array(listed))
 }
 
 fn single(row: Option<Row>) -> StoreResult<Value> {

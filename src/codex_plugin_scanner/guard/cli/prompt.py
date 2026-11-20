@@ -11,8 +11,8 @@ from rich.table import Table
 from rich.text import Text
 
 from ..approval_gate import ApprovalGateError, ApprovalGateGrant, public_config, require_approval_decision
-from ..consumer import artifact_hash
 from ..models import GuardArtifact, PolicyDecision
+from ..native_artifact_content_hash import native_artifact_content_hashes
 from ..store import GuardStore
 from .approval_gate_prompt import prompt_for_approval_gate
 
@@ -324,6 +324,7 @@ def build_prompt_artifacts(
     """Combine detected artifacts with evaluation results for prompting."""
 
     artifacts_by_id = {artifact.artifact_id: artifact for artifact in artifacts}
+    content_hashes = _content_hash_fallbacks(artifacts_by_id, evaluation_artifacts)
     prompt_artifacts: list[PromptArtifact] = []
     for item in evaluation_artifacts:
         artifact_id = str(item.get("artifact_id"))
@@ -369,7 +370,7 @@ def build_prompt_artifacts(
                 harness=harness,
                 artifact_id=artifact.artifact_id,
                 artifact_name=artifact.name,
-                artifact_hash=exact_approval_hash or artifact_hash(artifact),
+                artifact_hash=exact_approval_hash or content_hashes[artifact.artifact_id],
                 policy_action=str(item.get("policy_action") or "review"),
                 changed_fields=changed_fields,
                 provenance_summary=f"{artifact.source_scope} artifact defined at {artifact.config_path}",
@@ -383,10 +384,43 @@ def build_prompt_artifacts(
                 metadata=dict(artifact.metadata),
                 current_snapshot=_prompt_artifact_snapshot(artifact),
                 removed=False,
-                snapshot_hash=content_hash or artifact_hash(artifact),
+                snapshot_hash=content_hash or content_hashes[artifact.artifact_id],
             )
         )
     return prompt_artifacts
+
+
+def _content_hash_fallbacks(
+    artifacts_by_id: dict[str, GuardArtifact],
+    evaluation_artifacts: list[dict[str, object]],
+) -> dict[str, str]:
+    """Hash only the artifacts whose evaluation row is missing a hash.
+
+    Each hash is an approval key the resident spells, and an evaluation already
+    carries both hashes for nearly every row, so the fallback below rarely has
+    anything to fall back to. Asking for the ones that are missing keeps the
+    resident off the path of a prompt that needs none of them, and keeps a
+    prompt that needs one from crossing to the resident once per row.
+    """
+
+    pending: dict[str, GuardArtifact] = {}
+    for item in evaluation_artifacts:
+        artifact = artifacts_by_id.get(str(item.get("artifact_id")))
+        if artifact is None or artifact.artifact_id in pending:
+            continue
+        if _text(item.get("approval_context_hash")) and _text(item.get("artifact_hash")):
+            continue
+        pending[artifact.artifact_id] = artifact
+    if not pending:
+        return {}
+    wanted = list(pending.values())
+    return dict(zip(pending, native_artifact_content_hashes(wanted), strict=True))
+
+
+def _text(value: object) -> str:
+    """The value as the non-blank string it has to be to stand in for a hash."""
+
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _prompt_artifact_snapshot(artifact: GuardArtifact) -> dict[str, object]:

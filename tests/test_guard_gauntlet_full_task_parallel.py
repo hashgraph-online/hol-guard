@@ -51,7 +51,7 @@ def _environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     )
     pinned = json.loads((full_task_runner.REPO / "ci/pi-exact-continuation/package.json").read_text())
     version = "omp/" + pinned["dependencies"]["@oh-my-pi/pi-coding-agent"]
-    monkeypatch.setattr(full_task_runner.subprocess, "check_output", lambda *_a, **_k: version)
+    monkeypatch.setattr(full_task_runner, "omp_version", lambda _executable: version)
     exe = tmp_path / "omp"
     exe.write_text("")
     monkeypatch.setattr(full_task_runner, "source_identity", lambda *_a: {})

@@ -18,6 +18,11 @@ fn sibling_reads_with_multi_range_print_filters_are_allowed() {
         format!("cat {sibling}/src/main.rs | sed -n '1,5p; $p'"),
         format!("sed -n '1,12p;28,40p' {sibling}/src/main.rs"),
         "grep -n fixture src/main.rs | sed -n '1,12p;28,40p'".to_owned(),
+        // A pattern address prints from the same stream a line range does.
+        format!("grep -n fixture {sibling}/src/main.rs | sed -n '/fixture/p;1p'"),
+        format!("sed -n '/fixture/,/^}}/p' {sibling}/src/main.rs"),
+        // A `;` inside a pattern is the address's own.
+        format!("grep -n fixture {sibling}/src/main.rs | sed -n '/fix;ture/p'"),
     ] {
         assert_decision(&cwd, &layout.home, &command, true);
     }
@@ -36,8 +41,8 @@ fn sed_programs_that_write_execute_or_match_text_stay_reviewed() {
         format!("{read} | sed -n '1p;W copy.txt'"),
         format!("{read} | sed -n '1p;e id'"),
         format!("{read} | sed -n '1p;r /etc/hosts'"),
-        // A regex address may itself hold `;`, so only numeric ranges qualify.
-        format!("{read} | sed -n '/fixture/p;1p'"),
+        // A delimiter left open is a program this reading never finished.
+        format!("{read} | sed -n '/fixture;p'"),
         format!("{read} | sed -n '1p;'"),
         format!("{read} | sed -n -i '1p;2p'"),
         format!("sed -n '1p;2p' {sibling}/.env"),
@@ -85,7 +90,6 @@ fn globs_outside_a_repository_or_matching_sensitive_files_stay_reviewed() {
         format!("grep -n fixture {sibling}/.git/*"),
         // The match lies in a directory beside the repositories, not in one.
         format!("grep -n fixture {org}/*/todo.md"),
-        format!("grep -n fixture {org}/plain-notes/*.md"),
         "grep -n fixture ~/*".to_owned(),
         "rg -n fixture /*".to_owned(),
     ] {

@@ -52,7 +52,11 @@ def isolate_user_home() -> Path:
     # so the path must be the same for every session in this checkout.
     checkout = str(Path(__file__).resolve().parents[1])
     name = "home-" + hashlib.sha256(checkout.encode()).hexdigest()[:12]
-    private_home = real_home / ".cache" / "hol-guard-tests" / name
+    base_override = os.environ.get("HOL_GUARD_TEST_HOME_BASE")
+    home_base = Path(base_override) if base_override else real_home / ".cache" / "hol-guard-tests"
+    if not home_base.is_absolute():
+        raise ValueError("HOL_GUARD_TEST_HOME_BASE must be an absolute test-only directory")
+    private_home = home_base / name
     private_home.mkdir(parents=True, exist_ok=True)
     private_home = private_home.resolve()
     for variable, relative in _TOOL_HOMES.items():

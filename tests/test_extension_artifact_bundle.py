@@ -349,7 +349,8 @@ def test_retry_preserves_existing_provenance_bytes(snapshot, remote, monkeypatch
 
     monkeypatch.setattr(publisher, "download_asset", download)
     monkeypatch.setattr(
-        publisher, "verify_provenance",
+        publisher,
+        "verify_provenance",
         lambda directory, sha: verifications.append((directory / publisher.PROVENANCE).read_text()),
     )
     publisher.publish(snapshot[1], SHA)
@@ -460,6 +461,21 @@ def test_publication_is_postmerge_without_generated_catalog_commits_or_prs():
     commands = "\n".join(step.get("run", "") for step in workflow["jobs"]["regen"]["steps"])
     assert "git push" not in commands and "gh pr create" not in commands
     assert "scripts/publish_extension_delivery.py" in commands
+
+
+def test_delivery_build_runs_after_the_command_catalog_is_generated():
+    # A fresh runner has no Guard store; opening one needs the generated
+    # catalog, and a rebuilt legacy directory needs the full source compiler.
+    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-artifact-regen.yml").read_text())
+    names = [step.get("name") for step in workflow["jobs"]["regen"]["steps"]]
+    build = names.index("Build immutable public directory and policy packs")
+    generate = names.index("Generate the command catalog the delivery build loads")
+    assert generate < build
+    run = workflow["jobs"]["regen"]["steps"][generate]["run"]
+    assert "scripts/refresh_extension_artifacts.py --trust-only" in run
+    assert "--bin guard-command-source" in run
+    assert "scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source" in run
+    assert "HOL_GUARD_NATIVE_SOURCE_COMPILER=" in run
 
 
 def test_contribution_gate_accepts_public_records_and_rejects_shared_catalogs():

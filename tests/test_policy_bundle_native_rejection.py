@@ -15,10 +15,10 @@ from codex_plugin_scanner.guard.native_policy_bundle import (
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash
 from tests.support.network import stub_authenticated_urlopen
 from tests.test_cloud_exception_sync_proof import _JsonResponse
 from tests.test_cloud_exception_sync_proof import _seed_guard_cloud as _seed_sync_cloud
-from tests.test_policy_bundle_parser import computed_policy_bundle_hash
 
 
 def _raising(error: PolicyBundleNativeError):

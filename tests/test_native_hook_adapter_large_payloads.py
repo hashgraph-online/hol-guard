@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_hook_adapter as adapter
+from tests.cursor_hook_payload_support import native_prepare_payload
 
 _VECTORS = Path(__file__).resolve().parents[1] / "rust/crates/guard-command/testdata/hook_adapter_vectors.json"
 _MIB = 1024 * 1024
@@ -86,28 +87,28 @@ def test_oversize_echoes_round_trip_through_digest_references(
     base = {"tool_name": "Write", "tool_input": {"file_path": "a.txt", "content": "c" * (2 * _MIB + 17)}}
     if harness in {"cursor", "cline"}:
         pytest.skip("covered by the host-specific tests below")
-    prepared = adapter.native_prepare_payload(harness, base, guard_home=native_approval_reuse_runtime)
+    prepared = native_prepare_payload(harness, base, guard_home=native_approval_reuse_runtime)
     assert prepared["tool_input"]["content"] == base["tool_input"]["content"]  # type: ignore[index]
 
 
 def test_prepared_answer_near_the_response_cap_round_trips(native_approval_reuse_runtime: Path) -> None:
     payload = {f"k{index}": f"{index:02d}" + "z" * 60_000 for index in range(31)}  # ~1.86 MiB echoed
-    assert adapter.native_prepare_payload("codex", payload, guard_home=native_approval_reuse_runtime) == payload
+    assert native_prepare_payload("codex", payload, guard_home=native_approval_reuse_runtime) == payload
     digested = {f"k{index}": f"{index:02d}" + "z" * 100_000 for index in range(30)}  # 2.9 MiB, digests
-    assert adapter.native_prepare_payload("codex", digested, guard_home=native_approval_reuse_runtime) == digested
+    assert native_prepare_payload("codex", digested, guard_home=native_approval_reuse_runtime) == digested
 
 
 def test_prepared_answer_over_the_response_cap_fails_closed(native_approval_reuse_runtime: Path) -> None:
     payload = {f"k{index}": f"{index:02d}" + "z" * 60_000 for index in range(40)}  # ~2.4 MiB, no digests
     with pytest.raises(adapter.NativeHookAdapterError) as error:
-        adapter.native_prepare_payload("codex", payload, guard_home=native_approval_reuse_runtime)
+        native_prepare_payload("codex", payload, guard_home=native_approval_reuse_runtime)
     assert error.value.code == "native_hook_adapter_response_too_large"
 
 
 def test_request_over_the_transport_cap_fails_closed(native_approval_reuse_runtime: Path) -> None:
     payload = {"tool_input": {"command": "echo " + "a" * (4 * _MIB)}}
     with pytest.raises(adapter.NativeHookAdapterError) as error:
-        adapter.native_prepare_payload("codex", payload, guard_home=native_approval_reuse_runtime)
+        native_prepare_payload("codex", payload, guard_home=native_approval_reuse_runtime)
     assert error.value.code == "native_hook_adapter_request_too_large"
     with pytest.raises(adapter.NativeHookAdapterError) as error:
         adapter.native_command_text("Bash", payload["tool_input"], guard_home=native_approval_reuse_runtime)
@@ -127,7 +128,7 @@ def test_cline_two_mib_tool_output_is_copied_and_redacted(native_approval_reuse_
         "hookName": "PostToolUse",
         "tool_result": {"name": "read_files", "input": {"files": ["a"]}, "output": blob},
     }
-    prepared = adapter.native_prepare_payload("cline", payload, guard_home=native_approval_reuse_runtime)
+    prepared = native_prepare_payload("cline", payload, guard_home=native_approval_reuse_runtime)
     assert prepared["tool_response"] == blob
     assert prepared["output"] == blob
     small = {**payload, "tool_result": {**payload["tool_result"], "output": "x"}}  # type: ignore[dict-item]
@@ -141,6 +142,6 @@ def test_cline_two_mib_tool_output_is_copied_and_redacted(native_approval_reuse_
 def test_cursor_two_mib_command_is_prepared_whole(native_approval_reuse_runtime: Path) -> None:
     command = "echo " + "a" * (2 * _MIB + 5)
     payload = {"hook_event_name": "beforeShellExecution", "command": command, "cwd": "/work"}
-    prepared = adapter.native_prepare_payload("cursor", payload, guard_home=native_approval_reuse_runtime)
+    prepared = native_prepare_payload("cursor", payload, guard_home=native_approval_reuse_runtime)
     assert prepared["command"] == command
     assert prepared["tool_input"]["command"] == command  # type: ignore[index]

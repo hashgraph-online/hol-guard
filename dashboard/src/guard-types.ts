@@ -1,4 +1,6 @@
+import type { GuardApprovalExtensionCoverage } from "./approval-extension-coverage-types";
 import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
+import type { NativeDecisionSelector } from "./context-assistance/native-decision-selector";
 
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
 export type ApprovalResolutionAction = "allow" | "block";
@@ -223,6 +225,8 @@ export type GuardActionEnvelope = {
   policy_action?: GuardAction | null;
   script_name: string | null;
   raw_payload_redacted: Record<string, unknown>;
+  /** Advisory selector only; the native context service checks its own origin. */
+  native_origin_receipt?: NativeDecisionSelector;
 };
 
 export type GuardHeadlineState =
@@ -297,6 +301,7 @@ export type GuardApprovalRequest = {
   local_tool_approval?: GuardLocalToolApproval | null;
   /** Live daemon advice: a built-in extension permission that would let this command run automatically. */
   extension_recommendation?: GuardApprovalExtensionRecommendation;
+  extension_coverage?: GuardApprovalExtensionCoverage;
 };
 
 export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
@@ -970,12 +975,37 @@ export type GuardApprovalGatePublicConfig = {
   strict_all_decisions: boolean;
   totp_enabled?: boolean;
   totp_pending?: boolean; totp_recent_satisfied?: boolean;
+  pulse_enabled?: boolean;
+  pulse_cooldown_seconds?: number;
+  /** Whether the YID app shows the agent's command. Off unless the user opted in. */
+  pulse_show_command?: boolean;
 };
 
 export type GuardProtectionPostureValue = "protected" | "extra_careful" | "watch";
 
 /** Merge-patch for per-app postures: `null` clears the override (inherit). */
 export type GuardHarnessPosturePatch = Record<string, GuardProtectionPostureValue | null>;
+
+export type GuardContextAssistanceConfig = {
+  schema_version: 1;
+  enabled: boolean;
+  runtime_id: string;
+  resource_profile: "low_memory" | "balanced" | "custom";
+  features: { review_briefs: boolean; agent_context: boolean; shared_agents: boolean; execution_context?: boolean };
+  sources: {
+    native_policy_facts: boolean;
+    sanitized_receipt_facts: boolean;
+    workspace_documents: boolean;
+    source_set_id: string;
+  };
+  storage: { mode: "memory" | "sqlite"; retention_hours: number };
+  limits: {
+    context_tokens: number;
+    reserve_tokens: number;
+    max_active_workspaces: number;
+    idle_shutdown_seconds: number;
+  };
+};
 
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
@@ -991,6 +1021,8 @@ export type GuardSettings = {
   /** Per-app overrides only; an app with no entry inherits `protection_posture`. */
   harness_postures?: Record<string, GuardProtectionPostureValue>;
   harness_watch_entered_at?: Record<string, string>;
+  /** Apps whose prompts CIGAR leaves alone; an app with no entry follows CIGAR. */
+  harness_cigar?: Record<string, "off">;
   /** Read-only: the posture each known app actually runs under. */
   harness_postures_effective?: Record<string, GuardProtectionPostureValue>;
   /** Read-only: true when managed policy blocks local Watch/Protected app overrides. */
@@ -1015,6 +1047,16 @@ export type GuardSettings = {
   sync: boolean;
   receipt_redaction_level: "full" | "partial" | "none";
   billing: boolean;
+  /** Requested preferences only; runtime readiness is a separate capability. */
+  context_assistance?: GuardContextAssistanceConfig | null;
+  /** Read-only local intent; absence means an older native core cannot provide it. */
+  context_assistance_requested?: GuardContextAssistanceConfig | null;
+  /** Read-only, content-free native configuration diagnostic. */
+  context_assistance_diagnostic?: string | null;
+  /** Read-only: whether CIGAR adds context after validation and managed policy. Absent on older cores. */
+  context_assistance_effective_ready?: boolean;
+  /** Apps whose prompts can take CIGAR's context in this Guard home. */
+  cigar_apps?: string[];
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
   managed_locked_settings?: string[];
@@ -1231,6 +1273,7 @@ export type GuardUpdateStatus = {
   retry_command?: string;
   update_attempt_message?: string;
   release_channel: "stable" | "alpha";
+  update_mode: "automatic" | "ask" | "off";
 };
 
 export type GuardUpdateReconnectOptions = {

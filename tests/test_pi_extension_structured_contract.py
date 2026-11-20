@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from tests.pi_extension_response_callback_support import _run_generated_callback_payload
 from tests.pi_extension_response_source_support import _generated_source
+from tests.pi_extension_support import managed_extension_source
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])

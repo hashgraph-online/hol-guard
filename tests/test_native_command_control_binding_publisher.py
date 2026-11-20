@@ -36,7 +36,7 @@ from .test_guard_extension_control_authority import MemorySecretStore, _commit, 
 def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
 
 
@@ -317,11 +317,15 @@ def test_rolled_back_managed_activation_can_only_republish_the_previous_committe
     second_bundle["bundleVersion"] = 8
     second_bundle["bundleHash"] = "sha256:" + "e" * 64
 
-    def fail_before_commit(_connection, _rows):
-        assert not publisher.is_ready()
-        raise sqlite3.OperationalError("injected activation rollback")
+    write_authority = store._extension_control_authority_op  # pyright: ignore[reportPrivateUsage]
 
-    monkeypatch.setattr(store, "_replace_remote_policy_rows_locked", fail_before_commit)
+    def fail_before_commit(op, **fields):
+        if op == "apply_policy":
+            assert not publisher.is_ready()
+            raise sqlite3.OperationalError("injected activation rollback")
+        return write_authority(op, **fields)
+
+    monkeypatch.setattr(store, "_extension_control_authority_op", fail_before_commit)
     try:
         with pytest.raises(sqlite3.OperationalError, match="injected activation rollback"):
             activate_managed_bundle(store, second_bundle)

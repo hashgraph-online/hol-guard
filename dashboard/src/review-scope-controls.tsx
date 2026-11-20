@@ -1,10 +1,11 @@
 import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
-import type { ApprovalScopeChoice } from "./approval-scopes";
+import { scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
+import { retryWindowText } from "./approval-retry-guidance";
 import type { DecisionScope } from "./guard-types";
 
-type ReviewScopeControlsProps = {
+export type ReviewScopeControlsProps = {
   commonScopeOptions: ApprovalScopeChoice[];
   broaderScopeOptions: ApprovalScopeChoice[];
   advancedScopeOptions: ApprovalScopeChoice[];
@@ -23,12 +24,14 @@ type ReviewScopeControlsProps = {
   onAllowScopeChange: (scope: DecisionScope) => void;
   onBlockScopeChange: (scope: DecisionScope) => void;
   onRememberExactActionChange: (checked: boolean) => void;
+  /** Drop the heading and outer spacing, for controls that sit inside another disclosure. */
+  bare?: boolean;
 };
 
 export function ReviewScopeControls(props: ReviewScopeControlsProps) {
   return (
-    <div className="mt-6 space-y-2">
-      <SectionLabel>Approval scope</SectionLabel>
+    <div className={props.bare === true ? "space-y-2" : "mt-6 space-y-2"}>
+      {props.bare !== true && <SectionLabel>Approval scope</SectionLabel>}
       {!props.hasAllowScope && (
         <p className="text-sm text-brand-attention" role="status">
           {props.oneTimeRetryBlocked
@@ -36,16 +39,18 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
             : "This action cannot be approved under its current Guard policy."}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
-        {props.commonScopeOptions.map((choice) => (
-          <ScopeChoiceButton
-            key={choice.value}
-            choice={choice}
-            checked={props.allowScope === choice.value}
-            onScopeChange={props.onAllowScopeChange}
-          />
-        ))}
-      </div>
+      {props.commonScopeOptions.length > 0 && (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
+          {props.commonScopeOptions.map((choice) => (
+            <ScopeChoiceButton
+              key={choice.value}
+              choice={scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible)}
+              checked={props.allowScope === choice.value}
+              onScopeChange={props.onAllowScopeChange}
+            />
+          ))}
+        </div>
+      )}
       {props.exactActionPersistenceEligible && props.allowScope === "artifact" && (
         <ExactActionPersistenceChoice
           checked={props.rememberExactAction}
@@ -152,7 +157,7 @@ function ExactActionPersistenceChoice(props: {
             {props.versionBoundScript ? "Run once" : "This time"}
           </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
-            {`Retry within ${props.retryWindowMinutes} minutes.`}
+            {`Retry within ${retryWindowText(props.retryWindowMinutes)}.`}
           </span>
         </label>}
         <label className={exactActionChoiceClassName(props.checked)}>

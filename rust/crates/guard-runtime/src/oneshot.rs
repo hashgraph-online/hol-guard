@@ -258,6 +258,11 @@ pub(crate) struct PreToolRequestV1 {
     /// agent's shell. Without it the environment proofs stay unproven.
     #[serde(default)]
     pub(crate) execution_environment: Option<Value>,
+    /// Answer under the admitted snapshot's extension controls and carry the
+    /// evidence they produced. Only the resident reads it; see
+    /// `pre_tool_extension_evidence_op`.
+    #[serde(default)]
+    pub(crate) extension_evidence: bool,
 }
 
 /// The stamped environment of a request that carries a well-formed one.
@@ -266,7 +271,7 @@ pub(crate) struct PreToolRequestV1 {
 /// what it can decide is which rules get to prove an inherited variable
 /// away, so a malformed one costs a command its allow and nothing more.
 /// Failing the request instead would turn a caller's bad field into a block.
-fn stamped_environment(
+pub(crate) fn stamped_environment(
     value: Option<&Value>,
 ) -> Option<guard_contracts::GuardExecutionEnvironmentV1> {
     match value {

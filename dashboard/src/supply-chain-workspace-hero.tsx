@@ -1,90 +1,35 @@
-import {
-  HiMiniCheckCircle,
-  HiMiniCloud,
-  HiMiniComputerDesktop,
-  HiMiniExclamationTriangle,
-  HiMiniArrowPath,
-} from "react-icons/hi2";
-import { supplyChainCloudTagTone, type SupplyChainWorkspaceHeroState } from "./supply-chain-workspace-hero-state";
-import { Tag } from "./approval-center-primitives";
+import { BrandHero, BrandHeroBadge, BrandHeroFacts, type BrandHeroTone } from "./brand-hero";
+import type { SupplyChainWorkspaceHeroState } from "./supply-chain-workspace-hero-state";
 
 type SupplyChainWorkspaceHeroProps = {
   hero: SupplyChainWorkspaceHeroState;
-  compact?: boolean;
 };
 
-function heroSurfaceClass(tone: SupplyChainWorkspaceHeroState["tone"]): string {
-  if (tone === "green") {
-    return "border-brand-green/20 bg-brand-green/[0.04]";
-  }
-  if (tone === "blue") {
-    return "border-brand-blue/20 bg-brand-blue/[0.04]";
-  }
-  if (tone === "attention") {
-    return "border-brand-attention/20 bg-brand-attention/[0.04]";
-  }
-  return "border-slate-200 bg-slate-50/80";
+/** Green is all clear, attention is something to fix, everything else is still settling. */
+export function supplyChainBrandTone(tone: SupplyChainWorkspaceHeroState["tone"]): BrandHeroTone {
+  if (tone === "green") return "clear";
+  if (tone === "attention") return "review";
+  return "setup";
 }
 
-function heroIcon(hero: SupplyChainWorkspaceHeroState) {
-  if (hero.protectionStatus === "protected") {
-    return HiMiniCheckCircle;
-  }
-  if (hero.protectionStatus === "staged") {
-    return HiMiniArrowPath;
-  }
-  if (hero.protectionStatus === "partial" || hero.protectionStatus === "unprotected") {
-    return HiMiniExclamationTriangle;
-  }
-  return HiMiniComputerDesktop;
-}
-
-function heroIconClass(tone: SupplyChainWorkspaceHeroState["tone"]): string {
-  if (tone === "green") {
-    return "text-brand-green";
-  }
-  if (tone === "blue") {
-    return "text-brand-blue";
-  }
-  if (tone === "attention") {
-    return "text-brand-attention";
-  }
-  return "text-slate-500";
-}
-
-
-export function SupplyChainWorkspaceHero({ hero, compact = false }: SupplyChainWorkspaceHeroProps) {
-  const Icon = heroIcon(hero);
-  const titleClass = "text-brand-dark";
-
+/** The status at the top of the Supply chain tab, on the same branded surface Home opens with. */
+export function SupplyChainWorkspaceHero({ hero }: SupplyChainWorkspaceHeroProps) {
+  const tone = supplyChainBrandTone(hero.tone);
   return (
-    <section
-      className={`rounded-2xl border px-4 py-4 sm:px-5 sm:py-5 ${heroSurfaceClass(hero.tone)}`}
-      aria-label="Supply chain protection status"
-      data-testid="supply-chain-workspace-hero"
+    <BrandHero
+      tone={tone}
+      liveLabel={hero.liveLabel}
+      ariaLabel="Supply chain protection status"
+      testId="supply-chain-workspace-hero"
+      markOnSmall="inline"
+      compact
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Tag tone={supplyChainCloudTagTone(hero.cloudMode)}>
-          {hero.cloudMode === "local_only" ? (
-            <HiMiniComputerDesktop className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <HiMiniCloud className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          {hero.cloudLabel}
-        </Tag>
-        <span className="text-xs text-slate-500">{hero.statLine}</span>
+      <BrandHeroBadge tone={tone}>{hero.badge}</BrandHeroBadge>
+      <div className="max-w-2xl">
+        <h2 className="guard-hero-title text-2xl font-semibold tracking-tight text-white sm:text-3xl">{hero.title}</h2>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/80">{hero.detail}</p>
       </div>
-      {!compact ? (
-        <div className="mt-3 flex items-start gap-2.5">
-          <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${heroIconClass(hero.tone)}`} aria-hidden="true" />
-          <div className="min-w-0">
-            <h2 className={`text-lg font-semibold tracking-tight ${titleClass}`}>{hero.title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">{hero.detail}</p>
-          </div>
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-slate-600">{hero.detail}</p>
-      )}
-    </section>
+      <BrandHeroFacts facts={hero.facts} />
+    </BrandHero>
   );
 }

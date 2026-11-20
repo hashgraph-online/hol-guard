@@ -1,5 +1,8 @@
 use super::*;
 
+mod ancestry;
+mod spilled_history;
+
 fn installed() -> Identity {
     Identity {
         profile: "installed".into(),
@@ -35,7 +38,7 @@ fn separate_profiles_cross_engine_and_source_rollback() {
     next.engine = "4".repeat(64);
     next.root = "5".repeat(64);
     next.source = "b".repeat(40);
-    let evidence = json!({"status":"ahead","base_commit":{"sha":remote.source},"merge_base_commit":{"sha":remote.source},"head_commit":{"sha":next.source},"behind_by":0,"ahead_by":1});
+    let evidence = json!({"status":"ahead","base_commit":{"sha":remote.source},"merge_base_commit":{"sha":remote.source},"url":compare_url(&remote.source, &next.source),"behind_by":0,"ahead_by":1});
     let next_floor = transition(&remote_floor, &next, &evidence).unwrap();
     assert_eq!(next_floor.source, remote_floor.source);
     assert_eq!(next_floor.remote.as_ref().unwrap().version, "100.7");
@@ -187,6 +190,33 @@ fn migration_retains_authenticated_floor_and_never_repairs_stamped_loss() {
     forged["legacy_key"] = json!(hex::encode(key));
     forged["legacy_anchor"] = json!({"record":"{}","digest":"0".repeat(64),"mac":"0".repeat(64)});
     assert!(evaluate(&forged).is_err());
+}
+
+#[test]
+fn migration_enrolls_an_install_that_never_received_a_floor() {
+    // An install whose authority was enrolled before this record existed has
+    // no legacy anchor or snapshot to admit, and nothing else ever creates a
+    // floor for it. Returning no record left those installs failing the floor
+    // gate on every discovery and publication refresh, for good. Startup now
+    // derives the floor from the release evidence it already carries, through
+    // the same enrollment the installed adapter performs -- so unbound
+    // evidence is rejected here exactly as it is there, rather than silently
+    // producing nothing at all.
+    let key = [7u8; 32];
+    let mut startup = json!({"kind":"migrate","key":hex::encode(key),"floor":null,"stamp":null,"release_data":"{}"});
+    assert_eq!(
+        evaluate(&startup).unwrap_err(),
+        "pack_lifecycle_release_invalid"
+    );
+    startup["release_data"] = json!("not json");
+    assert_eq!(
+        evaluate(&startup).unwrap_err(),
+        "pack_lifecycle_release_invalid"
+    );
+    // A retained-floor probe carries no release evidence and is not a startup,
+    // so it still answers without creating or requiring anything.
+    startup["release_data"] = Value::Null;
+    assert_eq!(evaluate(&startup).unwrap()["record"], Value::Null);
 }
 
 fn legacy_envelope(mut value: Value, key: &[u8], purpose: &str) -> Value {

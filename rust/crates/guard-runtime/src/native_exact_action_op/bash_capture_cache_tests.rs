@@ -175,9 +175,11 @@ fn launch_analysis_cache_evicts_before_retaining_more_than_eight_mib_of_source()
     let padding = "x".repeat(900_000);
     std::fs::write(&entry, format!("# {padding}\nprintf '%s' reviewed\n")).unwrap();
     let mut first = request.clone();
-    for budget in 900..910 {
+    // Each budget is a distinct cache key. Analysing the large source can take
+    // longer than a second on a loaded runner, so the budgets sit near the cap.
+    for budget in 9_000..9_010 {
         request.budget_ms = budget;
-        if budget == 900 {
+        if budget == 9_000 {
             first = request.clone();
         }
         let _ = captured(&request);

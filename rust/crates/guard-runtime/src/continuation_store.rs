@@ -217,7 +217,7 @@ fn claim(connection: &Connection, args: &Value) -> StoreResult<Value> {
         &[keys[0].clone(),keys[1].clone(),keys[2].clone(),json!(now),json!(expiry),json!(claim_id)])?;
     Ok(json!({"claim_id":claim_id}))
 }
-fn finalize(connection: &Connection, args: &Value) -> StoreResult<Value> {
+pub(crate) fn finalize(connection: &Connection, args: &Value) -> StoreResult<Value> {
     let request_id = string(args, "request_id")?;
     let now = string(args, "now")?;
     let row = query_one(connection,"select state,claim_id,evidence_id from guard_continuation_claims where request_id = ? and offer_hash = ? and action = ?",

@@ -13,19 +13,12 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterable, Mapping
-
-# The resident accepts the review facts below in its direct-lane binding.
-DIRECT_HOOK_REVIEW_FACTS_FEATURE = "hook-direct-review-facts-v1"
+from collections.abc import Mapping
 
 # Mirrors the resident limits in guard-policy-snapshot's direct_lane module.
 _MAX_REVIEW_FACT_BYTES = 256
 _MAX_PATH_BYTES = 4096
 _BLOCKED_REQUEST_MODES = frozenset({"ask", "safe-alternative"})
-
-
-def review_facts_bound(features: Iterable[str]) -> bool:
-    return DIRECT_HOOK_REVIEW_FACTS_FEATURE in set(features)
 
 
 def _text_fact(value: object, limit: int) -> str | None:
@@ -36,21 +29,6 @@ def _text_fact(value: object, limit: int) -> str | None:
     except UnicodeEncodeError:
         return None
     return value if length <= limit else None
-
-
-def uniform_blocked_request_mode(configs: Iterable[object]) -> str | None:
-    """The blocked-request mode every compiled config resolves to.
-
-    The daemon reads the mode for the hook's own workspace. A binding covers
-    the home and every settled workspace, so it carries a mode only when they
-    all agree; otherwise such a hook defers to this daemon.
-    """
-
-    modes = {getattr(config, "blocked_request_mode", None) for config in configs}
-    if len(modes) != 1:
-        return None
-    (mode,) = modes
-    return mode if isinstance(mode, str) and mode in _BLOCKED_REQUEST_MODES else None
 
 
 class _ReadState:
@@ -79,7 +57,7 @@ def _read_origin(store: object) -> tuple[bool, str | None]:
     # fallback is not the origin the daemon links once the state lands, so
     # neither case binds an origin; an unreadable state reports itself as
     # unknown so a transient lock reads as no change.
-    from .daemon.native_review_records import native_review_approval_center_url
+    from .hook_review.native_review_records import native_review_approval_center_url
 
     getter = getattr(store, "get_runtime_state", None)
     if not callable(getter):
@@ -135,16 +113,13 @@ def with_review_facts(
     binding: Mapping[str, object] | None,
     *,
     store: object,
-    features: Iterable[str],
     blocked_request_mode: str | None,
 ) -> dict[str, object] | None:
-    """Add the review facts, for a resident that accepts them."""
+    """Add the review facts."""
 
     if binding is None:
         return None
     bound = dict(binding)
-    if not review_facts_bound(features):
-        return bound
     facts = {
         "blocked_request_mode": blocked_request_mode if blocked_request_mode in _BLOCKED_REQUEST_MODES else None,
         "approval_center_origin": approval_center_origin(store),

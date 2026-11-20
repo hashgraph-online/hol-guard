@@ -17,10 +17,7 @@ fn unique(label: &str) -> String {
     format!(
         "guard-init-chain-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     )
 }
 

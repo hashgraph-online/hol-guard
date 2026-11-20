@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from jsonschema import Draft202012Validator
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime import fleet_posture as fp
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
+from tests.support.receipt_upload_transport import RECEIPT_SYNC_BATCH_SIZE
 
 SCHEMA = json.loads(
     (Path(__file__).resolve().parents[1] / "contracts" / "fleet-posture" / "v1" / "schema.json").read_text(
@@ -25,26 +27,25 @@ SCHEMA = json.loads(
     )
 )
 FOLLOWUP_KEY = "fleet_posture_bundle_followup"
+NOW = datetime(2026, 10, 16, 12, 0, 0, tzinfo=timezone.utc)
 
 pytestmark = [pytest.mark.usefixtures("native_hook_force")]
 
 
-class _Adapter:
-    harness = "claude-code"
+def _diagnostics(_harness: str, _context: HarnessContext) -> dict[str, object]:
+    return {"setup_status": "active", "config_paths": ["/cfg"], "artifacts": [], "installed": True}
 
-    def diagnostics(self, _context: HarnessContext) -> dict[str, object]:
-        return {"setup_status": "active", "config_paths": ["/cfg"], "artifacts": [], "installed": True}
 
-    def setup_contract(self) -> SimpleNamespace:
-        return SimpleNamespace(
-            coverage=SimpleNamespace(
-                native_hooks=True,
-                browser_fallback=False,
-                mcp_proxy=True,
-                prompt_hooks=False,
-                blind_spots=(),
-            )
+def _setup_contract(_harness: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        coverage=SimpleNamespace(
+            native_hooks=True,
+            browser_fallback=False,
+            mcp_proxy=True,
+            prompt_hooks=False,
+            blind_spots=(),
         )
+    )
 
 
 class _Response:
@@ -87,7 +88,7 @@ def _add_receipts(store: GuardStore, count: int) -> None:
         store.add_receipt(
             GuardReceipt(
                 receipt_id=f"receipt-{index}",
-                timestamp="2026-10-16T00:00:00+00:00",
+                timestamp=(NOW - timedelta(hours=12)).isoformat(),
                 harness="claude-code",
                 artifact_id=f"artifact-{index}",
                 artifact_hash=f"sha256:{index:064x}",
@@ -103,11 +104,14 @@ def _add_receipts(store: GuardStore, count: int) -> None:
 
 @pytest.fixture
 def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GuardStore:
-    from codex_plugin_scanner.guard import adapters
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 
     guard_store = GuardStore(tmp_path / "guard-home")
     _seed_cloud(guard_store)
-    monkeypatch.setattr(adapters, "list_adapters", lambda: [_Adapter()])
+    monkeypatch.setattr(harness_ops, "list_harnesses", lambda: ("claude-code",))
+    monkeypatch.setattr(harness_ops, "diagnostics", _diagnostics)
+    monkeypatch.setattr(harness_ops, "setup_contract", _setup_contract)
+    monkeypatch.setattr(guard_runner_module, "FleetPostureSettings", partial(fp.FleetPostureSettings, now=NOW))
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
     yield guard_store
     guard_runner_module._test_sync_auth_context_override = None
@@ -128,7 +132,7 @@ def _install_transport(
         bodies.append(body)
         if fail_after is not None and len(bodies) > fail_after:
             raise OSError("transport down")
-        stamp = datetime(2026, 10, 16, 12, 0, len(bodies) % 60, tzinfo=timezone.utc).isoformat()
+        stamp = (NOW + timedelta(seconds=len(bodies) % 60)).isoformat()
         payload: dict[str, object] = {"syncedAt": stamp, "receiptsStored": len(body["receipts"])}
         payload.update(extra or {})
         return _Response(payload)
@@ -145,15 +149,16 @@ def test_session_capabilities_advertise_fleet_posture() -> None:
 def test_posture_rides_only_on_the_first_batch_and_is_schema_valid(
     store: GuardStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _add_receipts(store, guard_runner_module._RECEIPT_SYNC_BATCH_SIZE * 2 + 5)
+    _add_receipts(store, RECEIPT_SYNC_BATCH_SIZE * 2 + 5)
     bodies = _install_transport(monkeypatch)
 
     summary = guard_runner_module.sync_receipts(store)
 
-    assert summary["receipts"] == guard_runner_module._RECEIPT_SYNC_BATCH_SIZE * 2 + 5
+    assert summary["receipts"] == RECEIPT_SYNC_BATCH_SIZE * 2 + 5
     assert len(bodies) == 3
     posture = bodies[0]["syncContext"]["fleetPosture"]
     Draft202012Validator(SCHEMA).validate(posture)
+    assert posture["collectedAt"] == NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
     assert posture["aiTools"][0]["harness"] == "claude-code"
     assert posture["aiTools"][0]["protectionState"] == "protected"
     assert all("fleetPosture" not in body["syncContext"] for body in bodies[1:])

@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::{evaluate, QUERIES};
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 
 /// A host with no resident services: every trust probe fails closed.
 struct Host;
@@ -18,9 +18,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
 }
 
@@ -197,6 +194,51 @@ fn native_evaluation_claim_without_redirects_binds() {
             "{identity} classified the stripped command: {found}"
         );
     }
+}
+
+#[test]
+fn default_disabled_git_read_review_floor_is_not_an_interaction() {
+    let text = "git diff --stat";
+    let identity = crate::command_model::parse_shell_command(
+        text,
+        Some(std::path::Path::new("/work")),
+        Some(std::path::Path::new("/home/user")),
+        "posix",
+        "shell_string",
+        "guard-shell",
+        true,
+    )
+    .security_identity();
+    let evaluation = |minimum_action: &str| {
+        json!({
+            "tool_name": "Shell",
+            "arguments": {"command": text},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "canonical": {"raw_text": text, "security_identity": identity},
+            "evaluation": {
+                "security_identity": identity,
+                "minimum_action": minimum_action,
+                "match_default_modes": ["disabled"],
+                "reason_codes": [],
+                "explicitly_enabled_permission_ids": [],
+                "controlling_action_class": "git read command",
+                "controlling_reason": "Identifies git diff operations.",
+            },
+        })
+    };
+    // An enrolled authority reports the verified-read proof floor as review;
+    // the default-disabled git rule must not make that an approval request.
+    let found = ask("tool_action", &evaluation("review")).expect("classified");
+    assert!(found.get("error").is_none(), "{found}");
+    assert!(found["match"].is_null(), "{found}");
+    // A block floor still names the controlling extension action.
+    let blocked = ask("tool_action", &evaluation("block")).expect("classified");
+    assert_eq!(
+        blocked["match"]["action_class"].as_str(),
+        Some("git read command"),
+        "{blocked}"
+    );
 }
 
 #[test]
@@ -405,9 +447,6 @@ impl InspectionHost for SecretFreeHost {
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
     }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
-    }
 }
 
 /// A recorded `eph_safe` vector that the ported check accepts.
@@ -613,4 +652,118 @@ fn an_artifact_name_is_the_last_path_component() {
             windows_path
         }
     );
+}
+
+/// Which harness configuration files a write may not reach without a review is
+/// this side's to decide. A caller that sends an empty table used to leave
+/// every Codex configuration file writable, so the table is derived here and
+/// the caller's entries are only added to it.
+#[test]
+fn a_codex_configuration_write_is_protected_without_a_supplied_table() {
+    for (path, label) in [
+        ("/home/user/.codex/config.toml", "Codex config"),
+        ("/home/user/.codex/hooks.json", "Codex hooks"),
+        ("/work/.codex/config.toml", "Codex config"),
+        ("/work/.codex/hooks.json", "Codex hooks"),
+    ] {
+        let reply = ask(
+            "file_write_artifact",
+            &json!({
+                "tool_name": "Write",
+                "arguments": {"file_path": path, "content": "x"},
+                "cwd": "/work",
+                "home_dir": "/home/user",
+                "protected_paths": {},
+                "harness": "codex",
+                "config_path": "/home/user/.codex/config.toml",
+                "source_scope": "user",
+            }),
+        )
+        .expect("answered");
+
+        let found = &reply["match"];
+        assert_eq!(found["path_class"], json!(label), "{path}: {reply}");
+        assert_eq!(
+            found["action_class"],
+            json!("guard-managed config write"),
+            "{path}: {reply}"
+        );
+        assert!(!reply["artifact"].is_null(), "{path}: {reply}");
+    }
+}
+
+/// The table follows from the harness, so another harness's write to a Codex
+/// path is not a Codex configuration write. It may still be sensitive for its
+/// own reasons; what it must not be is attributed to a harness that is not
+/// making the call.
+#[test]
+fn another_harness_derives_no_codex_protection() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "/home/user/.codex/config.toml", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {},
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "user",
+        }),
+    )
+    .expect("answered");
+
+    assert_ne!(
+        reply["match"]["action_class"],
+        json!("guard-managed config write"),
+        "{reply}"
+    );
+}
+
+/// The caller still names the paths this side does not model, so its table is
+/// added to the derived one rather than replaced by it.
+#[test]
+fn a_supplied_protected_path_is_still_honoured() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "/work/.claude/settings.json", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {"/work/.claude/settings.json": "Claude settings"},
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "project",
+        }),
+    )
+    .expect("answered");
+
+    assert_eq!(reply["match"]["path_class"], json!("Claude settings"));
+    assert_eq!(
+        reply["match"]["action_class"],
+        json!("guard-managed config write")
+    );
+}
+
+/// A caller that names a Codex path too must not make it two entries, and the
+/// label this side derived is the one the review carries.
+#[test]
+fn a_duplicate_supplied_codex_path_keeps_the_derived_label() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "/home/user/.codex/config.toml", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {"/home/user/.codex/config.toml": "Something else"},
+            "harness": "codex",
+            "config_path": "/home/user/.codex/config.toml",
+            "source_scope": "user",
+        }),
+    )
+    .expect("answered");
+
+    assert_eq!(reply["match"]["path_class"], json!("Codex config"));
 }

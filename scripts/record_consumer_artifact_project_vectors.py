@@ -116,8 +116,13 @@ def _evidence_cases() -> list[dict[str, Any]]:
     return cases
 
 
+def _base_incident_builder() -> Any:
+    # The incident builder lives only in the ``--base-src`` checkout.
+    return importlib.import_module("codex_plugin_scanner.guard.incident").build_incident_context
+
+
 def _incident_cases() -> list[dict[str, Any]]:
-    from codex_plugin_scanner.guard.incident import build_incident_context
+    build_incident_context = _base_incident_builder()
 
     rng = random.Random(881)
     cases = []
@@ -185,7 +190,7 @@ def _decision(rng: random.Random, action: str) -> Any:
 
 
 def _result_case(rng: random.Random, index: int, artifact: Any) -> dict[str, Any]:
-    from codex_plugin_scanner.guard.incident import build_incident_context
+    build_incident_context = _base_incident_builder()
 
     action = rng.choice(ACTIONS)
     decision = _decision(rng, action)
@@ -292,7 +297,8 @@ _INCIDENT_KEYS = ("artifact_label", "source_label", "trigger_summary", "why_now"
 
 def _removed_cases() -> list[dict[str, Any]]:
     from codex_plugin_scanner.guard.consumer import service
-    from codex_plugin_scanner.guard.incident import build_incident_context
+
+    build_incident_context = _base_incident_builder()
     from codex_plugin_scanner.guard.types import HistoryContext, ProvenanceBundle
 
     rng = random.Random(7741)
@@ -413,7 +419,8 @@ def _structured_cases() -> list[dict[str, Any]]:
     """Non-string summaries: capability text sees them, launch and incident copy do not."""
 
     from codex_plugin_scanner.guard.consumer import service
-    from codex_plugin_scanner.guard.incident import build_incident_context
+
+    build_incident_context = _base_incident_builder()
 
     rng = random.Random(5150)
     cases = []

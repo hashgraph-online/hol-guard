@@ -161,8 +161,17 @@ pub(crate) fn load_workspace_config(
     workspace: Option<&Path>,
     require_canonical: bool,
 ) -> EvalResult<Map<String, Value>> {
+    load_workspace_config_parts(workspace, require_canonical).map(|(payload, _)| payload)
+}
+
+/// Preserve each assistance restriction independently: a later workspace file
+/// must not overwrite an earlier denial while the legacy payload merges normally.
+pub(crate) fn load_workspace_config_parts(
+    workspace: Option<&Path>,
+    require_canonical: bool,
+) -> EvalResult<(Map<String, Value>, Vec<Value>)> {
     let Some(workspace) = workspace else {
-        return Ok(Map::new());
+        return Ok((Map::new(), Vec::new()));
     };
     if require_canonical
         && (!workspace.is_absolute() || workspace.components().any(|c| c == Component::ParentDir))
@@ -173,14 +182,18 @@ pub(crate) fn load_workspace_config(
         reject_symlinked_ancestors(workspace)?;
     }
     let mut merged = Map::new();
+    let mut assistance_restrictions = Vec::new();
     for filename in WORKSPACE_CONFIG_FILENAMES {
         let Some(mut table) = read_config_table(workspace, filename)? else {
             continue;
         };
         table.retain(|key, _| !WORKSPACE_BLOCKED_POLICY_KEYS.contains(&key.as_str()));
+        if let Some(restriction) = table.get("context_assistance") {
+            assistance_restrictions.push(restriction.clone());
+        }
         merged = merge_config_payload(&merged, &table);
     }
-    Ok(merged)
+    Ok((merged, assistance_restrictions))
 }
 
 pub(crate) fn coerce_security_level(value: Option<&Value>) -> String {

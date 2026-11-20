@@ -131,3 +131,21 @@ def test_a_denied_read_is_not_held_to_an_output_it_was_never_given() -> None:
     denied = _read("proc://bg_1", text=None, is_error=True)
     assert native_tools_scope_error(scenario, [_job(), denied], {}, guard_denied=True) is None
     assert native_tools_scope_error(scenario, [_job(), denied], {}) is None
+
+
+# What the pinned Oh My Pi build actually prints when `async` starts the job.
+OMP_START_NOTICE = (
+    "Backgrounded as job bg_1 (killed once it has run 300s in total; `timeout: 0` disables "
+    "the deadline); its output is injected into the conversation as a follow-up the moment "
+    "it finishes. Do NOT poll for it."
+)
+
+
+def test_the_hosts_own_start_notice_binds_the_job_it_names() -> None:
+    """The host announces the job in its own words; the selector still has to match that id."""
+    scenario = _scenario()
+    started = _call("bash", {"command": COMMAND, "async": True}, "job", text=OMP_START_NOTICE)
+    assert native_tools_scope_error(scenario, [started, _read("proc://bg_1")], {}) is None
+    assert native_tools_scope_error(scenario, [started, _read("proc://bg_2")], {}) == (
+        "the model read a job it did not start here"
+    )

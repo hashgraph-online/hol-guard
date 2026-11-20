@@ -2,9 +2,13 @@
 //! Python `verified_npm_version` it replaces.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::path::Path;
+use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(unix)]
+use serde_json::Value;
 
 use super::*;
 
@@ -32,6 +36,7 @@ impl Fixture {
     }
 
     /// A standard npm layout: `<prefix>/bin/npm` links into `lib/node_modules`.
+    #[cfg(unix)]
     fn npm_prefix(&self, version: &str) -> PathBuf {
         let prefix = self.root.join("prefix");
         let bin = prefix.join("bin");
@@ -57,24 +62,20 @@ impl Drop for Fixture {
     }
 }
 
+#[cfg(unix)]
 fn write_executable(path: &Path, body: &str) {
+    use std::os::unix::fs::PermissionsExt;
     fs::write(path, body).expect("file must be writable");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755))
-            .expect("mode must be settable");
-    }
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("mode must be settable");
 }
 
+#[cfg(unix)]
 fn link(target: &Path, at: &Path) {
     let _ = fs::remove_file(at);
-    #[cfg(unix)]
     std::os::unix::fs::symlink(target, at).expect("symlink must be creatable");
-    #[cfg(not(unix))]
-    fs::copy(target, at).map(|_| ()).expect("copy must succeed");
 }
 
+#[cfg(unix)]
 fn environment(prefix: &Path, home: &Path, extra_names: &[&str]) -> ExecutionEnvironment {
     let mut names: Vec<Value> = vec![json!("PATH"), json!("HOME")];
     names.extend(extra_names.iter().map(|name| json!(name)));

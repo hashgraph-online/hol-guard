@@ -28,7 +28,7 @@ const DEFAULT_REVIEW_REASON: &str = "HOL Guard requires review before this actio
 const PERMISSION_REQUEST: &str = "PermissionRequest";
 const NOTIFICATION: &str = "Notification";
 /// The event the daemon records for every Claude permission prompt.
-pub(super) const PERMISSION_PROMPT_EVENT: &str = "claude/permission_prompt";
+pub(crate) const PERMISSION_PROMPT_EVENT: &str = "claude/permission_prompt";
 const DEFAULT_PROMPT_CONTEXT: &str =
     "HOL Guard intercepted the sensitive request and is routing it \
      into a HOL Guard approval question. This approval flow came from HOL Guard, not from Claude \
@@ -250,7 +250,7 @@ pub(super) fn permission_request_reason(notice: &Map<String, Value>) -> String {
 
 /// `claude_permission_request_response` once the caller has peeked the
 /// pending notice (and, when there is one, marked it seen).
-pub(super) fn permission_request_response(
+pub(crate) fn permission_request_response(
     payload: &Map<String, Value>,
     notice: Option<&Map<String, Value>>,
 ) -> Value {
@@ -295,7 +295,7 @@ pub(crate) fn permission_prompt_additional_context(notice: Option<&Map<String, V
 /// it: the hook's own fields as it sent them, then the notice or `{}`, in
 /// the daemon's key order. The notice reaches the daemon from the store
 /// op's sorted JSON, so its keys are sorted there too.
-pub(super) fn permission_prompt_event(
+pub(crate) fn permission_prompt_event(
     payload: &Map<String, Value>,
     notice: Option<&Map<String, Value>>,
 ) -> Option<String> {
@@ -311,7 +311,7 @@ pub(super) fn permission_prompt_event(
 
 /// `_claude_permission_prompt_notification_response` once the caller has
 /// loaded the notice, marked it seen and recorded the event.
-pub(super) fn permission_prompt_notification_response(
+pub(crate) fn permission_prompt_notification_response(
     payload: &Map<String, Value>,
     notice: Option<&Map<String, Value>>,
 ) -> Value {

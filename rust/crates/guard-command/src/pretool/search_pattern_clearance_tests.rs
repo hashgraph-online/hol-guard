@@ -18,6 +18,9 @@ fn only_plain_patterns_are_cleared() {
         "a.b",
         "foo|bar",
         "x = 1",
+        r"a\|b",
+        r"policy_upsert\|policy\.clear",
+        r"a\.b",
     ] {
         assert!(PatternClearance::new(plain).is_some(), "{plain}");
     }
@@ -35,7 +38,13 @@ fn only_plain_patterns_are_cleared() {
         "(a)",
         "a{2}",
         r"\w",
-        r"a\|b",
+        r"a\|",
+        r"\|b",
+        r"a\|\|b",
+        r"a\\|b",
+        r"a\",
+        r"a\*",
+        r"a\(b\)",
         "caf\u{e9}",
         "a\nb",
     ] {
@@ -183,5 +192,44 @@ fn only_a_plain_directory_may_be_descended() {
     assert!(!clearance.may_descend(&root.join(".ssh")));
     assert!(!clearance.may_descend(&root.join(".env")));
     assert!(!clearance.may_descend(&root.join(".missing")));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn an_escaped_bar_or_dot_is_read_more_widely_than_any_dialect() {
+    let root = scratch("escapes");
+    let env = root.join(".env.bak");
+    // `grep -F 'policy\.clear'` looks for the backslash too, so a pattern
+    // that cleared only a one-character gap would miss this line.
+    std::fs::write(&env, "NOTE=policy\\.clear\nPIPE=left|right\n").unwrap();
+    for (pattern, cleared) in [
+        (r"policy\.clear", false),
+        (r"policy\.upsert", true),
+        (r"left\|right", false),
+        (r"handler\|right", false),
+        (r"handler\|router", true),
+        (r"policy_upsert\|policy_clear\|policy\.upsert", true),
+    ] {
+        assert_eq!(
+            PatternClearance::new(pattern).unwrap().clears(&env),
+            cleared,
+            "{pattern}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn several_patterns_clear_only_when_none_can_match() {
+    let root = scratch("several");
+    let env = root.join(".env.bak");
+    std::fs::write(&env, "SESSION_SECRET=placeholder\n").unwrap();
+    let clears = |patterns: &[&str]| PatternClearance::any(patterns).map(|c| c.clears(&env));
+    assert_eq!(clears(&["handler", "router"]), Some(true));
+    assert_eq!(clears(&["handler", "session"]), Some(false));
+    assert_eq!(clears(&["handler", "^KEY"]), None);
+    assert_eq!(clears(&["handler", ""]), None);
+    assert_eq!(clears(&[]), None);
+    assert!(PatternClearance::any(&["a".repeat(300), "b".repeat(300)]).is_none());
     std::fs::remove_dir_all(root).unwrap();
 }

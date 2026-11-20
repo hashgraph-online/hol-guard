@@ -90,11 +90,8 @@ fn the_embedded_artifact_compiles_to_the_fully_admitted_program() {
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    let catalog: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/command-catalog.v1.json"
-    )))
-    .unwrap();
+    let catalog: serde_json::Value =
+        serde_json::from_slice(guard_command_catalog_data::CATALOG_JSON).unwrap();
     let entries = catalog["catalog"].as_array().unwrap();
     let mut catalog_ids: Vec<&str> = entries
         .iter()
@@ -336,7 +333,11 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
         decision("gh api graphql -f query='{ viewer { login } }'", &original),
         Some(Instant::now()),
     );
-    assert_eq!(result.minimum_action, "block");
+    // The deadline is already past, so the check observes nothing. That is a
+    // transient failure, not a command the controls cannot match, so it
+    // settles at a review the user can answer. The evidence field keeps one
+    // value for both, because consumers pin it.
+    assert_eq!(result.minimum_action, "review");
     let observations = result.command_extensions.unwrap();
     assert_eq!(
         observations.evaluation_error.as_deref(),

@@ -14,10 +14,7 @@ fn home(name: &str) -> PathBuf {
         .join(format!(
             "{name}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for directory in [
@@ -91,16 +88,23 @@ fn skill_directories_list_without_review() {
         ),
         "allow"
     );
+    assert_eq!(
+        action(
+            &home,
+            "zcode",
+            "cat ~/.agents/skills/review-loop/scripts/approve.sh"
+        ),
+        "allow"
+    );
     for command in [
         // Other agent state, hidden entries inside a skill, actions and
-        // content reads keep their review.
+        // content reads outside the skill rules keep their review.
         "ls -R ~/.codex",
         "find ~/.codex -name auth.json",
         "ls ~/.agents/skills/review-loop/.cache",
         "find ~/.agents -name approve.sh -exec cat {} +",
         "find ~/.agents -name approve.sh -delete",
         "find -L ~/.agents -name approve.sh",
-        "cat ~/.agents/skills/review-loop/scripts/approve.sh",
         "ls ~/.ssh",
     ] {
         assert_ne!(action(&home, "zcode", command), "allow", "{command}");
@@ -138,6 +142,11 @@ fn listing_a_missing_path_proceeds_outside_hidden_locations() {
             "ls missing-dir".to_owned(),
             // A missing entry inside a skill directory.
             "ls ~/.agents/skills/review-loop/missing".to_owned(),
+            // A tool's own directory that this machine never created. The
+            // same listing of a directory that is there is allowed, so the
+            // probe cannot report by Guard's answer whether it exists.
+            "ls ~/.config/missing".to_owned(),
+            "ls ~/.toolcfg".to_owned(),
         ] {
             assert_eq!(
                 action(&home, harness, &command),
@@ -149,7 +158,11 @@ fn listing_a_missing_path_proceeds_outside_hidden_locations() {
     for command in [
         "ls ~/.ssh/missing",
         "ls ~/work/.hidden-missing",
-        "ls ~/.config/missing",
+        // The stores keep their review whether or not they are there: the
+        // answer to a probe for one of them is itself the account it keeps.
+        "ls ~/.aws/missing",
+        "ls ~/.config/gh/missing",
+        "ls ~/.env.local",
         "ls ~/work/missing/.env",
         "ls ~/work/missing/id_rsa",
         "ls ~/work/missing/../.ssh",
@@ -278,10 +291,7 @@ fn a_skills_link_to_home_stays_closed_when_home_is_spelled_through_a_symlink() {
     std::os::unix::fs::symlink(&canonical, canonical.join(".agents/skills")).unwrap();
     let alias = canonical.parent().unwrap().join(format!(
         "home-alias-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     std::os::unix::fs::symlink(&canonical, &alias).unwrap();
     assert_ne!(alias.canonicalize().unwrap(), alias);

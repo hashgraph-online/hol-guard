@@ -75,21 +75,6 @@ pub(crate) fn resolve(path: &PyPath) -> Option<PyPath> {
     }
 }
 
-/// `Path.read_text(encoding="utf-8", errors="ignore")`; `None` is `OSError`.
-pub(crate) fn read_text_ignore(path: &PyPath) -> Option<String> {
-    let bytes = fs::read(as_fs(path)).ok()?;
-    Some(decode_ignore(&bytes))
-}
-
-/// `bytes.decode("utf-8", errors="ignore")`.
-pub(crate) fn decode_ignore(bytes: &[u8]) -> String {
-    let mut text = String::with_capacity(bytes.len());
-    for chunk in bytes.utf8_chunks() {
-        text.push_str(chunk.valid());
-    }
-    text
-}
-
 fn join(base: &str, name: &str) -> String {
     if base.is_empty() || base.ends_with('/') {
         format!("{base}{name}")

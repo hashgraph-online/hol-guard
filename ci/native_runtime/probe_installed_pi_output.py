@@ -355,7 +355,7 @@ elif {negative!s}:
         "negative-nonzero-allow": (2, b'{{"decision":"allow"}}\\n', b"cli failed\\n"),
         "negative-observe": (0, b'{{"decision":"allow","observe_mode":true}}\\n', b""),
     }}
-    returncode, stdout, stderr = responses.get(case_id, responses["negative-malformed"])
+    returncode, stdout, stderr = responses.get(case_id, (1, b"", b""))
 else:
     child_env = dict(os.environ)
     child_env.pop("PYTHONPATH", None)
@@ -495,18 +495,11 @@ def _generate_extension(
     home: Path,
     settings_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
+    from codex_plugin_scanner.guard.native_extension import extension_source
 
-    path.write_text(
-        managed_extension_source(
-            guard_home=guard_home,
-            home_dir=home,
-            settings_path=settings_path,
-            harness="omp",
-            display_name="Oh My Pi",
-        ),
-        encoding="utf-8",
-    )
+    context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
+    path.write_text(extension_source("omp", context, config_path=settings_path), encoding="utf-8")
 
 
 def _run_node_cases(
@@ -668,7 +661,7 @@ def _start_installed_daemon(
     *, guard_home: Path, home: Path, workspace: Path, identity: Any, register_workspace_policy: bool = True
 ) -> Any:
     """Start the installed Guard daemon that the generated extension will use."""
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
 
     store: Any | None = None

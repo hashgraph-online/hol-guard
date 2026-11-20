@@ -42,14 +42,15 @@ security bindings fail closed instead of being round-tripped into a signature.
 
 ## Verification, rotation, and replay
 
-Verifiers should pass the displayed claim, all currently trusted rotation keys, and a
-`GuardTrustAttestationVerificationPolicy`:
+Guard signs attestations; the native runtime's `trust_attestation_verify` operation
+verifies them. Verifiers should pass the displayed claim, all currently trusted rotation
+keys, and the verifier state under the operation's `policy` fields:
 
 - list compromised or retired key IDs in `revoked_key_ids`;
 - set each replacement key's activation timestamp in `key_not_before`;
 - persist the last accepted sequence and require a greater
   `minimum_sequence` when a Cloud sequence is present;
-- persist the replay key returned by `verify_trust_attestation` and reject it
+- persist the `replay_key` the operation returns and reject it
   through `seen_replay_keys` on subsequent uploads;
 - set `now` to enforce expiry and prevent future-dated signatures.
 

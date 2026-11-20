@@ -8,7 +8,8 @@ use std::os::unix::fs::MetadataExt;
 #[path = "user_tools.rs"]
 mod user_tools;
 pub(super) use user_tools::{
-    host_cargo_caches, host_corepack_home, host_go_module_cache, host_rustup_home,
+    host_cargo_caches, host_corepack_home, host_go_module_cache, host_maven_repository,
+    host_maven_wrapper_dists, host_rustup_home, is_package_tree,
 };
 
 /// Where `xcode-select -s` records the developer directory: the current
@@ -102,11 +103,17 @@ fn accept_entry(entry: &Path, home: Option<&Path>, workspace: &Path) -> Option<V
     // Any other directory must be one of the caller's sealed tool directories.
     let user_tool = || {
         let homes = homes(home);
-        user_tools::tool_root(&canonical, &homes, workspace).map(|root| {
-            let mut roots = vec![root.clone()];
-            roots.extend(user_tools::shim_siblings(&root, &homes, workspace));
-            roots
-        })
+        user_tools::tool_root(&canonical, &homes, workspace)
+            .map(|root| {
+                let mut roots = vec![root.clone()];
+                roots.extend(user_tools::shim_siblings(&root, &homes, workspace));
+                roots
+            })
+            // A tool directory inside an installed dependency tree carries no
+            // name of its own, so it is admitted as that tree instead.
+            .or_else(|| {
+                user_tools::package_tree_root(&canonical, &homes, workspace).map(|root| vec![root])
+            })
     };
     if forbidden(&canonical, home) || !owned_and_sealed(&canonical) {
         return user_tool();
@@ -152,11 +159,44 @@ fn accept_entry(entry: &Path, home: Option<&Path>, workspace: &Path) -> Option<V
                 _ => canonical.clone(),
             };
             if owned_and_sealed(&root) && !forbidden(&root, Some(home)) {
-                return Some(vec![root]);
+                // A version manager's prefix holds venvs of its own, and one
+                // of those can name a different version's install as its
+                // `home`. The grant stops at this prefix, so without the
+                // venv's own roots that interpreter stays unreachable.
+                let mut roots = vec![root.clone()];
+                roots.extend(external_venv(&canonical, workspace));
+                return Some(roots);
             }
         }
     }
-    user_tool()
+    // A venv activated outside the workspace reaches this far as an ordinary
+    // sealed tool directory, which grants the `bin` the session resolves
+    // `python3` in but not the interpreter that launcher links out to. The
+    // sandbox could then not start it, so the run was reviewed. Granted only
+    // alongside the tool directory, so a venv whose ancestry is not sealed
+    // gets no grant at all.
+    let mut roots = user_tool()?;
+    roots.extend(external_venv(&canonical, workspace));
+    Some(roots)
+}
+
+/// An external venv's own root and the interpreter install it runs, each
+/// sealed against every account but this one and root.
+fn external_venv(entry: &Path, workspace: &Path) -> Vec<PathBuf> {
+    let roots = super::venv::external_venv_roots(entry, workspace);
+    // The interpreter needs every root it was given; a run that can start but
+    // cannot read its standard library would fail inside the sandbox instead.
+    // Every ancestor too: a sealed directory below one another account can
+    // write can be renamed away and answered with different contents, and
+    // `approved_user_python_runtime` reads a managed prefix's name only.
+    if roots.is_empty()
+        || !roots
+            .iter()
+            .all(|root| root.ancestors().all(owned_and_sealed))
+    {
+        return Vec::new();
+    }
+    roots
 }
 
 /// The developer directory a `/usr/bin` shim forwards into: the one
@@ -188,7 +228,7 @@ fn read_selected_developer_dir() -> Option<PathBuf> {
 /// The Xcode or CommandLineTools root `/usr/bin` shims forward into. Inside
 /// an app bundle the whole bundle is granted, because the developer
 /// directory loads frameworks and `Info.plist` from beside it.
-fn developer_dir() -> Option<PathBuf> {
+pub(super) fn developer_dir() -> Option<PathBuf> {
     let resolved = selected_developer_dir()?;
     let root = developer_root(&resolved)?;
     owned_and_sealed(&root).then_some(root)
@@ -252,8 +292,10 @@ pub(super) fn workspace_exec_roots(
     search_path: &str,
     home: Option<&Path>,
     workspace: &Path,
+    text: Option<&str>,
     go: bool,
     cargo: bool,
+    maven: bool,
 ) -> (Vec<PathBuf>, String) {
     let mut roots: Vec<PathBuf> = Vec::new();
     let mut entries: Vec<String> = Vec::new();
@@ -290,11 +332,29 @@ pub(super) fn workspace_exec_roots(
             }
         }
     }
+    // A venv the command starts by its own path, such as `.venv/bin/pytest`,
+    // never reaches the loop above when the session's PATH does not name it.
+    // The install its launchers link to becomes an executable root; its `bin`
+    // stays off the sandbox PATH, so a bare name still resolves inside the
+    // sandbox to the file the session resolved outside it. Only the venvs
+    // `text` starts a program from are read: a command that names none is
+    // planned without the interpreter prefixes the others link out to.
+    for bin in super::venv::workspace_resident_bins(workspace, text) {
+        let Some((_, installs)) = workspace_venv(&bin, workspace) else {
+            continue;
+        };
+        for install in installs {
+            if !roots.contains(&install) {
+                roots.push(install);
+            }
+        }
+    }
     for system in ["/usr/bin", "/bin"] {
         if !entries.iter().any(|entry| entry == system) {
             entries.push(system.to_owned());
         }
     }
+    super::developer_shim::developer_tools_ahead_of_shims(&mut entries);
     roots.extend(developer_dir());
     // Corepack's shims (`pnpm`, `yarn`) read the package manager they run
     // from its cache; the launch environment points `COREPACK_HOME` there.
@@ -333,6 +393,24 @@ pub(super) fn workspace_exec_roots(
             }
         }
     }
+    // A Maven build resolves its dependencies from the local repository the
+    // host has already filled. The launch environment points the run's own
+    // local repository at a private directory with this one linked in, and
+    // runs offline. Only a run that reaches Maven gets it: the repository
+    // holds whatever the host has fetched, an internal artifact included.
+    // A wrapper run executes the Maven the project pins from the distribution
+    // the host has already unpacked, which the launch environment reaches
+    // through the run's own Maven user home.
+    if maven {
+        for cache in [host_maven_repository(), host_maven_wrapper_dists()]
+            .into_iter()
+            .flatten()
+        {
+            if !roots.contains(&cache) {
+                roots.push(cache);
+            }
+        }
+    }
     (roots, entries.join(":"))
 }
 
@@ -358,14 +436,49 @@ const CARGO_WRITTEN_CHILDREN: &[(&str, &str)] = &[("registry", "src"), ("git", "
 /// the registry nor the link that would name it.
 pub(super) fn private_links(private_tmp: &Path, granted: &[PathBuf]) -> Vec<(PathBuf, PathBuf)> {
     let home = super::environment::cargo_home(private_tmp);
-    host_cargo_caches()
+    let mut links = maven_links(private_tmp, granted);
+    links.extend(
+        host_cargo_caches()
+            .into_iter()
+            .filter(|(_, cache)| granted.iter().any(|root| cache.starts_with(root)))
+            .flat_map(|(name, cache)| {
+                let written = CARGO_WRITTEN_CHILDREN
+                    .iter()
+                    .find_map(|(cache, child)| (*cache == name).then_some(*child));
+                cache_links(&home.join(name), &cache, written)
+            }),
+    );
+    links
+}
+
+/// The links that put the host's Maven repository and wrapper distributions
+/// below directories of the run's own. Maven writes its resolver locks and the
+/// artifacts it builds at the top of the local repository, and a wrapper run
+/// writes a lock beside the distribution it unpacks, so the run gets both
+/// directories of its own, each holding a link to the entries the host already
+/// has. `granted` is the plan's own executable roots, so a run that compiles
+/// no Java project reaches neither directory nor a link that would name one.
+fn maven_links(private_tmp: &Path, granted: &[PathBuf]) -> Vec<(PathBuf, PathBuf)> {
+    let repository = (
+        host_maven_repository(),
+        super::environment::maven_repository(private_tmp),
+    );
+    let dists = (
+        host_maven_wrapper_dists(),
+        super::environment::maven_user_home(private_tmp)
+            .join("wrapper")
+            .join("dists"),
+    );
+    [repository, dists]
         .into_iter()
-        .filter(|(_, cache)| granted.iter().any(|root| cache.starts_with(root)))
-        .flat_map(|(name, cache)| {
-            let written = CARGO_WRITTEN_CHILDREN
-                .iter()
-                .find_map(|(cache, child)| (*cache == name).then_some(*child));
-            cache_links(&home.join(name), &cache, written)
+        .filter_map(|(host, local)| Some((host?, local)))
+        .filter(|(host, _)| granted.iter().any(|root| host.starts_with(root)))
+        .flat_map(|(host, local)| {
+            fs::read_dir(&host)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(move |entry| (local.join(entry.file_name()), entry.path()))
         })
         .collect()
 }
@@ -532,11 +645,152 @@ mod tests {
             &format!("{}:relative/bin", link.display()),
             Some(&home.0),
             Path::new("/nonexistent-workspace"),
+            None,
+            false,
             false,
             false,
         );
         assert!(!roots.contains(&outside.0) && !roots.contains(&link));
-        assert_eq!(path, "/usr/bin:/bin");
+        // A macOS host with a sealed developer directory lists its tools
+        // just ahead of the `/usr/bin` shims.
+        let mut expected = vec!["/usr/bin".to_owned(), "/bin".to_owned()];
+        super::super::developer_shim::developer_tools_ahead_of_shims(&mut expected);
+        assert_eq!(path, expected.join(":"));
+    }
+
+    /// A scratch tree whose ancestry is sealed, so a tool directory below it
+    /// is granted at all. `/tmp` is world-writable on Linux, where the crate
+    /// directory serves instead; with no sealed base there is nothing to
+    /// measure, and CI must provide one.
+    struct Scratch(PathBuf);
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scratch() -> Option<Scratch> {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let bases = [
+            std::env::temp_dir(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        ];
+        let Some(base) = bases
+            .iter()
+            .filter_map(|base| base.canonicalize().ok())
+            .find(|base| base.ancestors().all(owned_and_sealed))
+        else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "the venv exec-root tests need a sealed scratch base on CI"
+            );
+            eprintln!("skipping venv exec-root test: no sealed scratch base");
+            return None;
+        };
+        let root = base.join(format!(
+            ".scratch-venv-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+        Some(Scratch(root.canonicalize().unwrap()))
+    }
+
+    /// A trusted interpreter install the host really has, so a venv may name
+    /// it as its `home` the way one made from the system Python does.
+    fn trusted_interpreter_home() -> Option<PathBuf> {
+        Path::new("/usr/bin/python3")
+            .is_file()
+            .then(|| Path::new("/usr/bin").canonicalize().ok())
+            .flatten()
+    }
+
+    /// A session that activated a venv outside the workspace resolves a bare
+    /// `python3` to that venv's launcher, which is a symlink to an
+    /// interpreter installed elsewhere. Granting the `bin` directory alone
+    /// left the sandbox unable to start it, so `python3 -m unittest` in the
+    /// workspace was judged unreachable and reviewed instead of contained.
+    #[test]
+    fn an_external_venv_grants_its_interpreter_install() {
+        let Some(interpreter) = trusted_interpreter_home() else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "the venv exec-root tests need a trusted /usr/bin/python3 on CI"
+            );
+            return;
+        };
+        let Some(scratch) = scratch() else {
+            return;
+        };
+        let home = scratch.0.join("home");
+        let workspace = scratch.0.join("workspace");
+        let venv = scratch.0.join("venv");
+        let bin = venv.join("bin");
+        for directory in [&home, &workspace, &bin, &venv.join("lib/python3")] {
+            fs::create_dir_all(directory).unwrap();
+        }
+        symlink("/usr/bin/python3", bin.join("python3")).unwrap();
+        fs::write(
+            venv.join("pyvenv.cfg"),
+            format!("home = {}\n", interpreter.display()),
+        )
+        .unwrap();
+        let (roots, path) = workspace_exec_roots(
+            &bin.to_string_lossy(),
+            Some(&home),
+            &workspace,
+            None,
+            false,
+            false,
+            false,
+        );
+        // The venv itself, for the packages the run imports, and the install
+        // its launcher links out to, for the interpreter and its library.
+        let granted = super::venv::external_venv_roots(&bin, &workspace);
+        assert!(roots.contains(&venv), "{roots:?} from {granted:?}");
+        assert!(roots.contains(&interpreter), "{roots:?} from {granted:?}");
+        // Kept in place on the sandbox PATH, so a bare `python3` resolves
+        // inside the sandbox to the launcher the session resolved outside it.
+        assert!(
+            path.split(':').any(|entry| Path::new(entry) == bin),
+            "{path}"
+        );
+    }
+
+    /// The grant is a venv's, not any sealed directory's: a `bin` whose
+    /// parent holds something no venv holds keeps the tool directory alone.
+    #[test]
+    fn a_directory_that_is_not_a_venv_grants_no_install() {
+        let (Some(scratch), Some(interpreter)) = (scratch(), trusted_interpreter_home()) else {
+            return;
+        };
+        let home = scratch.0.join("home");
+        let workspace = scratch.0.join("workspace");
+        let tools = scratch.0.join("tools");
+        let bin = tools.join("bin");
+        for directory in [&home, &workspace, &bin] {
+            fs::create_dir_all(directory).unwrap();
+        }
+        fs::write(tools.join("notes.txt"), "").unwrap();
+        fs::write(
+            tools.join("pyvenv.cfg"),
+            format!("home = {}\n", interpreter.display()),
+        )
+        .unwrap();
+        let (roots, _) = workspace_exec_roots(
+            &bin.to_string_lossy(),
+            Some(&home),
+            &workspace,
+            None,
+            false,
+            false,
+            false,
+        );
+        assert!(roots.contains(&bin), "{roots:?}");
+        assert!(!roots.contains(&tools), "{roots:?}");
     }
 
     #[test]
@@ -546,8 +800,24 @@ mod tests {
         let Some(cache) = host_go_module_cache() else {
             return;
         };
-        let (without, _) = workspace_exec_roots("", None, Path::new("/nonexistent"), false, false);
-        let (with, _) = workspace_exec_roots("", None, Path::new("/nonexistent"), true, false);
+        let (without, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            false,
+        );
+        let (with, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            true,
+            false,
+            false,
+        );
         assert!(!without.contains(&cache));
         assert!(with.contains(&cache));
     }
@@ -561,13 +831,77 @@ mod tests {
         if caches.is_empty() {
             return;
         }
-        let (without, _) = workspace_exec_roots("", None, Path::new("/nonexistent"), false, false);
-        let (with, _) = workspace_exec_roots("", None, Path::new("/nonexistent"), false, true);
+        let (without, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            false,
+        );
+        let (with, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            true,
+            false,
+        );
         for (_, cache) in &caches {
             assert!(!without.contains(cache));
             assert!(with.contains(cache));
         }
         assert!(private_links(Path::new("/sandbox"), &without).is_empty());
         assert!(!private_links(Path::new("/sandbox"), &with).is_empty());
+    }
+
+    #[test]
+    fn the_maven_repository_is_an_executable_root_only_for_a_maven_run() {
+        // The repository holds the jars a build resolved, a plugin that the
+        // run executes included, and the wrapper distributions hold the Maven
+        // a `mvnw` run executes, so a workspace that builds no Maven project
+        // neither executes in either nor gets a link that names one.
+        let Some(repository) = host_maven_repository() else {
+            return;
+        };
+        let (without, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            false,
+        );
+        let (with, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            true,
+        );
+        assert!(!without.contains(&repository));
+        assert!(with.contains(&repository));
+        let dists = host_maven_wrapper_dists();
+        if let Some(dists) = &dists {
+            assert!(!without.contains(dists));
+            assert!(with.contains(dists));
+        }
+        let sandbox = Path::new("/sandbox");
+        let local = super::super::environment::maven_repository(sandbox);
+        let wrapper = super::super::environment::maven_user_home(sandbox)
+            .join("wrapper")
+            .join("dists");
+        assert!(private_links(sandbox, &with).iter().all(|(link, target)| {
+            (link.starts_with(&local) && target.starts_with(&repository))
+                || dists
+                    .as_ref()
+                    .is_some_and(|dists| link.starts_with(&wrapper) && target.starts_with(dists))
+        }));
+        assert!(private_links(sandbox, &without).is_empty());
     }
 }

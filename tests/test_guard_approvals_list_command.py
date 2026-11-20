@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
+from codex_plugin_scanner.guard.cli.commands_parser_approvals import add_approval_parser
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -66,3 +68,55 @@ class TestApprovalsListCommand:
 
         assert rc == 0
         assert store.get_approval_request("req-list-2")["status"] == "pending"
+
+
+class TestApprovalsJsonFlagPlacement:
+    """`--json` is honoured before the subcommand as well as after it."""
+
+    @staticmethod
+    def _parse(argv: list[str]) -> argparse.Namespace:
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="guard_command")
+        add_approval_parser(subparsers, lambda _parser: None)
+        return parser.parse_args(argv)
+
+    def test_leading_json_survives_the_read_only_subcommands(self) -> None:
+        for argv in (
+            ["approvals", "--json", "list"],
+            ["approvals", "--json", "wait", "req-1"],
+            ["approvals", "--json", "retry-hint", "req-1"],
+        ):
+            assert self._parse(argv).json is True, argv
+
+    def test_trailing_json_still_sets_the_flag(self) -> None:
+        for argv in (
+            ["approvals", "list", "--json"],
+            ["approvals", "wait", "req-1", "--json"],
+            ["approvals", "retry-hint", "req-1", "--json"],
+        ):
+            assert self._parse(argv).json is True, argv
+
+    def test_no_json_flag_leaves_the_reads_human_readable(self) -> None:
+        for argv in (
+            ["approvals", "list"],
+            ["approvals", "wait", "req-1"],
+            ["approvals", "retry-hint", "req-1"],
+        ):
+            assert self._parse(argv).json is False, argv
+
+    def test_leading_json_reaches_the_list_command(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        store = GuardStore(home_dir)
+        store.add_approval_request(_make_request(request_id="req-list-json"), "2026-01-01T00:00:00Z")
+        monkeypatch.setattr(
+            approval_commands_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(approval_commands_module, "open_browser_url", lambda _url: True)
+
+        rc = main(["guard", "approvals", "--json", "list", "--home", str(home_dir)])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["next_request_id"] == "req-list-json"

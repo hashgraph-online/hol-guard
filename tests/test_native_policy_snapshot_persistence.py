@@ -8,73 +8,17 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.native_policy_snapshot as snapshot_module
 from codex_plugin_scanner.guard.native_policy_snapshot import (
-    NATIVE_POLICY_SNAPSHOT_CACHE_NAME,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
     NativePolicySnapshotPublisher,
-    snapshot_bytes_v3,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .native_policy_snapshot_test_fixtures import _ack, _config, _DeterministicClock, _status
+from .native_policy_snapshot_test_fixtures import _ack, _DeterministicClock, _status
 
 # Split modules are implementation containers; the compatibility façade imports
 # their test functions so the historical test path keeps identical collection.
 __test__ = False
-
-
-@pytest.mark.parametrize("boundary", ("cache", "state", "cleanup"))
-def test_snapshot_transaction_recovers_each_persistence_boundary(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    boundary: str,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    master = b"z" * 32
-    future_ms = int(time.time() * 1_000) + 60_000
-    original_cache_writer = snapshot_module._write_v3_snapshot_cache
-    original_state_writer = snapshot_module._write_v3_generation_state
-    original_cleanup = snapshot_module._clear_v3_snapshot_pending
-
-    def fail_once(*_args: object, **_kwargs: object) -> bytes:
-        raise snapshot_module.NativePolicySnapshotError("injected_persistence_crash")
-
-    if boundary == "cache":
-        monkeypatch.setattr(snapshot_module, "_write_v3_snapshot_cache", fail_once)
-    elif boundary == "state":
-        monkeypatch.setattr(snapshot_module, "_write_v3_generation_state", fail_once)
-    else:
-        monkeypatch.setattr(snapshot_module, "_clear_v3_snapshot_pending", fail_once)
-    with pytest.raises(snapshot_module.NativePolicySnapshotError, match="injected_persistence_crash"):
-        snapshot_module.native_policy_snapshot_v3(
-            config=_config(),
-            guard_home=guard_home,
-            runtime_identity="a" * 64,
-            rule_digest="b" * 64,
-            policy_integrity_key=master,
-            issued_at_ms=future_ms,
-            expires_at_ms=future_ms + 60_000,
-        )
-    monkeypatch.setattr(snapshot_module, "_write_v3_snapshot_cache", original_cache_writer)
-    monkeypatch.setattr(snapshot_module, "_write_v3_generation_state", original_state_writer)
-    monkeypatch.setattr(snapshot_module, "_clear_v3_snapshot_pending", original_cleanup)
-
-    recovered = snapshot_module.native_policy_snapshot_v3(
-        config=_config(),
-        guard_home=guard_home,
-        runtime_identity="a" * 64,
-        rule_digest="b" * 64,
-        policy_integrity_key=master,
-        issued_at_ms=future_ms + 10_000,
-        expires_at_ms=future_ms + 70_000,
-    )
-    cache_path = guard_home / "native-runtime" / NATIVE_POLICY_SNAPSHOT_CACHE_NAME
-    pending_path = guard_home / "native-runtime" / "policy-snapshot-publisher-v3.pending.json"
-    assert recovered["generation"] == 1
-    assert cache_path.read_bytes() == snapshot_bytes_v3(recovered)
-    assert not pending_path.exists()
 
 
 def test_lost_ack_retries_identical_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,7 +32,7 @@ def test_lost_ack_retries_identical_payload(tmp_path: Path, monkeypatch: pytest.
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return None if len(calls) == 1 else _ack(payload)
+        return None if len(calls) == 1 else _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -127,7 +71,7 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
                     "resident_generation": 1,
                 }
             ).encode()
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -239,7 +183,7 @@ def test_publisher_process_restart_reuses_cached_payload(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         first_calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     first_publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -257,7 +201,7 @@ def test_publisher_process_restart_reuses_cached_payload(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         second_calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     second_publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -286,7 +230,7 @@ def test_renewal_materializes_higher_generation_before_expiry(tmp_path: Path, mo
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -332,7 +276,7 @@ def test_renewal_failure_keeps_barrier_closed_at_expiry(
         calls += 1
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
-        return _ack(payload) if calls == 1 else None
+        return _ack(payload, guard_home=kwargs.get("guard_home")) if calls == 1 else None
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -369,7 +313,7 @@ def test_renewal_retry_reuses_candidate_with_bounded_backoff(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload) if len(calls) != 2 else None
+        return _ack(payload, guard_home=kwargs.get("guard_home")) if len(calls) != 2 else None
 
     publisher = NativePolicySnapshotPublisher(
         store=store,

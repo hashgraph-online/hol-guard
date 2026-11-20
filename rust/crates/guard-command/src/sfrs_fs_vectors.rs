@@ -126,6 +126,7 @@ fn filesystem_helpers_match_recorded_python() {
     let root = scratch.0.clone();
     let mut failures = Vec::new();
     let mut compared = 0usize;
+    let mut frozen = 0usize;
     for case in document["cases"].as_array().expect("cases") {
         let function = case["fn"].as_str().expect("fn");
         let args = bind(&root, &case["args"]);
@@ -134,11 +135,17 @@ fn filesystem_helpers_match_recorded_python() {
             continue;
         };
         compared += 1;
+        // Recorded from the retired Python pull-request expansion helpers;
+        // the generator carries them forward, and this keeps them replayed.
+        if function.starts_with("pr_") {
+            frozen += 1;
+        }
         if actual != expected {
             failures.push(format!("{function} {args}: {actual} vs {expected}"));
         }
     }
     assert!(compared > 400, "too few cases: {compared}");
+    assert!(frozen > 5000, "too few pull-request cases: {frozen}");
     assert!(
         failures.is_empty(),
         "{} differ, first: {:#?}",

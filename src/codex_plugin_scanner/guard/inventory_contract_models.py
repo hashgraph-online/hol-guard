@@ -100,37 +100,6 @@ class GuardAgentInventoryDockerProof:
 
 
 @dataclass(frozen=True, slots=True)
-class GuardAgentIntegrationRun:
-    run_id: str
-    agent_id: str
-    agent_type: str
-    status: Literal["started", "completed", "failed"]
-    started_at: str
-    completed_at: str | None = None
-    message: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class GuardHarnessSetupStep:
-    step_id: str
-    agent_type: str
-    status: Literal["not_started", "running", "completed", "failed"]
-    label: str
-    safe_command: str | None = None
-    detail: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class GuardInventoryRiskComponent:
-    component_id: str
-    source: InventoryFindingSource
-    severity: InventorySeverity
-    confidence: InventoryConfidence
-    score_delta: int
-    summary: str
-
-
-@dataclass(frozen=True, slots=True)
 class GuardInventorySource:
     source_id: str
     source_type: Literal["config", "docker", "scanner", "runtime", "repository"]

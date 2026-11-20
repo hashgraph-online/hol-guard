@@ -56,6 +56,22 @@ const policiesPayload = {
       source_receipt_id: "receipt-ddd444",
     },
     {
+      decision_id: 5,
+      harness: "omp",
+      scope: "artifact",
+      artifact_id: "omp:native-pretool:bash",
+      artifact_hash: "guard-approval-context:v1:token",
+      workspace: null,
+      workspace_label: null,
+      publisher: null,
+      action: "allow",
+      reason: "approved in review",
+      source: "approval-gate",
+      updated_at: "2026-10-19T08:00:00Z",
+      remembered_command: "cd /work/shop-app && git status && rm -rf /tmp/build",
+      source_receipt_id: "receipt-eee555",
+    },
+    {
       decision_id: 3,
       harness: "claude-code",
       scope: "workspace",
@@ -106,16 +122,20 @@ async function mount(page: Page) {
 }
 
 test.describe("Rules & exceptions UX", () => {
-  test("hero, spotlight, list switch, inspector and bulk selection", async ({ page }) => {
+  test("header, attention strip, list switch, inspector and bulk selection", async ({ page }) => {
     await mount(page);
     await page.goto(`/policy${DAEMON_PARAM}`);
     await expect(page.getByText("1 broad allow deserves a second look")).toBeVisible();
     await expect(page.getByText("Worth a second look").first()).toBeVisible();
+    await expect(page.getByText(/Broad allow:/)).toBeVisible();
     await expect(page.getByText(/Guard will allow "git push origin main"/).first()).toBeVisible();
-    await expect(page.getByText("Broad allow").first()).toBeVisible();
+    await expect(page.getByText("Broad allow", { exact: true }).first()).toBeVisible();
+
+    await expect(page.getByText(/cd \/work\/shop-app && git status && rm -rf \/tmp\/build/).first()).toBeVisible();
+    await expect(page.getByText(/Guard will allow "cd \/work\/shop-app && git status && rm -rf \/tmp\/build" the next time Oh My Pi retries this exact action/)).toBeVisible();
 
     await page.getByRole("button", { name: /^Block/ }).click();
-    await expect(page.getByText(/Showing 1 of 4 remembered rules/)).toBeVisible();
+    await expect(page.getByText(/Showing 1 of 5 remembered rules/)).toBeVisible();
     await expect(page.getByText(/Guard will block "rm -rf build"/).first()).toBeVisible();
 
     await page.getByRole("button", { name: /^All actions/ }).click();
@@ -123,6 +143,13 @@ test.describe("Rules & exceptions UX", () => {
     await page.getByLabel(/Select rule rm -rf build/).check();
     await expect(page.getByText("2 rules selected")).toBeVisible();
     await expect(page.getByRole("button", { name: "Remove selected" })).toBeVisible();
+
+    await page.getByRole("button", { name: /Inspect rule cd \/work\/shop-app/ }).first().click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("Exact action approved")).toBeVisible();
+    await expect(page.getByRole("dialog").locator("pre")).toContainText("cd /work/shop-app && git status && rm -rf /tmp/build");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Inspect rule git push origin main" }).first().click();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -140,12 +167,12 @@ test.describe("Rules & exceptions UX", () => {
 
     await page.getByRole("tab", { name: /Remembered rules/ }).click();
     await page.getByLabel("Search remembered rules").fill("no-such-rule-zzz");
-    await expect(page.getByText(/No rules match/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No rules match" })).toBeVisible();
     await page.getByRole("button", { name: "Clear search and filters" }).click();
     await expect(page.getByText(/Guard will allow "git push origin main"/).first()).toBeVisible();
   });
 
-  test("mobile layout keeps hero and rules reachable", async ({ page }) => {
+  test("mobile layout keeps header and rules reachable", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mount(page);
     await page.goto(`/policy${DAEMON_PARAM}`);

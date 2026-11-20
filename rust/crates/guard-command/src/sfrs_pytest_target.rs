@@ -4,11 +4,11 @@
 //! The inline-Python half walks a `ast.parse` tree in Python. Rust has no
 //! Python parser, so `inline_python_payload_runs_pytest` answers `false` only
 //! when a lexical argument proves the payload cannot reach pytest (no call,
-//! or no route that names it) and `true` otherwise. Every route Python
-//! recognizes is a name in code, so text inside plain string literals is
-//! not a route. That is exact for the
-//! `false` answers and stricter than Python for a payload that merely
-//! mentions one of the routes without running pytest.
+//! no route that names it, or no mention of pytest at all) and `true`
+//! otherwise. Every route Python recognizes is a name in code, so text
+//! inside plain string literals is not a route. That is exact for the
+//! `false` answers and stricter than Python for a payload that names pytest
+//! near one of the routes without running it.
 
 // Consumed by the later classifier slices.
 #![allow(dead_code)]
@@ -308,10 +308,22 @@ pub(crate) fn inline_python_payload_runs_pytest(payload: &str, depth: usize) -> 
     // A triple-quoted delimiter is one literal. Adjacent quotes and
     // backslashes fail closed only when that split is uncertain.
     let uncertain = stripped.is_none();
+    // A route word only reaches pytest when the payload names it somewhere,
+    // including inside the literals the split removed. Python resolves the
+    // call's own arguments for that name, so a route carrying nothing else
+    // (`subprocess.run(["echo", "harmless"])`) runs no test there either.
+    // The name is matched with quotes, spaces and operators removed, because
+    // a shell drops quotes (`py""test`) and Python joins pieces
+    // (`'py' + 'test'`, `''.join(['py', 'test'])`) before either runs it.
+    let compact: String = normalized
+        .chars()
+        .filter(|character| character.is_alphanumeric() || *character == '.')
+        .collect();
+    let names_pytest = compact.contains("pytest") || compact.contains("py.test");
     code.contains("pytest")
         || code.contains("py.test")
         || (uncertain && (normalized.contains('\\') || has_adjacent_quotes(&normalized)))
-        || STRING_ROUTE_WORDS.iter().any(|word| code.contains(word))
+        || (names_pytest && STRING_ROUTE_WORDS.iter().any(|word| code.contains(word)))
 }
 
 fn is_line_end(character: char) -> bool {
@@ -432,6 +444,28 @@ mod tests {
         // Uncertain splits keep the full text.
         assert!(inline_python_payload_runs_pytest(
             r#"print(f"{__import__('pytest').main()}")"#,
+            0
+        ));
+        // A route whose arguments never name pytest runs no test.
+        assert!(!inline_python_payload_runs_pytest(
+            "import subprocess as sp; sp.run(['echo', 'harmless'])",
+            0
+        ));
+        assert!(!inline_python_payload_runs_pytest(
+            "import os; os.system('echo harmless')",
+            0
+        ));
+        // A name split by shell quotes or Python concatenation still counts.
+        assert!(inline_python_payload_runs_pytest(
+            r#"import os; os.system('py""test -x')"#,
+            0
+        ));
+        assert!(inline_python_payload_runs_pytest(
+            "import subprocess; subprocess.run(['py' + 'test'])",
+            0
+        ));
+        assert!(inline_python_payload_runs_pytest(
+            "import subprocess; subprocess.run([''.join(['py', 'test'])])",
             0
         ));
         assert!(inline_python_payload_runs_pytest("print('pytest", 0));

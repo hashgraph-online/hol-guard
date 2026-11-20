@@ -188,7 +188,7 @@ fn acquire_legacy_owner_locks(state_base: &Path) -> Result<LegacyOwnerLocks, Str
             };
             crate::resident_state::verify_windows_private_file(&file)?;
             fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-                if error.kind() == std::io::ErrorKind::WouldBlock {
+                if crate::resident_state::is_lock_contention(&error) {
                     "native_resident_owner_busy".to_owned()
                 } else {
                     "native_resident_owner_lock_failed".to_owned()
@@ -237,7 +237,7 @@ fn acquire_legacy_owner_locks(state_base: &Path) -> Result<LegacyOwnerLocks, Str
                 }
             }
             fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-                if error.kind() == std::io::ErrorKind::WouldBlock {
+                if crate::resident_state::is_lock_contention(&error) {
                     "native_resident_owner_busy".to_owned()
                 } else {
                     "native_resident_owner_lock_failed".to_owned()
@@ -307,7 +307,7 @@ pub(super) fn acquire(scope: &Path) -> Result<ManagedOwnerLock, String> {
     crate::resident_state::verify_windows_private_file(&file)?;
     #[cfg(windows)]
     fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
+        if crate::resident_state::is_lock_contention(&error) {
             "native_resident_owner_busy".to_owned()
         } else {
             "native_resident_owner_lock_failed".to_owned()

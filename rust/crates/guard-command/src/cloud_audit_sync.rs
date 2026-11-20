@@ -1535,10 +1535,7 @@ mod tests {
             let dir = std::env::temp_dir().join(format!(
                 "cloud-audit-sync-fixture-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                crate::unique_nanos::unique_nanos()
             ));
             for (rel, bytes) in files {
                 let path = dir.join(rel);

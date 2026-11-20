@@ -24,6 +24,12 @@ CASES = frozenset({EDIT_CASE, SHELL_CASE})
 # they sit in for names that are not there.
 LISTING_CASE = "omp-native-ls-temporary-scratch-probes"
 STAGED_CASES = frozenset({SHELL_CASE, LISTING_CASE})
+# Cases that only write a file into the stage directory. They need the directory
+# itself, not the staged sources, and a redirect whose parent does not exist is
+# a write nothing can complete.
+TEE_STAGE_CASE = "omp-native-shell-tee-stage-listing"
+MERGE_STREAM_STAGE_CASE = "omp-native-shell-merge-stream-listing"
+STAGE_DIR_CASES = STAGED_CASES | frozenset({TEE_STAGE_CASE, MERGE_STREAM_STAGE_CASE})
 
 REPORT_BEFORE = "report-window-marker"
 REPORT_AFTER = "report-window-fixed"
@@ -40,12 +46,14 @@ def session_cwd(home: Path, workspace: Path, scenario_id: str) -> Path:
 
 
 def seed_session_folder(home: Path, stage: Path, scenario_id: str) -> None:
-    """Create the plain session folder, and the staged source files for the cases that need them."""
+    """Create the plain session folder, the stage directory, and the staged sources for cases that need them."""
     if scenario_id in CASES:
         (home / SESSION_FOLDER).mkdir(mode=0o700, exist_ok=True)
-    if scenario_id not in STAGED_CASES:
+    if scenario_id not in STAGE_DIR_CASES:
         return
     stage.mkdir(mode=0o700, parents=True)
+    if scenario_id not in STAGED_CASES:
+        return
     for name, text in STAGED_FILES.items():
         (stage / name).write_text(text, encoding="utf-8", newline="\n")
 

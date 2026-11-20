@@ -1,6 +1,6 @@
 import { approvalProofRecentlySatisfied } from "../approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
-import type { LocalCliItem, LocalCliListResponse, LocalCliState } from "../local-cli-api";
+import { LocalCliApiError, type LocalCliItem, type LocalCliListResponse, type LocalCliState } from "../local-cli-api";
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
 import { hasSuggestedRules, type ConnectorGroupOutcome, type ConnectorSetupMatch } from "./custom-extension-profile";
 import { mcpToolCanReceiveDirectAllow } from "./mcp-catalog-state";
@@ -120,14 +120,30 @@ export function bulkPolicyCopy(surface: LocalCliItem["surface"]): { groupLabel: 
   };
 }
 
+export function keepChoicesCopy(count: number): string {
+  const tools = count === 1 ? "1 tool is" : `${count} tools are`;
+  return `${tools} new or changed since you last saved. Keep the choices shown to mark them reviewed.`;
+}
+
+export const FRESH_TOTP_REQUIRED_MESSAGE = "Enter the current six-digit code from your authenticator.";
+
+/**
+ * Whether a save was refused for a missing authenticator code. A recent code
+ * only stands in for about a minute, so it can lapse while the dialog is open;
+ * the dialog must then ask for a code instead of hiding the field.
+ */
+export function isFreshTotpRequired(error: unknown): boolean {
+  return error instanceof LocalCliApiError && error.code === "approval_gate_totp_required";
+}
+
 export function reviewTitle(name: string, state: LocalCliState): string {
   if (state === "allowed") return `Save ${name} command settings`;
   if (state === "blocked") return `Block ${name}`;
   return `Remove ${name}`;
 }
 
-export function reviewModalDetail(gate: GuardApprovalGatePublicConfig | null): string {
-  if (approvalProofRecentlySatisfied(gate)) {
+export function reviewModalDetail(gate: GuardApprovalGatePublicConfig | null, requireFreshTotp = false): string {
+  if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return "Recently confirmed with your authenticator. A new code is not needed yet.";
   }
   if (gate?.totp_enabled === true) {
@@ -154,7 +170,9 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
     if (item.surface === "mcp") return "This connection changed. Review its permissions again.";
     return item.surface === "package-scripts"
       ? "package.json scripts changed. Review the extension again."
-      : "This file changed. Review the extension again.";
+      : item.state === "allowed"
+        ? "You allowed an earlier version of this file. It has changed, so Guard asks again until you allow this version."
+        : "This file changed. Review the extension again.";
   }
   if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
   if (item.state === "allowed") {
@@ -179,6 +197,21 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
   return item.surface === "mcp" ? "Detected · Permissions not configured. Inspect this connection." : item.example_label;
 }
 
+/** The status line under a custom extension in the list. */
+export function customExtensionRowBehavior(item: LocalCliItem): string {
+  const continuity = continuityCopy(item);
+  return continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(item);
+}
+
+/**
+ * The app an MCP row comes from. A server is listed once per app that
+ * configures it, so the list names that app beside the server name; the
+ * detail page already shows it under the title.
+ */
+export function customExtensionRowSource(item: LocalCliItem): string | undefined {
+  return item.surface === "mcp" && item.source_label ? item.source_label : undefined;
+}
+
 export function continuityCopy(item: LocalCliItem): { title: string; description: string } | null {
   const status = item.continuity?.status;
   if (status === "applied") {
@@ -198,6 +231,12 @@ export function connectorSetupCopy(match: ConnectorSetupMatch, name: string): { 
     return {
       title: "This connector changed since the request was held",
       body: `The ${name} Guard sees now has a different identity from the one an agent was held on. Review it before you allow it. The held request stays in the Inbox.`,
+    };
+  }
+  if (match === "reallow") {
+    return {
+      title: `Allow this version of ${name}`,
+      body: "You allowed an earlier version of this file. It has changed since, so Guard paused the agent's calls to it. Allowing this version keeps your command choices, then approves the requests held on it once. If you did not expect the file to change, block it instead.",
     };
   }
   if (match === "decided") {

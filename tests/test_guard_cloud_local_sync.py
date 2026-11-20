@@ -5,30 +5,33 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import urllib.error
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.shims import install_package_shims
+from codex_plugin_scanner.guard.sqlite_connection_cache import close_idle_store_connections
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.support import cloud_sync_transport
 
 
 @pytest.fixture(autouse=True)
@@ -81,6 +84,33 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "access_token": token,
         "dpop_key_material": None,
     }
+
+
+@contextmanager
+def _refusing_cloud(status: int, headers: dict[str, str]) -> Iterator[str]:
+    """A loopback Guard Cloud that answers every upload with ``status``."""
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            self.rfile.read(length)
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
 
 
 def _signed_runtime_status_policy_bundle(*, workspace_id: str) -> dict[str, object]:
@@ -256,6 +286,32 @@ def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_p
     assert "sk-live-secret-token" not in json.dumps(failure_events[0]["payload"])
 
 
+def test_access_graph_snapshot_is_skipped_when_the_resident_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.access_graph_events import queue_access_graph_snapshot
+
+    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", refuse)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+
+    queue_access_graph_snapshot(
+        store=store,
+        detection=_detection(_artifact(tmp_path)),
+        artifacts=[{"artifact_id": "codex:mcp:x", "artifact_type": "mcp_server"}],
+        now="2026-07-07T00:00:00Z",
+    )
+
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    failure_events = store.list_events(limit=5, event_name="access_graph_snapshot_queue_failed")
+    assert not [item for item in pending if item["event_type"] == "access_graph.snapshot"]
+    assert failure_events[0]["payload"]["error_type"] == "NativeRunnerAuthorityError"
+
+
 def test_guard_cloud_event_queue_backpressures_without_dropping_pending_events(
     tmp_path: Path,
 ) -> None:
@@ -308,12 +364,10 @@ def test_guard_cloud_event_queue_backpressures_without_dropping_pending_events(
     }
 
 
-def test_sync_guard_events_records_failed_backoff_without_dropping_pending_events(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.native_guard_events
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_guard_events_records_failed_backoff_without_dropping_pending_events(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.add_guard_event_v1(
         build_runtime_session_event(
             session_id="session-1",
@@ -324,13 +378,10 @@ def test_sync_guard_events_records_failed_backoff_without_dropping_pending_event
         )
     )
 
-    def _raise_url_error(request, timeout):
-        raise urllib.error.URLError("sk-live-secret-token timed out")
-
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _raise_url_error)
-
-    with pytest.raises(RuntimeError):
-        guard_runner_module.sync_guard_events(store)
+    with _refusing_cloud(500, {}) as sync_url:
+        _seed_guard_cloud(store, workspace_id="workspace-alpha", sync_url=sync_url)
+        with pytest.raises(RuntimeError):
+            guard_runner_module.sync_guard_events(store)
 
     summary = store.get_sync_payload("guard_events_v1_summary")
     pending = store.list_guard_events_v1(uploaded=False, limit=10)
@@ -381,12 +432,10 @@ def test_guard_cloud_event_queue_backpressures_large_backlog_without_sqlite_limi
     }
 
 
-def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.native_guard_events
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavailable(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     for index in range(250):
         store.add_guard_event_v1(
             build_runtime_session_event(
@@ -398,22 +447,9 @@ def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavaila
             )
         )
 
-    def _raise_not_found(**_kwargs):
-        raise urllib.error.HTTPError(
-            url="https://hol.org/api/v1/guard/events",
-            code=404,
-            msg="Not Found",
-            hdrs={},
-            fp=None,
-        )
-
-    monkeypatch.setattr(
-        guard_runner_module,
-        "_urlopen_json_with_timeout_retry",
-        _raise_not_found,
-    )
-
-    result = guard_runner_module.sync_guard_events(store)
+    with _refusing_cloud(404, {}) as sync_url:
+        _seed_guard_cloud(store, workspace_id="workspace-alpha", sync_url=sync_url)
+        result = guard_runner_module.sync_guard_events(store)
 
     assert result["sync_reason"] == "guard_events_endpoint_unavailable"
     assert result["skipped"] == 0
@@ -423,6 +459,8 @@ def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavaila
     assert store.count_guard_events_v1(uploaded=True) == 0
 
 
+@pytest.mark.native_guard_events
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
@@ -462,16 +500,24 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
 
 
 def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
     provision_native_verifier_key_for_store(store)
     opened = 0
     original = sqlite3.connect
 
+    # The patch is process wide, so count only this store's opens: a thread an
+    # earlier test on the same worker left running opens its own databases.
     def counted_connect(*args, **kwargs):
         nonlocal opened
-        opened += 1
+        database = args[0] if args else kwargs.get("database", "")
+        if str(guard_home) in os.fsdecode(database):
+            opened += 1
         return original(*args, **kwargs)
 
+    # Count from a cold start: a connection kept from setup would hide an
+    # extra open.
+    close_idle_store_connections()
     monkeypatch.setattr(sqlite3, "connect", counted_connect)
 
     snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
@@ -493,6 +539,98 @@ def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:
     assert trust_status["last_proof"] is None
     serialized = json.dumps(snapshot, sort_keys=True)
     assert "key_id" not in serialized
+
+
+def test_runtime_snapshot_cloud_status_copy_comes_from_the_native_runtime(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    provision_native_verifier_key_for_store(store)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_state"] == "local_only"
+    assert snapshot["cloud_state_label"] == "Local only"
+    assert snapshot["cloud_pairing_state"]["label"] == "Local only"
+    assert snapshot["cloud_sync_health"] == {
+        "state": "disabled",
+        "label": "Cloud optional",
+        "detail": (
+            "Local Guard is active. Cloud sync is optional and currently off; connect it for shared team proof."
+        ),
+        "pending_events": 0,
+        "last_synced_at": None,
+        "next_retry_after": None,
+    }
+    assert snapshot["proof_status"]["state"] == "not_connected"
+    assert snapshot["proof_status"]["label"] == "Cloud proof not started"
+    assert snapshot["proof_status"]["request_id"] is None
+    assert snapshot["proof_status"]["receipts_stored"] == 0
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [None, {}, {"proof_status": {}, "cloud_state_label": "Connected", "cloud_state_detail": 1}],
+    ids=["refused", "empty", "malformed"],
+)
+def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reply: dict[str, object] | None,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    asked: list[str] = []
+    original = authority_module.native_runner_authority
+
+    def refuse_cloud_status(kind: str, args: Any, **kwargs: Any) -> dict[str, object]:
+        if kind == "runtime_cloud_status":
+            asked.append(kind)
+            if reply is None:
+                raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+            return reply
+        return original(kind, args, **kwargs)
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", refuse_cloud_status)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert asked == ["runtime_cloud_status"]
+    assert snapshot["cloud_state"] == "local_only"
+    assert snapshot["cloud_state_label"] == "Cloud status unavailable"
+    assert snapshot["cloud_sync_health"]["state"] == "failed"
+    assert snapshot["cloud_sync_health"]["label"] == "Cloud status unavailable"
+    assert snapshot["cloud_sync_health"]["pending_events"] == 0
+    assert snapshot["proof_status"]["state"] == "failed"
+    assert snapshot["proof_status"]["label"] == "Cloud status unavailable"
+    assert snapshot["proof_status"]["first_synced_at"] is None
+    assert snapshot["dashboard_url"] == "https://hol.org/guard"
+    assert snapshot["cloud_pairing_state"]["connect_url"] == "https://hol.org/guard/connect"
+
+
+@pytest.mark.parametrize(
+    ("sync_url", "dashboard_url"),
+    [
+        (
+            "https://registry-staging.example.test/points/api/guard/receipts/sync",
+            "https://registry-staging.example.test/guard",
+        ),
+        (None, "https://hol.org/guard"),
+        ("not a url", "https://hol.org/guard"),
+    ],
+    ids=["configured", "absent", "unparsable"],
+)
+def test_cloud_status_fallback_links_stay_on_the_configured_sync_origin(
+    sync_url: str | None,
+    dashboard_url: str,
+) -> None:
+    from codex_plugin_scanner.guard import approvals as approvals_module
+
+    assert approvals_module._fallback_guard_urls(sync_url) == {
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/protect",
+        "connect_url": f"{dashboard_url}/connect",
+    }
 
 
 def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:
@@ -981,7 +1119,7 @@ def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailabl
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1034,7 +1172,7 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1083,6 +1221,8 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     ]
     assert session_payload["yamlImport"] is False
     assert "canonicalPolicyEnforcement" not in session_payload
+    assert "policy-document-exact-commands.v1" in session_payload["capabilities"]
+    assert "policy-document-review-rules.v1" in session_payload["capabilities"]
 
 
 def test_local_runtime_session_advertises_enabled_policy_capabilities(
@@ -1104,6 +1244,8 @@ def test_local_runtime_session_advertises_enabled_policy_capabilities(
     ]
     assert session["yaml_import"] is True
     assert session["canonical_policy_enforcement"] is True
+    assert "policy-document-exact-commands.v1" in session["capabilities"]
+    assert "policy-document-review-rules.v1" in session["capabilities"]
 
 
 def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
@@ -1170,7 +1312,7 @@ def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_co
         return {"syncedAt": "2026-04-24T00:21:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1195,14 +1337,20 @@ def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_co
     }
 
 
-def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailable(
+def test_sync_runtime_session_reports_the_runtime_local_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
-    monkeypatch.setattr(guard_runner_module, "_safe_private_ip", lambda: None)
-    monkeypatch.setattr(guard_runner_module, "_safe_private_ipv6", lambda: "fd00::42")
+    monkeypatch.setattr(
+        guard_runner_module._authority,
+        "local_identity",
+        lambda observed_at: (
+            {"lastSyncedAt": observed_at, "ipAddress": "fd00::42", "privateIpAddress": "fd00::42"},
+            {"daemonId": "local-guard", "ipAddress": "local-guard", "privateIpAddress": "local-guard"},
+        ),
+    )
     captured_body: dict[str, object] = {}
 
     def _runtime_sync_response(**kwargs):
@@ -1211,7 +1359,7 @@ def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailabl
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1265,7 +1413,7 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
         return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
 
     monkeypatch.setattr(
-        guard_runner_module,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         _runtime_sync_response,
     )
@@ -1287,13 +1435,11 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
     assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
 
 
-def test_sync_guard_events_preserves_pending_events_when_rate_limited(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.native_guard_events
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_guard_events_preserves_pending_events_when_rate_limited(tmp_path: Path) -> None:
     """On HTTP 429, events must remain pending and the summary must report rate-limited state."""
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
-    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.add_guard_event_v1(
         build_runtime_session_event(
             session_id="session-rate-limited",
@@ -1304,22 +1450,9 @@ def test_sync_guard_events_preserves_pending_events_when_rate_limited(
         )
     )
 
-    def _raise_rate_limited(**_kwargs):
-        raise urllib.error.HTTPError(
-            url="https://hol.org/api/v1/guard/events",
-            code=429,
-            msg="Too Many Requests",
-            hdrs={"Retry-After": "30"},
-            fp=None,
-        )
-
-    monkeypatch.setattr(
-        guard_runner_module,
-        "_urlopen_json_with_timeout_retry",
-        _raise_rate_limited,
-    )
-
-    result = guard_runner_module.sync_guard_events(store)
+    with _refusing_cloud(429, {"Retry-After": "30"}) as sync_url:
+        _seed_guard_cloud(store, workspace_id="workspace-alpha", sync_url=sync_url)
+        result = guard_runner_module.sync_guard_events(store)
 
     assert result["sync_reason"] == "guard_events_rate_limited"
     assert result["skipped"] == 0

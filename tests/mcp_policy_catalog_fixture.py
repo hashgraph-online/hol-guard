@@ -31,12 +31,14 @@ def native_mcp_catalog_admission(request):
         "test_guard_mcp_mail_server_policy",
         "test_guard_ftp_mcp_contribution",
         "test_guard_gmail_mcp_contribution",
+        "test_guard_smithguard_mcp_contribution",
         "test_guard_remote_mcp_contributions",
         "test_guard_remote_mcp_endpoint_contract",
         "test_guard_remote_mcp_url_safety",
         "test_guard_remote_mcp_server_name_fallback",
         "test_guard_kranz_mcp_contribution",
         "test_guard_contributed_mcp_native",
+        "test_guard_mcp_server_contribution",
         "test_guard_direct_mcp_contribution",
     }
     if request.module.__name__.rsplit(".", 1)[-1] not in modules:

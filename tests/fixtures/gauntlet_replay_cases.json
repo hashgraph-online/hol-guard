@@ -2,10 +2,7 @@
   "_comment": "Gauntlet replay lane cases. expect: quiet = allow with no approval row and no rendered text; always = review row that carries an exact-action Always allow offer; block = must not allow. Benign cases of tests/fixtures/benign_false_positive_gate.json are replayed too, under the same strict judge. known_gaps lists case ids expected to fail on the current product.",
   "version": 1,
   "known_gaps": {
-    "pytest-module-quiet@cursor": "native_command_review_required",
-    "python-run-test-script@cursor": "native_command_review_required",
-    "session-git-c-wt-push-feature": "native_command_review_required",
-    "vitest-local-bin@cursor": "native_command_review_required"
+    "session-git-c-wt-push-feature": "native_command_review_required"
   },
   "cases": [
     {
@@ -275,6 +272,32 @@
       "expect": "quiet"
     },
     {
+      "id": "omp-eval-sh-git-status",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "language": "js",
+        "code": "console.log(await sh('git status --short'))"
+      },
+      "cwd": "worktree",
+      "expect": "quiet"
+    },
+    {
+      "id": "omp-neg-eval-sh-secret-copy",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "language": "js",
+        "code": "await sh('cp .env output/copied.env')"
+      },
+      "cwd": "worktree",
+      "expect": "protection_block"
+    },
+    {
       "id": "omp-todo-phases",
       "harnesses": [
         "omp"
@@ -331,7 +354,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -348,7 +372,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -365,7 +390,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -382,7 +408,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -399,7 +426,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -416,7 +444,8 @@
         "claude-code",
         "omp",
         "pi",
-        "cursor"
+        "cursor",
+        "muse"
       ],
       "tool": "shell",
       "tool_input": {
@@ -1362,6 +1391,54 @@
       },
       "cwd": "worktree",
       "expect": "always"
+    },
+    {
+      "id": "awk-glob-option-expands-to-executable-program-file",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo $(awk ?f payload.awk)"
+      },
+      "cwd": "worktree",
+      "expect": "block"
+    },
+    {
+      "id": "awk-unquoted-glob-file-operand-keeps-evaluation-fail-closed",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo $(awk '{print $1}' *.awk)"
+      },
+      "cwd": "worktree",
+      "expect": "block"
+    },
+    {
+      "id": "session-neg-comment-apostrophe-live-backticks",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf ok # it's documentation\ncp `printf synthetic-secret.txt` /tmp/copied-synthetic-secret.txt\n# '"
+      },
+      "cwd": "worktree",
+      "expect": "block"
     }
   ]
 }

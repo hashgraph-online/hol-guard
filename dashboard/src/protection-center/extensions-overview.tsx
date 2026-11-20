@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } fr
 import { extensionEffectiveState } from "../extension-control-center-model";
 import type { CatalogReadModel } from "../extension-catalog-v2";
 import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
+import { CODEX_HOST_FALLBACK, CONFIGURED_CONNECTIONS_FALLBACK, discoveryFailureMessage } from "../discovery-failure";
 import { fetchExtensionDiscoveryApi } from "../guard-api";
 import {
   connectorWorkspaceItems,
@@ -13,7 +14,7 @@ import {
 } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { useDiscoveryFeed, useJoinedDiscovery } from "./extensions-discovery-feed";
-import { inFeedSlotIndexes, MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderFeaturedFirst } from "./extensions-discover-model";
+import { inFeedSlotIndexes, MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderCatalogRows } from "./extensions-discover-model";
 import { CatalogSlotRow, ExtensionsSpotlight } from "./extensions-spotlight";
 import {
   CATALOG_SLOT_PRODUCTS,
@@ -23,6 +24,7 @@ import {
 } from "./extensions-spotlight-model";
 import { useExtensionPopularity } from "./use-extension-popularity";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
+import { PluginUpdatesSection } from "../plugin-updates/plugin-updates-section";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
 import { CustomExtensionsSection } from "./custom-extensions-section";
@@ -101,8 +103,11 @@ export function ExtensionsOverview(props: {
     setHostDiscoveryError(null);
     const reload = async () => { if (!controller.signal.aborted) await reloadConnections.current(); };
     const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0)
-      .then(reload).catch(() => {
-        if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+      .then(reload).catch((error: unknown) => {
+        // The reason a scan failed decides what the reader does next, so the
+        // authored guidance for this code reaches the banner instead of one
+        // sentence that fits every failure and names no action.
+        if (!controller.signal.aborted) setDiscoveryError(discoveryFailureMessage(error, CONFIGURED_CONNECTIONS_FALLBACK));
       });
     let hostRunning = false;
     const refreshHost = async (force: boolean) => {
@@ -111,8 +116,8 @@ export function ExtensionsOverview(props: {
       try {
         await refreshCodexHostInventory(controller.signal, force);
         if (!controller.signal.aborted) setHostDiscoveryError(null);
-      } catch {
-        if (!controller.signal.aborted) setHostDiscoveryError("Could not read Codex app inventory. Known connections remain available.");
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) setHostDiscoveryError(discoveryFailureMessage(error, CODEX_HOST_FALLBACK));
       } finally {
         await reload();
         hostRunning = false;
@@ -201,7 +206,8 @@ export function ExtensionsOverview(props: {
     ),
     [joinedDiscovery.featured, joinedDiscovery.sponsored],
   );
-  // Featured rows lead in server order (all-day before time windows).
+  // Featured rows lead in server order (all-day before time windows), then
+  // sponsored rows, Guard's own coverage, and free external contributions.
   const orderedCatalog = useMemo(() => {
     const visibleIds = new Set(visibleCatalog.map((extension) => extension.extension_id));
     const featuredVisible = joinedDiscovery.featured
@@ -217,7 +223,7 @@ export function ExtensionsOverview(props: {
         .map((entry) => entry.placement.extensionId)
         .filter((extensionId) => !featuredIds.has(extensionId)),
     );
-    const rest = orderFeaturedFirst(
+    const rest = orderCatalogRows(
       visibleCatalog.filter((extension) => !featuredIds.has(extension.extension_id)),
       sponsoredIds,
     );
@@ -480,6 +486,7 @@ export function ExtensionsOverview(props: {
           {/* Inspect-only sources sit below the catalog: they inform, they do not change protection. */}
           <CodexHostConnectors inventory={props.hostInventory} />
           <LocalSkillsWorkspace />
+          <PluginUpdatesSection />
         </>
       )}
       </div>

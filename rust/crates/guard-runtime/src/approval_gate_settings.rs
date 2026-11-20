@@ -19,6 +19,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::approval_gate_grants::{ApprovalGateErrorV1, ApprovalGateGrantV1, ApprovalGateGrants};
+use crate::approval_gate_pulse as pulse;
 use crate::approval_gate_state::{
     constant_time_eq, cooldown_active, enabled, epoch, is_future, iso_from_epoch, load_state,
     optional_bool, optional_int, optional_string, reset_failed_attempts, verifier, write_state,
@@ -142,6 +143,14 @@ pub(crate) fn public_config_locked(
         totp_enabled: totp_enabled_v,
         totp_pending: has_pending_totp(&state, now_epoch),
         totp_recent_satisfied: totp_recent,
+        pulse_enabled: pulse::pulse_enabled(&state),
+        pulse_cooldown_seconds: if pulse::pulse_enabled(&state) {
+            pulse::pulse_cooldown_seconds(&state)
+        } else {
+            0
+        },
+        pulse_show_command: pulse::pulse_enabled(&state)
+            && crate::approval_gate_pulse_command::pulse_show_command(&state),
     }
 }
 
@@ -162,6 +171,7 @@ fn validate_grant_for_settings(
     approval_gate_grant: Option<&ApprovalGateGrantV1>,
     now: Option<&str>,
     state: &Value,
+    binding: Option<&(String, String)>,
 ) -> Result<(), ApprovalGateErrorV1> {
     let now_epoch = epoch(now);
     let grant_home = guard_home.to_string_lossy();
@@ -174,9 +184,9 @@ fn validate_grant_for_settings(
         expires_epoch,
         Some("settings_write"),
         true,
+        binding.map(|(action, _)| action.as_str()),
         None,
-        None,
-        None,
+        binding.map(|(_, subject)| subject.as_str()),
         None,
         factor_generation(state),
         totp_enabled(state),
@@ -212,10 +222,30 @@ pub(crate) fn next_settings_state(
     if gate_input.revoke_cooldown {
         if let Some(o) = next_state.as_object_mut() {
             o.remove("cooldown_expires_at");
+            o.remove("pulse_cooldown");
         }
     }
     if gate_was_enabled {
-        validate_grant_for_settings(guard_home, grants, approval_gate_grant, now, &state)?;
+        // Every settings write is bound to the exact change being applied. A
+        // daemon save may carry the complete change in this private field;
+        // direct resident callers bind the approval-gate payload itself.
+        let binding = if pulse::pulse_enabled(&state) {
+            Some(if let Some(change) = payload.get("settings_change") {
+                crate::approval_gate_settings_binding::binding_for_change(guard_home, change)?
+            } else {
+                crate::approval_gate_settings_binding::gate_save_binding(guard_home, payload)?
+            })
+        } else {
+            None
+        };
+        validate_grant_for_settings(
+            guard_home,
+            grants,
+            approval_gate_grant,
+            now,
+            &state,
+            binding.as_ref(),
+        )?;
     }
     let np = gate_input.new_password.as_deref();
     if requested_enabled == Some(true) && !gate_was_enabled {
@@ -263,6 +293,60 @@ pub(crate) fn next_settings_state(
             .unwrap()
             .insert("cooldown_seconds".into(), Value::Number(secs.into()));
     }
+    if let Some(pcs) = payload.get("pulse_cooldown_seconds") {
+        // Only an explicit choice opens a Pulse cooldown; the default is a
+        // fresh biometric approval for every held action.
+        let secs = pcs
+            .as_i64()
+            .filter(|s| pulse::PULSE_ALLOWED_COOLDOWNS.contains(s))
+            .ok_or_else(invalid_cooldown)?;
+        if pulse::pulse_enabled(&next_state) {
+            let o = next_state.as_object_mut().unwrap();
+            o.insert("pulse_cooldown_seconds".into(), Value::Number(secs.into()));
+            o.remove("pulse_cooldown");
+        } else if secs != 0 {
+            return Err(err(
+                "approval_gate_pulse_not_enabled",
+                "Yanez Pulse is not the approval factor for this Guard.",
+                409,
+            ));
+        }
+        // Without Pulse the public config reports 0, so a saved or imported
+        // config sends 0 back; that changes nothing.
+    }
+    if let Some(show) = payload.get("pulse_show_command") {
+        // Whether the YID app shows the command of a paused action. Off by
+        // default; only the user's approved opt-in turns it on.
+        let show = show.as_bool().ok_or_else(|| {
+            err(
+                "approval_gate_invalid_pulse_show_command",
+                "pulse_show_command must be true or false.",
+                400,
+            )
+        })?;
+        if pulse::pulse_enabled(&next_state) {
+            next_state
+                .as_object_mut()
+                .unwrap()
+                .insert("pulse_show_command".into(), Value::Bool(show));
+        } else if show {
+            return Err(err(
+                "approval_gate_pulse_not_enabled",
+                "Yanez Pulse is not the approval factor for this Guard.",
+                409,
+            ));
+        }
+        // Without Pulse the public config reports false, so a saved or
+        // imported config sends false back; that changes nothing.
+    }
+    if requested_enabled == Some(false) && pulse::pulse_enabled(&next_state) {
+        // Turning the gate off ends Pulse too. The secrets are deleted by
+        // `update_settings` once the new state is written.
+        if let Some(o) = next_state.as_object_mut() {
+            o.retain(|k, _| !k.starts_with("pulse_") || k.ends_with("_secret_id"));
+            o.insert("pulse_enabled".into(), Value::Bool(false));
+        }
+    }
     if let Some(sad) = payload.get("strict_all_decisions") {
         next_state.as_object_mut().unwrap().insert(
             "strict_all_decisions".into(),
@@ -283,7 +367,15 @@ pub(crate) fn update_settings(
 ) -> Result<ApprovalGatePublicConfig, ApprovalGateErrorV1> {
     let previous_generation = factor_generation(&load_state(guard_home));
     let next_state = next_settings_state(guard_home, grants, payload, approval_gate_grant, now)?;
-    if let Some(ns) = next_state {
+    if let Some(mut ns) = next_state {
+        let pulse_secret_ids = if ns.get("pulse_enabled") == Some(&Value::Bool(false)) {
+            pulse::pulse_secret_ids(&ns)
+        } else {
+            Vec::new()
+        };
+        if ns.get("pulse_enabled") == Some(&Value::Bool(false)) {
+            pulse::clear_pulse_state(guard_home, &mut ns);
+        }
         write_state(guard_home, &ns, now).map_err(|_| {
             err(
                 "approval_gate_state_io",
@@ -291,6 +383,7 @@ pub(crate) fn update_settings(
                 500,
             )
         })?;
+        pulse::delete_pulse_secrets(guard_home, &pulse_secret_ids);
         if factor_generation(&ns) != previous_generation {
             invalidate_active_grants(grants, guard_home);
         }
@@ -318,6 +411,7 @@ pub(crate) fn revoke_cooldown(
     let mut state = load_state(guard_home);
     if let Some(o) = state.as_object_mut() {
         o.remove("cooldown_expires_at");
+        o.remove("pulse_cooldown");
     }
     write_state(guard_home, &state, now).map_err(|_| {
         err(
@@ -359,6 +453,10 @@ pub(crate) fn unlock_cooldown_locked(
             403,
         ));
     }
+    if pulse::pulse_enabled(&state) {
+        // A password must never open a cooldown the Pulse factor guards.
+        return Err(pulse::pulse_required());
+    }
     let seconds =
         crate::approval_gate_state::coerce_cooldown_seconds(Some(&Value::from(duration_seconds)))
             .map_err(|_| invalid_cooldown())?;
@@ -399,10 +497,7 @@ mod tests {
         let h = std::env::temp_dir().join(format!(
             "gate-set-{tag}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         std::fs::create_dir_all(&h).unwrap();
         h

@@ -33,10 +33,7 @@ fn fixture() -> Fixture {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
@@ -129,10 +126,14 @@ fn a_bridged_shell_call_gets_its_standalone_verdict() {
         assert!(contained(&omp(
             &f,
             "bash",
-            json!({"command": "python3 -I -c 'print(1)'"})
+            json!({"command": "python3 -I -c 'import os; print(os.getpid())'"})
         )));
         assert_eq!(
-            eval(&f, &bridged("python3 -I -c 'print(1)'")).minimum_action,
+            eval(
+                &f,
+                &bridged("python3 -I -c 'import os; print(os.getpid())'")
+            )
+            .minimum_action,
             "allow"
         );
     }

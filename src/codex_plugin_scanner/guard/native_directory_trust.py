@@ -14,30 +14,18 @@ unreachable runtime refuses a directory instead of trusting it.
 
 from __future__ import annotations
 
-import json
 import tempfile
 import threading
-import time
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypeAlias
 
 from .native_context import (
-    _canonical_request_sha256,
-    _native_error,
     _native_runtime_status_memo,
     _resolve_digest_home,
-    ensure_resident_prerequisite,
 )
-from .native_resident_client import native_resident_client_request
-from .native_resident_prerequisite_reason import prerequisite_unavailable_code
-from .native_runtime import _isolated_environment
-from .native_runtime_resilience import (
-    native_record_overload,
-    native_record_resident_failure,
-    native_record_resident_success,
-)
+from .native_resident_decision import BoundCall, bound_resident_call
 from .path_resolution_cache import IdentityWitness, identity_unchanged, identity_witness
 
 _FEATURE = "directory-trust-v1"
@@ -47,7 +35,6 @@ _HOOK_PATH_FEATURE = "hook-path-rules-v1"
 #: runtime normalizes them before it decides, so a runtime that predates that
 #: would read the spelling as a plain path.
 _HOOK_PATH_RULES = frozenset({"hook-workspace", "exec-workdir", "payload-reference"})
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _REQUEST_SCHEMA = "guard-directory-trust-request.v1"
 _RESULT_SCHEMA = "guard-directory-trust-result.v1"
 _MAX_REQUEST_BYTES = 64 * 1024
@@ -66,6 +53,19 @@ class NativeDirectoryTrustError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+_CALL = BoundCall(
+    operation="directory_trust",
+    feature=_FEATURE,
+    prefix="native_directory_trust",
+    result_schema=_RESULT_SCHEMA,
+    max_request_bytes=_MAX_REQUEST_BYTES,
+    timeout_seconds=_TIMEOUT_SECONDS,
+    error=NativeDirectoryTrustError,
+    transport_failure="unavailable",
+    clock_after_prerequisite=True,
+)
 
 
 class DirectoryTrustVerdict:
@@ -256,11 +256,6 @@ def _remember_answer(
         _remembered_asks[key] = (tuple(settled), witness)
 
 
-def clear_remembered_directory_trust() -> None:
-    with _memo_lock:
-        _remembered_asks.clear()
-
-
 def _round_trip(
     request: dict[str, Any],
     guard_home: Path,
@@ -270,92 +265,18 @@ def _round_trip(
 ) -> dict[str, object]:
     """One bound resident round trip; returns the verified result document."""
 
-    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
-        raise NativeDirectoryTrustError(UNAVAILABLE_REASON)
-
-    status = _native_runtime_status_memo()
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or _FEATURE not in status.capabilities.features
-        or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
-        or (hook_paths and _HOOK_PATH_FEATURE not in status.capabilities.features)
-    ):
-        raise NativeDirectoryTrustError(UNAVAILABLE_REASON)
-    try:
-        prerequisite = ensure_resident_prerequisite(guard_home)
-    except Exception as error:
-        raise NativeDirectoryTrustError("native_directory_trust_prerequisite_unavailable") from error
-    if not prerequisite:
-        raise NativeDirectoryTrustError(
-            prerequisite_unavailable_code("native_directory_trust_prerequisite_unavailable", guard_home)
-        )
-    started_at = time.monotonic()
-    local_deadline = started_at + _TIMEOUT_SECONDS
-    deadline = min(local_deadline, deadline_monotonic) if deadline_monotonic is not None else local_deadline
-    remaining_seconds = deadline - time.monotonic()
-    if remaining_seconds <= 0:
-        raise NativeDirectoryTrustError(UNAVAILABLE_REASON)
-    budget_ms = max(1, int(remaining_seconds * 1000))
-    try:
-        request_sha256 = "sha256:" + _canonical_request_sha256(request)
-        envelope = json.dumps(
-            {"operation": "directory_trust", "deadline_budget_ms": budget_ms, "request": request},
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
-        # A path carrying lone surrogates cannot cross a strict JSON
-        # transport. It is not a path this runtime may trust either.
-        raise NativeDirectoryTrustError("native_directory_trust_component_unencodable") from error
-    if len(envelope) > _MAX_REQUEST_BYTES:
-        raise NativeDirectoryTrustError("native_directory_trust_request_too_large")
-    try:
-        output = native_resident_client_request(
-            executable=status.identity.path,
-            guard_home=guard_home,
-            environment=_isolated_environment(),
-            payload=envelope,
-            deadline_monotonic=deadline,
-        )
-    except Exception:
-        output = None
-    if output is None:
-        # A shorter caller deadline is not evidence that the resident failed.
-        caller_budget_expired = (
-            deadline_monotonic is not None
-            and deadline_monotonic < local_deadline
-            and time.monotonic() >= deadline_monotonic
-        )
-        if not caller_budget_expired:
-            native_record_resident_failure(status.identity.sha256, guard_home, reason=UNAVAILABLE_REASON)
-        raise NativeDirectoryTrustError(UNAVAILABLE_REASON)
-    try:
-        result = json.loads(output)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=_INVALID_RESULT)
-        raise NativeDirectoryTrustError(_INVALID_RESULT) from error
-    error_code = _native_error(result)
-    if error_code is not None:
-        if error_code == "native_overloaded":
-            native_record_overload(status.identity.sha256, guard_home)
-        else:
-            native_record_resident_failure(status.identity.sha256, guard_home, reason=error_code)
-        raise NativeDirectoryTrustError(error_code)
-    if (
-        not isinstance(result, dict)
-        or result.get("schema") != _RESULT_SCHEMA
-        or result.get("request_id") != request["request_id"]
-        or result.get("request_sha256") != request_sha256
-        or result.get("status") != "ok"
-        or result.get("code") != "ok"
-    ):
-        native_record_resident_failure(status.identity.sha256, guard_home, reason=_INVALID_RESULT)
-        raise NativeDirectoryTrustError(_INVALID_RESULT)
-    native_record_resident_success(status.identity.sha256, guard_home)
+    reply = bound_resident_call(
+        _CALL,
+        request,
+        guard_home=guard_home,
+        status=_native_runtime_status_memo(),
+        deadline_monotonic=deadline_monotonic,
+        extra_features=(_HOOK_PATH_FEATURE,) if hook_paths else (),
+    )
+    result = reply.envelope
+    if result.get("status") != "ok" or result.get("code") != "ok":
+        raise reply.fail()
+    reply.healthy()
     return result
 
 
@@ -363,6 +284,5 @@ __all__ = [
     "UNAVAILABLE_REASON",
     "DirectoryTrustVerdict",
     "NativeDirectoryTrustError",
-    "clear_remembered_directory_trust",
     "native_directory_trust",
 ]

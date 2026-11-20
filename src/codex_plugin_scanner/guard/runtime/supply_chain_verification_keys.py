@@ -1,7 +1,7 @@
 """Supply-chain bundle verification keys and keyring loading.
 
-Kept apart from the bundle payload models so callers that only read the
-stored keyring do not load the bundle parsing and verification code.
+The native runtime verifies a bundle against this keyring; this reads the
+keyring's wire form so the sync path can save and send it.
 """
 
 from __future__ import annotations
@@ -26,12 +26,6 @@ class SupplyChainVerificationKey:
     fingerprint_sha256: str
     state: str
     valid_until: str | None
-
-    @property
-    def valid_until_timestamp(self) -> float | None:
-        if self.valid_until is None:
-            return None
-        return _parse_iso_timestamp(self.valid_until, field_name="validUntil")
 
     def to_dict(self) -> dict[str, object]:
         return {

@@ -92,11 +92,8 @@ mod tests {
             "/../../../contributions/command-sources/command.noodle.json"
         )))
         .unwrap();
-        let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-            env!("OUT_DIR"),
-            "/trust-class-map.v1.json"
-        )))
-        .unwrap();
+        let trust: Value =
+            serde_json::from_slice(guard_command_catalog_data::TRUST_MAP_JSON).unwrap();
         let ids = BTreeSet::from(["command.noodle".to_owned()]);
         let permissions = source["extension"]["permissions"]
             .as_array()

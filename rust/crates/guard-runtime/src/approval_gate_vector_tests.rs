@@ -20,10 +20,7 @@ fn temp_home(tag: &str) -> PathBuf {
         "approval_gate_vectors_{}_{}_{}",
         std::process::id(),
         tag,
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     std::fs::create_dir_all(&dir).unwrap();
     dir

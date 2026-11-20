@@ -97,10 +97,22 @@ def test_native_identity_watches_production_inputs_not_the_whole_test_tree() -> 
     """Verify native identity watches production inputs not the whole test tree."""
     identity = (ROOT / "rust/build_support/command_identity.rs").read_text()
     assert 'root.join("crates").display()' not in identity
-    assert 'collect(&directory.join("src"), &mut files)' in identity
+    assert 'read_dir(root.join("crates"))' not in identity
+    assert "command_source_inputs.v2.json" in identity
+    assert 'collect(&directory.join("src"), files)' in identity
     assert 'root.join("Cargo.lock")' in identity
     assert 'root.join("Cargo.toml")' in identity
     assert 'println!("cargo:rerun-if-changed={}", directory.display())' in identity
+
+
+def test_catalog_generation_is_owned_by_the_data_leaf_crate() -> None:
+    """guard-command-local edits must not rerun catalog generation."""
+    producer = (ROOT / "rust/crates/guard-command-catalog-data/build.rs").read_text()
+    for marker in ("compile_catalog_with_mcp", "trust_map(root, &entries)", "command-catalog.v1.json"):
+        assert marker in producer, marker
+    thin = (ROOT / "rust/crates/guard-command/build.rs").read_text()
+    assert "compile_catalog_with_mcp" not in thin
+    assert "trust-class-map" not in thin
 
 
 @pytest.mark.parametrize("name", ["guard-command-source", "guard-command-source.exe"])

@@ -1,0 +1,1247 @@
+{
+  "schema": "guard-attestation-payload-parity.v1",
+  "cases": [
+    {
+      "name": "a minimal builder payload is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      }
+    },
+    {
+      "name": "surrounding whitespace is stripped from every string",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "  agent-1\t",
+        "itemId": "item-1",
+        "itemKind": " skill ",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      }
+    },
+    {
+      "name": "the ascii separators str.strip removes are stripped too",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "\u001c\u001f agent-1 \u001e",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      }
+    },
+    {
+      "name": "a field of only ascii separators is refused as blank",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "\u001c\u001d\u001e\u001f",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field agentId must be a non-empty string"
+    },
+    {
+      "name": "an unknown field is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "extra": "x"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Unknown trust attestation payload fields: extra"
+    },
+    {
+      "name": "unknown fields are named in sorted order",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "zeta": "x",
+        "alpha": "y"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Unknown trust attestation payload fields: alpha, zeta"
+    },
+    {
+      "name": "a missing required field is named",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Missing trust attestation payload fields: agentId"
+    },
+    {
+      "name": "missing required fields are named in sorted order",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Missing trust attestation payload fields: agentId, itemId"
+    },
+    {
+      "name": "an empty payload names every required field",
+      "payload": {},
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Missing trust attestation payload fields: agentId, capturedAt, claimHash, contentHash, domainSeparator, evidenceHash, itemId, itemKind, payloadVersion, scope"
+    },
+    {
+      "name": "an unknown field outranks a missing one",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "extra": "x"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Unknown trust attestation payload fields: extra"
+    },
+    {
+      "name": "a blank required string is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field agentId must be a non-empty string"
+    },
+    {
+      "name": "a whitespace-only required string is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "   ",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field agentId must be a non-empty string"
+    },
+    {
+      "name": "a numeric required field is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": 5,
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field agentId must be a non-empty string"
+    },
+    {
+      "name": "a null required field is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": null,
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field agentId must be a non-empty string"
+    },
+    {
+      "name": "a blank optional string is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "nonce": ""
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field nonce must be a non-empty string"
+    },
+    {
+      "name": "a blank version is refused as a string, not as a version",
+      "payload": {
+        "payloadVersion": " ",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation payload field payloadVersion must be a non-empty string"
+    },
+    {
+      "name": "an unsupported payload version is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v2",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Unsupported trust attestation payload version"
+    },
+    {
+      "name": "a mismatched domain separator is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:other:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation domain separator mismatch"
+    },
+    {
+      "name": "an unsupported scope is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_other"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Unsupported trust attestation scope"
+    },
+    {
+      "name": "the scope is read before the capture time",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "not-a-time",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_other"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Unsupported trust attestation scope"
+    },
+    {
+      "name": "an unreadable capture time is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "not-a-time",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation capturedAt is invalid"
+    },
+    {
+      "name": "a naive capture time is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation capturedAt is invalid"
+    },
+    {
+      "name": "a capture time with an offset is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00+05:30",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00+05:30",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      }
+    },
+    {
+      "name": "an unreadable expiry is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "expiresAt": "soon"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation expiresAt is invalid"
+    },
+    {
+      "name": "a readable expiry is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "expiresAt": "2026-11-23T12:00:00Z"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "expiresAt": "2026-11-23T12:00:00Z"
+      }
+    },
+    {
+      "name": "a verifier payload without a signing time is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": true,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation signedAt is invalid"
+    },
+    {
+      "name": "a verifier payload with a signing time is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "signedAt": "2026-10-23T12:00:01Z"
+      },
+      "rules": {
+        "require_signed_at": true,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "signedAt": "2026-10-23T12:00:01Z"
+      }
+    },
+    {
+      "name": "a verifier payload with an unreadable signing time is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "signedAt": "whenever"
+      },
+      "rules": {
+        "require_signed_at": true,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation signedAt is invalid"
+    },
+    {
+      "name": "the builder refuses a payload that is already signed",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "signedAt": "2026-10-23T12:00:01Z"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation builder cannot accept signedAt"
+    },
+    {
+      "name": "a required nonce that is absent is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": true,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation nonce is required"
+    },
+    {
+      "name": "a required nonce that is present is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "nonce": "nonce-1"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": true,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "nonce": "nonce-1"
+      }
+    },
+    {
+      "name": "absent subject bindings are all named",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": true
+      },
+      "error": "Missing trust attestation subject bindings: adapterId, adapterVersion, configPathHash, policyVersion, repositoryId"
+    },
+    {
+      "name": "partial subject bindings name only the rest",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "adapterId": "adapter-1",
+        "policyVersion": "policy-7"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": true
+      },
+      "error": "Missing trust attestation subject bindings: adapterVersion, configPathHash, repositoryId"
+    },
+    {
+      "name": "complete subject bindings are accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "adapterId": "adapter-1",
+        "adapterVersion": "1.2.3",
+        "configPathHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "policyVersion": "policy-7",
+        "repositoryId": "repo-1"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": true
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "adapterId": "adapter-1",
+        "adapterVersion": "1.2.3",
+        "configPathHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "policyVersion": "policy-7",
+        "repositoryId": "repo-1"
+      }
+    },
+    {
+      "name": "a zero sequence is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 0
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 0
+      }
+    },
+    {
+      "name": "a positive sequence is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 5
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 5
+      }
+    },
+    {
+      "name": "a negative sequence is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": -1
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation sequence must be a non-negative integer"
+    },
+    {
+      "name": "a true sequence is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": true
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation sequence must be a non-negative integer"
+    },
+    {
+      "name": "a false sequence is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": false
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation sequence must be a non-negative integer"
+    },
+    {
+      "name": "a fractional sequence is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 1.0
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation sequence must be a non-negative integer"
+    },
+    {
+      "name": "a sequence written as a string is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": "3"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation sequence must be a non-negative integer"
+    },
+    {
+      "name": "a null sequence is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": null
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust attestation sequence must be a non-negative integer"
+    },
+    {
+      "name": "a sequence wider than a 64-bit integer is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 10000000000000000000000000
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "sequence": 10000000000000000000000000
+      }
+    },
+    {
+      "name": "a layer attestation with its identity is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_layer",
+        "layerId": "layer-1",
+        "layerType": "skill"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_layer",
+        "layerId": "layer-1",
+        "layerType": "skill"
+      }
+    },
+    {
+      "name": "a layer attestation missing its type is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_layer",
+        "layerId": "layer-1"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust layer attestation requires layer identity"
+    },
+    {
+      "name": "a layer attestation missing its identity is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_layer"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust layer attestation requires layer identity"
+    },
+    {
+      "name": "a resolution attestation carrying a layer id is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "layerId": "layer-1"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust resolution attestation cannot contain layer identity"
+    },
+    {
+      "name": "a resolution attestation carrying a layer type is refused",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_resolution",
+        "layerType": "skill"
+      },
+      "rules": {
+        "require_signed_at": false,
+        "require_nonce": false,
+        "require_subject_bindings": false
+      },
+      "error": "Trust resolution attestation cannot contain layer identity"
+    },
+    {
+      "name": "a fully populated layer attestation is accepted",
+      "payload": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_layer",
+        "layerId": "layer-1",
+        "layerType": "skill",
+        "signedAt": "2026-10-23T12:00:01Z",
+        "sequence": 9,
+        "analyzerId": "analyzer-1",
+        "analyzerSpecVersion": "2",
+        "analyzerVersion": "3.4.5",
+        "challengeId": "challenge-1",
+        "deviceId": "device-1",
+        "evidenceSchemaVersion": "1",
+        "expiresAt": "2026-11-23T12:00:00Z",
+        "installationId": "install-1",
+        "nonce": "nonce-1",
+        "uploadId": "upload-1",
+        "workspaceId": "workspace-1",
+        "adapterId": "adapter-1",
+        "adapterVersion": "1.2.3",
+        "configPathHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "policyVersion": "policy-7",
+        "repositoryId": "repo-1"
+      },
+      "rules": {
+        "require_signed_at": true,
+        "require_nonce": true,
+        "require_subject_bindings": true
+      },
+      "normalized": {
+        "payloadVersion": "guard-aibom-trust-attestation.v3",
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "agentId": "agent-1",
+        "itemId": "item-1",
+        "itemKind": "skill",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "claimHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "scope": "trust_layer",
+        "layerId": "layer-1",
+        "layerType": "skill",
+        "signedAt": "2026-10-23T12:00:01Z",
+        "sequence": 9,
+        "analyzerId": "analyzer-1",
+        "analyzerSpecVersion": "2",
+        "analyzerVersion": "3.4.5",
+        "challengeId": "challenge-1",
+        "deviceId": "device-1",
+        "evidenceSchemaVersion": "1",
+        "expiresAt": "2026-11-23T12:00:00Z",
+        "installationId": "install-1",
+        "nonce": "nonce-1",
+        "uploadId": "upload-1",
+        "workspaceId": "workspace-1",
+        "adapterId": "adapter-1",
+        "adapterVersion": "1.2.3",
+        "configPathHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "policyVersion": "policy-7",
+        "repositoryId": "repo-1"
+      }
+    }
+  ]
+}

@@ -124,6 +124,30 @@ pub(crate) fn resume(connection: &Connection, request_id: &str) -> StoreResult<O
     Ok(row.map(resume_payload))
 }
 
+/// `get_request_resume`: the stored resume of one request, or `Null`.
+pub(crate) fn get(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
+    Ok(resume(connection, args.str("request_id")?)?.unwrap_or(Value::Null))
+}
+
+/// `get_latest_request_resume`: the most recently attempted resume, of one
+/// harness when the call names it, or `Null`.
+pub(crate) fn latest(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let harness = args.opt_str("harness")?;
+    let filter = if harness.is_some() {
+        " where harness = ?"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "select {RESUME_COLUMNS} from guard_request_resumes{filter} \
+         order by coalesce(last_attempt_at, updated_at) desc, request_id desc limit 1"
+    );
+    let params: Vec<Value> = harness.map(Value::from).into_iter().collect();
+    Ok(query_one(connection, &sql, &params)?
+        .map(resume_payload)
+        .unwrap_or(Value::Null))
+}
+
 /// `_row_to_payload`.
 fn resume_payload(mut row: Map<String, Value>) -> Value {
     let supported = row
@@ -220,3 +244,7 @@ pub(crate) fn update(
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "codex_request_resume_store_tests.rs"]
+mod tests;

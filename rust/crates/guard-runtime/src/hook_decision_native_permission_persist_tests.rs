@@ -21,8 +21,14 @@ const WELL_FORMED_TOKEN: &str = "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiO
 const LEGACY_EXACT_KEY: &str =
     "runtime-exact:44869672e5a90ec571e6ba62a2aec9cded44bdf7a09b4d477a679f972b70a534";
 /// The same command bound to its config path, scope, text and wrapper chain.
+/// The key binds the platform's rendering of the config path: POSIX keeps the
+/// forward slashes, Windows renders the same spelling with backslashes.
+#[cfg(not(windows))]
 const LEGACY_EXACT_KEY_WITH_CONTEXT: &str =
     "runtime-exact:7ee804454b012f82e91b2fbd4b5471f53c41c1fb9d6ad108a3625a22f01e79bc";
+#[cfg(windows)]
+const LEGACY_EXACT_KEY_WITH_CONTEXT: &str =
+    "runtime-exact:1ffb8864baf9e1867ca48dcc1cc867e2dc34b73cec98033a0bf584d7eeeebb5d";
 const TOOL_ACTION_ID: &str = "claude-code:runtime:tool-action:abc123";
 
 fn reply(inputs: &Value) -> Option<Value> {

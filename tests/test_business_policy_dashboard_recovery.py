@@ -2,8 +2,8 @@
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_business_source_store as owner
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp.policy_store import MCPolicyRequestRepository
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.policy_document import policy_document_digest
@@ -16,8 +16,8 @@ from tests.test_native_business_source_store import _grant, _install, _key
 
 
 def test_read_only_inspection_allows_native_publication(store, env_flags, native_mcp_probe, monkeypatch):
-    from codex_plugin_scanner.guard.daemon import business_policy_recovery_inspection as inspection
     from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
+    from codex_plugin_scanner.guard.routes import business_policy_recovery_inspection as inspection
 
     native_mcp_probe(store.guard_home)
     candidate = document()

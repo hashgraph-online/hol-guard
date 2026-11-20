@@ -186,9 +186,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "hol-guard-edge-push-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |elapsed| elapsed.as_nanos())
+            crate::unique_nanos::unique_nanos()
         ));
         std::fs::create_dir_all(&root).unwrap();
         let root = std::fs::canonicalize(root).unwrap();

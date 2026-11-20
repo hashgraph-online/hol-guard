@@ -1,0 +1,473 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "clickup",
+    "name": "ClickUp",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.clickup.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "api"
+    ]
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "clickup"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "clickup.tasks.get",
+      "title": "Read a task",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.clickup.com",
+          "path": "/api/v2/task/{task_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 15,
+          "pattern": "^[0-9a-z]{5,15}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "status.status"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          },
+          {
+            "name": "error",
+            "value": {
+              "from": "err"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error_code",
+            "value": {
+              "from": "ECODE"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "reads one task",
+          "kind": "safe",
+          "arguments": {
+            "task_id": "86b0x1abc"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.clickup.com/api/v2/task/86b0x1abc"
+            },
+            "response": "{\"id\":\"86b0x1abc\",\"name\":\"Write docs\",\"status\":{\"status\":\"in progress\"},\"url\":\"https://app.clickup.com/t/86b0x1abc\"}",
+            "projection": {
+              "id": "86b0x1abc",
+              "name": "Write docs",
+              "status": "in progress",
+              "url": "https://app.clickup.com/t/86b0x1abc"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a task id with a path",
+          "kind": "risky",
+          "arguments": {
+            "task_id": "86b0x/../team"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "clickup.tasks.comment",
+      "title": "Comment on a task",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.clickup.com",
+          "path": "/api/v2/task/{task_id}/comment",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "comment_text",
+                "value": {
+                  "arg": "text"
+                }
+              },
+              {
+                "name": "notify_all",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 15,
+          "pattern": "^[0-9a-z]{5,15}$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8000
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "error",
+            "value": {
+              "from": "err"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error_code",
+            "value": {
+              "from": "ECODE"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "comments on a task",
+          "kind": "safe",
+          "arguments": {
+            "task_id": "86b0x1abc",
+            "text": "Blocked on review."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"comment_text\":\"Blocked on review.\",\"notify_all\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.clickup.com/api/v2/task/86b0x1abc/comment"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an upper-case task id",
+          "kind": "risky",
+          "arguments": {
+            "task_id": "ABC12",
+            "text": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "clickup.tasks.set_status",
+      "title": "Change a task status",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "api.clickup.com",
+          "path": "/api/v2/task/{task_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "status",
+                "value": {
+                  "arg": "status"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "task_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 15,
+          "pattern": "^[0-9a-z]{5,15}$"
+        },
+        "status": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9 _-]{1,64}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "status.status"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error",
+            "value": {
+              "from": "err"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error_code",
+            "value": {
+              "from": "ECODE"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "marks a task done",
+          "kind": "safe",
+          "arguments": {
+            "task_id": "86b0x1abc",
+            "status": "complete"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"status\":\"complete\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.clickup.com/api/v2/task/86b0x1abc"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a status with markup",
+          "kind": "risky",
+          "arguments": {
+            "task_id": "86b0x1abc",
+            "status": "<b>done</b>"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

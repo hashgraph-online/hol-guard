@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -273,11 +273,11 @@ class TestHookWorkerNonPostTool:
     ) -> None:
         """PreToolUse without a native result returns the fail-safe response."""
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+            "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
             lambda *_args, **_kwargs: None,
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+            "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
             lambda: NativeRuntimeStatus(mode="force", available=False, compatible=False, reason="missing"),
         )
         payload = {
@@ -537,7 +537,7 @@ class TestHookWorkerOutputScanning:
         assert result["continue"] is True
         assert result["stopReason"] == result["reason"]
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_credential_echo_with_forged_auth_role_remains_blocked(
@@ -566,7 +566,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["decision"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_documentation_demo_secret_output_blocks(
@@ -590,7 +590,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_documentation_fixture_prefixed_secret_output_blocks(
@@ -614,7 +614,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_mixed_docs_and_source_paths_keep_secret_retry(
@@ -638,7 +638,7 @@ class TestHookWorkerOutputScanning:
         )
 
         assert result["policy_action"] == "block"
-        assert result["model_output_action"] == "block"
+        assert result["model_output_action"] == "not_applicable"
         assert result["reason_code"] == "output_secret_match"
 
     def test_shell_output_uses_scan_fast_path(

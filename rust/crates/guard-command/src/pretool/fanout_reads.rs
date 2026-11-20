@@ -27,27 +27,18 @@
 use super::safe_reads::{bounded_read_target, verified_path_context};
 use super::segment_proof::exact_safe_segment_with_context;
 use super::PathContext;
-use crate::read_only_fanout::{self as fanout, FindShape};
+use crate::read_only_fanout::{self as fanout, source_extension, FindShape};
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
-/// Source and documentation extensions a content reader may fan out over.
-/// find's `*` also matches a leading dot, so a denylist of secret extensions
-/// would still reach `.env.local` through `*.local`; configuration formats
-/// such as JSON and YAML are left out because they often hold keys.
-const SOURCE_EXTENSIONS: [&str; 46] = [
-    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "pyi", "rs", "go", "java", "kt",
-    "kts", "scala", "c", "h", "cc", "cpp", "hpp", "cs", "rb", "php", "swift", "m", "dart", "lua",
-    "ex", "exs", "hs", "md", "mdx", "rst", "txt", "html", "htm", "css", "scss", "sass", "less",
-    "vue", "svelte", "sql", "graphql", "proto",
-];
-
 fn plain_extension_pattern(pattern: &str) -> bool {
-    pattern.strip_prefix("*.").is_some_and(|extension| {
-        SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-    })
+    pattern.strip_prefix("*.").is_some_and(source_extension)
 }
 
 fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
+    roots_contained(shape.roots, context)
+}
+
+fn roots_contained<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool {
     let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
         return false;
     };
@@ -69,7 +60,8 @@ fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
     // directory as the relative spelling. Where it resolves, links and `..`
     // included, is what decides, so an absolute root has to land inside the
     // workspace as well.
-    shape.roots.iter().all(|root| {
+    roots.iter().all(|root| {
+        let root = root.as_ref();
         !root.starts_with(['\\', '~'])
             && bounded_read_target(root, Some(home), Some(cwd), true)
             && std::fs::canonicalize(std::path::Path::new(cwd).join(root))
@@ -77,14 +69,95 @@ fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
     })
 }
 
-fn producer_allowed(shape: &FindShape<'_>, child: &[String], context: PathContext<'_>) -> bool {
+fn producer_allowed(
+    shape: &FindShape<'_>,
+    producer: &CommandSegmentV1,
+    child: &[String],
+    context: PathContext<'_>,
+) -> bool {
+    // A file passes a group of names by matching any one of them, so a group
+    // bounds what the child reads only when each of its names does.
     shape.regular_files_only
         && (!fanout::child_reads_contents(child)
             || shape
                 .patterns
                 .iter()
-                .any(|pattern| plain_extension_pattern(pattern)))
-        && contained_roots(shape, context)
+                .any(|pattern| plain_extension_pattern(pattern))
+            || shape
+                .name_groups
+                .iter()
+                .any(|names| names.iter().all(|pattern| plain_extension_pattern(pattern))))
+        && (contained_roots(shape, context)
+            || (metadata_child(child) && metadata_roots(shape.roots, producer, context)))
+}
+
+/// A child that prints only what the directory entry says about each file:
+/// its name, size, owner and times. `wc` reads the bytes to count them, so it
+/// stays bound to the workspace with the readers.
+fn metadata_child(child: &[String]) -> bool {
+    child.first().is_some_and(|name| {
+        matches!(
+            crate::parser_executables::executable_basename(name),
+            "ls" | "stat"
+        )
+    })
+}
+
+/// A root outside the workspace for a metadata child.
+///
+/// `find ROOT -type f` already lists every name below a root that passes
+/// the bounded read-target proof, and a metadata child adds only what `ls -l`
+/// shows about each of those names. The root still has to resolve to a
+/// directory strictly below the home directory with no hidden component on
+/// the way, so a home dot-directory, the home directory itself and paths
+/// outside home keep review whatever the child. A `~/` root needs the shell's
+/// own home to be the declared one as well: where they differ the shell walks
+/// a tree this proof never resolved.
+fn metadata_roots<R: AsRef<str>>(
+    roots: &[R],
+    producer: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
+        return false;
+    };
+    if !verified_path_context(Some(home), Some(cwd))
+        || !std::path::Path::new(home).is_absolute()
+        || !std::path::Path::new(cwd).is_absolute()
+    {
+        return false;
+    }
+    let Ok(home_root) = std::fs::canonicalize(home) else {
+        return false;
+    };
+    // A quoted or escaped `~` never reaches the shell as the home directory.
+    // The word stays the literal relative name `~/...`, which `find` looks for
+    // under the working directory -- the one place the agent writes without
+    // review -- so resolving it against home here would prove a path the
+    // command never walks.
+    if !super::directory_targets::home_targets_unquoted(producer) {
+        return false;
+    }
+    roots.iter().all(|root| {
+        let root = root.as_ref();
+        let spelled = match root.strip_prefix("~/") {
+            Some(rest) => std::path::Path::new(home).join(rest),
+            None => std::path::Path::new(cwd).join(root),
+        };
+        !root.starts_with(['\\', '-'])
+            && (!root.starts_with('~') || (context.shell_home_matches && root.starts_with("~/")))
+            && bounded_read_target(root, Some(home), Some(cwd), true)
+            && std::fs::canonicalize(spelled).is_ok_and(|resolved| {
+                resolved.is_dir()
+                    && resolved.strip_prefix(&home_root).is_ok_and(|below| {
+                        below.components().next().is_some()
+                            && below.components().all(|part| {
+                                matches!(part, std::path::Component::Normal(name)
+                                    if !name.to_string_lossy().starts_with('.'))
+                            })
+                    })
+            })
+    })
 }
 
 /// The child as it will run, with one stand-in file operand last.
@@ -169,7 +242,28 @@ pub(super) fn safe_find_exec(
     plain(segment)
         && words_as_written(segment)
         && fanout::find_exec(&segment.arguments).is_some_and(|exec| {
-            producer_allowed(&exec.shape, exec.child, context)
+            producer_allowed(&exec.shape, segment, exec.child, context)
+                && child_proven(model, segment, exec.child, context)
+        })
+}
+
+/// `fd ... -x CHILD` with a proven producer scope and child.
+///
+/// fd appends the file name to the child, so the command that runs is the
+/// child as written with one operand last -- the same proxy the `find -exec`
+/// proof judges. `--type f` carries the regular-file bound find spells
+/// `-type f`, and `--extension` carries the name bound find spells
+/// `-name '*.ext'`.
+pub(super) fn safe_fd_exec(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    plain(segment)
+        && words_as_written(segment)
+        && fanout::fd::fd_exec(&segment.arguments).is_some_and(|exec| {
+            fanout::fd::producer_shape_proven(&exec)
+                && roots_contained(&exec.shape.roots, context)
                 && child_proven(model, segment, exec.child, context)
         })
 }
@@ -214,8 +308,77 @@ pub(super) fn safe_xargs(
     xargs.null_separated
         && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
         && shape.print0
-        && producer_allowed(&shape, xargs.child, context)
+        && producer_allowed(&shape, previous, xargs.child, context)
         && child_proven(model, segment, xargs.child, context)
+}
+
+/// `rg -l --null PATTERN ROOT | xargs -0 CHILD` with a contained root and a
+/// proven child.
+///
+/// The search prints the paths of the files it matched, each one beginning
+/// with a root this proof resolved inside the workspace, so the child receives
+/// names from the same walk `find` would have produced. NUL separation is
+/// required on both halves: a name holding a space would otherwise reach the
+/// child as words that were never proven.
+///
+/// A child that reads file contents asks for the same extension bound a `find`
+/// producer asks for, through `-g` or `--include`, because a listing search
+/// walks every file under its root whatever its name. Every glob on the line
+/// has to carry it: the search prints a file that matched any one of them, so
+/// a single `-g '*.env*'` beside `-g '*.ts'` widens the walk rather than
+/// narrowing it.
+pub(super) fn safe_listing_xargs(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    let (true, Some(previous), Some(xargs)) = (
+        plain(segment) && words_as_written(segment),
+        previous_listing(model, segment),
+        fanout::xargs(&segment.arguments),
+    ) else {
+        return false;
+    };
+    let Some(shape) = previous
+        .executable
+        .as_deref()
+        .map(crate::parser_executables::executable_basename)
+        .and_then(|tool| fanout::listing::shape(tool, &previous.arguments))
+    else {
+        return false;
+    };
+    if !words_as_written(previous) {
+        return false;
+    }
+    xargs.null_separated
+        && shape.null_separated
+        && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
+        && (!fanout::child_reads_contents(xargs.child)
+            || (!shape.patterns.is_empty()
+                && shape
+                    .patterns
+                    .iter()
+                    .all(|pattern| plain_extension_pattern(pattern))))
+        && roots_contained(&shape.roots, context)
+        && child_proven(model, segment, xargs.child, context)
+}
+
+fn previous_listing<'a>(
+    model: &'a CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> Option<&'a CommandSegmentV1> {
+    let index = model
+        .segments
+        .iter()
+        .position(|candidate| candidate.span.start == segment.span.start)?;
+    let previous = &model.segments[index.checked_sub(1)?];
+    fanout::listing::xargs_follows(
+        previous,
+        segment.pipeline_index,
+        &segment.execution_context,
+        &segment.arguments,
+    )
+    .then_some(previous)
 }
 
 /// `git merge-base REV... | xargs git ...` whose child passes the Git read
@@ -299,4 +462,54 @@ pub(super) fn whitespace_split_reason(model: &CanonicalCommandV1) -> Option<Stri
             "HOL Guard requires review because xargs splits file names on whitespace, so a crafted directory name can add another path. Use find DIR -type f -name '*.ext' -exec cat {} +, or find ... -print0 | xargs -0 cat, which Guard can prove read-only."
                 .to_owned()
         })
+}
+
+#[cfg(all(test, unix))]
+mod shell_home_tests {
+    use super::*;
+
+    fn parsed(command: &str) -> CanonicalCommandV1 {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({
+                "command": command,
+                "dialect": "posix",
+                "transport": "shell_string",
+                "provenance": "pre-tool-generic",
+            }))
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// A `~/` root is resolved against the home the hook declares. When the
+    /// shell runs with another `HOME` the command walks a different tree, so
+    /// the proof would stand for a path that is never read.
+    #[test]
+    fn a_tilde_root_needs_the_shell_to_use_the_declared_home() {
+        let home = std::env::temp_dir().join(format!(
+            "guard-fanout-home-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let sibling = home.join("Code/org/service-api/src");
+        std::fs::create_dir_all(&sibling).unwrap();
+        let cwd = home.join("Code/org/app-portal");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let home_text = home.to_str().unwrap().to_owned();
+        let cwd_text = cwd.to_str().unwrap().to_owned();
+        let model = parsed(r"find ~/Code/org/service-api/src -type f -exec stat {} \;");
+        let producer = model.segments.first().unwrap();
+        let roots = ["~/Code/org/service-api/src"];
+        let context = |shell_home_matches| PathContext {
+            home_dir: Some(&home_text),
+            cwd: Some(&cwd_text),
+            shell_home_matches,
+            ..Default::default()
+        };
+
+        assert!(metadata_roots(&roots, producer, context(true)));
+        assert!(!metadata_roots(&roots, producer, context(false)));
+
+        std::fs::remove_dir_all(&home).ok();
+    }
 }

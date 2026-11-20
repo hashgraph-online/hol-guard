@@ -40,6 +40,11 @@ pub struct ApprovalResolutionPlanEnvelopeV1 {
     /// `raw_payload_redacted.permissionMode`.
     #[serde(default)]
     pub permission_mode_camel: Option<String>,
+    /// The package key a queued package install review carries, so its Always
+    /// allow is also saved where the identical install in another checkout of
+    /// the repository finds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_approval: Option<crate::PackageApprovalKeyV1>,
 }
 
 /// Browser-intent fields the plan reads. Present only when the stored browser
@@ -134,7 +139,7 @@ pub struct ApprovalResolutionPlanResultV1 {
     /// `ok`, or one of the `native_approval_resolution_plan_*` failure codes.
     pub code: String,
     /// The plan: `decision`, `persistence`, `once_expires_at`, `local_once`,
-    /// `matching` and `exact_context_allow`.
+    /// `matching`, `exact_context_allow` and `package_decision`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }

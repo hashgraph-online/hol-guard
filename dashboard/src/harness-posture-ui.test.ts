@@ -146,7 +146,8 @@ assert(
 );
 
 // An app already in its own Watch can restart its timer; unrelated saves leave it alone.
-const appWatch = settings({ harness_postures: { codex: "watch" } });
+const appWatch = settings({ harness_postures: { codex: "watch" }, harness_watch_entered_at: { codex: "2026-11-12T10:00:00+00:00" } });
+assert(!canRestartHarnessWatch(settings({ harness_postures: { codex: "watch" } }), "codex"), "an untimed CIGAR-only Watch has no timer to restart");
 assert(canRestartHarnessWatch(appWatch, "codex"), "own Watch entry can restart");
 assert(!canRestartHarnessWatch(appWatch, "claude-code"), "inherited posture has no own timer");
 assert(!canRestartHarnessWatch({ ...appWatch, watch_auto_revert_hours: 0 }, "codex"), "no timer when auto-revert is off");
