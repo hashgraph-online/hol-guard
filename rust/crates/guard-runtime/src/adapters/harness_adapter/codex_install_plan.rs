@@ -358,6 +358,15 @@ fn pairs(fields: &Map<String, Value>) -> Step<Vec<(String, String)>> {
         .collect()
 }
 
+/// The planned files other than the pins compared before them, unchanged.
+fn not_yet_compared(files: &[Value], pins: &[Value]) -> Vec<Value> {
+    files
+        .iter()
+        .filter(|change| !pins.contains(change))
+        .cloned()
+        .collect()
+}
+
 fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
     let fields = transitions.fields;
     let pairs = pairs(fields)?;
@@ -464,10 +473,14 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
     files.extend(alternate_files);
     files.extend(cleanup);
     files.extend(shim_files);
-    files.extend(pins);
+    files.extend(pins.iter().cloned());
     super::codex_files::canonical(ctx, &mut files, &mut backups)?;
     let files = unique(transitions, files)?;
-    transitions.compare(&files)?;
+    // A pin `unique` kept unchanged was compared above, after every step that
+    // reads the home; hashing it again costs a pass over the pinned runtime
+    // and its packaged files. A pin two roles merged is compared again here,
+    // under the merged role.
+    transitions.compare(&not_yet_compared(&files, &pins))?;
     Ok(json!({
         "files": files,
         "rendered_config": rendered,
@@ -495,5 +508,24 @@ pub(super) fn install_plan(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value
         Err(Stop::Conflict) => Ok(json!({ "conflict": true, "events": events })),
         Err(Stop::Fault(fault)) => Ok(json!({ "fault": fault, "events": events })),
         Err(Stop::Failed(failure)) => Err(failure),
+    }
+}
+
+#[cfg(test)]
+mod compared_pins_tests {
+    use serde_json::json;
+
+    #[test]
+    fn only_pins_compared_unchanged_are_skipped() {
+        let pin = json!({"path": "/runtime", "expected_digest": "aa", "role": "runtime"});
+        let merged = json!({"path": "/runtime", "expected_digest": "aa", "role": "artifact"});
+        let config = json!({"path": "/config.toml", "before": null});
+        let pins = [pin.clone()];
+
+        let skipped = super::not_yet_compared(&[config.clone(), pin], &pins);
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0], config);
+        let kept = super::not_yet_compared(&[config.clone(), merged.clone()], &pins);
+        assert_eq!(kept, vec![config, merged]);
     }
 }

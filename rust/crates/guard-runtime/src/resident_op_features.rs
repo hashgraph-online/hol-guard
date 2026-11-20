@@ -262,6 +262,8 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-supervisor-install-v1",
     "native-guard-config-load-v1",
     "native-guard-config-update-v1",
+    crate::command_state::FEATURE,
+    crate::auto_update_state::FEATURE,
     "native-guard-config-resolve-v1",
     "native-installation-continuity-v1",
     "native-boot-observation-v1",
@@ -342,5 +344,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-guard-shim-profile-v1",
     "native-durable-runtime-collapse-v1",
     "native-exact-cloud-review-v1",
-    "native-verified-github-read-v1",
+    "native-verified-github-read-v2",
 ];

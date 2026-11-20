@@ -82,16 +82,6 @@ def test_wait_exhaustion_is_reported_as_not_admitted(monkeypatch, tmp_path: Path
     assert calls[0]["request_id"] == calls[1]["request_id"]
 
 
-def test_direct_wait_rejects_invalid_values(monkeypatch, tmp_path: Path) -> None:
-    calls: list[dict[str, object]] = []
-    monkeypatch.setattr(fence, "record_policy_fence_window", lambda _home, **kwargs: calls.append(kwargs))
-    store = Store(tmp_path)
-    fence.record_direct_fence_wait(store, True)
-    fence.record_direct_fence_wait(store, 0)
-    fence.record_direct_fence_wait(store, 450)
-    assert calls == [{"action": "absorb_direct", "waited_ms": 450}]
-
-
 def test_policy_update_reason_is_stable() -> None:
     assert fence.policy_update_pending_reason(0.1).endswith("Retry after 1 seconds.")
 

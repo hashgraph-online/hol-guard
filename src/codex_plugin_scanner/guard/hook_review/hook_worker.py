@@ -136,18 +136,30 @@ class HookWorker(HookWorkerNativeMixin):
         _ = list_harnesses()
         self._owns_policy_snapshot_publisher = publish_native_policy
         self._direct_evidence_drain: ResidentEvidenceDrain | None = None
-        if self._owns_policy_snapshot_publisher and start_native_policy:
-            bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
-            if home_dir is not None and callable(bind_daemon_home):
-                bind_daemon_home(home_dir)
-            if workspace is not None:
-                self.policy_snapshot_publisher.register_workspace(workspace)
-            self._start_direct_evidence_drain()
-            self.policy_snapshot_publisher.start()
+        if start_native_policy:
+            self.start_native_policy_publication(home_dir=home_dir, workspace=workspace)
         if wait_for_native_policy and start_native_policy:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
+
+    def start_native_policy_publication(self, *, home_dir: Path | None = None, workspace: Path | None = None) -> None:
+        """Starts publishing native policy, with its direct-lane lease and evidence drain.
+
+        A worker built with ``start_native_policy=False`` publishes nothing
+        until this runs, so its owner can build it early and start it once
+        publishing is safe.
+        """
+
+        if not self._owns_policy_snapshot_publisher:
+            return
+        bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
+        if home_dir is not None and callable(bind_daemon_home):
+            bind_daemon_home(home_dir)
+        if workspace is not None:
+            self.policy_snapshot_publisher.register_workspace(workspace)
+        self._start_direct_evidence_drain()
+        self.policy_snapshot_publisher.start()
 
     def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)

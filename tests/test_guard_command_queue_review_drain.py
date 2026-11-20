@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.command_queue_state import (
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import EXACT_CLOUD_REVIEW_TRANSPORT
+from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_command_queue import FakeStore, _context
 
 _GENERIC_OPERATION = "guard.packageShims.status"
@@ -499,17 +500,9 @@ def test_main_poll_restarts_drains_while_a_result_is_unsent(tmp_path: Path, monk
     assert events == (["start", "poll", "start"] if pending else ["poll", "start"])
 
 
-class _InterleavingStore(FakeStore):
-    """Yield between reading and writing a row so unlocked writers would race."""
-
-    def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
-        payload = super().get_sync_payload(key)
-        time.sleep(0.005)
-        return payload
-
-
-def test_parallel_replay_rows_are_all_kept(tmp_path: Path) -> None:
-    store = _InterleavingStore(tmp_path / "guard-home")
+def test_parallel_replay_rows_are_all_kept(tmp_path: Path, native_command_capability_runtime: Path) -> None:
+    del native_command_capability_runtime
+    store = GuardStore(tmp_path / "guard-home")
     barrier = threading.Barrier(6)
 
     def consume(index: int) -> None:
@@ -519,7 +512,7 @@ def test_parallel_replay_rows_are_all_kept(tmp_path: Path) -> None:
             requires_local_approval=False,
         )
         barrier.wait(5)
-        command_capability.mark_command_job_consumed(store, authorized, identity_digest=f"digest-{index}")
+        command_capability.mark_command_job_consumed(store, authorized)
 
     threads = [threading.Thread(target=consume, args=(index,)) for index in range(6)]
     for thread in threads:

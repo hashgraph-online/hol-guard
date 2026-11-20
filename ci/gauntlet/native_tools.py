@@ -11,6 +11,7 @@ from typing import Any
 
 from .catalog import Scenario
 from .command_outputs import _text
+from .goal_budget_scope import GOAL_BUDGET_CASE, goal_budget_scope_error
 from .input_evidence import post_input_matches
 from .parent_fixtures import PARENT_DIRECTORY, PARENT_WORKSPACE_CASE
 from .proofs import _edit_path, _path
@@ -768,6 +769,10 @@ def native_tools_scope_error(
     if scenario.id == SESSION_EDIT_CASE and (scope := _session_edit_error(calls, require_steps=False)):
         return scope
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):
+        return scope
+    if scenario.id == GOAL_BUDGET_CASE and (
+        scope := goal_budget_scope_error(calls, guard_denied=guard_denied)
+    ):
         return scope
     if scenario.id == BACKGROUND_READ_CASE and (scope := _background_read_error(calls, require_steps=False)):
         return scope

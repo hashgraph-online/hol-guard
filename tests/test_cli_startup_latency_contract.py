@@ -236,9 +236,13 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     tmp_path: Path,
 ) -> None:
     from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers
     from codex_plugin_scanner.guard.workers import host
 
     calls: list[tuple[str, Path | None]] = []
+    checked: list[str] = []
+    monkeypatch.setattr(desktop_daemon_workers, "_check_installed_bundle", lambda: checked.append("bundle"))
+    monkeypatch.setattr(desktop_daemon_workers, "_resolve_runtime_status", lambda: checked.append("runtime"))
 
     def fake_bind(guard_home: Path | None, *, remember: bool = True) -> None:
         del remember
@@ -262,6 +266,13 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     assert code == 0
     # The digest home is bound before the host starts, as the command router does.
     assert calls == [("bind", guard_home.resolve()), ("host", guard_home.resolve())]
+    # The host's bundle check started before the host, and the host's migration waits for it.
+    assert desktop_daemon_workers.wait_for_early_bundle_check() is True
+    # The runtime status the store's first native call needs also resolves beside the imports.
+    assert desktop_daemon_workers.wait_for_early_runtime_status() is True
+    assert sorted(checked) == ["bundle", "runtime"]
+    assert desktop_daemon_workers.wait_for_early_bundle_check() is False
+    assert desktop_daemon_workers.wait_for_early_runtime_status() is False
     assert _COMMANDS_HUB not in sys.modules
     assert _COMMANDS_PARSER not in sys.modules
     assert _COMMANDS_SUPPORT not in sys.modules
@@ -277,7 +288,7 @@ def test_hol_guard_library_children_skip_command_surface(
     command: str,
     handler: str,
 ) -> None:
-    from codex_plugin_scanner.guard.cli import desktop_library_call
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers, desktop_library_call
 
     served: list[Path] = []
 
@@ -297,6 +308,8 @@ def test_hol_guard_library_children_skip_command_surface(
 
     assert code == 0
     assert served == [guard_home.resolve()]
+    # Only the worker host opens a store, so only its launch resolves the runtime status early.
+    assert desktop_daemon_workers.wait_for_early_runtime_status() is False
     assert _COMMANDS_HUB not in sys.modules
     assert _COMMANDS_PARSER not in sys.modules
     assert _COMMANDS_SUPPORT not in sys.modules
@@ -307,7 +320,11 @@ def test_hol_guard_daemon_workers_fast_path_reports_a_host_failure(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from codex_plugin_scanner.guard.cli import desktop_daemon_workers
     from codex_plugin_scanner.guard.workers import host
+
+    monkeypatch.setattr(desktop_daemon_workers, "_check_installed_bundle", lambda: None)
+    monkeypatch.setattr(desktop_daemon_workers, "_resolve_runtime_status", lambda: None)
 
     def failing_host(guard_home: Path) -> int:
         del guard_home
@@ -319,6 +336,8 @@ def test_hol_guard_daemon_workers_fast_path_reports_a_host_failure(
 
     assert code == 1
     assert "worker host could not start" in capsys.readouterr().err
+    assert desktop_daemon_workers.wait_for_early_bundle_check() is True
+    assert desktop_daemon_workers.wait_for_early_runtime_status() is True
 
 
 _HELP_PATH_FORBIDDEN_MODULES = (
@@ -363,6 +382,29 @@ def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
     assert result["usage"] is True
     loaded = set(result["modules"])
     assert [name for name in _HELP_PATH_FORBIDDEN_MODULES if name in loaded] == []
+
+
+def test_worker_host_import_leaves_the_cryptography_backend_unloaded() -> None:
+    """The worker host imports the store; neither needs the cryptography backend to start."""
+
+    import json
+    import subprocess
+
+    probe = (
+        "import json, sys\n"
+        "import codex_plugin_scanner.guard.workers.host\n"
+        "print(json.dumps(sorted(name for name in sys.modules if name.split('.')[0] == 'cryptography')))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", probe],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) == []
 
 
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:

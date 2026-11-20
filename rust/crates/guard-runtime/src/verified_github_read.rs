@@ -1,76 +1,68 @@
-//! `verified-github-read --stdin`: what makes a public GitHub pull-request
-//! read provable, ported from `runtime/verified_github_reads.py`
-//! (`_validate_request`, `_pull_belongs_to_repository`, `_valid_pull_fields`,
-//! `_proof`, `_source_digest` and `_ca_bundle_digest`).
+//! `verified-github-read --stdin`: one credential-free read of a public
+//! GitHub pull request, and the proof that binds it, ported from
+//! `runtime/verified_github_reads.py`.
 //!
-//! Python still sends the two credential-free GET requests through the
-//! managed transport; this command checks what it may ask for and what came
-//! back, and binds the proof:
-//!
-//! - `{"op": "plan", ...read}` answers the two exact API URLs and the
-//!   `identity` the read runs under (the executor's source and the network
-//!   policy, with the managed CA bundle's contents);
-//! - `{"op": "compose", ...read, "identity", "tls_runtime",
-//!   "repository_body", "pull_body"}` reads the two replies (base64, read up
-//!   to one byte past the limit) and answers `{"stdout", "binding_digest"}`,
-//!   or `{"verified": false}` when the replies or the identity do not prove
-//!   the read.
+//! `{"op": "read", "owner", "repository", "pull_number", "fields",
+//! "timeout_seconds"}` resolves the machine's managed network policy, sends
+//! the two exact GET requests to the public API under it (no credential, no
+//! redirect, each reply bounded at 1 MiB) and answers `{"stdout",
+//! "binding_digest"}`, or `{"verified": false}` when the policy cannot be
+//! honoured, an exchange fails, the replies do not show a public repository
+//! and one of its pull requests, or the network identity changed during the
+//! read.
 //!
 //! A request outside the reviewed shape is an error. Python turns every
 //! answer other than a composed proof into ordinary review.
 
+use std::collections::BTreeMap;
 use std::fs::{self, File, Metadata};
 use std::io::Read;
 use std::path::Path;
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use guard_command::egress_caller::policy_get_with_headers;
+use guard_command::egress_caller_policy::{ManagedEgressPolicy, ManagedNetworkPolicy, ProxyMode};
 use guard_contracts::write_canonical_json;
 use guard_runtime_pyjson::{parse, PyVal};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::managed_policy_load::ManagedPolicySource;
+use crate::supply_chain_eval_caller::caller_network_policy;
+
 const VERIFIED_GITHUB_READ_VERSION: &str = "guard.verified-github-read.v1";
 const VERIFIED_READ_POLICY_VERSION: &str = "guard.verified-read-policy.v1";
 const VERIFIED_GITHUB_RULE_VERSION: &str = "guard.verified-read.github-public.v1";
 const API_ORIGIN: &str = "https://api.github.com";
+/// The executor the proof names: this runtime build sends the requests.
+const EXECUTOR: &str = concat!("hol-guard-runtime/", env!("CARGO_PKG_VERSION"));
+/// The TLS stack the exchanges run on.
+const TLS_RUNTIME: &str = "rustls";
 const FIELDS: [&str; 3] = ["mergeable", "number", "state"];
 const MAX_PULL_NUMBER: u64 = 2_147_483_647;
+const MAX_TIMEOUT_SECONDS: f64 = 30.0;
 const MAX_RESPONSE_BYTES: usize = 1_048_576;
 const MAX_IDENTITY_FILE_BYTES: u64 = 4 * 1024 * 1024;
-/// Two base64 replies one byte past their limit, plus the other members.
-const MAX_REQUEST_BYTES: u64 = 3 * 1024 * 1024;
+const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Op {
-    Plan,
-    Compose,
+    Read,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
-    op: Op,
+    /// Only `read` is accepted.
+    #[serde(rename = "op")]
+    _op: Op,
     owner: String,
     repository: String,
     pull_number: u64,
     fields: Vec<String>,
-    /// `ManagedNetworkPolicy.to_dict()`.
-    network_policy: Map<String, Value>,
-    ca_bundle_path: Option<String>,
-    /// The Python module that sends the requests.
-    executor_path: String,
-    /// What `compose` carries: the planned identity, Python's TLS library and
-    /// the two replies as base64.
-    #[serde(default)]
-    identity: Option<String>,
-    #[serde(default)]
-    tls_runtime: Option<String>,
-    #[serde(default)]
-    repository_body: Option<String>,
-    #[serde(default)]
-    pull_body: Option<String>,
+    /// Each of the two exchanges gets this long.
+    timeout_seconds: f64,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -87,7 +79,17 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         return Err("verified_github_read_request_too_large".to_owned());
     }
     let request: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    serde_json::to_vec(&answer(request)?)
+    let (read, fields) = checked(request)?;
+    let answer = match caller_network_policy(&ManagedPolicySource::native()) {
+        Ok(network) => match ManagedEgressPolicy::resolve(&network) {
+            Ok(egress) => compose_read(&read, &fields, &network, |url| {
+                public_get(url, read.timeout_seconds, &egress)
+            }),
+            Err(_) => unproven(),
+        },
+        Err(_) => unproven(),
+    };
+    serde_json::to_vec(&answer)
         .map_err(|_| "verified_github_read_response_encode_failed".to_owned())
 }
 
@@ -95,53 +97,77 @@ fn invalid() -> String {
     "verified_github_read_request_invalid".to_owned()
 }
 
-fn answer(request: Value) -> Result<Value, String> {
+fn unproven() -> Value {
+    json!({"verified": false})
+}
+
+/// The request and its sorted fields, when it has the reviewed shape.
+fn checked(request: Value) -> Result<(Request, Vec<String>), String> {
     let read: Request = serde_json::from_value(request).map_err(|_| invalid())?;
+    let timeout = read.timeout_seconds;
+    if !timeout.is_finite() || timeout <= 0.0 || timeout > MAX_TIMEOUT_SECONDS {
+        return Err(invalid());
+    }
     let fields = checked_fields(&read)?;
-    let composed = (
-        &read.identity,
-        &read.tls_runtime,
-        &read.repository_body,
-        &read.pull_body,
+    Ok((read, fields))
+}
+
+/// Read both resources through `get` and compose the proof, or answer
+/// `{"verified": false}`. `get` answers a 200 reply's body.
+fn compose_read(
+    read: &Request,
+    fields: &[String],
+    network: &ManagedNetworkPolicy,
+    mut get: impl FnMut(&str) -> Option<Vec<u8>>,
+) -> Value {
+    let Some(planned) = identity(network) else {
+        return unproven();
+    };
+    let (repository_url, pull_url) = urls(read);
+    let Some(repository_body) = get(&repository_url) else {
+        return unproven();
+    };
+    let Some(pull_body) = get(&pull_url) else {
+        return unproven();
+    };
+    // The CA bundle changed while the read ran.
+    if identity(network).as_deref() != Some(planned.as_str()) {
+        return unproven();
+    }
+    let Some(stdout) = output(read, fields, &repository_body, &pull_body) else {
+        return unproven();
+    };
+    let binding_digest = proof(
+        read,
+        fields,
+        &planned,
+        &repository_body,
+        &pull_body,
+        &stdout,
     );
-    match (&read.op, composed) {
-        (Op::Plan, (None, None, None, None)) => {
-            let (repository_url, pull_url) = urls(&read);
-            Ok(json!({
-                "fields": fields,
-                "urls": [repository_url, pull_url],
-                "identity": identity(&read),
-            }))
-        }
+    json!({"stdout": stdout, "binding_digest": binding_digest})
+}
+
+/// One credential-free GET under the managed policy: the body of a 200
+/// reply within the bound, with no redirect followed.
+fn public_get(url: &str, seconds: f64, egress: &ManagedEgressPolicy) -> Option<Vec<u8>> {
+    let headers = BTreeMap::from([
         (
-            Op::Compose,
-            (Some(planned), Some(tls_runtime), Some(repository_body), Some(pull_body)),
-        ) => {
-            let repository_body = STANDARD.decode(repository_body).map_err(|_| invalid())?;
-            let pull_body = STANDARD.decode(pull_body).map_err(|_| invalid())?;
-            let unproven = json!({"verified": false});
-            // The executor or the CA bundle changed while the read ran.
-            let Value::String(identity) = identity(&read) else {
-                return Ok(unproven);
-            };
-            if &identity != planned {
-                return Ok(unproven);
-            }
-            let Some(stdout) = output(&read, &fields, &repository_body, &pull_body) else {
-                return Ok(unproven);
-            };
-            let binding_digest = proof(
-                &read,
-                &fields,
-                &identity,
-                tls_runtime,
-                &repository_body,
-                &pull_body,
-                &stdout,
-            );
-            Ok(json!({"stdout": stdout, "binding_digest": binding_digest}))
-        }
-        _ => Err(invalid()),
+            "Accept".to_owned(),
+            "application/vnd.github+json".to_owned(),
+        ),
+        // Identity encoding keeps the byte bound equal to the decoded bound.
+        ("Accept-Encoding".to_owned(), "identity".to_owned()),
+        (
+            "User-Agent".to_owned(),
+            "hol-guard-verified-read".to_owned(),
+        ),
+        ("X-GitHub-Api-Version".to_owned(), "2022-11-28".to_owned()),
+    ]);
+    let cap = u64::try_from(MAX_RESPONSE_BYTES).ok()?;
+    match policy_get_with_headers(url, headers, seconds, 0, cap, egress) {
+        Ok((200, _, body)) => Some(body),
+        _ => None,
     }
 }
 
@@ -182,21 +208,40 @@ fn urls(read: &Request) -> (String, String) {
     (repository, pull)
 }
 
-/// The executor's source digest and the network policy digest, or `null`
-/// when either identity file cannot be read within its bounds.
-fn identity(read: &Request) -> Value {
-    let Some(source) = identity_file_digest(Path::new(&read.executor_path)) else {
-        return Value::Null;
+/// `ManagedNetworkPolicy.to_dict()`, the policy as the proof names it.
+fn policy_dict(network: &ManagedNetworkPolicy) -> Map<String, Value> {
+    let mode = match network.proxy_mode {
+        ProxyMode::None => "none",
+        ProxyMode::System => "system",
+        ProxyMode::Explicit => "explicit",
     };
-    let mut policy = read.network_policy.clone();
-    if let Some(path) = &read.ca_bundle_path {
-        let Some(digest) = identity_file_digest(Path::new(path)) else {
-            return Value::Null;
-        };
+    let mut policy = Map::new();
+    policy.insert("proxyMode".to_owned(), json!(mode));
+    policy.insert(
+        "proxyConfigured".to_owned(),
+        json!(network.proxy_url.is_some()),
+    );
+    policy.insert(
+        "caBundleConfigured".to_owned(),
+        json!(network.ca_bundle_path.is_some()),
+    );
+    policy.insert(
+        "allowPublicRegistries".to_owned(),
+        json!(network.allow_public_registries),
+    );
+    policy
+}
+
+/// The executor and the network policy digest, with the managed CA bundle's
+/// contents, or `None` when that bundle cannot be read within its bounds.
+fn identity(network: &ManagedNetworkPolicy) -> Option<String> {
+    let mut policy = policy_dict(network);
+    if let Some(path) = &network.ca_bundle_path {
+        let digest = identity_file_digest(path)?;
         policy.insert("caBundleSha256".to_owned(), Value::String(digest));
     }
-    Value::String(framed_digest(&json!({
-        "executor_source": source,
+    Some(framed_digest(&json!({
+        "executor_source": EXECUTOR,
         "network_policy": framed_digest(&Value::Object(policy)),
     })))
 }
@@ -276,7 +321,6 @@ fn proof(
     read: &Request,
     fields: &[String],
     identity: &str,
-    tls_runtime: &str,
     repository_body: &[u8],
     pull_body: &[u8],
     stdout: &str,
@@ -300,7 +344,7 @@ fn proof(
         "executor_identity": identity,
         "executor_runtime": "guard-runtime:verified-github-read.v1",
         "redirect_mode": "rejected",
-        "tls_runtime": framed_digest(&json!(tls_runtime)),
+        "tls_runtime": framed_digest(&json!(TLS_RUNTIME)),
         "repository_response": hex::encode(Sha256::digest(repository_body)),
         "pull_response": hex::encode(Sha256::digest(pull_body)),
         "output": framed_digest(&json!(stdout)),
