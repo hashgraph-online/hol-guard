@@ -575,7 +575,7 @@
       "required_tools": [
         "glob"
       ],
-      "prompt": "List the page files under {{workspace}}/app/items with the glob tool (pattern app/items/[slug]/page.tsx) so I can see which routes exist. One call is enough; then tell me what you found."
+      "prompt": "List the page files under {{workspace}}/app/items with the glob tool, setting its path selector to app/items/[slug]/page.tsx (including the bracketed route directory). One call is enough; then tell me what you found."
     },
     {
       "id": "omp-native-grep-ordinary-sources",
