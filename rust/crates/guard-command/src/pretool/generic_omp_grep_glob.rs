@@ -113,10 +113,8 @@ fn literal_groups_only(selector: &str) -> bool {
             && body.as_bytes().windows(3).any(|window| {
                 window[1] == b'-'
                     && !((window[0].is_ascii_digit() && window[2].is_ascii_digit())
-                        || (window[0].is_ascii_lowercase()
-                            && window[2].is_ascii_lowercase())
-                        || (window[0].is_ascii_uppercase()
-                            && window[2].is_ascii_uppercase()))
+                        || (window[0].is_ascii_lowercase() && window[2].is_ascii_lowercase())
+                        || (window[0].is_ascii_uppercase() && window[2].is_ascii_uppercase()))
             })
         {
             return false;
