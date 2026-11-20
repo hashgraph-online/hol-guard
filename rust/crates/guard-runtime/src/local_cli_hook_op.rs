@@ -154,9 +154,45 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
             ..Refined::default()
         };
     }
-    contained::refine(request, grant(request, package), || {
+    let answer = grant(request, package);
+    // No single CLI launch: a compound command, or one that launches none.
+    let no_single_launch = matches!(answer, Ok((None, None, _)));
+    let mut refined = contained::refine(request, answer, || {
         contained::unverified_action(request).to_owned()
-    })
+    });
+    if no_single_launch
+        && refined.action == "review"
+        && refined.connector.is_none()
+        && matches!(package, Ok(None))
+    {
+        refined.connector = compound_changed_connector(request);
+    }
+    refined
+}
+
+/// The connector a reviewed compound command waits on: the one CLI it
+/// launches, when the user allowed only an earlier version of that CLI. The
+/// grant step reads a single invocation alone, so without this a changed
+/// script run as `cd dir && ./script` or `./script | tail` was an ordinary
+/// review whose Always allow saved only that exact text. Naming the connector
+/// changes no action: the review stays a review, and only its card offers the
+/// new version. A command that launches more than one CLI names none.
+fn compound_changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
+    let records = unlisted(request, true).ok()?;
+    let first = records.first()?;
+    if records.iter().any(|record| record.cli_id != first.cli_id) {
+        return None;
+    }
+    let record = records.into_iter().next()?;
+    let launch = Launch {
+        cli_id: record.cli_id,
+        identity_hash: record.identity_hash,
+        name: record.name,
+        kind: record.kind,
+        runner: record.runner,
+        source: record.identity_source,
+    };
+    crate::connector_setup::for_changed_launch(request, &launch)
 }
 
 /// The launch observation: the package script identity, else every CLI a

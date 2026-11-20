@@ -645,6 +645,16 @@ def apply_approval_resolution(
             approval_gate_grant=resolved_gate_grant,
         )
 
+    changed_cli: dict[str, object] | None = None
+    if action == "allow" and persisted_rule:
+        from .local_clis.local_cli_reallow import reallow_changed_cli
+
+        # Always allow on a review held only because an allowed script changed
+        # moves the script's allow to this version, keeping its command choices.
+        changed_cli = reallow_changed_cli(
+            store, request_id=request_id, approval_gate_input=approval_gate_input, now=resolved_at
+        )
+
     matching = plan.get("matching")
     if return_queue_result:
         result = (
@@ -694,6 +704,8 @@ def apply_approval_resolution(
         result["applied_scope"] = scope
         if selection.warning is not None:
             result["scope_warning"] = selection.warning
+        if changed_cli is not None:
+            result["changed_cli"] = changed_cli
         if temporary_mcp_selection is not None:
             result["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
             if temporary_mcp_resolved_ids:
@@ -742,6 +754,8 @@ def apply_approval_resolution(
         updated["temporary_mcp_grant"] = _temporary_mcp_grant_result(temporary_mcp_selection)
     if local_tool_selection is not None:
         updated["local_tool_grant"] = _local_tool_grant_result(local_tool_selection)
+    if changed_cli is not None:
+        updated["changed_cli"] = changed_cli
     return updated
 
 
