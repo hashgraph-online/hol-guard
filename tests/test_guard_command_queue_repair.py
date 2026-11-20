@@ -73,3 +73,26 @@ def test_doctor_reports_a_repair_the_runtime_could_not_answer(
     repair = json.loads(capsys.readouterr().out)["command_queue"]["repair"]
     assert repair == {"repaired": [], "repaired_count": 0, "error": "native_command_state_unavailable"}
     assert store.get_sync_payload(COMMAND_QUEUE_STATE_KEY) == DAMAGED
+
+
+@pytest.mark.usefixtures("native_command_capability_runtime")
+def test_doctor_repair_clears_malformed_command_queue_state(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_sync_payload(
+        COMMAND_QUEUE_STATE_KEY,
+        {"state": "result_pending", "active_job": "bad", "pending_result": {"job": "bad"}},
+        SAVED_AT,
+    )
+
+    rc = main(["guard", "doctor", "--guard-home", str(guard_home), "--repair", "--json"])
+
+    assert rc == 0
+    repair = json.loads(capsys.readouterr().out)["command_queue"]["repair"]
+    assert repair["repaired_count"] == 2
+    assert sorted(repair["repaired"]) == ["active_job", "pending_result"]
+    state = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    assert isinstance(state, dict)
+    assert state["state"] == "idle"
+    assert "active_job" not in state
+    assert "pending_result" not in state
