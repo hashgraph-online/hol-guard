@@ -336,7 +336,8 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did,
         // unless the reconcile outlasts its ready wait.
-        let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
+        let reconcile =
+            workers::reconcile_beside(&reads, config.user_home.clone(), home.clone(), port);
         let registration = workers::Registration {
             session_id: session_id.clone(),
             guard_home: home.clone(),

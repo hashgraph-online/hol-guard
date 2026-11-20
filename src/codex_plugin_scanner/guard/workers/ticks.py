@@ -9,12 +9,15 @@ one-file extraction sweep run in the native daemon itself.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from ..store import GuardStore
+
+_LOOPBACK_DAEMON_URL = re.compile(r"http://127\.0\.0\.1:[1-9][0-9]{0,4}")
 
 
 def _now() -> str:
@@ -79,12 +82,27 @@ def _refresh_extension_controls(store: GuardStore) -> None:
 
 
 def reconcile_artifacts(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Brings Guard-owned artifacts in line with the active runtime before the daemon reports ready."""
+    """Brings Guard-owned artifacts in line with the active runtime before the daemon reports ready.
 
+    The daemon names its own loopback URL, which hook artifacts that reach the
+    daemon are written with. It has not reported ready while this runs, so a
+    live check against it would only wait out its health probe.
+    """
+
+    from contextlib import nullcontext
+
+    from ..claude_hook_entry import serving_daemon_url
     from ..runtime_artifact_reconciliation import reconcile_runtime_artifacts
 
     home = args.get("home")
-    result = reconcile_runtime_artifacts(store, home_dir=Path(home) if isinstance(home, str) and home else None)
+    daemon_url = args.get("daemon_url")
+    serving = (
+        serving_daemon_url(daemon_url)
+        if isinstance(daemon_url, str) and _LOOPBACK_DAEMON_URL.fullmatch(daemon_url)
+        else nullcontext()
+    )
+    with serving:
+        result = reconcile_runtime_artifacts(store, home_dir=Path(home) if isinstance(home, str) and home else None)
     return {
         "ok": True,
         "healthy": result.healthy,

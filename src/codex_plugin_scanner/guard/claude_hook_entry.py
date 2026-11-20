@@ -12,7 +12,9 @@ from __future__ import annotations
 import importlib
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +27,22 @@ _HARNESS = "claude-code"
 _STALE_DAEMON_HOOK = (
     "This HOL Guard hook predates the native runtime, so Guard blocked the call. Run `hol-guard repair`."
 )
+
+
+# The daemon a reconcile runs inside, named by the daemon itself. Until that
+# reconcile ends the daemon has not reported ready, so asking it whether it is
+# live waits out the health probe and learns nothing.
+_SERVING_DAEMON_URL: ContextVar[str | None] = ContextVar("serving_daemon_url", default=None)
+
+
+@contextmanager
+def serving_daemon_url(url: str) -> Iterator[None]:
+    """Answer ``claude_facts`` with ``url``, the daemon this call runs inside."""
+    token = _SERVING_DAEMON_URL.set(url)
+    try:
+        yield
+    finally:
+        _SERVING_DAEMON_URL.reset(token)
 
 
 def _daemon_module():
@@ -41,7 +59,8 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
 
 def claude_facts(guard_home: Path) -> str:
     """What only this process knows about the daemon the hooks reach."""
-    return json.dumps({"daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)})
+    url = _SERVING_DAEMON_URL.get() or load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)
+    return json.dumps({"daemon_url": url})
 
 
 def claude_argv(which: str, context: HarnessContext) -> tuple[str, ...]:
