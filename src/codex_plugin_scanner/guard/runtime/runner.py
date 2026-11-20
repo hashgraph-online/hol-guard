@@ -439,6 +439,10 @@ def policy_bundle_candidate_decisions(
     if not native_shadow_unavailable and evaluating:
         # An Evaluate bundle keeps its canonical rows empty on purpose, so it
         # has nothing to drift from and needs no verdict from the resident.
+        # This is the answer the Rust policy_shadow_verdict kind gives for an
+        # evaluating candidate; test_policy_bundle_v2 pins that answer, so the
+        # two stay in step. Asking anyway would refuse the bundle whenever the
+        # resident is unreachable, which the Evaluate rollout must not do.
         mismatch_reasons, rejection = (), None
     elif not native_shadow_unavailable:
         try:
