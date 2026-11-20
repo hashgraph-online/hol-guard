@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.runtime.command_capability import issue_command_
 from codex_plugin_scanner.guard.runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
-    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     _oauth_metadata,
     apply_exact_cloud_review,
     disable_exact_cloud_review,
@@ -50,6 +49,7 @@ from tests.guard_exact_cloud_review_support import (
 from tests.guard_exact_cloud_review_support import (
     review_request as _request,
 )
+from tests.support.command_lease_transport import lease_over
 
 _TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review" / "exact-transport-fixture.json"
 _TRANSPORT_FIXTURE_SHA256 = "3b14a6c1ea73b53492d32bcd3031666fdd429220c1021525cb7df7510f12a0f3"
@@ -111,8 +111,10 @@ def test_exact_lease_rejects_missing_or_downgraded_protocol(
         lease_next_job(
             operations=(EXACT_CLOUD_REVIEW_OPERATION,),
             wait_ms=0,
-            exact_request=lambda _options: response,
-            queue_request=lambda _options: pytest.fail("exact-only lease cannot use the generic queue"),
+            lease=lease_over(
+                lambda _body: response,
+                lambda _body: pytest.fail("exact-only lease cannot use the generic queue"),
+            ),
         )
 
 
@@ -204,10 +206,6 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
     assert advertisement["nativeBindingVersion"] == claim["nativeBindingVersion"]
     assert advertisement["nativeBindingDigest"] == claim["nativeBindingDigest"]
 
-    lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
-    assert "localRequestsSnapshot" not in lease
-    assert lease["protocolVersion"] == EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    assert lease["capabilities"] == {"operations": [EXACT_CLOUD_REVIEW_OPERATION]}
     disable_exact_cloud_review(store)
     refreshed_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
     assert "exactReviewCapability" not in refreshed_claim

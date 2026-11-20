@@ -405,6 +405,13 @@ def authority_error(evaluation: Mapping[str, object], *, require_launch_permitte
     return _typed(payload, "authority_error", str, nullable=True)
 
 
+def local_identity(observed_at: str) -> tuple[dict[str, object], dict[str, str]]:
+    """The host name and private address a runtime session reports, with their source."""
+
+    payload = native_runner_authority("local_identity", {"observed_at": observed_at})
+    return _typed(payload, "identity", dict), _typed(payload, "source", dict)
+
+
 def receipt_evidence_updates(
     rows: Sequence[Mapping[str, object]],
     *,

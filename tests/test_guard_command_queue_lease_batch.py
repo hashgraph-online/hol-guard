@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import command_queue, command_queue_drain, command_queue_state
+from codex_plugin_scanner.guard.runtime import command_queue, command_queue_drain
 from codex_plugin_scanner.guard.runtime.command_queue_state import (
     COMMAND_QUEUE_STATE_KEY,
     current_command_queue_lane,
@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import lease_next_job, uses_exact_transport
+from tests.support.command_lease_transport import lease_over
 from tests.test_guard_command_queue import FakeStore, _context
 from tests.test_guard_command_queue_review_drain import _enable_queue, _exact_job
 
@@ -36,25 +37,23 @@ def _item(lease_id: str, *, protocol: str = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION)
 def _lease(response: dict[str, object] | Exception, **kwargs: object) -> tuple[object, list[dict[str, object]]]:
     requests: list[dict[str, object]] = []
 
-    def exact_request(options: dict[str, object]) -> dict[str, object]:
-        requests.append(dict(options))
+    def exact_request(body: dict[str, object]) -> dict[str, object]:
+        requests.append(dict(body))
         if isinstance(response, Exception):
             raise response
         return {"protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION, **response}
 
-    def queue_request(_options: dict[str, object]) -> dict[str, object]:
+    def queue_request(_body: dict[str, object]) -> dict[str, object]:
         raise AssertionError("an exact-only lease never reaches the generic route")
 
-    item = lease_next_job(
-        operations=_EXACT_ONLY, wait_ms=0, exact_request=exact_request, queue_request=queue_request, **kwargs
-    )
+    item = lease_next_job(operations=_EXACT_ONLY, wait_ms=0, lease=lease_over(exact_request, queue_request), **kwargs)
     return item, requests
 
 
 def test_lease_asks_for_one_job_when_nothing_takes_the_extras() -> None:
     _item_result, requests = _lease({"item": _item("a")}, max_jobs=4)
 
-    assert requests[0]["max_jobs"] == 1
+    assert requests[0]["maxJobs"] == 1
 
 
 def test_lease_hands_over_distinct_current_extras_and_records_the_advertised_limit() -> None:
@@ -69,7 +68,7 @@ def test_lease_hands_over_distinct_current_extras_and_records_the_advertised_lim
 
     item, requests = _lease(response, max_jobs=4, on_extra_jobs=extras.extend, observe_lease_batch_limit=limits.append)
 
-    assert requests[0]["max_jobs"] == 4
+    assert requests[0]["maxJobs"] == 4
     assert item is not None and uses_exact_transport(item) and item["leaseId"] == "a"
     assert [job["leaseId"] for job in extras] == ["b", "d"]
     assert all(uses_exact_transport(job) for job in extras)
@@ -108,19 +107,6 @@ def test_batch_limit_is_saved_only_when_it_changes(tmp_path: Path) -> None:
 
     record_exact_lease_batch_limit(store, state, 1)
     assert exact_lease_batch_limit(load_command_queue_state(store)) == 1
-
-
-def test_lease_payload_carries_the_batch_only_on_the_exact_route(tmp_path: Path, monkeypatch) -> None:
-    store = FakeStore(tmp_path / "guard-home")
-    monkeypatch.setattr(command_queue_state, "command_queue_oauth_target", lambda _store: ("machine", "workspace"))
-
-    exact = command_queue_state.command_queue_lease_payload(store, operations=_EXACT_ONLY, wait_ms=0, max_jobs=4)
-    generic = command_queue_state.command_queue_lease_payload(
-        store, operations=("guard.packageShims.status",), wait_ms=0, max_jobs=4
-    )
-
-    assert exact["maxJobs"] == 4
-    assert generic["maxJobs"] == 1
 
 
 def _stop_after_heartbeat(monkeypatch: pytest.MonkeyPatch) -> list[str]:

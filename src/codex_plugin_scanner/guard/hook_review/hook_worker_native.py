@@ -10,6 +10,7 @@ from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
+from ..native_hook_direct_route import native_or_daemon_edge
 from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
 from ..native_resident_client import (
@@ -299,28 +300,31 @@ class HookWorkerNativeMixin:
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
         for retried in (False, True):
-            edge = self._review_raw_hook_native(
+            edge, direct_answer = native_or_daemon_edge(
+                self,
                 payload=payload,
                 harness=harness,
-                event=event_name,
-                guard_home=guard_home,
+                event_name=event_name,
+                default_harness=default_harness,
                 home_dir=home_dir,
-                cwd=workspace,
-                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-                observe_mode=recording_only,
+                guard_home=guard_home,
+                workspace=workspace,
                 deadline=deadline,
                 policy_snapshot=policy_snapshot,
-                **({"request_id": probe[1]} if probe is not None else {}),
-                local_cli_rules=True,
-                observe_local_cli=True,
-                record_receipt=(
-                    not defer_accepted_recording
-                    and callable(getattr(self.activity_writer, "submit_native_decision_receipt", None))
-                ),
-                # The edge rewrites a call it routes to the contained sink in
-                # the same answer.
-                containment_sink=True,
+                recording_only=recording_only,
+                defer_accepted_recording=defer_accepted_recording,
+                probe=probe,
+                claim_saved_approval=claim_saved_approval,
             )
+            if direct_answer:
+                if edge is None:
+                    break
+                receipt = self._record_native_decision_receipt(edge.get("receipt"))
+                if receipt is not None and defer_accepted_recording and deferred_receipts is not None:
+                    deferred_receipts.append(receipt)
+                if receipt is not None and capture_receipts is not None and edge.get("harness") == "codex":
+                    capture_receipts.append(receipt)
+                return _edge_harness_response(edge), True
             refreshed = (
                 None
                 if edge is not None or retried
