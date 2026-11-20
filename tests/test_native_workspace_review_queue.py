@@ -184,12 +184,13 @@ def test_nonnative_operation_with_native_fields_keeps_generic_consumption_mark(
         ),
     )
     monkeypatch.setattr(command_queue, "command_identity_digest", lambda *_args, **_kwargs: "identity-digest-1")
-    monkeypatch.setattr(command_queue, "consume_local_command_approval", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(
-        command_queue,
-        "mark_command_job_consumed",
-        lambda _store, authorized, **_kwargs: marked.append(authorized.operation),
-    )
+
+    def consume(_store: object, authorized: SimpleNamespace, **kwargs: object) -> bool:
+        if kwargs.get("record_replay"):
+            marked.append(authorized.operation)
+        return True
+
+    monkeypatch.setattr(command_queue, "consume_local_command_approval", consume)
     monkeypatch.setattr(command_queue, "audit_command_decision", lambda *_args, **_kwargs: None)
 
     command_queue.poll_command_queue_once(
@@ -392,8 +393,7 @@ def test_native_lost_ack_redelivery_skips_generic_mark_and_external_resume(
     )
     monkeypatch.setattr(command_queue, "_execute_job", lambda *_args: execution)
     monkeypatch.setattr(
-        command_queue,
-        "mark_command_job_consumed",
+        "codex_plugin_scanner.guard.runtime.command_capability.mark_command_job_consumed",
         lambda *_args, **_kwargs: pytest.fail("native jobs must rely on resident claims, not generic replay marks"),
     )
 

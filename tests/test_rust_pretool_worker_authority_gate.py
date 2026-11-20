@@ -85,9 +85,8 @@ def test_missing_native_authority_link_fails_closed(
             "does not return the native edge harness response",
         ),
         (
-            "        response = _edge_harness_response(edge)\n        if structured_view is not None:",
-            "        response = harness_json_from_native_post_tool(native_harness, native_result)\n"
-            "        if structured_view is not None:",
+            "            rendered = _edge_harness_response(edge)",
+            "            rendered = harness_json_from_native_post_tool(native_harness, native_result)",
             "renders PostToolUse in Python",
         ),
     ],

@@ -262,6 +262,8 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-supervisor-install-v1",
     "native-guard-config-load-v1",
     "native-guard-config-update-v1",
+    crate::command_state::FEATURE,
+    crate::auto_update_state::FEATURE,
     "native-guard-config-resolve-v1",
     "native-installation-continuity-v1",
     "native-boot-observation-v1",

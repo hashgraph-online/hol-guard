@@ -129,7 +129,7 @@ MAIN_README = "# logbook\n\nLog helpers.\n"
 PUNCTUATION_CASE = "assert.equal(slug('Hello, World!'), 'hello-world')"
 JOIN_CASE = "assert.equal(slug('Hello World'), 'hello-world')"
 
-SITE_BRANCH_FILE = "app/registry/plugins/[slug]/page.jsx"
+SITE_BRANCH_FILE = "app/items/plugins/[slug]/page.jsx"
 SITE_ROUTE_FILE = "app/blog/[slug]/post-content.jsx"
 # The host and the runner's summary exist only in the sibling checkout, so a
 # document that records them was written from a read of a bracketed route

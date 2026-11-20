@@ -26,11 +26,9 @@ from contextlib import AbstractContextManager, contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, scrypt, sha256
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, TypeVar, cast
 from urllib.parse import urlparse
 from uuid import uuid4
-
-from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
@@ -110,6 +108,11 @@ from .store_threat_intel import (
     threat_intel_matches_schema_statement,
 )
 from .types import CapabilitySet, TransportKind
+
+if TYPE_CHECKING:
+    # Loaded on first use: the Fernet backend is a large native extension the worker host
+    # does not need to start.
+    from cryptography.fernet import Fernet
 
 
 class _RecoveredOAuthLocalCredentialInputs(TypedDict):
@@ -813,6 +816,8 @@ class EncryptedFileSecretStore:
     def _ensure_ready(self) -> None:
         if self._fernet is not None:
             return
+        from cryptography.fernet import Fernet
+
         self.base_dir.mkdir(parents=True, exist_ok=True)
         # Owner-only directory access is required for encrypted secret material.
         # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
@@ -936,6 +941,8 @@ class EncryptedFileSecretStore:
         fernet = self._fernet
         if fernet is None:
             return None
+        from cryptography.fernet import InvalidToken
+
         try:
             plaintext = fernet.decrypt(ciphertext_value.encode("ascii"))
         except (InvalidToken, ValueError, TypeError):

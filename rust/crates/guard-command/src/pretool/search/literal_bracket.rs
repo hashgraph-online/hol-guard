@@ -137,7 +137,7 @@ pub(in crate::pretool) fn inert_bracket_class(value: &str, context: ReadContext<
 
 /// Whether the shell hands `value` over exactly as typed because every
 /// bracket in it sat inside quotes. No shell globs a quoted word, so
-/// `"app/(marketing)/blog/[slug]/page.tsx"` names that route file even though
+/// `"app/(group)/blog/[slug]/page.tsx"` names that route file even though
 /// the expansion matchers refuse the parentheses, which zsh would read as a
 /// pattern group in an unquoted word. A word starting with `~` is left to
 /// the expansion proof: quoted, the tilde is not expanded, so the word names

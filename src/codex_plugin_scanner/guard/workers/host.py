@@ -414,9 +414,13 @@ def _wait_for_daemon_to_close() -> None:
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
+    from ..cli.desktop_daemon_workers import wait_for_early_runtime_status
     from ..runtime_health.background_diagnostics import install_sink, release_sink
     from ..runtime_health.diagnostics import BackgroundLogWriter
 
+    # Opening the store makes native calls that need the runtime status, which
+    # the launch started resolving beside the imports.
+    wait_for_early_runtime_status()
     store = GuardStore(guard_home)
     # Nothing else in this process opens daemon.log, so without these sinks a
     # failed migration or publication left no line for support to read.

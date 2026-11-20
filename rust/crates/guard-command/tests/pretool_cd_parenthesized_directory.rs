@@ -1,7 +1,7 @@
 #![cfg(unix)]
 //! A directory whose own name holds parentheses is an ordinary directory.
 //!
-//! Next.js route groups (`app/(marketing)`), Xcode build products and plenty
+//! Next.js route groups (`app/(group)`), Xcode build products and plenty
 //! of hand-made folders are spelled that way. The shell only reads `(` as
 //! syntax when it is unquoted, and an unquoted one opens a subshell the
 //! parser refuses long before a `cd` operand is read. So a parenthesis in a
@@ -21,11 +21,11 @@ fn home() -> PathBuf {
             crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
-    for directory in ["project/app/(marketing)/challenge", "project/app/plain"] {
+    for directory in ["project/app/(group)/overview", "project/app/plain"] {
         std::fs::create_dir_all(home.join(directory)).unwrap();
     }
     std::fs::write(
-        home.join("project/app/(marketing)/challenge/page.tsx"),
+        home.join("project/app/(group)/overview/page.tsx"),
         "export default function Page() {}\n",
     )
     .unwrap();
@@ -77,14 +77,14 @@ fn a_read_below_a_parenthesized_directory_keeps_its_proof() {
     let home_text = home.to_str().unwrap();
     let project = home.join("project");
     let cwd = project.to_str().unwrap().to_owned();
-    let group = project.join("app/(marketing)/challenge");
+    let group = project.join("app/(group)/overview");
     let group_text = group.to_str().unwrap();
     for command in [
         format!("cd \"{group_text}\" && pwd"),
         format!("cd \"{group_text}\" && ls"),
         format!("cd \"{group_text}\" && head -40 page.tsx"),
-        "cd \"app/(marketing)/challenge\" && pwd".to_owned(),
-        "cd app/\\(marketing\\)/challenge && pwd".to_owned(),
+        "cd \"app/(group)/overview\" && pwd".to_owned(),
+        "cd app/\\(group\\)/overview && pwd".to_owned(),
     ] {
         assert_eq!(shell(home_text, &cwd, &command), allowed(), "{command}");
     }
@@ -119,10 +119,7 @@ fn an_unquoted_parenthesis_is_still_unproven() {
     let home_text = home.to_str().unwrap();
     let project = home.join("project");
     let cwd = project.to_str().unwrap().to_owned();
-    for command in [
-        "cd app/(marketing)/challenge && pwd",
-        "cd $(echo app) && pwd",
-    ] {
+    for command in ["cd app/(group)/overview && pwd", "cd $(echo app) && pwd"] {
         let actions = shell(home_text, &cwd, command);
         assert!(
             actions.iter().all(|action| action != "allow"),

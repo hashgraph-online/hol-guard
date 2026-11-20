@@ -1205,7 +1205,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls app/registry/[slug]"
+        "command": "ls app/items/[slug]"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -1222,7 +1222,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -n -A8 Post \"${PARENT}/app/(marketing)/blog/[slug]/page.tsx\" | head -14"
+        "command": "grep -n -A8 Post \"${PARENT}/app/(group)/blog/[slug]/page.tsx\" | head -14"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -1239,7 +1239,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls \"app/registry/[slug]\""
+        "command": "ls \"app/items/[slug]\""
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -1256,7 +1256,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls ${PARENT}/app/registry/\\[slug\\]/ 2>/dev/null"
+        "command": "ls ${PARENT}/app/items/\\[slug\\]/ 2>/dev/null"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -1273,7 +1273,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls -la '${PARENT}/app/registry/[slug]'"
+        "command": "ls -la '${PARENT}/app/items/[slug]'"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -1607,7 +1607,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -rn useState app/registry/\\[slug\\]/page.tsx"
+        "command": "grep -rn useState app/items/\\[slug\\]/page.tsx"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -1624,7 +1624,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -rln export app/registry/\\[slug\\]"
+        "command": "grep -rln export app/items/\\[slug\\]"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -7226,7 +7226,7 @@
       ],
       "tool": "read",
       "tool_input": {
-        "path": "${WORKTREE}/app/registry/[slug]/page.tsx"
+        "path": "${WORKTREE}/app/items/[slug]/page.tsx"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -7241,7 +7241,7 @@
       ],
       "tool": "write",
       "tool_input": {
-        "path": "${WORKTREE}/app/registry/[slug]/page.tsx",
+        "path": "${WORKTREE}/app/items/[slug]/page.tsx",
         "content": "export default function Page() { return null; }\n"
       },
       "cwd": "worktree",
@@ -28175,6 +28175,45 @@
       "expect": "allow"
     },
     {
+      "id": "omp-glob-dynamic-route-segment",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${PARENT}/app/items/[slug]/page.tsx"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-glob-route-group-directory",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${PARENT}/app/(group)/blog/*/page.tsx"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-glob-class-spelling-a-parent",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "glob",
+      "tool_input": {
+        "path": "${PARENT}/app/[.][.]/[.][.]/.ssh/*"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-omp-grep-semicolon-env",
       "fix_area": "negative",
       "harnesses": [
@@ -32146,7 +32185,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cd \"${HOME}/other-project/app/(marketing)/challenge\" && pwd"
+        "command": "cd \"${HOME}/other-project/app/(group)/overview\" && pwd"
       },
       "cwd": "home_sibling",
       "expect": "allow"
@@ -32162,7 +32201,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cd \"app/(marketing)/challenge\" && head -40 page.tsx"
+        "command": "cd \"app/(group)/overview\" && head -40 page.tsx"
       },
       "cwd": "home_sibling",
       "expect": "allow"
@@ -32178,7 +32217,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cd app/(marketing)/challenge && pwd"
+        "command": "cd app/(group)/overview && pwd"
       },
       "cwd": "home_sibling",
       "expect": "not_allow"
@@ -51715,7 +51754,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "rm -rf app/registry"
+        "command": "rm -rf app/items"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -51749,7 +51788,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "rm -r app/registry ./src"
+        "command": "rm -r app/items ./src"
       },
       "cwd": "parent",
       "expect": "allow"

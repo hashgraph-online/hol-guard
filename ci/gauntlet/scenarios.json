@@ -569,6 +569,15 @@
       "prompt": "List the TypeScript sources under {{workspace}}/src with the glob tool (pattern src/**/*.ts) so I can see what is there. One call is enough; then tell me what you found."
     },
     {
+      "id": "omp-native-glob-dynamic-route-segment",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "glob"
+      ],
+      "prompt": "List the page files under {{workspace}}/app/items with the glob tool, setting its path selector to app/items/[slug]/page.tsx (including the bracketed route directory). One call is enough; then tell me what you found."
+    },
+    {
       "id": "omp-native-grep-ordinary-sources",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -3005,8 +3014,8 @@
       "expectation": "allow",
       "oracle": "commands",
       "commands": [
-        "cd \"app/(marketing)/challenge\" && cat page.tsx",
-        "cd \"app/(marketing)\" && ls challenge"
+        "cd \"app/(group)/overview\" && cat page.tsx",
+        "cd \"app/(group)\" && ls pricing"
       ],
       "prompt": "Use bash for each exact command below once, in order. Wait for each result. Stop on a real failure; do not preemptively refuse, substitute tools, or add verification commands."
     },

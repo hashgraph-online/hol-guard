@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.docusense",
+  "version": "1.0.0",
+  "name": "DocuSense",
+  "description": "Local, versioned document store: agents read PDFs, Word and Markdown files by section and claim with hash-verified citations, version diffs and contradiction checks. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.hksharma2004",
+    "displayName": "hksharma2004",
+    "url": "https://github.com/hksharma2004"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniFolder",
+    "background": "#111827"
+  },
+  "homepage": "https://docusense.xyz",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "docusense-mcp@0.1.2"
+  },
+  "riskClasses": [
+    "local-data-access",
+    "local-file-write",
+    "external-network-read"
+  ],
+  "tools": [
+    { "name": "list_documents", "state": "inherit" },
+    { "name": "get_section_map", "state": "inherit" },
+    { "name": "read_section", "state": "inherit" },
+    { "name": "search", "state": "inherit" },
+    { "name": "search_claims", "state": "inherit" },
+    { "name": "resolve_reference", "state": "inherit" },
+    { "name": "lookup_definition", "state": "inherit" },
+    { "name": "get_evidence", "state": "inherit" },
+    { "name": "verify_span", "state": "inherit" },
+    { "name": "assemble_context", "state": "inherit" },
+    { "name": "list_versions", "state": "inherit" },
+    { "name": "diff_versions", "state": "inherit" },
+    { "name": "blame", "state": "inherit" },
+    { "name": "find_affected_documents", "state": "inherit" },
+    { "name": "find_contradictions", "state": "inherit" },
+    { "name": "ingest_status", "state": "inherit" },
+    { "name": "add_document", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/hksharma2004/docu-sense/tree/v0.1.2",
+    "https://github.com/hksharma2004/docu-sense/blob/v0.1.2/src/docusense/mcp_server.py",
+    "https://github.com/hksharma2004/docu-sense/blob/v0.1.2/src/docusense/jobs.py",
+    "https://pypi.org/project/docusense-mcp/0.1.2/"
+  ],
+  "saferAlternatives": [
+    "Keep add_document on review: it reads local files or whole folders into the store under DOCUSENSE_HOME (default ~/.docusense).",
+    "Set DOCUSENSE_ADD_ROOTS to a dedicated documents folder that contains no symlinks (default is the home directory). The root check applies to the requested path only, so folder ingestion can read files outside the root through symlinks inside it.",
+    "Leave LLM provider keys (GROQ_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY) unset so extracted passages stay on the local machine; when set, they are sent to that provider.",
+    "First ingestion downloads a local search model (~130 MB) once; pre-run it on a connected host if the machine will later be offline.",
+    "Use the CLI (docusense add) to ingest documents yourself and keep the agent to the read-only tools."
+  ]
+}

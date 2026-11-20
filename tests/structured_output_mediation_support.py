@@ -127,30 +127,23 @@ class _NativeRouteFixture(HookWorkerNativeMixin):
 
     config: object
     mediation: dict[str, object] | None = None
-    # What a second read of the config returns once the edge has answered.
-    config_after_edge: object | None = None
-    reload_error: Exception | None = None
     captured: list[dict[str, object]] = field(default_factory=list)
     reads: int = 0
     raw_result: object | None = None
     raw_receipt: object | None = None
     recorded_receipt: object | None = None
-    answered: bool = False
     # No resident writer: the receipt stays with this fixture's own recorder.
     activity_writer: object | None = None
 
     def _load_config(self, _guard_home: Path, _workspace: Path | None) -> object:
         self.reads += 1
-        if self.answered and self.reload_error is not None:
-            raise self.reload_error
-        return self.config_after_edge if self.answered and self.config_after_edge is not None else self.config
+        return self.config
 
     def _edge_result(self) -> dict[str, object]:
         return _native_result()
 
     def _review_raw_hook_native(self, **kwargs: object) -> dict[str, object]:
         self.captured.append(kwargs)
-        self.answered = True
         result = self._edge_result()
         receipt = _receipt(decision=result["decision"])
         self.raw_result = result

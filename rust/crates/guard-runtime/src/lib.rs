@@ -70,6 +70,7 @@ mod archive_inspect_containment;
 mod archive_verdict_seam;
 mod artifact_content_hash_op;
 mod artifact_risk_op;
+mod auto_update_state;
 mod bash_post_delivery;
 #[cfg(unix)]
 mod binding_capture_capture;
@@ -271,6 +272,7 @@ mod command_policy_repair;
 #[path = "adapters/command_probe.rs"]
 mod command_probe;
 mod command_risk_groups;
+mod command_state;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -837,6 +839,7 @@ mod pyyaml_dump;
 mod runtime_output;
 mod runtime_output_directory;
 mod swarm_op;
+mod sync_state_ledger;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 mod cloud_bundle_command;
