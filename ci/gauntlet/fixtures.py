@@ -642,6 +642,8 @@ def add_route_group_directory(workspace: Path, scenario_id: str | None) -> None:
     target = workspace / ROUTE_GROUP_FILE
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(ROUTE_GROUP_TEXT, encoding="utf-8", newline="\n")
+    # The second listing requires the sibling route to exist.
+    (workspace / "app/(group)/challenge").mkdir(parents=True, exist_ok=True)
 
 
 def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: str | None) -> None:
