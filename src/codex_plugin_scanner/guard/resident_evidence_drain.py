@@ -39,6 +39,7 @@ class _DrainHost(Protocol):
     @property
     def activity_writer(self) -> object | None: ...
 
+
 def _decode_page(
     output: bytes | None,
     counters: object | None = None,
