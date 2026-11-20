@@ -26,10 +26,24 @@ def unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("unavailable")
-def test_token_exchange_fails_instead_of_saving_an_unbound_credential() -> None:
+def test_a_new_connection_fails_instead_of_saving_an_unbound_credential() -> None:
     payload = {"access_token": _token({"grant": {"grantId": "grant-1"}}), "token_type": "Bearer", "expires_in": 60}
     with pytest.raises(RuntimeError, match="could not read the access token"):
-        connect_flow._parse_guard_token_exchange_payload(payload, require_entitlement=False)
+        connect_flow._parse_guard_token_exchange_payload(payload)
+
+
+@pytest.mark.usefixtures("unavailable")
+def test_a_refresh_still_returns_the_rotated_refresh_token() -> None:
+    payload = {
+        "access_token": _token({"grant": {"grantId": "grant-1"}}),
+        "token_type": "Bearer",
+        "expires_in": 60,
+        "refresh_token": "rotated-refresh",
+    }
+    result = connect_flow._parse_guard_token_exchange_payload(payload, require_entitlement=False)
+    assert result.refresh_token == "rotated-refresh"
+    assert (result.grant_id, result.machine_id, result.workspace_id, result.device_id) == (None, None, None, None)
+    assert result.access_token_expires_at is None
 
 
 @pytest.mark.usefixtures("unavailable")

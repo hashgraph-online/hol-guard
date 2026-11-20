@@ -526,11 +526,16 @@ def _parse_guard_token_exchange_payload(
         identity = oauth_token_identity(access_token)
         access_token_expires_at = oauth_access_token_expires_at(access_token, expires_in=expires_in, now=now)
     except NativeRunnerAuthorityError as error:
-        # Saving the credential without its grant, machine and workspace would
-        # leave a row no later sync can tell apart from an unbound one.
-        raise RuntimeError(
-            "Guard OAuth token exchange failed: Guard's local runtime could not read the access token."
-        ) from error
+        if require_entitlement:
+            # Saving a new connection without its grant, machine and workspace
+            # would leave a row no later sync can tell apart from an unbound one.
+            raise RuntimeError(
+                "Guard OAuth token exchange failed: Guard's local runtime could not read the access token."
+            ) from error
+        # A refresh keeps the binding already saved with the credential; the
+        # rotated refresh token must still reach the store.
+        identity: dict[str, str | None] = dict.fromkeys(("grant_id", "machine_id", "workspace_id", "device_id"))
+        access_token_expires_at = None
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
         access_token_expires_at=access_token_expires_at,
