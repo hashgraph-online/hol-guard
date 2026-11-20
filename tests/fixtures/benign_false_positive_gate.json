@@ -9068,6 +9068,57 @@
       "expect": "allow"
     },
     {
+      "id": "gh-api-explicit-get-with-typed-field",
+      "fix_area": "gh-api",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/example/app/commits/0123456789abcdef0123456789abcdef01234567/check-runs --method GET -F per_page=100 --jq '[.check_runs[] | select(.name|test(\"build|required\";\"i\")) | {name,status,conclusion}]'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gh-api-explicit-get-short-flag-with-typed-field",
+      "fix_area": "gh-api",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api -X GET repos/example/app/actions/runs -f event=pull_request -F per_page=50 --jq '.workflow_runs[] | {id, name, status, conclusion}'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-gh-api-typed-field-without-method-posts",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/example/app/commits/0123456789abcdef0123456789abcdef01234567/check-runs -F per_page=100 --jq '[.check_runs[] | {name,status}]'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gh-api-contents-base64-decode-head",
       "fix_area": "gh-api",
       "harnesses": [
