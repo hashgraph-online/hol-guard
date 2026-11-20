@@ -233,6 +233,10 @@ fn a_script_too_long_to_read_is_screened_for_the_second_name() {
         "git stage .",
         "git stage -u",
         "git stage --all",
+        // The dot can arrive as a pathspec rather than an option, and the
+        // text screen reads words, so that spelling needs its own entry.
+        "git add -- .",
+        "git stage -- .",
     ] {
         let command = format!("python3 -c 'import os\n{padding}os.system(\"{tail}\")'");
         assert!(
