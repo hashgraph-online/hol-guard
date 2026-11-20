@@ -173,6 +173,7 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
         || lockfiles_pin(
             &workspace,
             dependency_name,
+            declared_version,
             &installed_version,
             &execution.lockfiles,
         )
@@ -275,10 +276,12 @@ fn declared_release_installed(
     semver_spec_matches(declared_version, installed_version).then(|| installed_version.to_owned())
 }
 
-/// Every lockfile must name one version, the installed one.
+/// Every lockfile that still describes the declared dependency must name one
+/// version, the installed one.
 fn lockfiles_pin(
     workspace: &Path,
     dependency_name: &str,
+    declared_version: &str,
     installed_version: &str,
     lockfiles: &[PackageExecutionFileEvidence],
 ) -> bool {
@@ -295,6 +298,20 @@ fn lockfiles_pin(
         else {
             return false;
         };
+        // A lockfile whose every entry for this dependency falls outside the
+        // range the manifest declares was written against an older manifest.
+        // Projects keep an abandoned manager's lockfile in the tree long after
+        // they stop running it, and a pin the manifest no longer admits cannot
+        // describe the installed tree: the installed release has to satisfy
+        // that range to get this far. Such a file neither pins the runner nor
+        // contradicts the lockfiles that do, so it is passed over rather than
+        // read as a conflict.
+        if versions
+            .iter()
+            .all(|version| !semver_spec_matches(declared_version, version))
+        {
+            continue;
+        }
         locked.extend(versions);
     }
     locked.len() == 1 && locked.contains(installed_version)
