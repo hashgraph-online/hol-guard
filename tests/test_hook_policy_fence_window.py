@@ -86,15 +86,6 @@ def test_policy_update_reason_is_stable() -> None:
     assert fence.policy_update_pending_reason(0.1).endswith("Retry after 1 seconds.")
 
 
-def test_wait_deadline_and_attempt_margins_remain_bounded(tmp_path: Path, monkeypatch) -> None:
-    assert fence.fence_wait_until(10.0, None) == 10.0
-    assert fence.fence_wait_until(10.0, 20.0) == 18.0
-    monkeypatch.setattr(fence, "record_policy_fence_window", lambda *_args, **_kwargs: {})
-    wait = fence.PolicySourceFenceWait(None, store=Store(tmp_path))
-    assert wait.pause() is False
-    assert wait.attempt_deadline is None
-
-
 def test_attempt_lease_reaches_the_native_bridge(tmp_path: Path, monkeypatch) -> None:
     clock = Clock()
     calls: list[dict[str, object]] = []
@@ -109,6 +100,15 @@ def test_attempt_lease_reaches_the_native_bridge(tmp_path: Path, monkeypatch) ->
     assert wait.attempt_deadline is not None
     assert [call["action"] for call in calls] == ["enter", "attempt"]
     assert isinstance(calls[1]["attempt_until_micros"], int)
+
+
+def test_wait_deadline_and_attempt_margins_remain_bounded(tmp_path: Path, monkeypatch) -> None:
+    assert fence.fence_wait_until(10.0, None) == 10.0
+    assert fence.fence_wait_until(10.0, 20.0) == 18.0
+    monkeypatch.setattr(fence, "record_policy_fence_window", lambda *_args, **_kwargs: {})
+    wait = fence.PolicySourceFenceWait(None, store=Store(tmp_path))
+    assert wait.pause() is False
+    assert wait.attempt_deadline is None
 
 
 def test_late_poll_sleep_exhausts_without_an_extra_attempt(tmp_path: Path, monkeypatch) -> None:

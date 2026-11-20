@@ -129,8 +129,8 @@ class PolicySourceFenceWait:
             event = record_policy_fence_window(
                 self._guard_home,
                 action="attempt",
-                request_id=self._request_id,
                 attempt_until_micros=attempt_until_micros,
+                request_id=self._request_id,
                 deadline=deadline,
             )
             if event:
