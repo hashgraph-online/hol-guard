@@ -468,7 +468,10 @@ pub(crate) fn drain(
                         || unwritten.iter().any(|record| record == &item.record)
                 });
             }
-            if !paged.is_empty() {
+            if paged
+                .iter()
+                .any(|item| record::needs_work(item, &request.guard_home))
+            {
                 return Err("direct_hook_evidence_unhandled".to_owned());
             }
             fatal
