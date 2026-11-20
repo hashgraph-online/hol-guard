@@ -44,6 +44,10 @@ def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | Non
     streak = streak_reader() if callable(streak_reader) else 0
     worker = getattr(daemon_server, "hook_worker", None)
     guard_home = getattr(worker, "guard_home", None)
+    if isinstance(guard_home, Path):
+        reason = native_policy_not_ready_reason(last_error, streak, guard_home, deadline=deadline)
+        if reason is not None:
+            return reason
     resident_down = (
         isinstance(last_error, str)
         and is_resident_class_error(last_error.strip())
@@ -53,10 +57,6 @@ def _native_policy_not_ready_reason(daemon_server: Any, *, deadline: float | Non
     )
     if resident_down:
         return _NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
-    if isinstance(guard_home, Path):
-        reason = native_policy_not_ready_reason(last_error, streak, guard_home, deadline=deadline)
-        if reason is not None:
-            return reason
     if last_error == "native_business_source_mutation_in_progress":
         return policy_update_pending_reason()
     # A resident that is already down cannot answer the Rust posture query.

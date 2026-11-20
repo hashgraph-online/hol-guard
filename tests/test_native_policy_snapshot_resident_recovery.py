@@ -442,7 +442,7 @@ def _daemon_with(publisher: object) -> SimpleNamespace:
     )
 
 
-def test_not_ready_reason_sends_the_user_to_repair_once_failures_repeat(monkeypatch) -> None:
+def test_not_ready_reason_uses_the_resident_posture_when_failures_repeat(monkeypatch) -> None:
     monkeypatch.setattr(
         admission,
         "native_policy_not_ready_reason",
@@ -450,9 +450,7 @@ def test_not_ready_reason_sends_the_user_to_repair_once_failures_repeat(monkeypa
     )
     reason = admission._native_policy_not_ready_reason(_daemon_with(_StuckPublisher(streak=RESIDENT_FAIL_FAST_STREAK)))
 
-    assert reason == admission._NATIVE_POLICY_RESIDENT_DOWN_FALLBACK
-    assert "hol-guard repair" in reason
-    assert "Retry once more" in reason
+    assert reason == "delegated-reason-should-not-be-used"
 
 
 def test_not_ready_reason_keeps_plain_retry_advice_for_a_first_failure(monkeypatch) -> None:
