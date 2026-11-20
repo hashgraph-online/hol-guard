@@ -308,7 +308,13 @@ def queue_native_pre_tool_review(
 ) -> dict[str, object] | None:
     if not policy_binding_verified:
         try:
-            native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+            native_review_policy_binding(
+                harness=harness,
+                native_result=native_result,
+                verified_receipt=native_receipt,
+                guard_home=guard_home,
+                deadline=deadline,
+            )
         except ValueError:
             return None
     queue = getattr(store, "queue_native_review", None)
