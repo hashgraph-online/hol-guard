@@ -30,6 +30,7 @@ from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
     LOCAL_BIN,
     IGNORE_NEGATION_CONSUMED_IGLOB_CASE,
+    IGNORE_NEGATION_BROAD_GLOB_CASE,
     IGNORE_NEGATION_PROTECTED_CASE,
     add_home_tools,
     add_ignore_negation_template,
@@ -359,7 +360,7 @@ def create_fixture(
         # Blocked-command Gauntlet cases use this minimal checkout, not the
         # realistic one. Seed their synthetic re-included hidden file here too
         # so a non-Allow verdict cannot pass without exercising the file.
-        if scenario_id in {IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE}:
+        if scenario_id in {IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE, IGNORE_NEGATION_BROAD_GLOB_CASE}:
             add_ignore_negation_template(workspace, scenario_id)
         add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
         add_git_allow_shape(workspace, environment, scenario_id)
