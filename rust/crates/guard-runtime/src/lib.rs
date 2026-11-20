@@ -1031,6 +1031,7 @@ mod oauth_package_firewall_entitlement;
 mod oauth_refresh;
 mod oauth_refresh_circuit;
 mod oauth_secret_authority;
+mod oauth_token_claims;
 mod oci_bundle_evidence;
 mod oci_bundle_mounts;
 mod oci_bundle_op;

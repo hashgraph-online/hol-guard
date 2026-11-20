@@ -27,6 +27,7 @@ use serde_json::{Map, Value};
 
 use crate::oauth_refresh_circuit as circuit;
 use crate::oauth_secret_authority;
+use crate::oauth_token_claims as token_claims;
 
 /// `runner.py:_OAUTH_INVALID_GRANT_MAX_ATTEMPTS` (:4112) — one edge-4xx retry.
 const INVALID_GRANT_MAX_ATTEMPTS: u32 = 2;
@@ -103,71 +104,6 @@ fn now_timestamp() -> Timestamp {
     Timestamp::from_unix_micros(now_unix() * 1_000_000)
 }
 
-/// `oauth_token_claims.py:oauth_binding_metadata` (:38) — recover the
-/// grant/machine/workspace/device binding from the fresh access token's claims.
-/// Returns `None` when the token's issuer disagrees with the stored issuer or
-/// any required claim is absent.
-fn binding_from_access_token(access_token: &str, issuer: &str) -> Option<Map<String, Value>> {
-    let claims = decode_jwt_claims(access_token)?;
-    let token_issuer = claims.get("iss").and_then(Value::as_str);
-    if let Some(t) = token_issuer {
-        if t.trim_end_matches('/') != issuer.trim_end_matches('/') {
-            return None;
-        }
-    }
-    let claim_str = |keys: &[&str]| -> Option<String> {
-        keys.iter()
-            .find_map(|k| claims.get(*k).and_then(Value::as_str))
-            .map(str::to_owned)
-    };
-    let grant_id = claim_str(&["grant", "grantId"]);
-    let machine_id = claim_str(&["machine", "machineId"]);
-    let workspace_id = claim_str(&["workspace", "workspaceId"]);
-    let device_id = claims
-        .get("device")
-        .and_then(|d| d.get("id").or_else(|| claims.get("deviceId")))
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| claim_str(&["deviceId"]));
-    if grant_id.is_none() || machine_id.is_none() || workspace_id.is_none() {
-        return None;
-    }
-    let mut binding = Map::new();
-    binding.insert("grant_id".into(), Value::String(grant_id.unwrap()));
-    binding.insert("machine_id".into(), Value::String(machine_id.unwrap()));
-    binding.insert("workspace_id".into(), Value::String(workspace_id.unwrap()));
-    if let Some(d) = device_id {
-        binding.insert("device_id".into(), Value::String(d));
-    }
-    Some(binding)
-}
-
-/// `runner.py:_oauth_refresh_binding` — prefer refreshed claims; otherwise
-/// retain stored credential fields and fill gaps from recovery.
-fn refresh_binding(
-    credentials: &Value,
-    recovered: &Map<String, Value>,
-    refreshed: bool,
-) -> Map<String, Value> {
-    let mut binding = Map::new();
-    for key in ["device_id", "grant_id", "machine_id", "workspace_id"] {
-        let value = if refreshed {
-            recovered.get(key).cloned()
-        } else {
-            credentials
-                .get(key)
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .map(Value::String)
-                .or_else(|| recovered.get(key).cloned())
-        };
-        if let Some(v) = value {
-            binding.insert(key.to_owned(), v);
-        }
-    }
-    binding
-}
-
 /// Decode the JWT payload segment into a claims map (no signature check — the
 /// token was just returned over the authenticated TLS channel).
 fn decode_jwt_claims(token: &str) -> Option<Map<String, Value>> {
@@ -221,17 +157,21 @@ pub(crate) fn persist_rotated_oauth_refresh_token(
             _ => return Err(EvalError::Validation(RECONNECT_AFTER_REVOKED.to_owned())),
         };
 
-    // `oauth_refresh_binding` — prefer refreshed claims, fall back to stored.
-    let recovered = access_token
-        .and_then(|t| binding_from_access_token(t, issuer))
-        .unwrap_or_else(|| {
-            credentials
-                .get("access_token")
-                .and_then(Value::as_str)
-                .and_then(|t| binding_from_access_token(t, issuer))
-                .unwrap_or_default()
-        });
-    let binding = refresh_binding(credentials, &recovered, access_token.is_some());
+    // Refreshed claims win; otherwise the saved fields stay and the saved
+    // token's claims only fill gaps when they agree with them.
+    let saved = credentials.as_object().cloned().unwrap_or_default();
+    let recovered = match access_token {
+        Some(token) => decode_jwt_claims(token)
+            .map(|claims| token_claims::binding(&claims, Some(issuer)))
+            .unwrap_or_default(),
+        None => saved
+            .get("access_token")
+            .and_then(Value::as_str)
+            .and_then(decode_jwt_claims)
+            .map(|claims| token_claims::binding_from_credentials(&claims, Some(issuer), &saved))
+            .unwrap_or_default(),
+    };
+    let binding = token_claims::refresh_binding(&saved, &recovered, access_token.is_some());
 
     let guard_home = store.guard_home().to_path_buf();
     let _credential_lock =

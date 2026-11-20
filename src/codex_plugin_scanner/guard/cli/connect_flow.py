@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import NoReturn, TypedDict
 
 from typing_extensions import Unpack
@@ -23,8 +23,7 @@ from ..dpop_key_binding import signed_dpop_proof
 from ..mdm.network import managed_urlopen
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
-from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
-from ..oauth_token_claims import oauth_device_id
+from ..oauth_token_claims import oauth_access_token_expires_at, oauth_token_identity
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -131,8 +130,8 @@ class GuardOAuthTokenExchangeResult:
         object.__setattr__(
             self,
             "access_token_expires_at",
-            _guard_access_token_expires_at(
-                access_token=self.access_token,
+            oauth_access_token_expires_at(
+                self.access_token,
                 expires_in=self.expires_in,
                 now=datetime.now(timezone.utc),
             ),
@@ -183,21 +182,6 @@ def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
             return None
         current = current.get(segment)
     return current if isinstance(current, str) and current else None
-
-
-def _guard_access_token_expires_at(
-    *,
-    access_token: str,
-    expires_in: int,
-    now: datetime,
-) -> str | None:
-    claims = _decode_access_token_claims(access_token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and float(exp) > 0:
-        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-    if expires_in <= 0:
-        return None
-    return (now + timedelta(seconds=expires_in)).isoformat()
 
 
 def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
@@ -535,12 +519,12 @@ def _parse_guard_token_exchange_payload(
     if token_type.lower() != "bearer":
         raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
     now = datetime.now(timezone.utc)
-    claims = _decode_access_token_claims(access_token)
+    identity = oauth_token_identity(access_token)
     expires_in = _int_payload_value(payload, "expires_in", 0)
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
-        access_token_expires_at=_guard_access_token_expires_at(
-            access_token=access_token,
+        access_token_expires_at=oauth_access_token_expires_at(
+            access_token,
             expires_in=expires_in,
             now=now,
         ),
@@ -548,15 +532,15 @@ def _parse_guard_token_exchange_payload(
         expires_in=expires_in,
         scope=str(payload.get("scope") or "").strip(),
         token_type=token_type,
-        grant_id=_read_nested_string(claims, "grant", "grantId"),
-        machine_id=_read_nested_string(claims, "machine", "machineId"),
-        device_id=oauth_device_id(claims),
+        grant_id=identity["grant_id"],
+        machine_id=identity["machine_id"],
+        device_id=identity["device_id"],
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
             now=now,
             required=require_entitlement,
         ),
-        workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
+        workspace_id=identity["workspace_id"],
         cloud_user_profile=_extract_cloud_user_profile(payload),
         cloud_actions=parse_cloud_actions_connect_report(payload),
     )
