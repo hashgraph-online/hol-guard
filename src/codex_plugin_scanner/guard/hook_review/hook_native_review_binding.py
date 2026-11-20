@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import overload
 
 from ..native_decision_receipt import edge_receipt
+from ..native_hook_review_binding import native_hook_review_policy_binding
 
 # v2 drops ``policy_digest``: it is ``H(config_digest, rule_digest)`` over the
 # whole compiled snapshot, so it moves whenever the publisher republishes, even
@@ -20,7 +21,12 @@ _SCHEMA = "guard.native-review-policy-binding.v2"
 
 
 def native_review_policy_binding(
-    *, harness: str, native_result: Mapping[str, object], verified_receipt: object
+    *,
+    harness: str,
+    native_result: Mapping[str, object],
+    verified_receipt: object,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Capture only a typed native receipt; request payload metadata is not authority.
 
@@ -32,6 +38,17 @@ def native_review_policy_binding(
     receipt_bound = isinstance(verified_receipt, Mapping) and "command_extensions" in verified_receipt
     if "command_extensions" not in native_result and not receipt_bound:
         return None
+    if guard_home is not None:
+        binding = native_hook_review_policy_binding(
+            harness=harness,
+            native_result=native_result,
+            verified_receipt=verified_receipt if isinstance(verified_receipt, Mapping) else None,
+            guard_home=guard_home,
+            deadline=deadline,
+        )
+        if binding is None:
+            raise ValueError("native_review_policy_binding_invalid")
+        return binding
     receipt = edge_receipt(harness, native_result, verified_receipt)
     if receipt is None:
         raise ValueError("native_review_policy_binding_invalid")

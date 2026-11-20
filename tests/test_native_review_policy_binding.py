@@ -26,6 +26,35 @@ def _binding(result: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
     return bound
 
 
+def test_production_binding_delegates_to_the_resident(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_binding as binding_module
+
+    result, receipt = _fixture()
+    expected = {
+        "schema": "guard.native-review-policy-binding.v2",
+        "rule_digest": receipt["rule_digest"],
+        "runtime_identity": receipt["runtime_identity"],
+        "command_extensions": receipt["command_extensions"],
+    }
+    calls: list[dict[str, object]] = []
+
+    def resident(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return expected
+
+    monkeypatch.setattr(binding_module, "native_hook_review_policy_binding", resident)
+    assert (
+        binding_module.native_review_policy_binding(
+            harness="claude-code",
+            native_result=result,
+            verified_receipt=receipt,
+            guard_home=tmp_path,
+        )
+        == expected
+    )
+    assert calls[0]["guard_home"] == tmp_path
+
+
 def _resign_identity(receipt: dict[str, Any]) -> None:
     identity = {
         **{
