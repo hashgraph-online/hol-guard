@@ -31,6 +31,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.support import cloud_sync_transport
 from tests.support import receipt_upload_transport as upload
 
 
@@ -191,7 +192,7 @@ def test_sync_migrates_legacy_anchor_and_restores_cloud_redaction_choice(
         lambda: (False, ()),
     )
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: {
             "syncedAt": "2026-07-01T00:00:01Z",
@@ -272,7 +273,7 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
     )
 
     monkeypatch.setattr(
-        runner,
+        cloud_sync_transport,
         "_urlopen_json_with_timeout_retry",
         lambda **_kwargs: next(responses),
     )
@@ -438,7 +439,7 @@ def test_receipt_sync_401_with_explicit_auth_context_keeps_cursor_and_backfill_m
     def reject_sync(**_kwargs: object) -> dict[str, object]:
         raise _sync_unauthorized_error()
 
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", reject_sync)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", reject_sync)
 
     with pytest.raises(runner.GuardSyncAuthorizationExpiredError):
         runner.sync_receipts(
@@ -485,7 +486,7 @@ def test_receipt_sync_401_forces_oauth_refresh_before_retry(
         }
 
     monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", resolve_auth_context)
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", post_sync)
+    monkeypatch.setattr(cloud_sync_transport, "_urlopen_json_with_timeout_retry", post_sync)
 
     runner.sync_receipts(store)
 

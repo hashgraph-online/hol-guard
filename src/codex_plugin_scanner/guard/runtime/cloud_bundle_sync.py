@@ -27,6 +27,7 @@ CLOUD_EVENT_SYNC_COMMAND = "cloud-event-sync"
 CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
 CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
 CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v4"
+CLOUD_OAUTH_REFRESH_FEATURE = "cloud-oauth-refresh-v1"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
@@ -92,6 +93,33 @@ def cloud_receipt_upload(
         subject="receipt sync",
         extra={"upload": dict(upload)},
     )
+
+
+def cloud_oauth_refresh(call: Mapping[str, object]) -> dict[str, object]:
+    """Exchange a Guard OAuth refresh grant natively and return how it ended.
+
+    ``call`` carries ``tokenEndpoint``, ``clientId``, ``refreshToken`` and
+    ``dpopKey`` (``privateKeyPem``, ``publicJwk``, ``algorithm``). The answer's
+    ``outcome`` is ``refreshed`` (with the token response as ``payload``),
+    ``rate_limited`` (with ``retryAfterSeconds``), ``dead_grant``,
+    ``rejected``, ``unusable``, ``unreachable`` or ``failed`` (with a
+    ``reason``). The exchange reads no Guard home.
+    """
+
+    from ..config import resolve_guard_home
+
+    answer = run_native_cloud_sync(
+        CLOUD_EVENT_SYNC_COMMAND,
+        CLOUD_OAUTH_REFRESH_FEATURE,
+        resolve_guard_home(),
+        "oauth_refresh",
+        auth_context=None,
+        subject="Guard OAuth token refresh",
+        extra={"oauthRefresh": dict(call)},
+    )
+    if not isinstance(answer, dict) or not isinstance(answer.get("outcome"), str):
+        raise RuntimeError("The Guard native runtime did not answer the Guard OAuth token refresh.")
+    return answer
 
 
 def cloud_json_request(

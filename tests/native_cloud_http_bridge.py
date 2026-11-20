@@ -43,6 +43,7 @@ from codex_plugin_scanner.guard.runtime.managed_controls_sync import managed_con
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
 from tests.native_cloud_helpers import call_native, prepare_native, raw
+from tests.support import cloud_sync_transport
 
 
 def main(data):
@@ -128,14 +129,14 @@ def main(data):
         if data["action"] == "observe":
 
             def send(_production_url, body):
-                request = runner._guard_sync_request(
+                request = cloud_sync_transport._guard_sync_request(
                     auth,
                     request_url=data["portal"] + "/api/guard/runtime/extension-catalog/sync-v2",
                     method="POST",
                     data=body,
                     extra_headers={"Connection": "close"},
                 )
-                return runner._urlopen_json_with_timeout_retry(
+                return cloud_sync_transport._urlopen_json_with_timeout_retry(
                     request=request, timeout_seconds=120, retry_timeout_seconds=120, max_response_bytes=4096
                 )
 

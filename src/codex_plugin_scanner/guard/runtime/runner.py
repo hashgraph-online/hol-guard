@@ -9,12 +9,11 @@ import importlib.metadata
 import io
 import json
 import logging
+import math
 import os
 import socket
 import time
 import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
@@ -32,7 +31,6 @@ from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
 from ..harness_context import HarnessContext
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
-from ..mdm.network import managed_urlopen
 from ..models import PolicyDecision
 from ..native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
@@ -127,15 +125,7 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
-from .sync_retry_delay import (
-    parse_retry_after_header as _parse_retry_after_header,
-)
-from .sync_retry_delay import (
-    retry_after_sleep_seconds as _retry_after_sleep_seconds,
-)
-from .sync_retry_delay import (
-    retryable_gateway_http_error as _retryable_gateway_http_error,
-)
+from .sync_retry_delay import parse_retry_after_value
 from .workspace_assessment_sync import (
     build_workspace_assessment_sync_safely,
 )
@@ -201,7 +191,6 @@ _LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
-_SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS = 2
 _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES = 5  # single 404 shouldn't disable sync for a full day
@@ -1130,10 +1119,6 @@ def sync_guard_events(
     return result if isinstance(result, dict) else {}
 
 
-def _request_for_gateway_retry(request: urllib.request.Request) -> urllib.request.Request:
-    return _refresh_guard_sync_request(request) or request
-
-
 def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
     summary = store.get_sync_payload("guard_events_v1_summary")
     if not isinstance(summary, dict):
@@ -1463,76 +1448,6 @@ def _dpop_nonce_from_http_error(error: urllib.error.HTTPError, payload: object) 
     return nonce
 
 
-_GUARD_DPOP_REQUEST_CONTEXTS: dict[str, dict[str, object]] = {}
-_GUARD_DPOP_REQUEST_CONTEXT_LIMIT = 1000
-
-
-def _remember_guard_dpop_request_context(dpop_header: str, context: dict[str, object]) -> None:
-    if len(_GUARD_DPOP_REQUEST_CONTEXTS) >= _GUARD_DPOP_REQUEST_CONTEXT_LIMIT:
-        oldest_header = next(iter(_GUARD_DPOP_REQUEST_CONTEXTS), None)
-        if isinstance(oldest_header, str):
-            _GUARD_DPOP_REQUEST_CONTEXTS.pop(oldest_header, None)
-    _GUARD_DPOP_REQUEST_CONTEXTS[dpop_header] = context
-
-
-def _guard_sync_request(
-    auth_context: dict[str, object],
-    *,
-    request_url: str,
-    method: str,
-    data: bytes | None = None,
-    extra_headers: dict[str, str] | None = None,
-    dpop_nonce: str | None = None,
-) -> urllib.request.Request:
-    headers = _guard_sync_headers(
-        auth_context,
-        request_url=request_url,
-        method=method,
-        extra_headers=extra_headers,
-        dpop_nonce=dpop_nonce,
-    )
-    request = urllib.request.Request(
-        request_url,
-        data=data,
-        method=method,
-        headers=headers,
-    )
-    object.__setattr__(
-        request,
-        "_guard_dpop_retry_context",
-        {
-            "auth_context": auth_context,
-            "request_url": request_url,
-            "method": method,
-            "extra_headers": None if extra_headers is None else dict(extra_headers),
-            "dpop_nonce": dpop_nonce,
-        },
-    )
-    return request
-
-
-def _oauth_refresh_error_message(error: urllib.error.HTTPError) -> str:
-    try:
-        raw_body = error.read().decode("utf-8")
-    except OSError:
-        raw_body = ""
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        description = _optional_string(payload.get("error_description"))
-        if description is not None:
-            return description
-        error_code = _optional_string(payload.get("error"))
-        if error_code is not None:
-            return error_code
-    normalized_body = raw_body.strip()
-    if normalized_body:
-        return normalized_body
-    return f"HTTP Error {error.code}: {error.reason}"
-
-
 def _guard_oauth_reauthorization_message() -> str:
     return "Guard authorization expired. Run `hol-guard connect` to sign in again."
 
@@ -1568,24 +1483,6 @@ def _guard_runtime_upgrade_restart_message() -> str:
     return (
         "HOL Guard was upgraded while this process was running. Restart the agent application "
         "before Guard Cloud access resumes."
-    )
-
-
-def _invalid_grant_oauth_payload(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    return _invalid_grant_oauth_error_details(
-        _optional_string(payload.get("error")),
-        _optional_string(payload.get("error_description")),
-    )
-
-
-def _invalid_grant_oauth_error_details(
-    error_code: str | None,
-    description: str | None,
-) -> bool:
-    return error_code == "invalid_grant" or (
-        description is not None and "missing, expired, or already consumed" in description.lower()
     )
 
 
@@ -1666,6 +1563,38 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         raise GuardSyncEndpointUntrustedError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
+def _refreshed_oauth_payload(answer: dict[str, object]) -> dict[str, object]:
+    """The token response of a native refresh, or the error its outcome names."""
+
+    outcome = answer.get("outcome")
+    reason = _optional_string(answer.get("reason")) or "Guard Cloud did not say why."
+    if outcome == "refreshed":
+        payload = answer.get("payload")
+        if not isinstance(payload, dict):
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        return payload
+    if outcome == "rate_limited":
+        # The header as sent keeps an HTTP date and a long wait; the runner's
+        # rate-limit circuit applies its own bound.
+        header = answer.get("retryAfter")
+        if isinstance(header, str) and header.strip():
+            raise _GuardOAuthRefreshRateLimitedError(parse_retry_after_value(header.strip()))
+        retry_after = answer.get("retryAfterSeconds")
+        seconds = 60
+        if isinstance(retry_after, int | float) and not isinstance(retry_after, bool):
+            seconds = max(1, math.ceil(retry_after))
+        raise _GuardOAuthRefreshRateLimitedError(seconds)
+    if outcome == "dead_grant":
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
+    if outcome == "rejected":
+        raise _GuardOAuthRefreshRejectedError(f"{_guard_oauth_reauthorization_message()} {reason}")
+    if outcome == "unusable":
+        raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {reason}")
+    if outcome == "unreachable":
+        raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True)
+    raise RuntimeError(f"Guard OAuth token refresh failed: {reason}")
+
+
 def _refresh_guard_oauth_access_token_once(
     *,
     token_endpoint: str,
@@ -1675,85 +1604,48 @@ def _refresh_guard_oauth_access_token_once(
 ) -> dict[str, object]:
     if _guard_runtime_was_upgraded():
         raise GuardSyncNotAvailableError(_guard_runtime_upgrade_restart_message(), retryable=True)
-    request_body = urllib.parse.urlencode(
-        {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "refresh_token": refresh_token,
-        }
-    ).encode("utf-8")
-    dpop_nonce: str | None = None
-    nonce_retry_count = 0
-    while True:
-        try:
-            dpop_proof = _sign_guard_dpop_proof(
-                request_url=token_endpoint,
-                method="POST",
-                dpop_key_material=dpop_key_material,
-                nonce=dpop_nonce,
-            )
-        except GuardSyncNotAvailableError:
-            raise
-        except (RuntimeError, TypeError, ValueError) as error:
-            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-        request = urllib.request.Request(
-            token_endpoint,
-            data=request_body,
-            method="POST",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-                "User-Agent": _GUARD_SYNC_USER_AGENT,
-                "DPoP": dpop_proof,
-            },
+    from . import cloud_bundle_sync
+
+    try:
+        answer = cloud_bundle_sync.cloud_oauth_refresh(
+            {
+                "tokenEndpoint": token_endpoint,
+                "clientId": client_id,
+                "refreshToken": refresh_token,
+                "dpopKey": {
+                    "privateKeyPem": dpop_key_material.private_key_pem,
+                    "publicJwk": dict(dpop_key_material.public_jwk),
+                    "algorithm": dpop_key_material.algorithm,
+                },
+            }
         )
-        try:
-            with managed_urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            payload = _http_error_payload(error) if error.code in {400, 401, 403, 429} else None
-            challenge_nonce = _dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
-                dpop_nonce = challenge_nonce
-                nonce_retry_count += 1
-                continue
-            if error.code == 429:
-                raise _GuardOAuthRefreshRateLimitedError(_parse_retry_after_header(error)) from error
-            if error.code in {400, 401, 403}:
-                if _invalid_grant_oauth_payload(payload):
-                    raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
-                refresh_error_message = _oauth_refresh_error_message(error)
-                raise _GuardOAuthRefreshRejectedError(
-                    f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
-                ) from error
-            refresh_error_message = _oauth_refresh_error_message(error)
-            raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
-        except OSError as error:
-            if _is_guard_cloud_unreachable_error(error):
-                raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True) from error
-            raise RuntimeError(_sync_url_error_message(error)) from error
-        if not isinstance(payload, dict):
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        access_token = _optional_string(payload.get("access_token"))
-        token_type = _optional_string(payload.get("token_type"))
-        if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        access_token_expires_at = _oauth_access_token_expires_at(
-            access_token,
-            payload=payload,
+    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError):
+        raise
+    except RuntimeError as error:
+        # The native runtime was missing or did not answer: an outage the
+        # caller retries, not a refusal of this grant.
+        raise GuardSyncNotAvailableError(str(error), retryable=True) from error
+    payload = _refreshed_oauth_payload(answer)
+    access_token = _optional_string(payload.get("access_token"))
+    token_type = _optional_string(payload.get("token_type"))
+    if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+    access_token_expires_at = _oauth_access_token_expires_at(
+        access_token,
+        payload=payload,
+        now=datetime.now(timezone.utc),
+    )
+    return {
+        "access_token": access_token,
+        "access_token_expires_at": access_token_expires_at,
+        "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
+            payload,
             now=datetime.now(timezone.utc),
-        )
-        return {
-            "access_token": access_token,
-            "access_token_expires_at": access_token_expires_at,
-            "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
-                payload,
-                now=datetime.now(timezone.utc),
-            ),
-            "cloud_user_profile": extract_cloud_user_profile(payload),
-            "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
-            "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
-        }
+        ),
+        "cloud_user_profile": extract_cloud_user_profile(payload),
+        "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
+        "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
+    }
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -2497,99 +2389,9 @@ def _guard_sync_headers(
             nonce=dpop_nonce,
         )
         headers["DPoP"] = dpop_header
-        _remember_guard_dpop_request_context(
-            dpop_header,
-            {
-                "auth_context": auth_context,
-                "request_url": request_url,
-                "method": method,
-                "extra_headers": None if extra_headers is None else dict(extra_headers),
-                "dpop_nonce": dpop_nonce,
-            },
-        )
     if isinstance(extra_headers, dict):
         headers.update(extra_headers)
     return headers
-
-
-def _guard_sync_request_with_nonce(
-    request: urllib.request.Request,
-    dpop_nonce: str,
-) -> urllib.request.Request | None:
-    request_context = _resolve_guard_dpop_retry_context(request)
-    if request_context is None:
-        return None
-    auth_context = request_context.get("auth_context")
-    request_url = request_context.get("request_url")
-    method = request_context.get("method")
-    extra_headers = request_context.get("extra_headers")
-    current_dpop_nonce = request_context.get("dpop_nonce")
-    if not isinstance(auth_context, dict) or not isinstance(request_url, str) or not isinstance(method, str):
-        return None
-    if extra_headers is not None and not isinstance(extra_headers, dict):
-        return None
-    if current_dpop_nonce == dpop_nonce:
-        return None
-    return _guard_sync_request(
-        auth_context,
-        request_url=request_url,
-        method=method,
-        data=_request_data_bytes(request.data),
-        extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
-        dpop_nonce=dpop_nonce,
-    )
-
-
-def _resolve_guard_dpop_retry_context(
-    request: urllib.request.Request,
-) -> dict[str, object] | None:
-    request_context = getattr(request, "_guard_dpop_retry_context", None)
-    if isinstance(request_context, dict):
-        return request_context
-    current_dpop = request.get_header("DPoP")
-    if not isinstance(current_dpop, str):
-        for header_name, header_value in request.header_items():
-            if header_name.lower() == "dpop":
-                current_dpop = header_value
-                break
-    if not isinstance(current_dpop, str):
-        return None
-    request_context = _GUARD_DPOP_REQUEST_CONTEXTS.get(current_dpop)
-    if not isinstance(request_context, dict):
-        return None
-    return request_context
-
-
-def _refresh_guard_sync_request(
-    request: urllib.request.Request,
-) -> urllib.request.Request | None:
-    """Build a new request with a fresh DPoP proof for timeout retries.
-
-    Reusing the same DPoP proof after a timeout triggers server-side replay
-    detection because the original request may have already been consumed.
-    Preserves any server-provided DPoP nonce from the current request so
-    nonce-challenged endpoints do not lose their nonce state across retries.
-    """
-    request_context = _resolve_guard_dpop_retry_context(request)
-    if request_context is None:
-        return None
-    auth_context = request_context.get("auth_context")
-    request_url = request_context.get("request_url")
-    method = request_context.get("method")
-    extra_headers = request_context.get("extra_headers")
-    current_dpop_nonce = request_context.get("dpop_nonce")
-    if not isinstance(auth_context, dict) or not isinstance(request_url, str) or not isinstance(method, str):
-        return None
-    if extra_headers is not None and not isinstance(extra_headers, dict):
-        return None
-    return _guard_sync_request(
-        auth_context,
-        request_url=request_url,
-        method=method,
-        data=_request_data_bytes(request.data),
-        extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
-        dpop_nonce=current_dpop_nonce if isinstance(current_dpop_nonce, str) else None,
-    )
 
 
 # Bounds the body shipped to the resident well inside its request cap; Guard
@@ -2720,135 +2522,6 @@ def _is_timeout_error(error: OSError) -> bool:
     return reason_text == "timed out" or reason_text.endswith(" timed out") or "timed out" in reason_text
 
 
-def _urlopen_with_sync_retries(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-    parse_json_response: bool,
-    nonce_fast_path: bool,
-    max_response_bytes: int | None = None,
-    unhinted_gateway_retry_seconds: float | None = None,
-) -> object:
-    """Drive one Guard Cloud request through the shared sync retry policies.
-
-    Retry order is deliberate: an optional DPoP nonce fast path for raw
-    requests, then bounded 429 rate-limit waits with a freshly signed
-    request, then bounded gateway retries, then the generic DPoP nonce
-    challenge retry, and finally one timeout retry at the longer budget.
-    """
-
-    current_request = request
-    current_timeout_seconds = timeout_seconds
-    retried_timeout = False
-    nonce_retry_count = 0
-    rate_limit_retry_count = 0
-    gateway_retry_count = 0
-    while True:
-        try:
-            with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
-                if parse_json_response:
-                    raw = response.read() if max_response_bytes is None else response.read(max_response_bytes + 1)
-                    if max_response_bytes is not None and len(raw) > max_response_bytes:
-                        raise RuntimeError("Guard Cloud sync response exceeds its byte budget.")
-                    return json.loads(raw.decode("utf-8"))
-                return None
-        except urllib.error.HTTPError as error:
-            if nonce_fast_path and error.code == 401:
-                error_payload = _http_error_payload(error)
-                dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
-                if dpop_nonce is not None and nonce_retry_count < 3:
-                    nonce_retry_count += 1
-                    retry_request = _guard_sync_request_with_nonce(current_request, dpop_nonce)
-                    if retry_request is not None:
-                        current_request = retry_request
-                        current_timeout_seconds = timeout_seconds
-                        retried_timeout = False
-                        continue
-            if error.code == 429 and rate_limit_retry_count < 2:
-                retry_after = _parse_retry_after_header(error)
-                time.sleep(min(retry_after, 120))
-                rate_limit_retry_count += 1
-                refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is None:
-                    raise
-                current_request = refreshed_request
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
-                retry_after = _retry_after_sleep_seconds(
-                    error, retry_timeout_seconds, unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds
-                )
-                time.sleep(retry_after)
-                gateway_retry_count += 1
-                current_request = _request_for_gateway_retry(current_request)
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
-            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
-            retry_request = (
-                None
-                if dpop_nonce is None or nonce_retry_count >= 3
-                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
-            )
-            if retry_request is not None:
-                nonce_retry_count += 1
-                current_request = retry_request
-                current_timeout_seconds = timeout_seconds
-                retried_timeout = False
-                continue
-            raise
-        except OSError as error:
-            if not retried_timeout and _is_timeout_error(error):
-                refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is None:
-                    raise
-                current_request = refreshed_request
-                current_timeout_seconds = retry_timeout_seconds
-                retried_timeout = True
-                continue
-            raise
-
-
-def _urlopen_json_with_timeout_retry(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-    max_response_bytes: int | None = None,
-    unhinted_gateway_retry_seconds: float | None = None,
-) -> dict[str, object]:
-    payload = _urlopen_with_sync_retries(
-        request=request,
-        timeout_seconds=timeout_seconds,
-        retry_timeout_seconds=retry_timeout_seconds,
-        parse_json_response=True,
-        nonce_fast_path=False,
-        max_response_bytes=max_response_bytes,
-        unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds,
-    )
-    if not isinstance(payload, dict):
-        raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
-    return payload
-
-
-def _urlopen_with_timeout_retry(
-    *,
-    request: urllib.request.Request,
-    timeout_seconds: int,
-    retry_timeout_seconds: int,
-) -> None:
-    _urlopen_with_sync_retries(
-        request=request,
-        timeout_seconds=timeout_seconds,
-        retry_timeout_seconds=retry_timeout_seconds,
-        parse_json_response=False,
-        nonce_fast_path=True,
-    )
-
-
 def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
@@ -2872,12 +2545,6 @@ def _string_items(value: object) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         return ()
     return tuple(item for item in value if isinstance(item, str))
-
-
-def _request_data_bytes(value: object) -> bytes | None:
-    if isinstance(value, bytes):
-        return value
-    return None
 
 
 def _auth_context_sync_url(auth_context: dict[str, object]) -> str:
