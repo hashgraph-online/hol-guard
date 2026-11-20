@@ -35,7 +35,8 @@ function config(value: unknown): value is GuardContextAssistanceConfig {
 function runtime(value: unknown): value is ContextRuntime {
   if (!record(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record(value.interpreter)) return false;
   const facts = value.interpreter;
-  return facts.schema === "guard-cigar-interpreter.v1" && version(facts.version)
+  const builtinFacts = facts.schema === "guard-cigar-builtin.v1" && facts.implementation === "guard-builtin" && facts.abi === "none";
+  return (facts.schema === "guard-cigar-interpreter.v1" || builtinFacts) && version(facts.version)
     && ["implementation", "release_level", "abi", "platform"].every((key) => text(facts[key]))
     && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean"
     && isCigarProducerVersion(value.package_version) && text(value.protocol)

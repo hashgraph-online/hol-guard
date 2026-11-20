@@ -5,7 +5,7 @@ import type { CigarReleaseBinding } from "./release-version";
 export type ContextRuntime = {
   schema: "guard-cigar-runtime-status.v1";
   interpreter: {
-    schema: "guard-cigar-interpreter.v1";
+    schema: "guard-cigar-interpreter.v1" | "guard-cigar-builtin.v1";
     implementation: string;
     version: [number, number, number];
     release_level: string;

@@ -21,6 +21,13 @@ const builtinOption = { runtime_id: "builtin", qualification: "guard_builtin", p
   worker_fingerprint: "b".repeat(64), sdk_version: "0.14.2", core_version: "0.14.2", build_id: null,
   adapter_id: "guard-cigar-builtin-v1", adapter_revision: 1, managed: false, builtin: true };
 assert.equal(parseContextAssistanceStatus({ ...off, installation_options: [builtinOption] }).installation_options![0].python_version, null);
+const builtinFacts = { schema: "guard-cigar-builtin.v1", implementation: "guard-builtin", version: [0, 0, 0],
+  release_level: "final", abi: "none", platform: "darwin-arm64", free_threaded: false, debug_build: false };
+const builtinReady = { ...ready, runtime: { ...ready.runtime, interpreter: builtinFacts },
+  last_check: ready.last_check && { ...ready.last_check, interpreter: builtinFacts } };
+assert.equal(parseContextAssistanceStatus(builtinReady).runtime?.interpreter.schema, "guard-cigar-builtin.v1");
+assert.throws(() => parseContextAssistanceStatus({ ...builtinReady,
+  runtime: { ...builtinReady.runtime, interpreter: { ...builtinFacts, abi: "cp314" } } }));
 assert.equal(contextStatusCopy(parseContextAssistanceStatus({ ...off, job: { id: "42", operation: "recheck", phase: "verifying" } })).label, "Checking runtime");
 
 const waiting = parseContextAssistanceStatus({ ...off, availability: "unavailable", requested_enabled: true,
