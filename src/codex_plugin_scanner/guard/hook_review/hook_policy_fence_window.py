@@ -154,6 +154,8 @@ class PolicySourceFenceWait:
         )
         if event:
             _record_event(self._store, event)
+
+
 __all__ = [
     "POLICY_SOURCE_FENCE_ERRORS",
     "POLICY_SOURCE_FENCE_WINDOW_EVENT",
