@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import NoReturn, TypedDict
 
 from typing_extensions import Unpack
@@ -23,8 +23,8 @@ from ..dpop_key_binding import signed_dpop_proof
 from ..mdm.network import managed_urlopen
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
-from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
-from ..oauth_token_claims import oauth_device_id
+from ..native_runner_authority import NativeRunnerAuthorityError
+from ..oauth_token_claims import oauth_access_token_expires_at, oauth_token_identity
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -128,15 +128,16 @@ class GuardOAuthTokenExchangeResult:
     def __post_init__(self) -> None:
         if self.access_token_expires_at is not None:
             return
-        object.__setattr__(
-            self,
-            "access_token_expires_at",
-            _guard_access_token_expires_at(
-                access_token=self.access_token,
+        try:
+            expires_at = oauth_access_token_expires_at(
+                self.access_token,
                 expires_in=self.expires_in,
                 now=datetime.now(timezone.utc),
-            ),
-        )
+            )
+        except (NativeRunnerAuthorityError, OSError):
+            # No saved expiry only means the token is refreshed before reuse.
+            expires_at = None
+        object.__setattr__(self, "access_token_expires_at", expires_at)
 
     def target_binding(self, *, machine_fallback: str | None = None) -> GuardOAuthTargetBinding:
         return {
@@ -183,21 +184,6 @@ def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
             return None
         current = current.get(segment)
     return current if isinstance(current, str) and current else None
-
-
-def _guard_access_token_expires_at(
-    *,
-    access_token: str,
-    expires_in: int,
-    now: datetime,
-) -> str | None:
-    claims = _decode_access_token_claims(access_token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and float(exp) > 0:
-        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-    if expires_in <= 0:
-        return None
-    return (now + timedelta(seconds=expires_in)).isoformat()
 
 
 def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
@@ -535,28 +521,40 @@ def _parse_guard_token_exchange_payload(
     if token_type.lower() != "bearer":
         raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
     now = datetime.now(timezone.utc)
-    claims = _decode_access_token_claims(access_token)
     expires_in = _int_payload_value(payload, "expires_in", 0)
+    try:
+        identity = oauth_token_identity(access_token)
+    except (NativeRunnerAuthorityError, OSError) as error:
+        if require_entitlement:
+            # A new connection saved before its claims were read would leave a
+            # row no later sync can tell apart from an unbound one.
+            raise RuntimeError(
+                "Guard OAuth token exchange failed: Guard's local runtime could not read the access token."
+            ) from error
+        # A refresh keeps the binding already saved with the credential; the
+        # rotated refresh token must still reach the store.
+        identity: dict[str, str | None] = dict.fromkeys(("grant_id", "machine_id", "workspace_id", "device_id"))
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(access_token, expires_in=expires_in, now=now)
+    except (NativeRunnerAuthorityError, OSError):
+        # No saved expiry only means the token is refreshed before reuse.
+        access_token_expires_at = None
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
-        access_token_expires_at=_guard_access_token_expires_at(
-            access_token=access_token,
-            expires_in=expires_in,
-            now=now,
-        ),
+        access_token_expires_at=access_token_expires_at,
         refresh_token=str(payload.get("refresh_token") or "").strip() or None,
         expires_in=expires_in,
         scope=str(payload.get("scope") or "").strip(),
         token_type=token_type,
-        grant_id=_read_nested_string(claims, "grant", "grantId"),
-        machine_id=_read_nested_string(claims, "machine", "machineId"),
-        device_id=oauth_device_id(claims),
+        grant_id=identity["grant_id"],
+        machine_id=identity["machine_id"],
+        device_id=identity["device_id"],
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
             now=now,
             required=require_entitlement,
         ),
-        workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
+        workspace_id=identity["workspace_id"],
         cloud_user_profile=_extract_cloud_user_profile(payload),
         cloud_actions=parse_cloud_actions_connect_report(payload),
     )

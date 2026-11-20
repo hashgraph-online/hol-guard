@@ -39,8 +39,11 @@ from ..native_policy_bundle import (
 )
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
 from ..native_runner_authority import NativeRunnerAuthorityError
-from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
-from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
+from ..oauth_token_claims import (
+    oauth_access_token_expires_at,
+    oauth_binding_from_credentials,
+    oauth_effective_binding,
+)
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -1611,11 +1614,16 @@ def _refresh_guard_oauth_access_token_once(
     token_type = _optional_string(payload.get("token_type"))
     if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-    access_token_expires_at = _oauth_access_token_expires_at(
-        access_token,
-        payload=payload,
-        now=datetime.now(timezone.utc),
-    )
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(
+            access_token,
+            expires_in=payload.get("expires_in"),
+            now=datetime.now(timezone.utc),
+        )
+    except (NativeRunnerAuthorityError, OSError):
+        # The refreshed token still works; without an expiry it is only
+        # refreshed again before reuse instead of being served from cache.
+        access_token_expires_at = None
     return {
         "access_token": access_token,
         "access_token_expires_at": access_token_expires_at,
@@ -1859,32 +1867,6 @@ def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, o
     return True
 
 
-def _oauth_access_token_expires_at(
-    access_token: str,
-    *,
-    payload: dict[str, object],
-    now: datetime,
-) -> str | None:
-    claims = _decode_oauth_access_token_claims(access_token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and not isinstance(exp, bool) and float(exp) > 0:
-        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-    expires_in = payload.get("expires_in")
-    parsed_expires_in: int | None
-    if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool):
-        parsed_expires_in = int(expires_in)
-    elif isinstance(expires_in, str):
-        try:
-            parsed_expires_in = int(expires_in)
-        except ValueError:
-            parsed_expires_in = None
-    else:
-        parsed_expires_in = None
-    if parsed_expires_in is None or parsed_expires_in <= 0:
-        return None
-    return (now + timedelta(seconds=parsed_expires_in)).isoformat()
-
-
 def _cached_oauth_access_token(credentials: dict[str, object], *, now: datetime) -> str | None:
     access_token = _optional_string(credentials.get("access_token"))
     access_token_expires_at = _optional_string(credentials.get("access_token_expires_at"))
@@ -1937,15 +1919,7 @@ def _persist_rotated_oauth_refresh_token(
             credentials_supply_chain_firewall if isinstance(credentials_supply_chain_firewall, bool) else None
         )
     effective_access_token = access_token or _optional_string(credentials.get("access_token"))
-    if access_token is not None:
-        recovered_binding = oauth_binding_metadata(access_token, issuer=issuer)
-    else:
-        recovered_binding = oauth_binding_from_credentials({**credentials, "access_token": effective_access_token})
-    effective_binding = oauth_refresh_binding(
-        credentials,
-        recovered_binding,
-        refreshed=access_token is not None,
-    )
+    effective_binding = oauth_effective_binding(credentials, access_token=access_token, issuer=issuer)
     store.set_oauth_local_credentials(
         issuer=issuer,
         client_id=client_id,

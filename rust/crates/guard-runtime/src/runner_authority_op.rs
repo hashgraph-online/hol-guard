@@ -136,6 +136,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "hermes_install_plan" => crate::hermes_install_plan::dispatch(args),
         "harness_shim_refresh" => crate::harness_shim_refresh::dispatch(args),
         "cloud_actions_access" => crate::cloud_actions_access::dispatch(args),
+        "oauth_token_claims" => crate::oauth_token_claims::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
         "mcp_tool_inventory" => crate::mcp_tool_inventory::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
