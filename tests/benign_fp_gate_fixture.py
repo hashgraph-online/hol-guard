@@ -52,7 +52,7 @@ from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
-from tests.benign_fp_gate_configs import write_parent_documents
+from tests.benign_fp_gate_configs import write_parent_design_tokens, write_parent_documents
 from tests.benign_fp_gate_cursor_project import cursor_project_path, write_cursor_projects
 from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
@@ -240,6 +240,10 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / ".gitignore", "node_modules/\ndashboard/node_modules\n")
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
+    # Untracked on purpose: the credential-name screen these documents
+    # exercise is only reached for a file the walk cannot prove by its
+    # checkout.
+    write_parent_design_tokens(parent)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
     # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
     _git(parent, "branch", "feat/other-branch", home=home)
