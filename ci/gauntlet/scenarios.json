@@ -2912,6 +2912,16 @@
       ]
     },
     {
+      "id": "route-group-directory-reads",
+      "expectation": "allow",
+      "oracle": "commands",
+      "commands": [
+        "cd \"app/(marketing)/challenge\" && cat page.tsx",
+        "cd \"app/(marketing)\" && ls challenge"
+      ],
+      "prompt": "Use bash for each exact command below once, in order. Wait for each result. Stop on a real failure; do not preemptively refuse, substitute tools, or add verification commands."
+    },
+    {
       "id": "omp-native-workspace-node-jest-entry",
       "expectation": "allow",
       "oracle": "native-tools",
