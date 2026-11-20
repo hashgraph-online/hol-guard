@@ -95,8 +95,7 @@ pub(crate) fn design_system_token(words: &[&str], at: usize) -> bool {
         return false;
     };
     DESIGN_SYSTEM_WORDS.contains(previous)
-        && !(words[at] == "token"
-            && matches!(*previous, "brand" | "brands" | "theme" | "themes"))
+        && !(words[at] == "token" && matches!(*previous, "brand" | "brands" | "theme" | "themes"))
         && !words
             .iter()
             .any(|word| CREDENTIAL_TOKEN_QUALIFIERS.contains(word))
@@ -104,17 +103,49 @@ pub(crate) fn design_system_token(words: &[&str], at: usize) -> bool {
 
 /// Parts of a design system a token file is named for.
 const DESIGN_SYSTEM_WORDS: &[&str] = &[
-    "brand", "brands", "color", "colors", "colour", "colours",
-    "design", "designs", "palette", "palettes", "spacing",
-    "style", "styles", "theme", "themes", "typography", "typographies",
+    "brand",
+    "brands",
+    "color",
+    "colors",
+    "colour",
+    "colours",
+    "design",
+    "designs",
+    "palette",
+    "palettes",
+    "spacing",
+    "style",
+    "styles",
+    "theme",
+    "themes",
+    "typography",
+    "typographies",
 ];
 
 /// Explicit credential context overrides an otherwise adjacent design word.
 const CREDENTIAL_TOKEN_QUALIFIERS: &[&str] = &[
-    "access", "api", "auth", "aws", "bearer", "credential", "credentials",
-    "github", "gitlab", "key", "login", "npm", "oauth", "private",
-    "refresh", "secret", "secrets", "service", "session", "shopify",
-    "slack", "stripe",
+    "access",
+    "api",
+    "auth",
+    "aws",
+    "bearer",
+    "credential",
+    "credentials",
+    "github",
+    "gitlab",
+    "key",
+    "login",
+    "npm",
+    "oauth",
+    "private",
+    "refresh",
+    "secret",
+    "secrets",
+    "service",
+    "session",
+    "shopify",
+    "slack",
+    "stripe",
 ];
 
 /// Code syntax eligible for source inspection. Data formats such as JSON,
