@@ -14,6 +14,35 @@ use serde_json::{json, Value};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, int, is_null, query_all, query_one, text, Row, StoreResult};
 
+/// Atomically decide whether a hook harness is unmanaged. The direct row and
+/// the active-harness fallback are read from one store snapshot, so a write
+/// cannot race between the two reads as it did in the Python cache path.
+pub(crate) fn hook_admission(
+    connection: &rusqlite::Connection,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    let harness = args.str("harness")?;
+    let direct = query_one(
+        connection,
+        "select active from managed_installs where harness = ?",
+        &[Value::from(harness)],
+    )?;
+    let unmanaged = match direct {
+        Some(row) => int(&row, "active") == 0,
+        None => query_all(
+            connection,
+            "select harness, active from managed_installs where active != 0",
+            &[],
+        )?
+        .iter()
+        .any(|row| text(row, "harness") != harness),
+    };
+    Ok(json!({
+        "unmanaged": unmanaged,
+        "revision": read_revision(connection)?,
+    }))
+}
+
 /// The `sync_state` row that holds the table's revision.
 const REVISION_KEY: &str = "managed_install_revision";
 

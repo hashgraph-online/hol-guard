@@ -548,7 +548,6 @@
     "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
     "src/codex_plugin_scanner/guard/native_business_*.py",
     "src/codex_plugin_scanner/guard/native_command_control_*.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_readiness.py",
     "src/codex_plugin_scanner/guard/store_approvals.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
