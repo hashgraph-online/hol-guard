@@ -81,6 +81,10 @@ pub(crate) struct Request {
     integrity_key_b64: Option<String>,
     #[serde(default)]
     integrity_key_id: Option<String>,
+    /// `consume` also records the job's replay row, in the same transaction
+    /// that spends the grant, so a spent grant never lacks its replay row.
+    #[serde(default)]
+    record_replay: bool,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -117,7 +121,7 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
         "pending" => ledger.transact(|tx| Ok(Value::Array(pending(tx, now)?))),
         "register_pending" => ledger.transact(|tx| register_pending(tx, request)),
         "approve" => ledger.transact(|tx| approve(tx, request, now)),
-        "consume" => ledger.transact(|tx| consume(tx, request).map(Value::Bool)),
+        "consume" => ledger.transact(|tx| consume(tx, request, now).map(Value::Bool)),
         "mark_consumed" => ledger.transact(|tx| mark_consumed(tx, request, now)),
         _ => Err(INVALID.to_owned()),
     }
@@ -319,7 +323,7 @@ fn approve(conn: &Connection, request: &Request, now: i64) -> Result<Value, Stri
 
 /// `consume_local_command_approval`: spends the grant that is genuine and
 /// names exactly this identity, and drops the job's waiting row with it.
-fn consume(conn: &Connection, request: &Request) -> Result<bool, String> {
+fn consume(conn: &Connection, request: &Request, now: i64) -> Result<bool, String> {
     let identity = identity(request)?;
     let digest = identity_digest(request, identity)?;
     let mut items = state_items(conn, LOCAL_APPROVALS_KEY)?;
@@ -343,6 +347,10 @@ fn consume(conn: &Connection, request: &Request) -> Result<bool, String> {
     let mut waiting = state_items(conn, PENDING_KEY)?;
     waiting.retain(|item| !names_job(item, &identity["id"]));
     save_items(conn, PENDING_KEY, waiting, None, &request.now)?;
+    if request.record_replay {
+        // A refusal here rolls the whole transaction back, grant included.
+        mark_consumed(conn, request, now)?;
+    }
     Ok(true)
 }
 

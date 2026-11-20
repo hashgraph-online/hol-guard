@@ -152,6 +152,43 @@ fn an_approved_job_is_consumed_once() {
 }
 
 #[test]
+fn consuming_a_grant_records_its_replay_row_in_the_same_transaction() {
+    let home = home();
+    register(home.path(), "job-1");
+    call(
+        home.path(),
+        "approve",
+        LATER,
+        keyed(json!({"job_id": "job-1", "issuer": "local-cli"})),
+    )
+    .unwrap();
+
+    // A replay row that cannot be written leaves the grant in place.
+    let incomplete = keyed(json!({"identity": identity("job-1"), "record_replay": true}));
+    assert_eq!(
+        call(home.path(), "consume", LATER, incomplete),
+        Err(INVALID.to_owned())
+    );
+    assert_eq!(items(home.path(), LOCAL_APPROVALS_KEY).len(), 1);
+    assert!(items(home.path(), REPLAY_KEY).is_empty());
+
+    let consume = keyed(json!({
+        "identity": identity("job-1"),
+        "operation": "guard.example",
+        "record_replay": true,
+    }));
+    assert_eq!(
+        call(home.path(), "consume", LATER, consume),
+        Ok(json!(true))
+    );
+    assert!(items(home.path(), LOCAL_APPROVALS_KEY).is_empty());
+    let replay = items(home.path(), REPLAY_KEY);
+    assert_eq!(replay.len(), 1);
+    assert_eq!(replay[0]["jobId"], json!("job-1"));
+    assert_eq!(replay[0]["consumedAt"], json!(LATER));
+}
+
+#[test]
 fn approving_an_unknown_or_expired_job_is_refused() {
     let home = home();
     let approve = keyed(json!({"job_id": "job-1", "issuer": "local-cli"}));

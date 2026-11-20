@@ -333,9 +333,15 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
 
 
 def command_capability_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
+    try:
+        waiting = pending_command_approvals(store, now=now)
+    except CommandCapabilityError:
+        # Status and revocation still answer while the ledger does not; they
+        # just cannot list what is waiting.
+        waiting = []
     pending_status = [
         {key: item[key] for key in ("id", "operation", "issuer", "expiresAt", "approveCommand") if key in item}
-        for item in pending_command_approvals(store, now=now)
+        for item in waiting
     ]
     try:
         capability = _verified_capability(store, now=now)
@@ -550,8 +556,18 @@ def consume_local_command_approval(
     *,
     now: str | None = None,
     identity_digest: str | None = None,
+    record_replay: bool = False,
 ) -> bool:
+    """Spend the job's local grant and, when asked, record its replay row.
+
+    The runtime spends the grant and writes the replay row in one
+    transaction, so a spent grant always has its replay row. A job that needs
+    no local approval only records the row.
+    """
+
     if not authorized.requires_local_approval:
+        if record_replay:
+            mark_command_job_consumed(store, authorized, now=now, identity_digest=identity_digest)
         return True
     consumed = _ledger(
         store,
@@ -560,6 +576,8 @@ def consume_local_command_approval(
         signing=True,
         identity=dict(authorized.identity),
         identity_digest=identity_digest,
+        operation=authorized.operation if record_replay else None,
+        record_replay=True if record_replay else None,
     )
     if not isinstance(consumed, bool):
         raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
