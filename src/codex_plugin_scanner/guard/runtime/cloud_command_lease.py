@@ -71,7 +71,9 @@ def cloud_command_report(
             subject="Guard command report",
             extra={"commandReport": {**call, **fields}},
         )
-    url = answer.get("url") if isinstance(answer, dict) else None
+    if not isinstance(answer, dict):
+        raise RuntimeError("The Guard native runtime did not answer the Guard command report.")
+    url = answer.get("url")
     if not isinstance(url, str) or not url:
         raise RuntimeError("The Guard native runtime did not answer the Guard command report.")
     return cloud_json_answer(url, answer.get("reply"))

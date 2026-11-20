@@ -138,6 +138,18 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
     )
 
 
+def _json_request(
+    auth_context: dict[str, object],
+    *,
+    method: str,
+    path: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    """POST ``payload`` below the generic command queue route; see ``_exact_json_request``."""
+
+    return request_json(auth_context, method=method, path=path, payload=payload)
+
+
 def _exact_json_request(
     auth_context: dict[str, object],
     *,
