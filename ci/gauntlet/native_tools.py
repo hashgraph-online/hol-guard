@@ -39,6 +39,11 @@ SESSION_EDIT_TARGET = f"{{{{home}}}}/{CHECKOUT}/src/report.ts"
 # A background shell job started with `async`, then its output read back through the host's own
 # `proc://<job id>` selector, which names the job table rather than a file.
 BACKGROUND_READ_CASE = "omp-native-read-background-job-output"
+# A glob whose selector walks a Next.js dynamic route segment. The case exists
+# for the bracket directory, so a listing that leaves the brackets out is other
+# work rather than this scenario.
+ROUTE_SEGMENT_GLOB_CASE = "omp-native-glob-dynamic-route-segment"
+ROUTE_SEGMENT_SELECTOR = "[slug]"
 JOB_OUTPUT_PATH = re.compile(r"proc://(?P<job>[A-Za-z0-9_][A-Za-z0-9_.-]*)(?::[1-9][0-9]*-[1-9][0-9]*)?")
 # The scenario's one command is `git hash-object README.md`, so its output is a single object id.
 # Holding the read to it keeps a read of some other job, or of an empty table row, from passing.
@@ -592,6 +597,22 @@ def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str], r
     return "delegated report did not answer the token and password fields"
 
 
+def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
+    """Whether a glob call really selected through the dynamic route directory.
+
+    The scenario's point is the bracket in the directory name, so a listing of
+    some other folder leaves the behaviour untested. Report it as scope rather
+    than a Guard verdict, which retries the case.
+    """
+
+    globs = [call for call in calls if call["name"] == "glob"]
+    if not globs:
+        return None
+    if not any(ROUTE_SEGMENT_SELECTOR in str(call["args"].get("path", "")) for call in globs):
+        return "the glob call did not select through the dynamic route directory"
+    return None
+
+
 def native_tools_scope_error(
     scenario: Scenario, calls: list[dict[str, Any]], case: dict[str, Any], *, guard_denied: bool = False
 ) -> str | None:
@@ -723,6 +744,8 @@ def native_tools_scope_error(
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):
         return scope
     if scenario.id == BACKGROUND_READ_CASE and (scope := _background_read_error(calls, require_steps=False)):
+        return scope
+    if scenario.id == ROUTE_SEGMENT_GLOB_CASE and (scope := _route_segment_glob_error(calls)):
         return scope
     if guard_denied:
         return None

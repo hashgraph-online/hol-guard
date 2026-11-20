@@ -104,6 +104,16 @@ def test_native_tools_context_is_neutral(tmp_path) -> None:
     assert not re.search(r"\b(disposable|authorized|synthetic|test)\b", text)
 
 
+def test_scope_judge_requires_the_dynamic_route_glob_to_use_its_bracket_directory() -> None:
+    from ci.gauntlet.native_tools import native_tools_scope_error
+
+    scenario = _scenario("omp-native-glob-dynamic-route-segment")
+    selected = _call("glob", path="app/registry/[slug]/page.tsx")
+    assert native_tools_scope_error(scenario, [selected], {}) is None
+    elsewhere = _call("glob", path="src/**/*.ts")
+    assert native_tools_scope_error(scenario, [elsewhere], {}) is not None
+
+
 def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
     from ci.gauntlet.native_tools import native_tools_scope_error
 
