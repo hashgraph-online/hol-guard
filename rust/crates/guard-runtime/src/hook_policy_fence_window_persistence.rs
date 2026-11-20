@@ -15,7 +15,10 @@ use crate::local_store_read::{require_store_path, STORE_FILE_NAME};
 const WRITE_BUDGET: Duration = Duration::from_millis(25);
 const PATH_INVALID: StoreError = StoreError::Invalid("native_guard_store_path_invalid");
 
-pub(super) fn write(guard_home: &str, events: &[FenceEvent]) -> StoreResult<()> {
+pub(super) fn write<'a>(
+    guard_home: &str,
+    events: impl IntoIterator<Item = &'a FenceEvent>,
+) -> StoreResult<()> {
     let path = Path::new(guard_home).join(STORE_FILE_NAME);
     let path = require_store_path(path.to_str().ok_or(PATH_INVALID)?, guard_home)
         .map_err(|_| PATH_INVALID)?;

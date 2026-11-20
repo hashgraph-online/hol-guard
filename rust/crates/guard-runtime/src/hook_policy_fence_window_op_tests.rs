@@ -16,6 +16,15 @@ fn request(home: &str, action: &str) -> HookPolicyFenceWindowRequestV1 {
 
 #[test]
 fn resident_persists_completed_windows_once_after_write_contention() {
+    check_contended_batch(MAX_BATCH_EVENTS, 0);
+}
+
+#[test]
+fn resident_records_a_dropped_window_when_the_pending_queue_is_full() {
+    check_contended_batch(MAX_PENDING_EVENTS, 1);
+}
+
+fn check_contended_batch(queued: usize, dropped: i64) {
     let dir = tempfile::tempdir().unwrap();
     let guard_home = dir.path().to_str().unwrap();
     let connection =
@@ -35,6 +44,12 @@ fn resident_persists_completed_windows_once_after_write_contention() {
     let mut enter = request(guard_home, "enter");
     enter.persist_events = true;
     evaluate(&enter).unwrap();
+    {
+        let mut windows = WINDOWS.get().unwrap().lock().unwrap();
+        let pending = &mut windows.get_mut(guard_home).unwrap().pending_events;
+        let now = now_micros().unwrap();
+        pending.extend((0..queued).map(|_| event(now, now, 1, 0).unwrap()));
+    }
     let mut leave = request(guard_home, "leave");
     leave.persist_events = true;
     leave.request_id.clone_from(&enter.request_id);
@@ -55,23 +70,38 @@ fn resident_persists_completed_windows_once_after_write_contention() {
     assert!(result["result"]["window_event"].is_null());
     assert_eq!(result["result"]["window_events"], json!([]));
     evaluate(&leave).unwrap();
+    evaluate(&leave).unwrap();
 
-    let (name, payload, occurred_at): (String, String, String) = connection
+    let count: i64 = connection
         .query_row(
-            "select event_name, payload_json, occurred_at from guard_events",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            "select count(*) from guard_events where event_name = ?",
+            [EVENT_NAME],
+            |row| row.get(0),
         )
         .unwrap();
-    let count: i64 = connection
-        .query_row("select count(*) from guard_events", [], |row| row.get(0))
+    assert_eq!(count, queued as i64 + 1 - dropped);
+    let reported: i64 = connection
+        .query_row(
+            "select coalesce(sum(json_extract(payload_json, '$.dropped_windows')), 0) \
+             from guard_events where event_name = ?",
+            [OVERFLOW_EVENT_NAME],
+            |row| row.get(0),
+        )
         .unwrap();
-    let payload: Value = serde_json::from_str(&payload).unwrap();
-    assert_eq!(count, 1);
-    assert_eq!(name, EVENT_NAME);
-    assert_eq!(payload["ended_at"], occurred_at);
-    assert_eq!(payload["absorbed_calls"], 0);
-    assert_eq!(payload["exhausted_calls"], 1);
+    assert_eq!(reported, dropped);
+    if dropped == 0 {
+        let (payload, occurred_at): (String, String) = connection
+            .query_row(
+                "select payload_json, occurred_at from guard_events \
+                 where json_extract(payload_json, '$.exhausted_calls') = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let payload: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(payload["ended_at"], occurred_at);
+        assert_eq!(payload["absorbed_calls"], 0);
+    }
 }
 
 #[test]
