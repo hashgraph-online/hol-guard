@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_command_envelope import CommandEnvelopeUnavailableError
+from codex_plugin_scanner.guard.native_command_state import CommandStateUnavailableError
 from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
@@ -394,28 +395,32 @@ def test_state_change_requires_exact_single_use_local_approval(tmp_path: Path) -
     assert consume_local_command_approval(store, authorized) is False
 
 
-def test_an_identity_digest_does_not_ship_the_signing_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_only_the_grant_operations_ship_the_signing_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _connected_store(tmp_path)
     operation = "guard.app.update"
     _issue(store, operation)
     job = _job(store, operation, payload={"channel": "stable"})
     authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+    real = command_capability_module.native_command_state
+    calls: list[tuple[str, bool]] = []
+
+    def recorded(guard_home: Path, op: str, **kwargs: object) -> object:
+        calls.append((op, kwargs.get("integrity_key_b64") is not None))
+        return real(guard_home, op, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(command_capability_module, "native_command_state", recorded)
+
     register_pending_command(store, authorized, job)
-    real = command_capability_module.native_command_envelope
-    calls: list[tuple[str, str | None]] = []
-
-    def recorded(**kwargs: object) -> dict[str, object]:
-        calls.append((str(kwargs["action"]), kwargs["integrity_key_b64"]))  # type: ignore[arg-type]
-        return real(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", recorded)
-
     assert approve_pending_command(store, "job-1")["approved"] is True
+    assert consume_local_command_approval(store, authorized) is True
+    mark_command_job_consumed(store, authorized)
 
-    digested = [key for action, key in calls if action == "digest"]
-    signed = [key for action, key in calls if action == "sign"]
-    assert digested and all(key is None for key in digested)
-    assert signed and all(key is not None for key in signed)
+    assert calls == [
+        ("register_pending", False),
+        ("approve", True),
+        ("consume", True),
+        ("mark_consumed", False),
+    ]
 
 
 def test_an_unanswered_runtime_refuses_an_approval_as_a_capability_error(
@@ -428,10 +433,10 @@ def test_an_unanswered_runtime_refuses_an_approval_as_a_capability_error(
     authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
     register_pending_command(store, authorized, job)
 
-    def unavailable(**_kwargs: object) -> dict[str, object]:
-        raise CommandEnvelopeUnavailableError
+    def unavailable(*_args: object, **_kwargs: object) -> object:
+        raise CommandStateUnavailableError
 
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", unavailable)
+    monkeypatch.setattr(command_capability_module, "native_command_state", unavailable)
 
     with pytest.raises(CommandCapabilityError, match=CommandEnvelopeUnavailableError.reason):
         approve_pending_command(store, "job-1")
@@ -447,16 +452,16 @@ def test_an_unanswered_runtime_never_reads_a_grant_as_unmatched(
     authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
     register_pending_command(store, authorized, job)
     assert approve_pending_command(store, "job-1")["approved"] is True
-    real = command_capability_module.native_command_envelope
+    real = command_capability_module.native_command_state
 
     answering = [False]
 
-    def unavailable_for_verify(**kwargs: object) -> dict[str, object]:
-        if not answering[0] and kwargs.get("action") == "verify":
-            raise CommandEnvelopeUnavailableError
-        return real(**kwargs)  # type: ignore[arg-type]
+    def unavailable_for_consume(guard_home: Path, op: str, **kwargs: object) -> object:
+        if not answering[0] and op == "consume":
+            raise CommandStateUnavailableError
+        return real(guard_home, op, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", unavailable_for_verify)
+    monkeypatch.setattr(command_capability_module, "native_command_state", unavailable_for_consume)
 
     # Walking past the unanswered grant would read as "no approval on file"
     # and spend the user's approval without running the job.

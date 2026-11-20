@@ -271,6 +271,7 @@ mod command_policy_repair;
 #[path = "adapters/command_probe.rs"]
 mod command_probe;
 mod command_risk_groups;
+mod command_state;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
