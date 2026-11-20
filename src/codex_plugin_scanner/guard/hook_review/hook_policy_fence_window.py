@@ -90,6 +90,7 @@ class PolicySourceFenceWait:
         self._until: float | None = None
         self._exhausted = False
         self._attempt_registered = False
+        self._entered = False
         self._request_id = f"policy-fence-wait-{uuid.uuid4().hex}"
 
     def pause(self) -> bool:
@@ -105,9 +106,9 @@ class PolicySourceFenceWait:
                     request_id=self._request_id,
                     deadline=self._deadline,
                 )
+                self._entered = result is not None
                 if result:
                     _record_event(self._store, result)
-                now = self._monotonic()
         if now + POLL_SECONDS > self._until:
             self._exhausted = True
             return False
@@ -129,8 +130,8 @@ class PolicySourceFenceWait:
             event = record_policy_fence_window(
                 self._guard_home,
                 action="attempt",
-                request_id=self._request_id,
                 attempt_until_micros=attempt_until_micros,
+                request_id=self._request_id,
                 deadline=deadline,
             )
             if event:
@@ -143,7 +144,7 @@ class PolicySourceFenceWait:
         if self._until is None:
             return
         self._until = None
-        if self._guard_home is None:
+        if self._guard_home is None or not self._entered:
             return
         event = record_policy_fence_window(
             self._guard_home,
@@ -156,6 +157,19 @@ class PolicySourceFenceWait:
             _record_event(self._store, event)
 
 
+def record_direct_fence_wait(store: object, waited_ms: object) -> None:
+    """Record a direct-lane fence wait through the resident window state."""
+
+    if isinstance(waited_ms, bool) or not isinstance(waited_ms, int) or waited_ms <= 0:
+        return
+    guard_home = _guard_home(store)
+    if guard_home is None:
+        return
+    event = record_policy_fence_window(guard_home, action="absorb_direct", waited_ms=waited_ms)
+    if event:
+        _record_event(store, event)
+
+
 __all__ = [
     "POLICY_SOURCE_FENCE_ERRORS",
     "POLICY_SOURCE_FENCE_WINDOW_EVENT",
@@ -164,4 +178,5 @@ __all__ = [
     "PolicySourceFenceWait",
     "fence_wait_until",
     "policy_update_pending_reason",
+    "record_direct_fence_wait",
 ]
