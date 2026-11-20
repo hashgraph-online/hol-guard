@@ -8,7 +8,7 @@
 
 use crate::package_authority_op::request_digest_with_limit;
 use guard_contracts::{
-    CommandJobPlanPayloadV1, CommandJobPlanQueryV1, CommandJobPlanRequestV1,
+    python_strip, CommandJobPlanPayloadV1, CommandJobPlanQueryV1, CommandJobPlanRequestV1,
     CommandJobPlanResultV1, CommandJobPlanV1, COMMAND_JOB_PLAN_MAX_BYTES,
     COMMAND_JOB_PLAN_REQUEST_SCHEMA, COMMAND_JOB_PLAN_RESULT_SCHEMA,
 };
@@ -192,7 +192,7 @@ fn manager_list(managers: Option<&Value>) -> Result<Option<Vec<String>>, String>
     for item in items {
         let name = item
             .as_str()
-            .map(py_strip)
+            .map(python_strip)
             .filter(|name| !name.is_empty())
             .ok_or_else(|| "invalid_managers".to_owned())?;
         normalized.push(name.to_lowercase());
@@ -294,14 +294,9 @@ fn object(value: Value) -> Map<String, Value> {
 fn optional_text(value: &Value) -> Option<String> {
     value
         .as_str()
-        .map(py_strip)
+        .map(python_strip)
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
-}
-
-/// `str.strip()`: Python also strips the four ASCII separator controls.
-fn py_strip(value: &str) -> &str {
-    value.trim_matches(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
 }
 
 #[cfg(test)]
