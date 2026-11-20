@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import sys
 import threading
 import time
@@ -199,6 +200,7 @@ class WorkerHost:
         # engine compiled is refused by the resident, so publishing first
         # would fail every hook closed until something else migrated it.
         report = on_phase or (lambda _step: None)
+        self._start_private_state_resident()
         # Building the hook worker publishes nothing, so it runs beside the
         # admission; publishing starts only once the admission has run.
         self._prepare_policy_publication()
@@ -272,6 +274,32 @@ class WorkerHost:
         from ..extension_control_host import migrate_installed_authority
 
         self._installed_authority_admitted = migrate_installed_authority(self.store, on_phase=on_phase)
+
+    def _start_private_state_resident(self) -> None:
+        """Opens the Windows resident stream beside admission.
+
+        This host serves the resident from its first publication anyway. Opened
+        now, the private-state checks admission and publication make go over
+        the stream instead of each starting a runtime process.
+        """
+
+        if os.name != "nt":
+            return
+        from ..native_policy_snapshot_windows_resident import start_private_state_resident
+
+        def open_stream() -> None:
+            try:
+                start_private_state_resident(self.store.guard_home)
+            except Exception:
+                _LOGGER.warning("Guard worker host could not open the resident stream early", exc_info=True)
+
+        thread = threading.Thread(target=open_stream, daemon=True, name="guard-worker-resident-start")
+        try:
+            thread.start()
+        except RuntimeError:
+            _LOGGER.warning("Guard worker host could not start the resident stream opener", exc_info=True)
+            return
+        self._threads.append(thread)
 
     def _prepare_policy_publication(self) -> None:
         """Builds the hook worker on a thread of its own, without starting it."""

@@ -25,6 +25,7 @@ def _no_real_hook_worker(monkeypatch):
     """Keeps the real hook worker out of these tests; a test can set its own build."""
 
     monkeypatch.setattr(worker_host.WorkerHost, "_build_hook_worker", lambda self: None)
+    monkeypatch.setattr(worker_host.WorkerHost, "_start_private_state_resident", lambda self: None)
 
 
 class _StopError(Exception):
