@@ -413,6 +413,41 @@ fn inclusion_globs_that_cannot_reach_a_re_included_secret_keep_rg_allowed() {
 }
 
 #[test]
+fn ambiguous_rg_globs_cannot_hide_reincluded_secret_names() {
+    let fixture = fixture(&[(
+        "template",
+        &[
+            (".gitignore", ".env*\n!.env.test.ts\n"),
+            (".env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\\n"),
+        ],
+    )]);
+    // Across ripgrep versions a comment-shaped inclusion may not be
+    // installed, and whitespace can be normalized before glob matching.
+    // Neither spelling may justify screening away the hidden filename.
+    assert_actions(
+        &fixture,
+        "template",
+        &[
+            "rg -n KEY --glob '#comment'",
+            "rg -n KEY --glob '*.ts '",
+            // The first -- is consumed as an option value, not the
+            // end of options; the following --iglob is case-blind.
+            "rg -n KEY --context-separator -- --iglob '*.TS'",
+        ],
+        "review",
+    );
+    assert_actions(
+        &fixture,
+        "template",
+        &[
+            "rg -n KEY --glob '*.rs'",
+            "rg -n KEY --context-separator -- --glob '*.rs'",
+        ],
+        "allow",
+    );
+}
+
+#[test]
 fn a_path_glob_with_explicit_rg_root_cannot_hide_reincluded_secrets() {
     let fixture = fixture(&[(
         "explicit-root",
