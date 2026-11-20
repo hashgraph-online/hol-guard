@@ -142,10 +142,12 @@ class AlphaTagAnswers:
         self._lock = threading.Lock()
         self._answers: dict[str, tuple[bool, float]] = {}
         self._paused_until = 0.0
+        self._in_flight: dict[str, threading.Lock] = {}
 
     def clear(self) -> None:
         with self._lock:
             self._answers.clear()
+            self._in_flight.clear()
             self._paused_until = 0.0
 
     def _remembered(self, version: str, now: float, max_age: float) -> bool | None:
@@ -154,26 +156,50 @@ class AlphaTagAnswers:
             return None
         return entry[0]
 
-    def answer(self, version: str, lookup: Lookup) -> bool | None:
+    def _settled(self, version: str) -> tuple[bool, bool | None]:
+        """Return (settled, answer): settled when no lookup should be sent now."""
+
         now = self._clock()
         with self._lock:
             fresh = self._remembered(version, now, CONFIRMED_ANSWER_TTL_SECONDS)
             if fresh is not None:
-                return fresh
+                return True, fresh
             if now < self._paused_until:
-                return self._remembered(version, now, STALE_ANSWER_LIMIT_SECONDS)
-        result, pause = lookup(version)
-        now = self._clock()
+                return True, self._remembered(version, now, STALE_ANSWER_LIMIT_SECONDS)
+            return False, None
+
+    def _gate(self, version: str) -> threading.Lock:
         with self._lock:
-            if result is not None:
-                self._answers.pop(version, None)
-                self._answers[version] = (result, now)
-                while len(self._answers) > _MAX_REMEMBERED_VERSIONS:
-                    self._answers.pop(next(iter(self._answers)))
-                return result
-            if pause is not None:
-                self._paused_until = max(self._paused_until, now + pause)
-            return self._remembered(version, now, STALE_ANSWER_LIMIT_SECONDS)
+            gate = self._in_flight.get(version)
+            if gate is None:
+                if len(self._in_flight) >= _MAX_REMEMBERED_VERSIONS:
+                    for idle in [name for name, lock in self._in_flight.items() if not lock.locked()]:
+                        del self._in_flight[idle]
+                gate = self._in_flight[version] = threading.Lock()
+            return gate
+
+    def answer(self, version: str, lookup: Lookup) -> bool | None:
+        settled, remembered = self._settled(version)
+        if settled:
+            return remembered
+        # One lookup per version at a time: callers that arrive while it is in
+        # flight wait for it and reuse its answer or rate-limit pause.
+        with self._gate(version):
+            settled, remembered = self._settled(version)
+            if settled:
+                return remembered
+            result, pause = lookup(version)
+            now = self._clock()
+            with self._lock:
+                if result is not None:
+                    self._answers.pop(version, None)
+                    self._answers[version] = (result, now)
+                    while len(self._answers) > _MAX_REMEMBERED_VERSIONS:
+                        self._answers.pop(next(iter(self._answers)))
+                    return result
+                if pause is not None:
+                    self._paused_until = max(self._paused_until, now + pause)
+                return self._remembered(version, now, STALE_ANSWER_LIMIT_SECONDS)
 
 
 _ANSWERS = AlphaTagAnswers()
