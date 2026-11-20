@@ -332,3 +332,54 @@ fn grok_tools_are_found_under_their_prefixed_name() {
         ["mcp__ads_api__get_report", "mcp__ads_api__list_ads"]
     );
 }
+
+#[test]
+fn each_tool_carries_the_command_id_of_its_exact_name() {
+    let connection = store();
+    for name in [
+        "mcp__codex_apps__composio__search",
+        "mcp__server__read_file",
+        "mcp__server__read-file",
+    ] {
+        receipt(&connection, "codex", name, Some("2026-01-01T00:00:00Z"));
+    }
+    let answer = discover(&connection, json!({}));
+    let found = connectors(&answer);
+    let tools = |namespace: &str| {
+        found
+            .iter()
+            .find(|connector| connector["namespace"] == namespace)
+            .unwrap()["tools"]
+            .as_array()
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(
+        tools("mcp__codex_apps__composio__")[0]["command_id"],
+        "tool-6c046d138d80ae7db4bcdf50"
+    );
+    let server = tools("mcp__server__");
+    assert_eq!(server.len(), 2);
+    // The two names slug alike but keep separate permissions.
+    assert_ne!(server[0]["command_id"], server[1]["command_id"]);
+}
+
+#[test]
+fn malformed_or_unbounded_names_are_not_parsed() {
+    let long = format!("mcp__server__{}", "a".repeat(150));
+    for name in [
+        "composio",
+        "mcp__",
+        "mcp__server__",
+        "mcp__server__tool; rm",
+        "mcp__server__tool\n",
+        "mcp__codex_apps____tool",
+        long.as_str(),
+    ] {
+        assert!(
+            super::observed_mcp_tool("codex", name).is_none(),
+            "{name:?} parsed"
+        );
+    }
+    assert!(super::observed_mcp_tool("codex", "mcp__server__tool").is_some());
+}
