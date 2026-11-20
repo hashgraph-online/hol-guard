@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
 from tests import containment_resident as containment_probe
 from tests import containment_rewrite_client as containment_route
+from tests.restricted_native_clients import contained_expectation_reply
 
 COMMAND = "./todo.py add x"
 
@@ -90,6 +91,8 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
     ran: list[object] = []
 
     def answer(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         # Each reading this run makes is answered as itself. A catch-all that
         # handed the kinds back to every question would quietly pass a screen
         # the test never thought about, so an unexpected one fails here instead.
@@ -245,6 +248,8 @@ def test_matching_plan_launches_in_the_sandbox_backend(monkeypatch: pytest.Monke
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "g"))
 
     def fake_native(operation: str, fields: object, expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         calls.append(operation)
         if isinstance(fields, dict) and operation == "prepare_workspace_contained":
             sent.append(fields["git_environment"])
@@ -348,6 +353,8 @@ def test_linux_runs_in_an_overlay_and_applies_only_after_exit(monkeypatch: pytes
     order: list[str] = []
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         calls.append((operation, dict(fields)))
         order.append(operation)
         if operation == "workspace_bubblewrap_argv":
@@ -383,6 +390,8 @@ def test_a_denied_overlay_change_fails_the_run(monkeypatch: pytest.MonkeyPatch, 
     roots: list[Path] = []
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         if operation == "workspace_bubblewrap_argv":
             roots.append(Path(str(fields["upper"])).parent)
             return ["/usr/bin/bwrap"]
@@ -411,6 +420,8 @@ def test_a_linked_worktree_overlays_the_shared_git_directory(monkeypatch: pytest
     calls: dict[str, dict[str, object]] = {}
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         calls[operation] = dict(fields)
         if operation == "workspace_bubblewrap_argv":
             assert Path(str(fields["shared_upper"])).is_dir() and Path(str(fields["shared_work"])).is_dir()
@@ -438,6 +449,8 @@ def test_macos_profile_receives_the_linked_worktree(monkeypatch: pytest.MonkeyPa
     profiles: list[dict[str, object]] = []
 
     def fake_native(operation: str, fields: dict[str, object], expected: object) -> object:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         if operation == "macos_profile":
             profiles.append(dict(fields))
             return "(version 1)"
@@ -559,6 +572,8 @@ def test_a_grant_is_read_against_the_words_that_admitted_the_run(
     asked: list[str] = []
 
     def answer(operation: str, fields: dict[str, object], expected: object) -> list[str]:
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         assert operation == "command_absolute_words", operation
         asked.append(str(fields["command_text"]))
         return [str(good)]

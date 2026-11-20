@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_tool as tool
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.restricted_native_clients import contained_expectation_reply
 
 # Which spellings name a tool, which modes only report and which arguments
 # write are all one reading in native authority, tested there
@@ -29,6 +30,8 @@ def _routes(monkeypatch, answer, *, build_output=None):
     """
 
     def _native(operation, fields, expected):
+        if operation == "contained_expectation":
+            return contained_expectation_reply(fields)
         if operation == "node_build_output_root":
             assert build_output is not None
             return str(build_output)

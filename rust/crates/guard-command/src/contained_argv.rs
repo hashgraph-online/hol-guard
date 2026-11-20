@@ -1078,6 +1078,12 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             Err(error) => crate::restricted_command::error_reply(error),
         });
     }
+    if operation == "contained_expectation" {
+        return Some(match crate::contained_expectation::expectation(input) {
+            Ok(value) => json!({ "value": value }),
+            Err(error) => crate::restricted_command::error_reply(error),
+        });
+    }
     if operation == "script_words" {
         return Some(match script_words(input) {
             Ok(words) => json!({ "value": words }),

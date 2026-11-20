@@ -19,7 +19,7 @@ from .contained_command_prefix import (
     planned_route_argv,
 )
 from .contained_run_directory import as_directory_change, as_run_root
-from .contained_test_request import _contained_receipt, _names_pytest, _reject
+from .contained_test_request import _contained_receipt, _names_pytest, _reject, contained_expectation
 from .contained_test_request import read_contained_test_request as read_contained_test_request
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
@@ -31,11 +31,8 @@ from .restricted_package_test import (
 )
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
 from .restricted_pytest_model import (
-    GIT_READ_ONLY_PROFILE_VERSION,
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
-    NODE_TEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_INVALID_COMMAND_REASON_CODE,
-    PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
 )
 from .restricted_pytest_validation import _path_is_within
@@ -346,28 +343,28 @@ def run_authorized_contained_test(
                 raise _reject(receipt) from error
             raise
         return exit_code
+    # Authorize after planning so the live decision follows every file the
+    # planner read. Rust may still pick the workspace sandbox for this shape.
+    receipt = settled_authority(authorize, payload)
+    exit_code = run_workspace(receipt)
+    if exit_code is not None:
+        return exit_code
+    # Native authority names the receipt this planned run must carry, from the
+    # same reason table the hook renders receipts with. A run the workspace
+    # sandbox took never needs it, so it is asked only once that sandbox declines.
     if inline_plan is not None:
-        profile = inline_plan.profile_version
-        if profile == "node-eval-readonly-v1" and Path(command[0]).name == "bun":
-            reason = "native_bun_eval_readonly_containment_required"
-        elif profile == "node-eval-readonly-v1":
-            reason = "native_node_eval_readonly_containment_required"
-        else:
-            reason = "native_python_eval_readonly_containment_required"
+        kind, plan_profile = "inline_eval", inline_plan.profile_version
     elif node_tool_plan is not None:
-        profile = node_tool_plan.profile_version
-        if profile == NODE_BUILD_OUTPUT_PROFILE_VERSION:
-            reason = "native_node_build_output_containment_required"
-        else:
-            reason = "native_node_tool_readonly_containment_required"
+        kind, plan_profile = "node_tool", node_tool_plan.profile_version
     elif git:
-        reason, profile = "native_git_readonly_containment_required", GIT_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "git", None
     elif vitest:
-        reason, profile = "native_vitest_readonly_containment_required", VITEST_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "vitest", None
     elif node_test:
-        reason, profile = "native_node_test_readonly_containment_required", NODE_TEST_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "node_test", None
     else:
-        reason, profile = "native_pytest_readonly_containment_required", PYTEST_READ_ONLY_PROFILE_VERSION
+        kind, plan_profile = "pytest", None
+    reason, profile = contained_expectation(kind, plan_profile, command)
 
     def required(response: object, *, expected_reason: str = reason, expected_profile: str = profile) -> bool:
         return (
@@ -379,12 +376,6 @@ def run_authorized_contained_test(
             and response.get("observe_mode") is not True
         )
 
-    # Authorize after planning so the live decision follows every file the
-    # planner read. Rust may still pick the workspace sandbox for this shape.
-    receipt = settled_authority(authorize, payload)
-    exit_code = run_workspace(receipt)
-    if exit_code is not None:
-        return exit_code
     if not required(
         receipt,
         expected_reason=PACKAGE_TEST_REASON if package_test else reason,
