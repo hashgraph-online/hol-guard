@@ -291,6 +291,7 @@
       "src/parser_env_prefix.rs",
       "src/parser_executables.rs",
       "src/parser_launchers.rs",
+      "src/parser_segment_cd.rs",
       "src/parser_segment_shapes.rs",
       "src/parser_segments.rs",
       "src/parser_shell_tokens.rs",

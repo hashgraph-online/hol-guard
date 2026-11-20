@@ -81,6 +81,21 @@
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
   {
+   "path": "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
+   "module": "codex_plugin_scanner.guard.resident_evidence_fallback",
+   "source_sha256": "01af0a3da81096effa93f6760d35b38db9fa376f90bc8c9b4c6df13f4e5c9968",
+   "forbidden_symbols": [
+    "record_resident_evidence_fallback",
+    "_submit_fallback_activity",
+    "_record_mcp_with_one_retry"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_record.rs",
+    "rust/crates/guard-runtime/src/mcp_relay_receipt.rs",
+    "rust/crates/guard-runtime/src/mcp_relay_receipt_package.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
    "module": "codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain",
    "source_sha256": "cf18573fdeb8d2aa27f6bcd8bbdf62542a871c657ea9c759b4d55736a01ac162",

@@ -275,6 +275,7 @@ def upload_primary_content_sources(
     summary["eligible"] = len(sources)
     if not sources:
         return summary, auth_context
+    from .runtime import cloud_bundle_sync
 
     resolved_auth_context = auth_context
     batch_items: list[dict[str, object]] = []
@@ -286,18 +287,13 @@ def upload_primary_content_sources(
             return True
         body = _encoded_batch(items=batch_items)
         content_url = _content_upload_url(str(resolved_auth_context["sync_url"]), workspace_id)
-        request = runner._guard_sync_request(
-            resolved_auth_context,
-            request_url=content_url,
-            method="POST",
-            data=body,
-            extra_headers=None,
-        )
         summary["attempted"] += len(batch_items)
         summary["batches"] += 1
         try:
-            payload = runner._urlopen_json_with_timeout_retry(
-                request=request,
+            payload = cloud_bundle_sync.cloud_json_request(
+                resolved_auth_context,
+                url=content_url,
+                body=body,
                 timeout_seconds=60,
                 retry_timeout_seconds=90,
             )
@@ -306,15 +302,10 @@ def upload_primary_content_sources(
                 try:
                     resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
                     content_url = _content_upload_url(str(resolved_auth_context["sync_url"]), workspace_id)
-                    request = runner._guard_sync_request(
+                    payload = cloud_bundle_sync.cloud_json_request(
                         resolved_auth_context,
-                        request_url=content_url,
-                        method="POST",
-                        data=body,
-                        extra_headers=None,
-                    )
-                    payload = runner._urlopen_json_with_timeout_retry(
-                        request=request,
+                        url=content_url,
+                        body=body,
                         timeout_seconds=60,
                         retry_timeout_seconds=90,
                     )

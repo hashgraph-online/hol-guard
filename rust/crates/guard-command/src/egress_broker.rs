@@ -419,7 +419,10 @@ fn replay_outcome(
                 max_response_bytes,
             )?;
             if (200..300).contains(status) {
-                return Ok(SyncResponse { body_bytes: bytes });
+                return Ok(SyncResponse {
+                    status: *status,
+                    body_bytes: bytes,
+                });
             }
             Err(SyncHttpError::Http {
                 status: *status,
