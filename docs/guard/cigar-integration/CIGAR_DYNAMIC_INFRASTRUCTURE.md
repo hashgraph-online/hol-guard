@@ -37,4 +37,4 @@ The remaining work includes production trust/feed provisioning, installed/frozen
 
 The earlier masked configuration-read SDK failure remains recorded and its exact cause is unconfirmed. The new typed Changed-read retry has deterministic regression coverage and the subsequent six-workflow run passes; this is not proof that all earlier workspace/broker/transport load observations are resolved. These limitations remain part of release hardening rather than a reason to invent a newer build or reintroduce version-specific application pins.
 
-Use [the release-maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md) for the next compatible build. The current core target is met; the extended roadmap is not claimed complete.
+Use the release-maintenance runbook for the next compatible build. The current core target is met; the extended roadmap is not claimed complete.

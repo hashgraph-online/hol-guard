@@ -33,7 +33,7 @@ impl Installation {
         }
         let origin = builtin::origin();
         let producer =
-            EvidenceUpgradeProducer::from_enrolled_runtime(runtime).map_err(|e| error(e.code()))?;
+            EvidenceUpgradeProducer::from_runtime(runtime).map_err(|e| error(e.code()))?;
         producer
             .revalidate_runtime(runtime)
             .map_err(|e| error(e.code()))?;

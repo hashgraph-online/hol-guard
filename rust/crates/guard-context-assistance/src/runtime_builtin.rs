@@ -50,7 +50,6 @@ pub fn builtin_approval() -> BundleApproval {
         files: 0,
         bytes: 0,
         release: None,
-        python_bundle: None,
     }
 }
 
@@ -76,8 +75,6 @@ pub fn builtin_selection(program: PathBuf, work_dir: PathBuf) -> RuntimeSelectio
         python: program,
         site_packages: PathBuf::new(),
         work_dir,
-        verified_python: None,
-        python_bundle: None,
     }
 }
 

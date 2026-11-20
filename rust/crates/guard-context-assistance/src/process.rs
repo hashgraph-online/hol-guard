@@ -1,5 +1,5 @@
 //! Bounded private SDK transport. No shell, inherited environment or PATH lookup.
-use crate::{RuntimeError, RuntimeSelection};
+use crate::RuntimeError;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 pub(crate) const MAX_REQUEST: usize = 1024 * 1024;
 const MAX_RESPONSE: usize = 4 * 1024 * 1024;
 const SCHEMA: &str = "guard-cigar-bridge.v1";
-// The first launch of a freshly unpacked interpreter can be slow: macOS
-// translates an x64 build under Rosetta and Windows scans a new executable.
+// The first launch can be slow: macOS translates an x64 build under Rosetta
+// and Windows scans a new executable.
 pub(crate) const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 type Job = (Vec<u8>, SyncSender<Result<Vec<u8>, RuntimeError>>);
 
@@ -29,19 +29,8 @@ pub(crate) struct JsonProcess {
     cancel: Arc<AtomicBool>,
 }
 
-fn command(
-    selection: &RuntimeSelection,
-    script: &str,
-    cancel: &AtomicBool,
-) -> Result<Command, RuntimeError> {
-    crate::private_python::check_selection(selection, None, Some(cancel))?;
-    let mut cmd = isolated(&selection.python, &selection.work_dir);
-    cmd.args(["-I", "-S", "-B", "-u", "-c", script]);
-    Ok(cmd)
-}
-
 /// No inherited environment, a private working directory, piped stdio and its
-/// own process tree. Shared by the Python bridge and Guard's built-in one.
+/// own process tree.
 fn isolated(program: &Path, work_dir: &Path) -> Command {
     let mut cmd = Command::new(program);
     cmd.env_clear()
@@ -57,8 +46,8 @@ fn isolated(program: &Path, work_dir: &Path) -> Command {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        // CPython needs SystemRoot to load its socket and SSL modules; the
-        // value comes from the kernel, not the inherited environment.
+        // Windows socket and TLS libraries need SystemRoot; the value comes
+        // from the kernel, not the inherited environment.
         if let Some(root) = guard_runtime_windows_process::kernel_windows_directory() {
             cmd.env("SystemRoot", root);
         }
@@ -67,7 +56,7 @@ fn isolated(program: &Path, work_dir: &Path) -> Command {
     cmd
 }
 
-/// A launched interpreter and every process it starts: a process group on
+/// A launched engine process and every process it starts: a process group on
 /// Unix, a kill-on-close Job Object on Windows.
 struct Tree {
     child: Child,
@@ -114,28 +103,6 @@ impl Tree {
 }
 
 impl JsonProcess {
-    #[cfg(test)]
-    pub(crate) fn pid(&self) -> u32 {
-        self.child.child.id()
-    }
-    #[cfg(test)]
-    pub(crate) fn spawn(selection: &RuntimeSelection, script: &str) -> Result<Self, RuntimeError> {
-        Self::spawn_cancellable(selection, script, Arc::new(AtomicBool::new(false)))
-    }
-
-    pub(crate) fn spawn_cancellable(
-        selection: &RuntimeSelection,
-        script: &str,
-        cancel: Arc<AtomicBool>,
-    ) -> Result<Self, RuntimeError> {
-        if cancel.load(Ordering::Acquire) {
-            return Err(RuntimeError::Cancelled);
-        }
-        let mut cmd = command(selection, script, &cancel)?;
-        cmd.arg(&selection.site_packages);
-        Self::start(cmd, cancel)
-    }
-
     /// Start one of Guard's own CIGAR modes (`guard_cigar_native`) from the
     /// Guard executable itself: no interpreter, package or script.
     pub(crate) fn spawn_builtin(
@@ -266,10 +233,8 @@ impl JsonProcess {
                     | "Integrity"
                     | "BaseMismatch",
                 ) => Err(RuntimeError::WorkerRejected),
-                // The SDK found no bundled worker for this interpreter.
-                Some("UnsupportedPlatform") => Err(RuntimeError::Interpreter(
-                    crate::UnavailableReason::PlatformUnsupported,
-                )),
+                // The engine has no worker for this platform.
+                Some("UnsupportedPlatform") => Err(RuntimeError::PlatformUnqualified),
                 _ => Err(RuntimeError::TransportFailed),
             },
             _ => Err(RuntimeError::TransportFailed),
@@ -295,37 +260,6 @@ impl Drop for JsonProcess {
     fn drop(&mut self) {
         self.stop();
     }
-}
-
-pub(crate) fn probe(
-    selection: &RuntimeSelection,
-    script: &str,
-    cancel: &AtomicBool,
-) -> Result<Value, RuntimeError> {
-    if cancel.load(Ordering::Acquire) {
-        return Err(RuntimeError::Cancelled);
-    }
-    let mut cmd = command(selection, script, cancel)?;
-    cmd.stdin(Stdio::null());
-    let mut child = Tree::spawn(&mut cmd)?;
-    let stdout = child
-        .child
-        .stdout
-        .take()
-        .ok_or(RuntimeError::LaunchFailed)?;
-    let (tx, rx) = mpsc::sync_channel(1);
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let read = stdout.take(64 * 1024 + 1).read_to_end(&mut bytes);
-        let _ = tx.send(read.map(|_| bytes));
-    });
-    let result = receive(&rx, PROBE_TIMEOUT, cancel);
-    child.terminate();
-    let bytes = result?.map_err(|_| RuntimeError::TransportFailed)?;
-    if bytes.len() > 64 * 1024 {
-        return Err(RuntimeError::TransportFailed);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| RuntimeError::TransportFailed)
 }
 
 fn receive<T>(rx: &Receiver<T>, timeout: Duration, cancel: &AtomicBool) -> Result<T, RuntimeError> {

@@ -1,12 +1,9 @@
 #![forbid(unsafe_code)]
 
 //! Optional CIGAR control plane, isolated from synchronous hook decisions.
-//! Interpreter eligibility alone is not package verification or execution authority.
 
 mod actor;
 mod artifacts;
-mod private_python;
-pub use private_python::PrivatePythonSelection;
 mod broker;
 mod broker_doctor;
 mod broker_execution_doctor;
@@ -17,7 +14,6 @@ mod evidence_cache;
 mod freshness;
 mod graph;
 mod interpreter;
-mod interpreter_probe;
 mod process;
 mod release;
 mod restrictions;
@@ -25,10 +21,7 @@ mod runtime;
 mod source;
 
 pub use actor::{Quiescence, RuntimeActivity, RuntimeActor};
-pub use artifacts::{
-    inspect_bundle, inspect_release_bundle, inspect_release_bundle_cancellable, BundleApproval,
-    RuntimeSelection,
-};
+pub use artifacts::{BundleApproval, RuntimeSelection};
 pub use broker::EphemeralReviewedNotes;
 pub use broker::{
     BrokerAnswerClaim, BrokerAnswerPolicy, BrokerBoundExecution, BrokerClaimReview,
@@ -51,21 +44,13 @@ pub use freshness::{ContextEpoch, ContextFence};
 pub use graph::{
     ContextBrief, ContextDocument, ContextExcerpt, RetainedContext, ViewHandle, WorkspaceHandle,
 };
-pub use interpreter::{check_interpreter, InterpreterFacts, UnavailableReason};
-pub use interpreter_probe::{
-    probe_interpreter_cancellable, probe_private_interpreter_cancellable, VerifiedInterpreter,
-};
+pub use interpreter::InterpreterFacts;
 pub use restrictions::{restrict_config, restrict_value};
 pub use runtime::{
     builtin_approval, builtin_interpreter, builtin_platform, builtin_selection, RuntimeError,
     RuntimeStatus, VerifiedRuntime, BUILTIN_APPROVAL_SCHEMA,
 };
 pub use source::{AdmittedFile, SourceRoot};
-
-// Historical fixture identity only; production resolves the bundled catalog.
-#[cfg(test)]
-pub(crate) const CIGAR_VERSION: &str = "0.14.1";
-pub const CIGAR_PROTOCOL: &str = "cigar.context-worker.v1";
 
 #[cfg(test)]
 mod tests;
