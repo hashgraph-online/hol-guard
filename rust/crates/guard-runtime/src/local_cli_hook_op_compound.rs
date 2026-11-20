@@ -2,6 +2,11 @@
 use super::*;
 
 pub(super) fn changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
+    // A changed-script card must not obscure a review for an independent risk.
+    // The already-Review action is unchanged regardless of this proof.
+    if !crate::connector_setup::grant_lifts(request.current_reason_code.as_deref()) {
+        return None;
+    }
     let records = unlisted(request, true).ok()?;
     let records = if records.is_empty() {
         relative_script_after_cd(request)?

@@ -126,6 +126,13 @@ fn changed_script_after_cd_with_relative_path_names_exact_connector() {
     assert_eq!(connector["identity_hash"], named["identity_hash"]);
     assert_eq!(connector["allowed_earlier_version"], true);
 
+    // An independent sensitive-access reason is not a script-setup review.
+    let mut sensitive = review(&fixture, &relative);
+    sensitive.current_reason_code = Some("native_sensitive_access_review".to_owned());
+    let (sensitive_action, sensitive_connector) = run_with_connector(&sensitive).unwrap();
+    assert_eq!(sensitive_action, "review");
+    assert!(sensitive_connector.is_none());
+
     // A failed directory change, semicolon, or extra command is not proven.
     for command in [
         format!("cd {} ; ./approve-merge.sh --dry-run", fixture.workspace),
