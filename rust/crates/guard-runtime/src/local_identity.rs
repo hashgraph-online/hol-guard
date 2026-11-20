@@ -12,8 +12,15 @@
 //! public resolver (no packet is sent), else the first IPv4 address the host
 //! name resolves to. Without one, the first non-loopback IPv6 address the host
 //! name resolves to stands in.
+//!
+//! The host name is resolved once, on its own thread: a slow resolver gives up
+//! the address after [`LOOKUP_DEADLINE`] instead of holding the resident worker
+//! that answers this kind.
 
 use std::net::{IpAddr, ToSocketAddrs, UdpSocket};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -26,6 +33,8 @@ const HOSTNAME_CHARS: usize = 255;
 const ADDRESS_CHARS: usize = 128;
 const SOURCE: &str = "local-guard";
 const ROUTE_PROBE: &str = "8.8.8.8:80";
+/// How long the session sync waits on the host name's addresses.
+const LOOKUP_DEADLINE: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -91,13 +100,26 @@ fn probe() -> Probe {
                 .collect::<String>()
         })
         .filter(|name| !name.is_empty());
-    let ipv4 = routed_ipv4().or_else(|| resolved(hostname.as_deref(), IpAddr::is_ipv4));
-    let ipv6 = if ipv4.is_none() {
-        resolved(hostname.as_deref(), |address| {
-            address.is_ipv6() && !address.is_loopback()
-        })
-    } else {
-        None
+    let (ipv4, ipv6) = match routed_ipv4() {
+        Some(address) => (Some(address), None),
+        None => {
+            let addresses = hostname.as_deref().map(lookup).unwrap_or_default();
+            let ipv4 = addresses
+                .iter()
+                .copied()
+                .find(IpAddr::is_ipv4)
+                .and_then(usable_ipv4);
+            let ipv6 = if ipv4.is_none() {
+                addresses
+                    .iter()
+                    .copied()
+                    .find(|address| address.is_ipv6() && !address.is_loopback())
+                    .map(bounded)
+            } else {
+                None
+            };
+            (ipv4, ipv6)
+        }
     };
     Probe {
         hostname,
@@ -113,15 +135,25 @@ fn routed_ipv4() -> Option<String> {
     usable_ipv4(socket.local_addr().ok()?.ip())
 }
 
-/// The first address the host name resolves to that `accept` keeps. A
-/// loopback IPv4 address is never a private identity.
-fn resolved(hostname: Option<&str>, accept: fn(&IpAddr) -> bool) -> Option<String> {
-    let addresses = (hostname?, 0).to_socket_addrs().ok()?;
-    let found = addresses.map(|address| address.ip()).find(accept)?;
-    match found {
-        IpAddr::V4(_) => usable_ipv4(found),
-        IpAddr::V6(_) => Some(bounded(found)),
+/// The addresses `hostname` resolves to, or none once [`LOOKUP_DEADLINE`]
+/// passes. The lookup runs on a detached thread that ends when the resolver
+/// answers, so a slow resolver holds only that thread.
+fn lookup(hostname: &str) -> Vec<IpAddr> {
+    let (sender, receiver) = mpsc::channel();
+    let name = hostname.to_owned();
+    let spawned = thread::Builder::new()
+        .name("guard-host-lookup".to_owned())
+        .spawn(move || {
+            let addresses: Vec<IpAddr> = (name.as_str(), 0)
+                .to_socket_addrs()
+                .map(|found| found.map(|address| address.ip()).collect())
+                .unwrap_or_default();
+            let _ = sender.send(addresses);
+        });
+    if spawned.is_err() {
+        return Vec::new();
     }
+    receiver.recv_timeout(LOOKUP_DEADLINE).unwrap_or_default()
 }
 
 fn usable_ipv4(address: IpAddr) -> Option<String> {
