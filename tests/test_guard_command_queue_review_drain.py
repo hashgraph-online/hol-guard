@@ -512,7 +512,7 @@ def test_parallel_replay_rows_are_all_kept(tmp_path: Path, native_command_capabi
             requires_local_approval=False,
         )
         barrier.wait(5)
-        command_capability.mark_command_job_consumed(store, authorized, identity_digest=f"digest-{index}")
+        command_capability.mark_command_job_consumed(store, authorized)
 
     threads = [threading.Thread(target=consume, args=(index,)) for index in range(6)]
     for thread in threads:
