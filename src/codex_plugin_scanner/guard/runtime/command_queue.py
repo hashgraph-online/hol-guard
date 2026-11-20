@@ -24,7 +24,6 @@ from .command_capability import (
     command_environment_allows_queue,
     command_identity_digest,
     consume_local_command_approval,
-    mark_command_job_consumed,
     register_pending_command,
 )
 from .command_executors import (
@@ -333,7 +332,12 @@ def _settle_authorized_job(
             if authorized.requires_local_approval or needs_replay_row
             else None
         )
-        if not consume_local_command_approval(store, authorized, identity_digest=identity_digest):
+        if not consume_local_command_approval(
+            store,
+            authorized,
+            identity_digest=identity_digest,
+            record_replay=needs_replay_row,
+        ):
             pending = register_pending_command(store, authorized, item)
             execution = {
                 "waitingLocalConfirm": True,
@@ -348,8 +352,6 @@ def _settle_authorized_job(
                 reason="local_approval_required",
             )
         else:
-            if needs_replay_row:
-                mark_command_job_consumed(store, authorized, identity_digest=identity_digest)
             audit_command_decision(
                 store,
                 "cloud_command.accepted",
