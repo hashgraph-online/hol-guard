@@ -356,6 +356,7 @@ def create_fixture(
         add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
         add_git_allow_shape(workspace, environment, scenario_id)
         add_sibling_checkout(home, environment, scenario_id)
+        add_parent_credential_file(home, scenario_id)
     add_workspace_test_runner(workspace, scenario_id)
     add_output_fixture(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
@@ -575,6 +576,12 @@ SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three atte
 SOURCED_INIT_CASE = "approved-retry-sourced-toolchain-init"
 # Git reads run after a cd into the checkout beside the project.
 SIBLING_GIT_READ_CASE = "git-read-after-sibling-climb"
+PARENT_CREDENTIAL_CASE = "predicate-credential-name-beside-the-project"
+PARENT_CREDENTIAL_FILE = "kubeconfig.yaml"
+# Inert synthetic cluster settings: no address, no token, nothing to reach.
+PARENT_CREDENTIAL_TEXT = (
+    "apiVersion: v1\nkind: Config\nclusters: []\ncontexts: []\nusers: []\n"
+)
 TEMP_WORKTREE_CASE = "omp-native-git-worktree-temp-root-leaf"
 BENCH_SEARCH_CASE = "omp-native-rg-outside-checkout-test-vectors"
 BENCH_CHECKOUT = "bench-checkout"
@@ -634,6 +641,22 @@ def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: s
         ("commit", "--quiet", "-m", "Synthetic sibling baseline"),
     ):
         _git(args, sibling, environment)
+
+
+def add_parent_credential_file(home: Path, scenario_id: str | None) -> None:
+    """Put a credential-named settings file beside the project this case climbs out of.
+
+    A deploy script asks whether the settings file next to its checkout is
+    there before it uses it. The answer is one bit about a path, which the
+    absolute spelling already gets; this case proves the parent component in
+    the relative spelling does not change the question. Only the realistic
+    home keeps files beside the project, and this case's oracle is not
+    ``native-tools``, so without this the probe answers for a path that is not
+    there and the case proves nothing.
+    """
+    if scenario_id != PARENT_CREDENTIAL_CASE:
+        return
+    (home / PARENT_CREDENTIAL_FILE).write_text(PARENT_CREDENTIAL_TEXT, encoding="utf-8", newline="\n")
 
 
 def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], scenario_id: str | None = None) -> Path:
