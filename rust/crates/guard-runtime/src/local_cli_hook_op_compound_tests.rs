@@ -103,3 +103,33 @@ fn a_compound_command_running_a_current_script_is_not_sent_to_setup() {
         ("review".to_owned(), None)
     );
 }
+
+#[test]
+fn changed_script_after_cd_with_relative_path_names_exact_connector() {
+    let fixture = Fixture::new("compound-relative");
+    let merge = script(&fixture, "approve-merge.sh", "#!/bin/sh\necho ready\n");
+    let named = run_with_connector(&review(&fixture, &format!("{} --dry-run", merge.display())))
+        .unwrap()
+        .1
+        .expect("single script is named");
+    fixture.grant(named["cli_id"].as_str().unwrap(), &"0".repeat(64), "allowed");
+
+    let relative = format!("cd {} && ./approve-merge.sh --dry-run", fixture.workspace);
+    let (action, connector) = run_with_connector(&review(&fixture, &relative)).unwrap();
+    assert_eq!(action, "review");
+    let connector = connector.expect("relative changed script names its connector");
+    assert_eq!(connector["cli_id"], named["cli_id"]);
+    assert_eq!(connector["identity_hash"], named["identity_hash"]);
+    assert_eq!(connector["allowed_earlier_version"], true);
+
+    // A failed directory change, semicolon, or extra command is not proven.
+    for command in [
+        format!("cd {} ; ./approve-merge.sh --dry-run", fixture.workspace),
+        format!("cd {} && ./approve-merge.sh --dry-run && echo done", fixture.workspace),
+        "cd /this-does-not-exist && ./approve-merge.sh --dry-run".to_owned(),
+    ] {
+        let (action, connector) = run_with_connector(&review(&fixture, &command)).unwrap();
+        assert_eq!(action, "review");
+        assert!(connector.is_none(), "unexpected connector: {command}");
+    }
+}

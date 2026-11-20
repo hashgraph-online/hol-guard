@@ -34,6 +34,9 @@ use crate::local_cli_identify::{identify, launch_arguments, Request};
 use crate::local_store_read;
 use crate::native_exact_action_op::runner_bin::runner_split;
 
+#[path = "local_cli_hook_op_compound.rs"]
+mod compound;
+
 const IDENTIFY_BUDGET_MS: u64 = 2_000;
 const ROOT_COMMAND_ID: &str = "root";
 const OTHER_COMMAND_ID: &str = "other";
@@ -178,21 +181,7 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
 /// changes no action: the review stays a review, and only its card offers the
 /// new version. A command that launches more than one CLI names none.
 fn compound_changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
-    let records = unlisted(request, true).ok()?;
-    let first = records.first()?;
-    if records.iter().any(|record| record.cli_id != first.cli_id) {
-        return None;
-    }
-    let record = records.into_iter().next()?;
-    let launch = Launch {
-        cli_id: record.cli_id,
-        identity_hash: record.identity_hash,
-        name: record.name,
-        kind: record.kind,
-        runner: record.runner,
-        source: record.identity_source,
-    };
-    crate::connector_setup::for_changed_launch(request, &launch)
+    compound::changed_connector(request)
 }
 
 /// The launch observation: the package script identity, else every CLI a
