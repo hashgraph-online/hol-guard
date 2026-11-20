@@ -450,6 +450,12 @@ def _failure(response: Mapping[str, object], subject: str) -> RuntimeError:
     return RuntimeError(text)
 
 
+def sync_failure(response: Mapping[str, object], subject: str) -> RuntimeError:
+    """The exception a native ``{"outcome", "error", "retryable"}`` failure stands for."""
+
+    return _failure(response, subject)
+
+
 def _json_auth_context(supplied: Mapping[str, object]) -> dict[str, object]:
     """A resolved sign-in carries its DPoP key as a dataclass; send it as a plain object."""
     return {

@@ -258,3 +258,22 @@ fn an_unknown_call_field_is_refused() {
     fields["token"] = json!("x");
     assert!(serde_json::from_value::<LeaseCall>(fields).is_err());
 }
+
+#[test]
+fn a_generic_lease_error_keeps_the_exact_route_state() {
+    let lease = call(&[EXACT_OPERATION, GENERIC], 3, true);
+    let mut replies: VecDeque<Result<Reply, SyncError>> = vec![
+        Ok(refusal(400)),
+        Err(SyncError::NotAvailable {
+            message: "Guard Cloud is unavailable.".to_owned(),
+            retryable: true,
+        }),
+    ]
+    .into();
+    let answer = lease_with(&lease, |_, _| replies.pop_front().expect("a reply")).expect("answer");
+    assert_eq!(answer["lease"]["batchLimit"], json!(1));
+    assert_eq!(answer["lease"]["exactRoute"], json!("failed"));
+    assert_eq!(answer["failure"]["route"], json!("/api/guard/commands"));
+    assert_eq!(answer["failure"]["sync"]["outcome"], json!("not_available"));
+    assert_eq!(answer["failure"]["sync"]["retryable"], json!(true));
+}

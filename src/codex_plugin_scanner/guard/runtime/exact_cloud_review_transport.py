@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from typing import NoReturn, TypedDict, cast
 from urllib.error import HTTPError
 
-from .cloud_bundle_sync import cloud_failure
+from .cloud_bundle_sync import cloud_failure, sync_failure
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 
 EXACT_CLOUD_REVIEW_COMMAND_API_BASE = "/api/guard/review/v2/commands"
@@ -103,6 +103,9 @@ def lease_next_job(
 def _raise_lease_failure(failure: Mapping[str, object], lease_url: Callable[[str], str]) -> NoReturn:
     if failure.get("protocol") == "cloud_review_protocol_upgrade_required":
         raise ValueError("cloud_review_protocol_upgrade_required")
+    sync = failure.get("sync")
+    if isinstance(sync, Mapping):
+        raise sync_failure(cast(Mapping[str, object], sync), "Guard command lease")
     route = failure.get("route")
     raise cloud_failure(lease_url(route if isinstance(route, str) else "/api/guard/commands"), failure)
 

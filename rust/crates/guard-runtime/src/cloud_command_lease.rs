@@ -9,11 +9,14 @@
 //! the answer reports what to record (the exact route's health, the batch
 //! limit Guard Cloud advertised and the responses whose policy revision it
 //! reads) beside the leased job, and a `failure` the caller raises after
-//! recording them, with the route base whose lease failed.
+//! recording them, with the route base whose lease failed. A generic lease
+//! that fails outright after the exact route answered reports its error as
+//! `sync`, so that state is still recorded.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::cloud_bundle_command::failure;
 use crate::cloud_bundle_fetch::SyncError;
 use crate::cloud_event_sync::trusted_base;
 use crate::cloud_json_request::{send, JsonRequest};
@@ -184,7 +187,17 @@ pub(crate) fn lease_with(
         return Ok(outcome.answer());
     }
     let body = lease_body(call, &generic, call.wait_ms, 1);
-    match post(QUEUE_BASE, &body)? {
+    let reply = match post(QUEUE_BASE, &body) {
+        Ok(reply) => reply,
+        // The exact route's health and batch limit are already known; the
+        // caller records them before it raises the generic lease's error.
+        Err(error) => {
+            return Ok(outcome
+                .failed(json!({"sync": failure(&error), "route": QUEUE_BASE}))
+                .answer())
+        }
+    };
+    match reply {
         Reply::Refusal(refusal) => Ok(outcome
             .failed(json!({"refusal": refusal, "route": QUEUE_BASE}))
             .answer()),
