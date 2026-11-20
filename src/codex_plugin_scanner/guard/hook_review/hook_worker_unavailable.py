@@ -1,16 +1,75 @@
-"""Deterministic responses when the resident cannot identify a hook event."""
+"""Deterministic responses when the resident cannot identify a hook event.
+
+Structured-output helpers in this module are outage-only adapters. The normal
+structured-output decision is made by the Rust edge from its authenticated
+direct-lane binding.
+"""
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_content_sensitivity import content_query
+from ..native_policy_snapshot_direct_lane_structured import structured_output_view
 from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 
 if TYPE_CHECKING:
     from .hook_worker import HookWorker
 
 _PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
+_LOG = logging.getLogger(__name__)
+MEDIATION_FIELD = "structured_content_mediation"
+_MEDIATION_SCHEMA = "guard-structured-content-mediation.v1"
+_PI_ALIASES = {"pi-agent": "pi", "pi-coding-agent": "pi", "oh-my-pi": "omp"}
+
+
+def withholds_structured_destination(*, harness: str, event_name: str) -> bool:
+    normalized = harness.strip().lower().replace("_", "-")
+    return event_name == "PostToolUse" and _PI_ALIASES.get(normalized, normalized) in {"pi", "omp"}
+
+
+def _withheld(reason_code: str, native_decision_id: object = None) -> dict[str, object]:
+    disposition: dict[str, object] = {
+        "schema": _MEDIATION_SCHEMA,
+        "action": "withhold",
+        "reason_code": reason_code,
+    }
+    if isinstance(native_decision_id, str) and native_decision_id:
+        disposition["native_decision_id"] = native_decision_id
+    return disposition
+
+
+def withhold_structured_destination(response: dict[str, object]) -> dict[str, object]:
+    """Withhold structured output when native proof is unavailable."""
+
+    return {**response, MEDIATION_FIELD: _withheld("structured_native_edge_unavailable")}
+
+
+def read_structured_view(load_config: Callable[[], object]) -> dict[str, object]:
+    """Read the managed view used only by the outage-only overlay."""
+
+    try:
+        config = load_config()
+        view = None if config is None else structured_output_view(config)
+    except Exception as exc:
+        _LOG.warning("structured managed policy read failed: %s", type(exc).__name__)
+        view = None
+    return view if view is not None else {}
+
+
+def structured_destination_required(view: Mapping[str, object], *, harness: str) -> bool:
+    """Return whether the managed policy requires withholding this destination."""
+
+    if not view:
+        return True
+    try:
+        result = content_query("resolution", {"config": dict(view), "harness": harness})
+    except Exception:
+        return True
+    return not (isinstance(result, dict) and result.get("required") is False)
 
 
 def unavailable_event_response(

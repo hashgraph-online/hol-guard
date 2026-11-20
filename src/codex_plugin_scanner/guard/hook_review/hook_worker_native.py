@@ -33,10 +33,9 @@ from .hook_worker_native_review import (
     review_native_edge,
     superseded_post_tool_snapshot,
 )
-from .hook_worker_structured import (
+from .hook_worker_unavailable import (
     read_structured_view,
     structured_destination_required,
-    withhold_stale_forward,
     withhold_structured_destination,
     withholds_structured_destination,
 )
@@ -233,8 +232,9 @@ class HookWorkerNativeMixin:
 
         if not withholds_structured_destination(harness=harness, event_name=event_name):
             return response
-        # The edge never answered, so nothing resolved the policy. Read it
-        # again: one activated while the edge was tried must still apply.
+        # The edge never answered, so nothing resolved the policy. Read the
+        # managed view for the outage-only overlay: an active destination
+        # still must not receive unreviewed content.
         resolved = read_structured_view(lambda: self._load_config(guard_home, workspace))
         if not structured_destination_required(resolved, harness=harness):
             return response
@@ -298,14 +298,6 @@ class HookWorkerNativeMixin:
         # Worker threads are reused, so clear any failure code left by an
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
-        # The edge mediates a managed structured destination itself, from the
-        # managed policy only this daemon reads. It is read once, ahead of the
-        # call, and does not depend on the native decision.
-        structured_view = (
-            read_structured_view(lambda: self._load_config(guard_home, workspace))
-            if withholds_structured_destination(harness=harness, event_name=event_name)
-            else None
-        )
         for retried in (False, True):
             edge = self._review_raw_hook_native(
                 payload=payload,
@@ -328,7 +320,6 @@ class HookWorkerNativeMixin:
                 # The edge rewrites a call it routes to the contained sink in
                 # the same answer.
                 containment_sink=True,
-                **({"structured_output_config": structured_view} if structured_view is not None else {}),
             )
             refreshed = (
                 None
@@ -564,17 +555,7 @@ class HookWorkerNativeMixin:
                 payload=payload,
                 succeeded=hook_post_succeeded(native_event, payload),
             )
-        response = _edge_harness_response(edge)
-        if structured_view is not None:
-            edge_result = edge.get("result")
-            response = withhold_stale_forward(
-                response,
-                view=structured_view,
-                load_config=lambda: self._load_config(guard_home, workspace),
-                deadline=deadline,
-                allowed=isinstance(edge_result, dict) and edge_result.get("decision") == "allow",
-            )
-        return (response, True)
+        return (_edge_harness_response(edge), True)
 
     def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> Mapping[str, object] | None:
         """Hold the edge's receipt for this hook; the edge checked it before answering."""
