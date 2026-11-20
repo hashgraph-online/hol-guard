@@ -167,11 +167,6 @@ impl SearchFilter {
         })
     }
 
-    /// The inclusion patterns, as this filter models them.
-    pub(super) fn inclusions(&self) -> &[String] {
-        &self.include
-    }
-
     /// Apply glob overrides to one entry. `relative` is the entry's path
     /// from the search root, which a path-shaped inclusion matches against.
     /// Directory exclusions are not modeled, so a directory is never
@@ -243,6 +238,11 @@ impl SearchFilter {
             };
             glob_matches(pattern, text).unwrap_or(true)
         })
+    }
+
+    /// The inclusion patterns, as this filter models them.
+    pub(super) fn inclusions(&self) -> &[String] {
+        &self.include
     }
 
     pub(super) fn type_allows(&self, name: &str) -> bool {
