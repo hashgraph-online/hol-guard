@@ -33,6 +33,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     crate::edge_receipt::EDGE_PRE_TOOL_ACTIVITY_RECORD_FEATURE,
     guard_contracts::APPROVAL_EXTENSION_RECOMMENDATION_FEATURE,
     guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE,
+    guard_contracts::COMMAND_JOB_PLAN_FEATURE,
     guard_contracts::PROTECT_REQUEST_FEATURE,
     guard_contracts::PROTECT_ADVISORY_MERGE_FEATURE,
     guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE,

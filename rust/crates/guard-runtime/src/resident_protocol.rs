@@ -234,6 +234,7 @@ pub(crate) enum ResidentOperationV1 {
     ),
     ApprovalExtensionRecommendation(guard_contracts::ApprovalExtensionRecommendationRequestV1),
     GithubCliClassify(GithubCliClassifyRequestV1),
+    CommandJobPlan(guard_contracts::CommandJobPlanRequestV1),
     GithubWorkflowPrepare(guard_contracts::GithubWorkflowPrepareRequestV1),
     ProtectRequest(ProtectRequestRequestV1),
     ProtectAdvisoryMerge(guard_contracts::ProtectAdvisoryMergeRequestV1),
