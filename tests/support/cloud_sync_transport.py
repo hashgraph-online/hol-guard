@@ -15,6 +15,7 @@ import time
 import urllib.error
 import urllib.request
 
+from codex_plugin_scanner.guard.mdm import network
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime.sync_retry_delay import parse_retry_after_header
 
@@ -121,7 +122,7 @@ def _urlopen_json_with_timeout_retry(
     gateway_retries = 0
     while True:
         try:
-            with runner.managed_urlopen(current, timeout=timeout) as response:
+            with network.managed_urlopen(current, timeout=timeout) as response:
                 raw = response.read() if max_response_bytes is None else response.read(max_response_bytes + 1)
                 if max_response_bytes is not None and len(raw) > max_response_bytes:
                     raise RuntimeError("Guard Cloud sync response exceeds its byte budget.")

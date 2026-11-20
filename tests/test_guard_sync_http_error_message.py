@@ -11,6 +11,7 @@ import urllib.request
 import pytest
 import urllib3
 
+from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.runtime.runner import (
@@ -167,12 +168,14 @@ def _refresh_with_urlopen_failure(monkeypatch: pytest.MonkeyPatch, reason: BaseE
 
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner._guard_runtime_was_upgraded", lambda: False)
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner._sign_guard_dpop_proof", lambda **_kwargs: "proof")
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.managed_urlopen", _raise)
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.network.managed_urlopen", _raise)
     _refresh_guard_oauth_access_token_once(
         token_endpoint="https://hol.org/api/guard/oauth/token",
         client_id="client",
         refresh_token="refresh",
-        dpop_key_material=object(),  # type: ignore[arg-type]
+        dpop_key_material=GuardDpopKeyMaterial(
+            algorithm="ES256", private_key_pem="unused", public_jwk={}, public_jwk_thumbprint=""
+        ),
     )
 
 

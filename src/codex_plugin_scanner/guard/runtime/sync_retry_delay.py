@@ -9,7 +9,11 @@ from email.utils import parsedate_to_datetime
 
 def parse_retry_after_header(error: urllib.error.HTTPError) -> int:
     """Parse the Retry-After header from a 429 response. Returns seconds to wait."""
-    retry_after = error.headers.get("Retry-After") if error.headers else None
+    return parse_retry_after_value(error.headers.get("Retry-After") if error.headers else None)
+
+
+def parse_retry_after_value(retry_after: str | None) -> int:
+    """Seconds to wait for a ``Retry-After`` value: delay seconds, an HTTP date or an ISO time."""
     if not retry_after:
         return 60  # Default: 60 seconds
     try:
@@ -33,4 +37,4 @@ def parse_retry_after_header(error: urllib.error.HTTPError) -> int:
         return 60
 
 
-__all__ = ["parse_retry_after_header"]
+__all__ = ["parse_retry_after_header", "parse_retry_after_value"]
