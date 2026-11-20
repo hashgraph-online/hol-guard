@@ -32,8 +32,10 @@ fn home() -> PathBuf {
     std::fs::canonicalize(home).unwrap()
 }
 
-/// The action both shell harnesses settle on for `command`, or "mixed".
-fn shell(home: &str, cwd: &str, command: &str) -> String {
+/// The action each shell harness settles on for `command`, as
+/// `[omp, zcode]`. Both are returned so an assertion can hold each harness
+/// to the expected action and report the pair when one of them differs.
+fn shell(home: &str, cwd: &str, command: &str) -> [String; 2] {
     let environment = guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap(),
         environment_names: vec!["GIT_CONFIG_NOSYSTEM".to_owned()],
@@ -45,7 +47,7 @@ fn shell(home: &str, cwd: &str, command: &str) -> String {
         git_config_no_system: true,
         ..Default::default()
     };
-    let [omp, zcode] = ["omp", "zcode"].map(|harness| {
+    ["omp", "zcode"].map(|harness| {
         evaluate_pre_tool_envelope_with_execution_context(
             harness,
             "PreToolUse",
@@ -60,12 +62,13 @@ fn shell(home: &str, cwd: &str, command: &str) -> String {
             Some(&environment),
         )
         .minimum_action
-    });
-    if omp == zcode {
-        omp
-    } else {
-        format!("mixed: omp {omp}, zcode {zcode}")
-    }
+    })
+}
+
+/// Both harnesses allowing `command`, for an `assert_eq!` that prints the
+/// pair when either one does not.
+fn allowed() -> [String; 2] {
+    ["allow".to_owned(), "allow".to_owned()]
 }
 
 #[test]
@@ -83,7 +86,7 @@ fn a_read_below_a_parenthesized_directory_keeps_its_proof() {
         "cd \"app/(marketing)/challenge\" && pwd".to_owned(),
         "cd app/\\(marketing\\)/challenge && pwd".to_owned(),
     ] {
-        assert_eq!(shell(home_text, &cwd, &command), "allow", "{command}");
+        assert_eq!(shell(home_text, &cwd, &command), allowed(), "{command}");
     }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
@@ -103,7 +106,7 @@ fn the_plain_directory_beside_it_is_allowed_the_same_way() {
             &cwd,
             &format!("cd \"{}\" && pwd", plain.to_str().unwrap())
         ),
-        "allow"
+        allowed()
     );
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
@@ -120,7 +123,11 @@ fn an_unquoted_parenthesis_is_still_unproven() {
         "cd app/(marketing)/challenge && pwd",
         "cd $(echo app) && pwd",
     ] {
-        assert_ne!(shell(home_text, &cwd, command), "allow", "{command}");
+        let actions = shell(home_text, &cwd, command);
+        assert!(
+            actions.iter().all(|action| action != "allow"),
+            "{command}: {actions:?}"
+        );
     }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
