@@ -124,3 +124,5 @@ def test_dashboard_wheel_names_the_cached_runtime_build_sha() -> None:
     identity = next(step["run"] for step in job["steps"] if step.get("name") == "Resolve wheel identity")
     assert "capabilities --json | jq -r '.build_sha'" in identity
     assert "git rev-parse HEAD" not in identity
+    seal = next(step["run"] for step in job["steps"] if step.get("name") == "Seal the native wheel")
+    assert 'HOL_GUARD_BUNDLE_SOURCE_SHA="$SOURCE_SHA" uv build --wheel' in seal
