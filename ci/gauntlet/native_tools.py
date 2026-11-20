@@ -637,7 +637,7 @@ def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
     if any(
         not _route_segment_glob_path(
             call["args"].get("path")
-            if call["args"].get("path") not in (None, "")
+            if call["args"].get("path") not in (None, "", ".", "{{workspace}}")
             else call["args"].get("pattern")
         )
         for call in globs
