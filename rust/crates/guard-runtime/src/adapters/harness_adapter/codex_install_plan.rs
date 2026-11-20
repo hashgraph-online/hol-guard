@@ -522,13 +522,10 @@ mod compared_pins_tests {
         let config = json!({"path": "/config.toml", "before": null});
         let pins = [pin.clone()];
 
-        assert_eq!(
-            super::not_yet_compared(&[config.clone(), pin], &pins),
-            [config.clone()]
-        );
-        assert_eq!(
-            super::not_yet_compared(&[config.clone(), merged.clone()], &pins),
-            [config, merged]
-        );
+        let skipped = super::not_yet_compared(&[config.clone(), pin], &pins);
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0], config);
+        let kept = super::not_yet_compared(&[config.clone(), merged.clone()], &pins);
+        assert_eq!(kept, vec![config, merged]);
     }
 }
