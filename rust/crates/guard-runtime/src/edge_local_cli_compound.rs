@@ -130,6 +130,7 @@ fn step_texts(command: &str, cwd: Option<&str>, home_dir: &str) -> Option<Vec<St
         .map(|segment| {
             let executable = segment.executable.as_deref()?;
             let simple = segment.wrapper_chain.is_empty()
+                && segment.pipeline_index == 0
                 && !segment.path_overridden
                 && segment.environment_names.is_empty()
                 && !STATE_STEPS.contains(&executable)

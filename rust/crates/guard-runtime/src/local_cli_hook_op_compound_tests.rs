@@ -215,4 +215,9 @@ fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() 
         connector.is_none(),
         "parent traversal must not name an unrelated script"
     );
+
+    let hyphen = "cd - && ./approve-merge.sh --dry-run";
+    let (action, connector) = run_with_connector(&review(&fixture, hyphen)).unwrap();
+    assert_eq!(action, "review");
+    assert!(connector.is_none(), "cd - does not select cwd/nested");
 }

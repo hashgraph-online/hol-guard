@@ -147,6 +147,13 @@ fn a_step_that_changes_the_next_one_keeps_the_review() {
 }
 
 #[test]
+fn a_piped_step_keeps_the_review() {
+    let (envelope, _) = case("chain-pipe", Some("allowed"), false);
+    let envelope = asking(envelope, "npm run build | git status");
+    assert_eq!(settle_chain(&envelope, &chain_review()), None);
+}
+
+#[test]
 fn a_chain_whose_grants_are_not_read_in_time_keeps_the_review() {
     let (envelope, _) = case("chain-late", Some("allowed"), false);
     let envelope = asking(envelope, "npm run build ; git status");

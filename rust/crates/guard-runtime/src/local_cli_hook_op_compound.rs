@@ -114,7 +114,7 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
     // working directory than the one canonicalized here. Logical cd handles
     // '..' before symlinks; searched operands can be redirected by CDPATH.
     let operand = first.arguments[0].as_str();
-    if operand.split('/').any(|part| part == "..") {
+    if operand.starts_with('-') || operand.split('/').any(|part| part == "..") {
         return None;
     }
     let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");
