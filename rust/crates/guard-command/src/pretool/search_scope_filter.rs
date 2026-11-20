@@ -173,11 +173,6 @@ impl SearchFilter {
         })
     }
 
-    /// The inclusion patterns, as this filter models them.
-    pub(super) fn inclusions(&self) -> &[String] {
-        &self.include
-    }
-
     /// A copy whose walk renders every entry under `base`, the search
     /// root's own path from the directory ripgrep matches a path-shaped
     /// inclusion against. Empty when the two are the same directory.
@@ -264,6 +259,11 @@ impl SearchFilter {
             };
             glob_matches(pattern, text).unwrap_or(true)
         })
+    }
+
+    /// The inclusion patterns, as this filter models them.
+    pub(super) fn inclusions(&self) -> &[String] {
+        &self.include
     }
 
     pub(super) fn type_allows(&self, name: &str) -> bool {
