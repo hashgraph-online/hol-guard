@@ -19343,8 +19343,8 @@ def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
 @pytest.mark.parametrize(
     ("canonical", "step"),
     [
-        (True, "policy_shadow_mismatch"),
-        (False, "policy_shadow_mismatch"),
+        (True, "policy_shadow_verdict"),
+        (False, "policy_shadow_verdict"),
         (True, "policy_shadow_source"),
     ],
 )
@@ -19359,7 +19359,7 @@ def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavai
     def _unavailable(*_args, **_kwargs):
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-    monkeypatch.setattr(guard_runner_module._authority, step, _unavailable)
+    monkeypatch.setattr(guard_runner_module._shadow, step, _unavailable)
 
     guard_runner_module.sync_receipts(store)
 

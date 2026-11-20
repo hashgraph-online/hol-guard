@@ -1441,19 +1441,14 @@
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/policy_bundle_parser.py",
         "symbols": [
-          "_POLICY_BUNDLE_TRUST_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_VERSION_REMEDIATION_REASONS",
-          "policy_bundle_daemon_version_supported",
+          "_NATIVE_UNAVAILABLE_MESSAGE",
+          "policy_bundle_admission_rejection",
+          "policy_bundle_rejection_payload",
           "policy_bundle_rejection_message"
         ],
         "entry_points": [],
-        "reason": "The daemon version gate and rejection messages are used when Cloud sync accepts or rejects a policy bundle. Bundle parsing used at request time stays counted.",
-        "evidence": "rg -l 'policy_bundle_daemon_version_supported|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and daemon/server_control_sync.py (daemon-control-plane-routes) outside policy_bundle_parser.py."
+        "reason": "The candidate admission call (daemon version, rollout state and downgrade, decided in Rust) and rejection messages are used when Cloud sync accepts or rejects a policy bundle. Bundle parsing used at request time stays counted.",
+        "evidence": "rg -l 'policy_bundle_admission_rejection|policy_bundle_rejection_payload|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and routes/policy_sync_call.py (the daemon policy-sync route) outside policy_bundle_parser.py."
       },
       {
         "id": "package-audit-report-projection",

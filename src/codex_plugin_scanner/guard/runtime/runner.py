@@ -56,17 +56,15 @@ from ..policy_bundle_delivery import (
     is_failed_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    CANONICAL_COMPILE_DOCUMENT_CODES,
     CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
-    policy_bundle_cloud_exceptions_hash,
+    policy_bundle_admission_rejection,
+    policy_bundle_downgrade_verdict,
     policy_bundle_is_enforceable,
-    policy_bundle_is_version_downgrade,
-    policy_bundle_rejection_message,
 )
 from ..policy_bundle_parser import (
-    policy_bundle_daemon_version_supported as _daemon_version_supported,
+    policy_bundle_rejection_payload as _policy_bundle_rejection_payload,
 )
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -76,7 +74,6 @@ from ..policy_bundle_trusted_keys import (
 )
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
-    validate_policy_bundle_v2_transition,
     validated_policy_bundle_v2_acknowledgement,
 )
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
@@ -87,6 +84,7 @@ from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
+from . import runner_policy_shadow as _shadow
 from .extension_catalog_handshake import (
     catalog_runtime_unavailable_summary,
     prepare_extension_catalog_handshake,
@@ -226,43 +224,21 @@ def _policy_bundle_is_version_downgrade(
     *,
     expected_last_good_bundle: dict[str, object] | None = None,
 ) -> bool:
-    if next_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        current_version = existing_bundle.get("bundleVersion") if isinstance(existing_bundle, dict) else None
-        current_hash = existing_bundle.get("bundleHash") if isinstance(existing_bundle, dict) else None
-        expected_version = (
-            expected_last_good_bundle.get("bundleVersion") if isinstance(expected_last_good_bundle, dict) else None
-        )
-        expected_hash = (
-            expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
-        )
-        current_exceptions_issued_at = (
-            existing_bundle.get("cloudExceptionsIssuedAt") if isinstance(existing_bundle, dict) else None
-        )
-        transition_error = validate_policy_bundle_v2_transition(
-            next_bundle,
-            current_bundle_version=(
-                current_version if isinstance(current_version, int) and not isinstance(current_version, bool) else None
-            ),
-            current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
-            expected_last_good_bundle_version=(
-                expected_version
-                if isinstance(expected_version, int) and not isinstance(expected_version, bool)
-                else None
-            ),
-            expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
-            current_cloud_exceptions_issued_at=(
-                current_exceptions_issued_at if isinstance(current_exceptions_issued_at, str) else None
-            ),
-            current_cloud_exceptions_hash=(
-                policy_bundle_cloud_exceptions_hash(existing_bundle) if isinstance(existing_bundle, dict) else None
-            ),
-        )
-        if transition_error == NATIVE_UNAVAILABLE_REJECTION:
-            # The resident could not decide. That is an outage, never a
-            # downgrade verdict and never an implicit allow.
-            raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
-        return transition_error is not None
-    return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
+    return policy_bundle_downgrade_verdict(
+        existing_bundle,
+        next_bundle,
+        expected_last_good=expected_last_good_bundle,
+    )
+
+
+def _policy_bundle_admission_rejection(
+    store: GuardStore,
+    existing_bundle: dict[str, object] | None,
+    candidate: dict[str, object],
+) -> str | None:
+    """The first gate a validated synced candidate fails, or ``None``."""
+
+    return policy_bundle_admission_rejection(candidate, _policy_bundle_downgrade_reference(store, existing_bundle))
 
 
 def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
@@ -290,20 +266,6 @@ def _validate_cached_policy_bundle(
     """Revalidate cached policy authority before any rule is made effective."""
 
     return cached_policy_bundle_validation(store, policy_bundle)
-
-
-def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
-    resolved_reason = reason or "invalid_policy_bundle"
-    payload: dict[str, object] = {"reason": resolved_reason}
-    remediation = policy_bundle_rejection_message(resolved_reason)
-    if remediation is not None:
-        payload["message"] = remediation
-    # One rule refuses to compile and the whole bundle stays unapplied, so the
-    # rejection names that rule: without it an administrator sees only that a
-    # published policy never arrived.
-    if rule_id:
-        payload["ruleId"] = rule_id[:128]
-    return payload
 
 
 def _build_canonical_policy_bundle_decisions(
@@ -396,14 +358,14 @@ def policy_bundle_candidate_decisions(
             device_name=device_name,
         )
     except PolicyCompilationError as error:
-        rule_id = None if error.code in CANONICAL_COMPILE_DOCUMENT_CODES else error.rule_id
-        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", rule_id
+        # The stored record drops the rule id for a code about the whole document.
+        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", error.rule_id
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
     stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
     try:
-        shadow_source, evaluating = _authority.policy_shadow_source(
+        shadow_source, evaluating = _shadow.policy_shadow_source(
             policy_bundle,
             stored_legacy=stored_legacy,
             existing=existing_policy_bundle,
@@ -434,24 +396,28 @@ def policy_bundle_candidate_decisions(
         return [], native_rejection_code(error), None
 
     mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
-    if not native_shadow_unavailable:
+    rejection: str | None = "native_shadow_unavailable"
+    if not native_shadow_unavailable and evaluating:
+        # An Evaluate bundle keeps its canonical rows empty on purpose, so it
+        # has nothing to drift from and needs no verdict from the resident.
+        # This is the answer the Rust policy_shadow_verdict kind gives for an
+        # evaluating candidate; test_policy_bundle_v2 pins that answer, so the
+        # two stay in step. Asking anyway would refuse the bundle whenever the
+        # resident is unreachable, which the Evaluate rollout must not do.
+        mismatch_reasons, rejection = (), None
+    elif not native_shadow_unavailable:
         try:
-            # An Evaluate bundle compiles to no rows on purpose, so an older
-            # bundle's rows say nothing about its drift.
-            mismatch_reasons = (
-                ()
-                if evaluating
-                else _authority.policy_shadow_mismatch(
-                    legacy_decisions,
-                    canonical_decisions,
-                )
+            mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
+                legacy_decisions,
+                canonical_decisions,
+                evaluating=evaluating,
+                canonical_enforcement=canonical_enforcement,
             )
         except NativeRunnerAuthorityError:
             # Rust owns the shadow comparison. Without its verdict the candidate
             # cannot be proven equivalent, so treat it as a blocking mismatch:
             # keep the existing policy and never activate the new bundle.
-            native_shadow_unavailable = True
-    blocking_mismatch_reasons = tuple(reason for reason in mismatch_reasons if reason != "legacy_unavailable")
+            mismatch_reasons, rejection = ("native_shadow_unavailable",), "native_shadow_unavailable"
     if mismatch_reasons:
         store.add_event(
             "policy_bundle/shadow_mismatch",
@@ -463,11 +429,7 @@ def policy_bundle_candidate_decisions(
             },
             now,
         )
-    if native_shadow_unavailable:
-        return canonical_decisions, "native_shadow_unavailable", None
-    if canonical_enforcement and blocking_mismatch_reasons:
-        return canonical_decisions, "canonical_shadow_mismatch", None
-    return canonical_decisions, None, None
+    return canonical_decisions, rejection, None
 
 
 def sync_receipts(
@@ -618,18 +580,14 @@ def sync_receipts(
             validated_policy_bundle = None
             policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
         try:
-            if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+            admission_rejection = (
+                None
+                if validated_policy_bundle is None
+                else _policy_bundle_admission_rejection(store, existing_policy_bundle, validated_policy_bundle)
+            )
+            if admission_rejection is not None:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = "unsupported_daemon_version"
-            if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = "inactive_rollout_state"
-            if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-                _policy_bundle_downgrade_reference(store, existing_policy_bundle),
-                validated_policy_bundle,
-            ):
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = "bundle_version_downgrade"
+                policy_bundle_rejection_reason = admission_rejection
         except PolicyBundleNativeError as error:
             validated_policy_bundle = None
             policy_bundle_rejection_reason = native_rejection_code(error)
