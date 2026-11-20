@@ -47,10 +47,9 @@ pub(super) fn prove(
     if creation.pipeline_index != 0 || next.pipeline_index != 0 {
         return false;
     }
-    if !segments[add + 1..after]
-        .iter()
-        .all(|segment| super::super::chain_route::stdin_stage(segment, context, execution_environment))
-    {
+    if !segments[add + 1..after].iter().all(|segment| {
+        super::super::chain_route::stdin_stage(segment, context, execution_environment)
+    }) {
         return false;
     }
     let entered = next.executable.as_deref() == Some("cd");
@@ -81,7 +80,8 @@ pub(super) fn prove(
     ) else {
         return false;
     };
-    if entered && super::super::chain_route::cd_target(next, context).as_ref() != Some(&destination) {
+    if entered && super::super::chain_route::cd_target(next, context).as_ref() != Some(&destination)
+    {
         return false;
     }
     // After the `cd` the shell looks every program up again, `git` among
@@ -151,7 +151,11 @@ pub(super) fn prove(
         }
         let segment = &segments[index];
         if segment.pipeline_index > 0 {
-            return super::super::chain_route::stdin_stage(segment, repository, execution_environment);
+            return super::super::chain_route::stdin_stage(
+                segment,
+                repository,
+                execution_environment,
+            );
         }
         if entered {
             if super::super::chain_route::unrouted_read(
@@ -200,4 +204,3 @@ pub(super) fn prove(
         )
     })
 }
-
