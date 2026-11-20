@@ -9,6 +9,22 @@ use crate::resident_protocol::encode_response;
 pub(crate) const HOOK_PAYLOAD_FACTS_FEATURE: &str = "hook-payload-facts-v1";
 const REQUEST_SCHEMA: &str = "guard-hook-payload-facts-request.v1";
 const RESULT_SCHEMA: &str = "guard-hook-payload-facts-result.v1";
+const COMMAND_ONLY_INPUT_KEYS: &[&str] = &[
+    "command",
+    "cmd",
+    "shell_command",
+    "shellCommand",
+    "description",
+    "timeout",
+    "timeout_ms",
+    "timeoutMs",
+    "run_in_background",
+    "runInBackground",
+    "workdir",
+    "cwd",
+    "working_directory",
+    "workingDirectory",
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +144,14 @@ fn launch_target(
     format!("tool:{tool_name}")
 }
 
+fn command_only(input: Option<&Map<String, Value>>) -> bool {
+    input.is_some_and(|input| {
+        input
+            .keys()
+            .all(|key| COMMAND_ONLY_INPUT_KEYS.contains(&key.as_str()))
+    })
+}
+
 pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, String> {
     if request.schema != REQUEST_SCHEMA
         || request.request_id.is_empty()
@@ -147,7 +171,7 @@ pub(crate) fn evaluate(request: &HookPayloadFactsRequestV1) -> Result<Vec<u8>, S
         "result": {
             "request_id": request.request_id,
             "event_name": runtime_event(payload),
-            "tool_input": input.as_ref().map(|value| Value::Object(value.clone())),
+            "command_only": command_only(input.as_ref()),
             "command": command,
             "tool_name": tool_name.clone(),
             "launch_target": launch_target(input.as_ref(), command.as_deref(), &tool_name),

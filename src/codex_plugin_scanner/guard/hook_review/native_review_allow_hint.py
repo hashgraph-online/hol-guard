@@ -57,32 +57,10 @@ _SLOTS: Final = threading.BoundedSemaphore(4)
 # Tool-input keys that never carry a path, payload, or other content the
 # command-only re-review could miss. A stored row with any other key may hold
 # an independent review floor, so nothing is recovered for it.
-_COMMAND_ONLY_INPUT_KEYS = frozenset(
-    {
-        "command",
-        "cmd",
-        "shell_command",
-        "shellCommand",
-        "description",
-        "timeout",
-        "timeout_ms",
-        "timeoutMs",
-        "run_in_background",
-        "runInBackground",
-        "workdir",
-        "cwd",
-        "working_directory",
-        "workingDirectory",
-    }
-)
+def _command_only_payload(command_only: bool) -> bool:
+    """True when the resident proved the tool call carries only command fields."""
 
-
-def _command_only_payload(tool_input: Mapping[str, object] | None) -> bool:
-    """True when the shell command is the only content the tool call carries."""
-
-    if tool_input is None:
-        return False
-    return all(isinstance(key, str) and key in _COMMAND_ONLY_INPUT_KEYS for key in tool_input)
+    return command_only
 
 
 def _names_launch_directory(raw_payload: Mapping[str, object]) -> bool:
@@ -229,7 +207,7 @@ def _live_reviewed_command(approval: Mapping[str, object], guard_home: Path) -> 
     raw_payload = envelope.get("raw_payload_redacted") if isinstance(envelope, Mapping) else None
     if isinstance(raw_payload, Mapping) and any(key in raw_payload for key in ("tool_input", "toolInput")):
         facts = native_hook_facts(raw_payload, guard_home, deadline=time.monotonic() + _LIVE_BUDGET_SECONDS)
-        if facts is None or not _command_only_payload(facts.tool_input):
+        if facts is None or not _command_only_payload(facts.command_only):
             return None
         cwd = _stored_launch_cwd(raw_payload, workspace_path)
         if cwd is None and _names_launch_directory(raw_payload):

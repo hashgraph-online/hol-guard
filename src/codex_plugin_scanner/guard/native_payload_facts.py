@@ -36,7 +36,7 @@ _CONNECTOR_QUEUE_RESERVE_SECONDS = 0.35
 @dataclass(frozen=True, slots=True)
 class NativePayloadFacts:
     event_name: str
-    tool_input: Mapping[str, object] | None
+    command_only: bool
     command: str | None
     tool_name: str
     launch_target: str
@@ -93,14 +93,14 @@ def native_hook_facts(
     if not isinstance(result, Mapping):
         return None
     event = result.get("event_name")
-    tool_input = result.get("tool_input")
+    command_only = result.get("command_only")
     command = result.get("command")
     tool_name = result.get("tool_name")
     launch_target = result.get("launch_target")
     if (
         not isinstance(event, str)
         or not event
-        or (tool_input is not None and not isinstance(tool_input, Mapping))
+        or not isinstance(command_only, bool)
         or (command is not None and not isinstance(command, str))
         or not isinstance(tool_name, str)
         or not tool_name
@@ -108,7 +108,7 @@ def native_hook_facts(
         or not launch_target
     ):
         return None
-    return NativePayloadFacts(event, tool_input, command, tool_name, launch_target)
+    return NativePayloadFacts(event, command_only, command, tool_name, launch_target)
 
 
 def native_hook_event(
