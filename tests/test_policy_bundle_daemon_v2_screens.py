@@ -71,6 +71,28 @@ def test_daemon_refuses_a_candidate_the_resident_cannot_shadow(
     assert store.get_sync_payload("policy_bundle_ack") is None
 
 
+def test_daemon_applies_an_evaluate_candidate_without_asking_for_a_verdict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable(monkeypatch)
+    store = _store(tmp_path)
+    bundle, delivery = _fixture(store)
+    asked: list[object] = []
+
+    def _no_verdict(*args: object, **_kwargs: object) -> tuple[tuple[str, ...], str | None]:
+        asked.append(args)
+        raise NativeRunnerAuthorityError("unavailable")
+
+    monkeypatch.setattr(shadow, "policy_shadow_source", lambda *_args, **_kwargs: (None, True))
+    monkeypatch.setattr(shadow, "policy_shadow_verdict", _no_verdict)
+    status, response = _sync(store, bundle=bundle, delivery=delivery)
+
+    assert status == 200, response
+    assert asked == []
+    assert isinstance(store.get_sync_payload("policy_bundle_ack"), dict)
+
+
 def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

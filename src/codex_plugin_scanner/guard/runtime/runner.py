@@ -436,7 +436,11 @@ def policy_bundle_candidate_decisions(
 
     mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
     rejection: str | None = "native_shadow_unavailable"
-    if not native_shadow_unavailable:
+    if not native_shadow_unavailable and evaluating:
+        # An Evaluate bundle keeps its canonical rows empty on purpose, so it
+        # has nothing to drift from and needs no verdict from the resident.
+        mismatch_reasons, rejection = (), None
+    elif not native_shadow_unavailable:
         try:
             mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
                 legacy_decisions,
