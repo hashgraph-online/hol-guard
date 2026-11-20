@@ -167,6 +167,39 @@ def test_agentic_linkedin_private_reads_require_review() -> None:
     assert mcp_tool_state(payload, "get_voice_profile") == "review"
 
 
+def test_agentic_linkedin_stays_inert_until_local_admin_enable() -> None:
+    """Keep LinkedIn tools inert until a local admin enables the external catalog entry."""
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "agentic-linkedin@0.1.0"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="agentic-linkedin",
+        tool_name="get_posts",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    catalog_id = "command.mcp-agentic-linkedin"
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    assert (
+        apply_contributed_mcp_decision(
+            _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),)),
+            artifact,
+            "allow",
+        )
+        is None
+    )
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED),))
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
+
+
 def test_tether_declares_every_memory_tool_with_inherited_policy() -> None:
     """Require all four memory verbs before checking their inherited states."""
     payload = _tether_payload()
