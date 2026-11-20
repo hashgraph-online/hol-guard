@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import contained_sink_command
+from codex_plugin_scanner.guard import contained_sink_command, native_hook_direct_route
 from codex_plugin_scanner.guard.hook_review import hook_worker_native
 from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.native_hook_edge import (
@@ -288,7 +288,7 @@ def test_the_worker_uses_a_direct_resident_edge_before_the_daemon_edge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(_ROUTED_RESPONSE), containment_rewrite="routed"))
-    monkeypatch.setattr(hook_worker_native, "native_hook_direct", lambda **_kwargs: fixture.edge)
+    monkeypatch.setattr(native_hook_direct_route, "native_hook_direct", lambda **_kwargs: fixture.edge)
 
     answer, native = _review(fixture, tmp_path, workspace=tmp_path)
 
@@ -297,12 +297,28 @@ def test_the_worker_uses_a_direct_resident_edge_before_the_daemon_edge(
     assert fixture.captured == []
 
 
+def test_a_direct_saved_allow_does_not_reenter_python_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    edge = _edge(
+        result={"decision": "review", "minimum_action": "review", "policy_action": "review"},
+        harness_response={"policy_action": "allow", "permissionDecision": "allow"},
+        containment_route="none",
+    )
+    fixture = _SinkRouteFixture(edge=edge)
+    monkeypatch.setattr(native_hook_direct_route, "native_hook_direct", lambda **_kwargs: edge)
+
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert native is True
+    assert answer == edge["harness_response"]
+    assert fixture.captured == []
+
+
 def test_a_direct_resident_defer_keeps_the_daemon_edge_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture = _SinkRouteFixture(edge=_edge(containment_rewrite="routed"))
     monkeypatch.setattr(
-        hook_worker_native,
+        native_hook_direct_route,
         "native_hook_direct",
         lambda **_kwargs: {"outcome": "defer", "reason": "review_queue"},
     )

@@ -9,6 +9,7 @@ from pathlib import Path
 from .native_execution import _resident_request
 from .native_hook_edge import _decode_edge
 from .native_runtime import native_runtime_status
+from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 HOOK_DIRECT_FEATURE = "hook-direct-v1"
 
@@ -54,13 +55,17 @@ def native_hook_direct(
         return None
     if not isinstance(response, Mapping):
         return None
-    if response.get("outcome") == "answer":
-        edge = response.get("edge")
-        if not isinstance(edge, Mapping):
-            return None
-        return _decode_edge(dict(edge))
-    if response.get("outcome") == "defer":
+    outcome = response.get("outcome")
+    if outcome == "defer":
+        native_record_resident_success(status.identity.sha256, guard_home)
         return {"outcome": "defer", "reason": response.get("reason")}
+    if outcome == "answer":
+        edge = response.get("edge")
+        decoded = _decode_edge(dict(edge)) if isinstance(edge, Mapping) else None
+        if decoded is not None:
+            native_record_resident_success(status.identity.sha256, guard_home)
+            return decoded
+    native_record_resident_failure(status.identity.sha256, guard_home, reason="native_hook_direct_schema")
     return None
 
 

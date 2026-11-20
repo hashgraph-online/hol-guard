@@ -50,7 +50,7 @@ def test_current_worker_reaches_native_authority_through_review_helper() -> None
         ),
         (
             "hook_worker_native.py",
-            "edge = self._review_raw_hook_native(",
+            "edge, direct_answer = native_or_daemon_edge(",
             "edge = self.unavailable_review(",
             "HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge",
         ),

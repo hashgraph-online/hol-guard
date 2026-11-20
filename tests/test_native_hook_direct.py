@@ -18,7 +18,9 @@ _EDGE = {
 
 def test_native_hook_direct_decodes_an_answer(monkeypatch, tmp_path: Path) -> None:
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=object()))
+    monkeypatch.setattr(
+        direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64))
+    )
 
     def resident(**kwargs: object) -> dict[str, object]:
         calls.append(kwargs)
@@ -39,7 +41,9 @@ def test_native_hook_direct_decodes_an_answer(monkeypatch, tmp_path: Path) -> No
 
 
 def test_native_hook_direct_preserves_defer(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=object()))
+    monkeypatch.setattr(
+        direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64))
+    )
     monkeypatch.setattr(
         direct,
         "_resident_request",
@@ -57,3 +61,63 @@ def test_native_hook_direct_preserves_defer(monkeypatch, tmp_path: Path) -> None
         home_dir=None,
         deadline=None,
     ) == {"outcome": "defer", "reason": "review_queue"}
+
+
+def test_native_hook_direct_records_health_after_valid_answer(monkeypatch, tmp_path: Path) -> None:
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64))
+    )
+    monkeypatch.setattr(direct, "native_record_resident_success", lambda *_args: recorded.append("success"))
+    monkeypatch.setattr(
+        direct,
+        "_resident_request",
+        lambda **_kwargs: {
+            "schema": "guard-hook-direct-result.v1",
+            "outcome": "answer",
+            "edge": _EDGE,
+        },
+    )
+
+    assert (
+        direct.native_hook_direct(
+            harness="codex",
+            guard_home=tmp_path,
+            payload={},
+            workspace=None,
+            home_dir=None,
+            deadline=None,
+        )
+        == _EDGE
+    )
+    assert recorded == ["success"]
+
+
+def test_native_hook_direct_records_health_after_invalid_answer(monkeypatch, tmp_path: Path) -> None:
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64))
+    )
+    monkeypatch.setattr(direct, "native_record_resident_failure", lambda *_args, **_kwargs: recorded.append("failure"))
+    monkeypatch.setattr(
+        direct,
+        "_resident_request",
+        lambda **_kwargs: {
+            "schema": "guard-hook-direct-result.v1",
+            "outcome": "answer",
+            "edge": {"malformed": True},
+        },
+    )
+
+    assert (
+        direct.native_hook_direct(
+            harness="codex",
+            guard_home=tmp_path,
+            payload={},
+            workspace=None,
+            home_dir=None,
+            deadline=None,
+        )
+        is None
+    )
+    assert recorded == ["failure"]
