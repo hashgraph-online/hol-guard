@@ -118,11 +118,13 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
         return None;
     }
     let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");
+    // Without the caller's environment, CDPATH cannot be ruled out.
     if searched
-        && request
-            .env
-            .keys()
-            .any(|name| name.eq_ignore_ascii_case("CDPATH"))
+        && (request.env.is_empty()
+            || request
+                .env
+                .keys()
+                .any(|name| name.eq_ignore_ascii_case("CDPATH")))
     {
         return None;
     }

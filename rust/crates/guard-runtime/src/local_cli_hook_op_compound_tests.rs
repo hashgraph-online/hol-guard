@@ -199,6 +199,13 @@ fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() 
         "CDPATH must not move another script's allow"
     );
 
+    // Without the caller's environment, CDPATH cannot be ruled out.
+    let mut unknown = review(&fixture, command);
+    unknown.env.clear();
+    let (action, connector) = run_with_connector(&unknown).unwrap();
+    assert_eq!(action, "review");
+    assert!(connector.is_none(), "an unknown environment may set CDPATH");
+
     // Logical shell cd removes '..' before following symlinks; canonicalize
     // follows symlinks first. This ambiguity must not provide an identity.
     let parent = "cd nested/.. && ./approve-merge.sh --dry-run";
