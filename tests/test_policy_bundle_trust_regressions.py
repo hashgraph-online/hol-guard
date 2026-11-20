@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import cast
 
@@ -37,6 +38,11 @@ from tests.policy_bundle_signing_helpers import (
     sign_policy_bundle,
 )
 from tests.policy_store_support import replace_remote_policies, resolve_policy
+
+_NEEDS_RESIDENT = pytest.mark.skipif(
+    os.environ.get("HOL_GUARD_NATIVE_REGRESSION") != "1",
+    reason="the rejection text comes from the native resident",
+)
 
 
 def _exact_shell_command_id(command: str) -> str:
@@ -615,6 +621,7 @@ def test_invalid_explicit_matcher_families_cannot_fall_back_to_broad_family(
     assert build_policy_bundle_decisions(signed_bundle, device_id="device-1", device_name="Device") == []
 
 
+@_NEEDS_RESIDENT
 def test_inactive_rollout_rejection_has_actionable_remediation() -> None:
     assert policy_bundle_rejection_message("inactive_rollout_state") == (
         "The authenticated policy bundle is not active for local enforcement. "

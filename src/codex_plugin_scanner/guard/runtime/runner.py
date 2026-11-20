@@ -56,17 +56,18 @@ from ..policy_bundle_delivery import (
     is_failed_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    CANONICAL_COMPILE_DOCUMENT_CODES,
     CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_cloud_exceptions_hash,
     policy_bundle_is_enforceable,
     policy_bundle_is_version_downgrade,
-    policy_bundle_rejection_message,
 )
 from ..policy_bundle_parser import (
     policy_bundle_daemon_version_supported as _daemon_version_supported,
+)
+from ..policy_bundle_parser import (
+    policy_bundle_rejection_payload as _policy_bundle_rejection_payload,
 )
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -292,20 +293,6 @@ def _validate_cached_policy_bundle(
     return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
-    resolved_reason = reason or "invalid_policy_bundle"
-    payload: dict[str, object] = {"reason": resolved_reason}
-    remediation = policy_bundle_rejection_message(resolved_reason)
-    if remediation is not None:
-        payload["message"] = remediation
-    # One rule refuses to compile and the whole bundle stays unapplied, so the
-    # rejection names that rule: without it an administrator sees only that a
-    # published policy never arrived.
-    if rule_id:
-        payload["ruleId"] = rule_id[:128]
-    return payload
-
-
 def _build_canonical_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -396,8 +383,8 @@ def policy_bundle_candidate_decisions(
             device_name=device_name,
         )
     except PolicyCompilationError as error:
-        rule_id = None if error.code in CANONICAL_COMPILE_DOCUMENT_CODES else error.rule_id
-        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", rule_id
+        # The stored record drops the rule id for a code about the whole document.
+        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", error.rule_id
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 

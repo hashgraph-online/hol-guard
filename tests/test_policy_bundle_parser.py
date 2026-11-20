@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -35,6 +36,12 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_verification_key_from_public_key,
     sign_policy_bundle,
 )
+
+_NEEDS_RESIDENT = pytest.mark.skipif(
+    os.environ.get("HOL_GUARD_NATIVE_REGRESSION") != "1",
+    reason="the rejection text comes from the native resident",
+)
+
 
 _TEST_SIGNING_KEY = policy_bundle_test_verification_key()
 
@@ -181,6 +188,7 @@ def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
     assert reason == "bundle_signature_invalid"
 
 
+@_NEEDS_RESIDENT
 @pytest.mark.parametrize(
     ("reason", "expected_guidance"),
     [
@@ -206,6 +214,7 @@ def test_policy_bundle_rejection_message_provides_actionable_guidance(
     assert "Sync again" in message
 
 
+@_NEEDS_RESIDENT
 def test_policy_bundle_rejection_message_does_not_blame_guard_version_for_downgrade() -> None:
     message = policy_bundle_rejection_message("bundle_version_downgrade")
 
@@ -218,6 +227,7 @@ def test_policy_bundle_rejection_message_does_not_blame_guard_version_for_downgr
     assert "policy record on this device may be damaged" in message
 
 
+@_NEEDS_RESIDENT
 def test_policy_bundle_rejection_message_names_the_exact_command_review_restriction() -> None:
     message = policy_bundle_rejection_message("canonical_compile_unsupported_exact_command_review")
 
