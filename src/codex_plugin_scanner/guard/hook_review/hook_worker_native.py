@@ -10,6 +10,7 @@ from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
+from ..native_hook_direct import native_hook_direct
 from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
 from ..native_resident_client import (
@@ -299,28 +300,39 @@ class HookWorkerNativeMixin:
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
         for retried in (False, True):
-            edge = self._review_raw_hook_native(
-                payload=payload,
+            direct_edge = native_hook_direct(
                 harness=harness,
-                event=event_name,
                 guard_home=guard_home,
+                payload=payload,
+                workspace=workspace,
                 home_dir=home_dir,
-                cwd=workspace,
-                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-                observe_mode=recording_only,
                 deadline=deadline,
-                policy_snapshot=policy_snapshot,
-                **({"request_id": probe[1]} if probe is not None else {}),
-                local_cli_rules=True,
-                observe_local_cli=True,
-                record_receipt=(
-                    not defer_accepted_recording
-                    and callable(getattr(self.activity_writer, "submit_native_decision_receipt", None))
-                ),
-                # The edge rewrites a call it routes to the contained sink in
-                # the same answer.
-                containment_sink=True,
             )
+            if direct_edge is None or direct_edge.get("outcome") == "defer":
+                edge = self._review_raw_hook_native(
+                    payload=payload,
+                    harness=harness,
+                    event=event_name,
+                    guard_home=guard_home,
+                    home_dir=home_dir,
+                    cwd=workspace,
+                    source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
+                    observe_mode=recording_only,
+                    deadline=deadline,
+                    policy_snapshot=policy_snapshot,
+                    **({"request_id": probe[1]} if probe is not None else {}),
+                    local_cli_rules=True,
+                    observe_local_cli=True,
+                    record_receipt=(
+                        not defer_accepted_recording
+                        and callable(getattr(self.activity_writer, "submit_native_decision_receipt", None))
+                    ),
+                    # The edge rewrites a call it routes to the contained sink in
+                    # the same answer.
+                    containment_sink=True,
+                )
+            else:
+                edge = direct_edge
             refreshed = (
                 None
                 if edge is not None or retried

@@ -151,7 +151,21 @@ def _resident_request(
         "hook_policy_fence_window": "guard-hook-policy-fence-window-result.v1",
         "hook_review_binding": "guard-hook-review-binding-result.v1",
     }.get(operation)
-    if operation == "cloud_catalog":
+    if operation == "hook_direct":
+        # The direct hook op is a strict answer/defer union. A defer is a
+        # native routing decision and must remain visible to the caller so it
+        # can take the daemon path without inventing a Python verdict.
+        if decoded.get("schema") != "guard-hook-direct-result.v1":
+            return None
+        if set(decoded) == {"schema", "outcome", "edge"}:
+            if decoded.get("outcome") != "answer" or not isinstance(decoded.get("edge"), dict):
+                return None
+        elif set(decoded) == {"schema", "outcome", "reason"}:
+            if decoded.get("outcome") != "defer" or not isinstance(decoded.get("reason"), str):
+                return None
+        else:
+            return None
+    elif operation == "cloud_catalog":
         # Producer/completion replies use a strict payload/error union, with
         # no status field. Keep native validation refusals intact.
         if decoded.get("schema") != "guard-cloud-catalog-result.v2":

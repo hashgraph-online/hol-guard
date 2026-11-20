@@ -284,6 +284,19 @@ def test_the_daemon_answers_with_the_edge_rewrite_in_one_resident_call(
     assert [call["containment_sink"] for call in fixture.captured] == [True]
 
 
+def test_the_worker_uses_a_direct_resident_edge_before_the_daemon_edge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(_ROUTED_RESPONSE), containment_rewrite="routed"))
+    monkeypatch.setattr(hook_worker_native, "native_hook_direct", lambda **_kwargs: fixture.edge)
+
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+
+    assert native is True
+    assert answer == _ROUTED_RESPONSE
+    assert fixture.captured == []
+
+
 def test_an_unmarked_sink_route_in_a_workspace_is_the_outage(tmp_path: Path) -> None:
     fixture = _SinkRouteFixture(edge=_edge())
     answer, native = _review(fixture, tmp_path, workspace=tmp_path)
