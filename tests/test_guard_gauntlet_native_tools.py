@@ -150,6 +150,10 @@ def test_scope_judge_requires_the_dynamic_route_glob_to_use_its_bracket_director
     # OMP normally supplies the route selector as `pattern`, with no `path`.
     # These calls must exercise the same scenario as the explicit path form.
     assert native_tools_scope_error(scenario, [_call("glob", pattern="app/items/[slug]/page.tsx")], {}) is None
+    for root in (".", "{{workspace}}"):
+        assert native_tools_scope_error(
+            scenario, [_call("glob", path=root, pattern="app/items/[slug]/page.tsx")], {}
+        ) is None
     assert native_tools_scope_error(
         scenario, [_call("glob", path="", pattern="app/items/[slug]/page.tsx")], {}
     ) is None
