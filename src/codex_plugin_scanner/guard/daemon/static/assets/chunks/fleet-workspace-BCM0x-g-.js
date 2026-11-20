@@ -1,8 +1,8 @@
 import { av as isUnsupportedPlatformCheck, t as harnessDisplayName, j as jsxRuntimeExports, aw as RECHECK_UNAVAILABLE_SIGNATURE, ax as protectionReasonText, r as reactExports, A as ActionButton, ay as HiMiniExclamationCircle, az as hasRepairableProtectionGap, aA as remainingProtectionRepairParts, aB as protectionGapSignature, aC as repairOutcomeIsStalled, aD as ProtectionRepairFlowError, aE as nextProtectionRepairOutcome, aF as waitForAuthorizeUrl, aG as startOrRecoverCloudConnect, aH as safeCloudConnectUrl, aI as openPackageFirewallAuthorizeFallback, aJ as waitForCloudConnection, aK as activeFailedHarnesses, aL as resetRepairOutcomeTracker, aM as HiMiniWrenchScrewdriver, G as HiMiniCheckCircle, x as HiMiniChevronDown, aN as useFleetAppPosture, S as SectionLabel, al as EmptyState, aO as harnessRowTone, aP as appModesNote, aQ as harnessRowStatus, q as HiMiniChevronRight, aR as HiMiniEye, aS as HiMiniXCircle, J as isConnectableAppHarness, a5 as protectionHealthFor, a4 as useProtectionPresentationState, aT as GuardHero, aU as ProofStrip, aV as HiMiniClipboardDocumentCheck, aW as HiMiniClipboard } from "../guard-dashboard.js";
-import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, i as inactiveInstallNeedsRepair, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-CPnNdoDR.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-DMNzsDd6.js";
+import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, i as inactiveInstallNeedsRepair, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-JURowldM.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CzWHGND8.js";
 import { a as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog-Ca_M7GbC.js";
-import { G as GuardRepairControl } from "./guard-repair-control-zO9jfh8e.js";
+import { G as GuardRepairControl } from "./guard-repair-control-91tBByHP.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;

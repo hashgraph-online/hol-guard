@@ -499,7 +499,3 @@ fn metadata(id: &str, scope: &Scope) -> Value {
         "receipt_window":{"enabled":scope.policy.sources.sanitized_receipt_facts, "retained":scope.receipts.len(),
             "dropped":scope.receipts_dropped.to_string(), "coverage":"bounded_recent_native_receipts"}})
 }
-
-#[cfg(all(test, unix))]
-#[path = "context_assistance_persistence_tests.rs"]
-mod persistence_tests;

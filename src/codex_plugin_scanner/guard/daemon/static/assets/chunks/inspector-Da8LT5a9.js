@@ -1,6 +1,6 @@
-import { r as reactExports, j as jsxRuntimeExports, ak as HiMiniXMark, b as HiMiniCommandLine, d as HiMiniCircleStack, fE as HiMiniArrowUp } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, ak as HiMiniXMark, b as HiMiniCommandLine, d as HiMiniCircleStack, fA as HiMiniArrowUp } from "../guard-dashboard.js";
 import { s as setSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
-import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-bBGraC2U.js";
+import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-CRKVu82y.js";
 function Activity({ agent, stale }) {
   const [events, setEvents] = reactExports.useState([]);
   const [error, setError] = reactExports.useState(false);
