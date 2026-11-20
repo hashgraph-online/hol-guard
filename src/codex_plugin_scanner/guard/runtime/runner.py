@@ -3342,6 +3342,7 @@ def _sync_extension_catalog_from_runtime_handshake(
 ) -> dict[str, object]:
     """Upload the canonical catalog only after a digest-bound Cloud request."""
 
+    from .cloud_bundle_sync import cloud_json_request
     from .extension_catalog_pages import observed_view
     from .extension_catalog_sync import ExtensionCatalogUnavailableError, build_v1_catalog_from_view
     from .extension_catalog_transfer import catalog_sync_plan, sync_catalog_view
@@ -3353,19 +3354,13 @@ def _sync_extension_catalog_from_runtime_handshake(
         def send_page(url: str, body: bytes) -> object:
             nonlocal sent
             sent = True
-            request = _guard_sync_request(
-                auth_context,
-                request_url=url,
-                method="POST",
-                data=body,
-                extra_headers=None,
-            )
             try:
-                return _urlopen_json_with_timeout_retry(
-                    request=request,
+                return cloud_json_request(
+                    auth_context,
+                    url=url,
+                    body=body,
                     timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
                     retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
-                    max_response_bytes=4096,
                 )
             except urllib.error.HTTPError as error:
                 raise RuntimeError(_sync_http_error_message(error)) from error
@@ -3429,16 +3424,11 @@ def _sync_extension_catalog_from_runtime_handshake(
     )
     if upload is None:
         return summary
-    request = _guard_sync_request(
-        auth_context,
-        request_url=upload.url,
-        method="POST",
-        data=upload.body,
-        extra_headers=None,
-    )
     try:
-        response = _urlopen_json_with_timeout_retry(
-            request=request,
+        response = cloud_json_request(
+            auth_context,
+            url=upload.url,
+            body=upload.body,
             timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
             retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
         )

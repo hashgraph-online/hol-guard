@@ -164,3 +164,76 @@ fn a_post_needs_a_body_and_a_get_carries_none() {
         );
     }
 }
+
+fn post_with(fields: Value) -> JsonRequest {
+    let mut request = json!({
+        "url": "https://hol.org/api/guard/extensions/catalog",
+        "method": "POST",
+        "timeoutSeconds": 1.0,
+        "retryTimeoutSeconds": 1.0,
+    });
+    if let (Some(target), Value::Object(extra)) = (request.as_object_mut(), fields) {
+        target.extend(extra);
+    }
+    serde_json::from_value(request).unwrap()
+}
+
+#[test]
+fn a_body_file_is_read_byte_for_byte() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("page.json");
+    fs::write(&path, b"{\"page\":1}").unwrap();
+    let request = post_with(json!({"bodyFile": path.to_str().unwrap()}));
+    assert_eq!(
+        request_body(&request).unwrap().as_deref(),
+        Some(&b"{\"page\":1}"[..])
+    );
+}
+
+#[test]
+fn a_post_carries_one_body_and_a_get_no_body_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("page.json");
+    fs::write(&path, b"{}").unwrap();
+    let file = path.to_str().unwrap();
+    let both = post_with(json!({"body": "{}", "bodyFile": file}));
+    assert!(matches!(request_body(&both), Err(SyncError::Failed(_))));
+    let mut get = post_with(json!({"bodyFile": file}));
+    get.method = Method::Get;
+    assert!(matches!(request_body(&get), Err(SyncError::Failed(_))));
+}
+
+#[test]
+fn a_body_file_must_be_an_absolute_regular_file_within_the_limit() {
+    let dir = tempfile::tempdir().unwrap();
+    let relative = post_with(json!({"bodyFile": "page.json"}));
+    assert!(matches!(request_body(&relative), Err(SyncError::Failed(_))));
+    let directory = post_with(json!({"bodyFile": dir.path().to_str().unwrap()}));
+    assert!(matches!(
+        request_body(&directory),
+        Err(SyncError::Failed(_))
+    ));
+    let missing = dir.path().join("missing.json");
+    let missing = post_with(json!({"bodyFile": missing.to_str().unwrap()}));
+    assert!(matches!(request_body(&missing), Err(SyncError::Failed(_))));
+    let large = dir.path().join("large.json");
+    fs::write(
+        &large,
+        vec![b'x'; EGRESS_MAX_IN_PROCESS_NEED_BODY_BYTES + 1],
+    )
+    .unwrap();
+    let large = post_with(json!({"bodyFile": large.to_str().unwrap()}));
+    assert!(matches!(request_body(&large), Err(SyncError::Failed(_))));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_body_file_link_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("page.json");
+    fs::write(&target, b"{}").unwrap();
+    let link = dir.path().join("link.json");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let request = post_with(json!({"bodyFile": link.to_str().unwrap()}));
+    assert!(matches!(request_body(&request), Err(SyncError::Failed(_))));
+}
