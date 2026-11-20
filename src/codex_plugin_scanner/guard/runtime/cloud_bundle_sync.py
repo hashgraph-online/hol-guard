@@ -285,6 +285,12 @@ def cloud_raw_answer(url: str, answer: object) -> tuple[int, bytes]:
 
 
 def _raise_cloud_failure(url: str, answer: Mapping[str, object]) -> NoReturn:
+    raise cloud_failure(url, answer)
+
+
+def cloud_failure(url: str, answer: Mapping[str, object]) -> Exception:
+    """The ``HTTPError`` or ``URLError`` a native ``refusal`` or ``transport`` answer stands for."""
+
     refusal = answer.get("refusal")
     if isinstance(refusal, dict) and isinstance(refusal.get("status"), int):
         headers = Message()
@@ -296,17 +302,17 @@ def _raise_cloud_failure(url: str, answer: Mapping[str, object]) -> NoReturn:
         payload = body.encode("utf-8") if isinstance(body, str) else b""
         status = refusal["status"]
         reason = http.client.responses.get(status, "")
-        raise urllib.error.HTTPError(url, status, reason, headers, io.BytesIO(payload))
+        return urllib.error.HTTPError(url, status, reason, headers, io.BytesIO(payload))
     transport = answer.get("transport")
     if isinstance(transport, dict):
         reason = transport.get("reason")
         text = reason if isinstance(reason, str) else ""
         if transport.get("timeout") is True:
-            raise urllib.error.URLError(TimeoutError(text))
+            return urllib.error.URLError(TimeoutError(text))
         if transport.get("outage") is True:
-            raise urllib.error.URLError(ConnectionError(text))
-        raise urllib.error.URLError(text)
-    raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+            return urllib.error.URLError(ConnectionError(text))
+        return urllib.error.URLError(text)
+    return RuntimeError("Guard Cloud sync returned an invalid response payload.")
 
 
 @dataclasses.dataclass(frozen=True)

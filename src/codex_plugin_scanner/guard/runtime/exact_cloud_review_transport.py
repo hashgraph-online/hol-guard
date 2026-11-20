@@ -3,29 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import TypedDict, cast
+from typing import NoReturn, TypedDict, cast
 from urllib.error import HTTPError
 
-from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
+from .cloud_bundle_sync import cloud_failure
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 
 EXACT_CLOUD_REVIEW_COMMAND_API_BASE = "/api/guard/review/v2/commands"
 EXACT_CLOUD_REVIEW_TRANSPORT = "cloud_review"
 _TRANSPORT_MARKER = "_guardCommandTransport"
 
 
-class LeaseOptions(TypedDict):
-    operations: tuple[str, ...]
-    wait_ms: int
-    max_jobs: int
-
-
-def advertised_lease_batch_limit(response: Mapping[str, object]) -> int | None:
-    """The most exact Review jobs Guard Cloud says one lease may return, if it says."""
-
-    value = response.get("maxJobs")
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        return None
-    return value
+class LeaseCall(TypedDict):
+    operations: list[str]
+    waitMs: int
+    maxJobs: int
+    collectExtras: bool
 
 
 def exact_transport_job(job: dict[str, object]) -> dict[str, object]:
@@ -50,8 +43,8 @@ def lease_next_job(
     *,
     operations: tuple[str, ...],
     wait_ms: int,
-    exact_request: Callable[[LeaseOptions], dict[str, object]],
-    queue_request: Callable[[LeaseOptions], dict[str, object]],
+    lease: Callable[[LeaseCall], Mapping[str, object]],
+    lease_url: Callable[[str], str] = lambda route: f"{route}/lease",
     exact_route_failure: Callable[[HTTPError], None] | None = None,
     exact_route_success: Callable[[], None] | None = None,
     observe_response: Callable[[dict[str, object]], object] | None = None,
@@ -59,80 +52,59 @@ def lease_next_job(
     on_extra_jobs: Callable[[list[dict[str, object]]], object] | None = None,
     observe_lease_batch_limit: Callable[[int], object] | None = None,
 ) -> dict[str, object] | None:
-    """Lease the next job, exact Review jobs first.
+    """Lease the next job, exact Review jobs first, through the native ``lease``.
 
-    With ``max_jobs`` above one, Guard Cloud may lease further exact Review
-    jobs in the same response. The first job is returned; the others, already
-    leased to this device, go to ``on_extra_jobs``.
+    The native runtime sends the leases and reports what to record beside the
+    leased job: the exact route's health, the batch limit Guard Cloud
+    advertised and each response. With ``max_jobs`` above one, Guard Cloud may
+    lease further exact Review jobs in the same response; the first job is
+    returned and the others, already leased to this device, go to
+    ``on_extra_jobs``. A failure is raised after the state is recorded.
     """
 
-    generic = generic_operations(operations)
-    if EXACT_CLOUD_REVIEW_OPERATION in operations:
-        requested_jobs = max_jobs if on_extra_jobs is not None else 1
-        try:
-            exact_response = exact_request(
-                {
-                    "operations": (EXACT_CLOUD_REVIEW_OPERATION,),
-                    "wait_ms": wait_ms if exact_operation_only(operations) else 0,
-                    "max_jobs": requested_jobs,
-                }
-            )
-        except HTTPError as error:
-            if requested_jobs > 1 and error.code == 400 and observe_lease_batch_limit is not None:
-                # A Guard Cloud rolled back to one that leases a single job
-                # rejects the batch; ask it for one job from the next poll.
-                observe_lease_batch_limit(1)
-            if error.code == 401 or not generic:
-                raise
-            if exact_route_failure is not None:
-                exact_route_failure(error)
-        else:
-            if exact_response.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-                raise ValueError("cloud_review_protocol_upgrade_required")
-            if exact_route_success is not None:
-                exact_route_success()
-            if observe_lease_batch_limit is not None:
-                observe_lease_batch_limit(advertised_lease_batch_limit(exact_response) or 1)
-            if observe_response is not None:
-                observe_response(exact_response)
-            item = _mapping(exact_response.get("item"))
-            if item:
-                if item.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-                    raise ValueError("cloud_review_protocol_upgrade_required")
-                if on_extra_jobs is not None:
-                    extras = _extra_exact_jobs(exact_response, first=item)
-                    if extras:
-                        on_extra_jobs(extras)
-                return exact_transport_job(item)
-    if not generic:
+    if not operations:
         return None
-    queue_response = queue_request({"operations": generic, "wait_ms": wait_ms, "max_jobs": 1})
-    if observe_response is not None:
-        observe_response(queue_response)
-    item = _mapping(queue_response.get("item"))
-    return item or None
+    answer = lease(
+        {
+            "operations": list(operations),
+            "waitMs": wait_ms,
+            "maxJobs": max_jobs if on_extra_jobs is not None else 1,
+            "collectExtras": on_extra_jobs is not None,
+        }
+    )
+    leased = _mapping(answer.get("lease"))
+    route = leased.get("exactRoute")
+    if route == "failed" and exact_route_failure is not None:
+        refused = cloud_failure(lease_url(EXACT_CLOUD_REVIEW_COMMAND_API_BASE), {"refusal": leased.get("exactRefusal")})
+        if isinstance(refused, HTTPError):
+            exact_route_failure(refused)
+    elif route == "ok" and exact_route_success is not None:
+        exact_route_success()
+    limit = leased.get("batchLimit")
+    if observe_lease_batch_limit is not None and isinstance(limit, int) and not isinstance(limit, bool):
+        observe_lease_batch_limit(limit)
+    responses = leased.get("responses")
+    if observe_response is not None and isinstance(responses, list):
+        for response in responses:
+            observe_response(_mapping(response))
+    raw_extras = leased.get("extras")
+    extras = [job for job in map(_mapping, raw_extras if isinstance(raw_extras, list) else []) if job]
+    if on_extra_jobs is not None and extras:
+        on_extra_jobs([exact_transport_job(job) for job in extras])
+    failure = answer.get("failure")
+    if isinstance(failure, Mapping):
+        _raise_lease_failure(cast(Mapping[str, object], failure), lease_url)
+    item = _mapping(leased.get("item"))
+    if not item:
+        return None
+    return exact_transport_job(item) if leased.get("exact") is True else item
 
 
-def _extra_exact_jobs(response: dict[str, object], *, first: dict[str, object]) -> list[dict[str, object]]:
-    """The exact Review jobs leased beside ``first``, each with a distinct lease."""
-
-    items = response.get("items")
-    if not isinstance(items, list):
-        return []
-    seen = {first.get("leaseId")}
-    extras: list[dict[str, object]] = []
-    for value in items:
-        job = _mapping(value)
-        lease = job.get("leaseId")
-        if not isinstance(lease, str) or not lease or lease in seen:
-            continue
-        if job.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-            # Left leased: it goes stale and is leased again, the same as a job
-            # whose worker stopped before its result.
-            continue
-        seen.add(lease)
-        extras.append(exact_transport_job(job))
-    return extras
+def _raise_lease_failure(failure: Mapping[str, object], lease_url: Callable[[str], str]) -> NoReturn:
+    if failure.get("protocol") == "cloud_review_protocol_upgrade_required":
+        raise ValueError("cloud_review_protocol_upgrade_required")
+    route = failure.get("route")
+    raise cloud_failure(lease_url(route if isinstance(route, str) else "/api/guard/commands"), failure)
 
 
 def _mapping(value: object) -> dict[str, object]:
@@ -146,7 +118,6 @@ def _mapping(value: object) -> dict[str, object]:
 
 __all__ = [
     "EXACT_CLOUD_REVIEW_COMMAND_API_BASE",
-    "advertised_lease_batch_limit",
     "exact_operation_only",
     "exact_transport_job",
     "generic_operations",

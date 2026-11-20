@@ -849,6 +849,7 @@ mod cloud_bundle_command;
 mod cloud_bundle_fetch;
 mod cloud_bundle_network;
 mod cloud_bundle_sync;
+mod cloud_command_lease;
 mod cloud_event_command;
 mod cloud_event_sync;
 mod cloud_json_request;

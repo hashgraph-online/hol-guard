@@ -9,6 +9,7 @@ use serde_json::{json, Map, Value};
 
 use crate::cloud_bundle_command::{failure, store_for};
 use crate::cloud_bundle_fetch::{brokered, SyncError};
+use crate::cloud_command_lease::{lease, LeaseCall};
 use crate::cloud_event_sync::{event_store, sync_guard_events};
 use crate::cloud_json_request::{send, JsonRequest};
 use crate::cloud_oauth_refresh::{refresh, RefreshCall};
@@ -27,6 +28,8 @@ pub(crate) const REQUEST_FEATURE: &str = "cloud-json-request-v4";
 pub(crate) const OAUTH_REFRESH_FEATURE: &str = "cloud-oauth-refresh-v1";
 /// The `oauth_refresh_circuit` action.
 pub(crate) const OAUTH_REFRESH_CIRCUIT_FEATURE: &str = "cloud-oauth-refresh-circuit-v1";
+/// The `command_lease` action.
+pub(crate) const COMMAND_LEASE_FEATURE: &str = "cloud-command-lease-v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -45,6 +48,9 @@ struct Request {
     /// What the caller built for `request`.
     #[serde(default)]
     request: Option<JsonRequest>,
+    /// What the caller asked to lease for `command_lease`.
+    #[serde(default)]
+    command_lease: Option<LeaseCall>,
     /// What the caller built for `oauth_refresh`.
     #[serde(default)]
     oauth_refresh: Option<RefreshCall>,
@@ -66,6 +72,8 @@ enum Action {
     Receipts,
     /// One authenticated JSON request the caller built.
     Request,
+    /// Lease the next Guard Cloud command job, exact Review jobs first.
+    CommandLease,
     /// One refresh-token exchange for a grant the caller owns.
     OauthRefresh,
     /// Read or record the refresh circuit for the stored grant.
@@ -84,6 +92,12 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
             Some(call) => brokered(|| send(request.auth_context.as_ref(), call)),
             None => Err(SyncError::Failed(
                 "The Guard Cloud request is missing.".to_owned(),
+            )),
+        },
+        Action::CommandLease => match &request.command_lease {
+            Some(call) => brokered(|| lease(request.auth_context.as_ref(), call)),
+            None => Err(SyncError::Failed(
+                "The Guard command lease is missing.".to_owned(),
             )),
         },
         Action::OauthRefresh => match &request.oauth_refresh {
@@ -130,9 +144,12 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
                         "The receipt upload request is missing.".to_owned(),
                     )),
                 },
-                Action::Request | Action::OauthRefresh | Action::OauthRefreshCircuit => Err(
-                    SyncError::Failed("The Guard Cloud request is missing.".to_owned()),
-                ),
+                Action::Request
+                | Action::CommandLease
+                | Action::OauthRefresh
+                | Action::OauthRefreshCircuit => Err(SyncError::Failed(
+                    "The Guard Cloud request is missing.".to_owned(),
+                )),
             }
         }
     };
