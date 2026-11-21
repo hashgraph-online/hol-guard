@@ -92,6 +92,7 @@ def test_native_transport_hint_cannot_authorize_legacy_payload_without_keyring(
     store = connected_exact_review_store(tmp_path)
     authority = store.guard_home / "native-runtime" / "workspace-review-authority.v1.json"
     authority.parent.mkdir(parents=True, exist_ok=True)
+    authority.parent.chmod(0o700)
     authority.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(command_queue, "review_verification_keyring_ready", lambda _store: False)
     monkeypatch.setattr(

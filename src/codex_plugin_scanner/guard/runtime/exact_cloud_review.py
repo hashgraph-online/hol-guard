@@ -8,6 +8,7 @@ signed Cloud review receipt.
 from __future__ import annotations
 
 import secrets
+import sqlite3
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -349,15 +350,24 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
         return ()
 
 
+def _revoked_or_unreadable(store: GuardStore) -> bool:
+    """Whether consent is revoked or its rows cannot be read; either way nothing is advertised."""
+
+    try:
+        return _consent_row(store, "revocation") is not None
+    except sqlite3.Error:
+        return True
+
+
 def _advertised_operations(store: GuardStore, *, now: str | None) -> tuple[str, ...]:
-    if _consent_row(store, "revocation") is not None:
+    if _revoked_or_unreadable(store):
         return ()
     try:
         _verified_capability(store, now=now)
         return (EXACT_CLOUD_REVIEW_OPERATION,)
     except (AttributeError, ExactCloudReviewError):
         pass
-    if _consent_row(store, "revocation") is not None:
+    if _revoked_or_unreadable(store):
         return ()
     try:
         _oauth_metadata(store)
@@ -366,11 +376,20 @@ def _advertised_operations(store: GuardStore, *, now: str | None) -> tuple[str, 
     return (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
+def _status_failure_reason(error: Exception) -> str:
+    """Why the status reports Cloud Review as off; an unavailable store fails closed."""
+    if isinstance(error, ExactCloudReviewError):
+        return error.code
+    if isinstance(error, NativeGuardStoreUnavailable):
+        return error.reason
+    return "cloud_review_capability_missing"
+
+
 def exact_cloud_review_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
     try:
         capability = _verified_capability(store, now=now)
-    except (AttributeError, ExactCloudReviewError) as error:
-        reason = error.code if isinstance(error, ExactCloudReviewError) else "cloud_review_capability_missing"
+    except (AttributeError, ExactCloudReviewError, NativeGuardStoreUnavailable) as error:
+        reason = _status_failure_reason(error)
         return enrich_exact_cloud_review_status(
             store,
             {

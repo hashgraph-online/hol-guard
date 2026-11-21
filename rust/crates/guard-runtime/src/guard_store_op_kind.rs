@@ -43,7 +43,6 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "cloud_review_settings_state"
         | "workspace_assessment_delivery"
         | "cached_policy_bundle"
-        | "exact_cloud_review_state"
         | "has_exact_cloud_review_receipt"
         | "count_guard_events_v1"
         | "get_request_resume"
@@ -119,7 +118,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
-        | "hook_managed_install_admission" => Kind::Snapshot,
+        | "hook_managed_install_admission"
+        // Two rows read as one consent pair.
+        | "exact_cloud_review_state" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
