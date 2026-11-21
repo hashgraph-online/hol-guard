@@ -32,6 +32,8 @@ guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }
 guard-scanner = { path = "../guard-scanner" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 caseless.workspace = true
+# Local dates for the usage meter; already built for the Google sign-in client.
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 regex.workspace = true
 fancy-regex.workspace = true
 getrandom.workspace = true

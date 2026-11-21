@@ -313,9 +313,6 @@ def test_settings_calls_answer_without_a_daemon(tmp_path: Path) -> None:
     assert setup["status"] == 400  # type: ignore[index]
     channel = _call(tmp_path, "route.update_channel", {"payload": {"update_channel": "nightly-unknown"}})["ok"]
     assert channel["status"] == 400 and channel["body"]["error"] == "invalid_update_channel"  # type: ignore[index]
-    # A Guard home outside the home folder never touches the Codex config there.
-    short = _call(tmp_path, "route.codex_short_replies_ensure", {"payload": {}})["ok"]
-    assert short["status"] == 200 and short["body"] == {"state": "skipped"}  # type: ignore[index]
 
 
 def test_policy_sync_refuses_a_request_without_a_bundle(tmp_path: Path) -> None:

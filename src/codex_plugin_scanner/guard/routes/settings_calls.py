@@ -68,31 +68,6 @@ def _hand_settings_to_cigar(guard_home: Path) -> None:
         native_context_assistance.control("status", guard_home=guard_home)
 
 
-def codex_short_replies_ensure(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Turning CIGAR on also asks Codex for short replies, unless the user turned that off.
-
-    The daemon calls this after it saved a settings change that turns CIGAR on. Measured
-    on top of CIGAR it cut the Codex bill by 5-14% with no task lost. A Codex config Guard
-    cannot change leaves the saved CIGAR setting as it is.
-    """
-
-    del args
-    guard_home = store.guard_home
-    # A Guard home outside the home folder belongs to a test or a sandbox; the Codex
-    # config in the home folder is not its to change.
-    if guard_home.resolve().parent != Path.home().resolve():
-        return _reply({"state": "skipped"})
-    import os
-
-    from ..codex_lean_sessions import LeanSessionsError
-    from ..codex_short_replies import ensure
-
-    with suppress(LeanSessionsError, OSError, RuntimeError, TimeoutError, ValueError):
-        ensure(Path.home(), guard_home, os.environ)
-        return _reply({"state": "asked"})
-    return _reply({"state": "failed"})
-
-
 def _requeue_privacy_projection(store: GuardStore, level: str) -> None:
     from ..runtime.runner import _requeue_cloud_review_privacy_projection
 
@@ -209,5 +184,4 @@ def update_channel(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
 SETTINGS_CALLS = {
     "route.approval_gate_setup": approval_gate_setup,
     "route.update_channel": update_channel,
-    "route.codex_short_replies_ensure": codex_short_replies_ensure,
 }

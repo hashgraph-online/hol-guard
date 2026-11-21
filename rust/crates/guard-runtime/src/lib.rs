@@ -203,6 +203,7 @@ mod cloud_sync_privacy;
 mod codex_app_server_socket;
 mod codex_app_server_target_op;
 mod codex_config_rpc;
+mod codex_config_switch;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
@@ -340,6 +341,7 @@ mod context_digest_json;
 mod context_digest_local_cli;
 mod context_digest_package_scripts;
 mod context_digest_result_check;
+mod context_usage_meter;
 mod continuation_authority_op;
 mod continuation_grants;
 mod continuation_lineage;

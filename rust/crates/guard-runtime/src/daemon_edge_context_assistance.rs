@@ -1,20 +1,21 @@
 //! The built-in CIGAR engine's `/v1/context-assistance` routes: status,
 //! installations, recheck, activate, stop, workspace access, the project
-//! picker, versions and setup jobs.
+//! picker, versions, setup jobs and usage.
 //!
 //! Each route is one `context_assistance` request to the resident, which owns
 //! the engine. The edge frames the request, binds the reply to it (schema,
 //! request id and canonical digest), checks the reply's shape and maps the
 //! resident's refusal codes to HTTP statuses. Expanding workspace access and
-//! changing the engine version pass the approval gate first. Codex lean mode,
-//! short replies and the usage meter edit Codex config or read Guard's usage
-//! records, so the daemon keeps answering those.
+//! changing the engine version pass the approval gate first. The usage route
+//! adds the meter's totals, counted here, to the resident's savings estimate.
 
 use serde_json::{json, Map, Value};
 
 use super::super::ReadConfig;
 use super::gate::{self, Gate};
 
+#[path = "daemon_edge_codex_config.rs"]
+pub(super) mod codex_config;
 #[path = "daemon_edge_context_assistance_resident.rs"]
 mod resident;
 
@@ -42,6 +43,9 @@ pub(in crate::daemon_edge) fn reads(path: &str) -> bool {
         "/v1/context-assistance"
             | "/v1/context-assistance/installations"
             | "/v1/context-assistance/jobs"
+            | "/v1/context-assistance/usage"
+            | codex_config::LEAN
+            | codex_config::SHORT_REPLIES
     )
 }
 
@@ -60,6 +64,8 @@ fn write_kind(path: &str) -> Option<&'static str> {
         "/v1/context-assistance/workspace-access" => "workspace_access",
         "/v1/context-assistance/workspace-grant" => "workspace_grant",
         "/v1/context-assistance/folders" => "folders",
+        codex_config::LEAN => "codex_lean",
+        codex_config::SHORT_REPLIES => "codex_short_replies",
         _ => return None,
     })
 }
@@ -92,7 +98,8 @@ fn get_with(
             let body = json!({"action": "jobs"});
             versions(Some(&body), &Map::new(), config, resident)
         }
-        _ => return None,
+        "/v1/context-assistance/usage" => usage(config, resident),
+        path => return codex_config::get(path, config),
     })
 }
 
@@ -105,6 +112,7 @@ fn post_with(
     Some(match write_kind(path)? {
         "versions" => versions(payload.get("input"), payload, config, resident),
         "folders" => folders(payload.clone(), resident),
+        "codex_lean" | "codex_short_replies" => return codex_config::post(path, payload, config),
         kind @ ("workspace" | "workspace_access" | "workspace_grant") => {
             let Some(Value::Object(input)) = payload.get("input") else {
                 return Some(invalid_input());
@@ -161,6 +169,30 @@ fn control(
         Ok(mut payload) => ok(payload.remove("state").unwrap_or(Value::Null)),
         Err(code) => refusal(&code),
     }
+}
+
+/// The usage meter's totals with this week's savings estimate. The first
+/// count of a long history runs in the background; until it finishes the
+/// state is `counting` and the page asks again. An older or stopped resident
+/// has no estimate; the meter still shows.
+fn usage(
+    config: &ReadConfig,
+    resident: impl FnOnce(Value, bool) -> Result<Map<String, Value>, String>,
+) -> Reply {
+    let Some(home) = codex_config::homes(config).map(|homes| homes.home_dir) else {
+        return ok(crate::context_usage_meter::empty("unavailable"));
+    };
+    let env = ["CODEX_HOME", "CLAUDE_CONFIG_DIR"]
+        .into_iter()
+        .filter_map(|name| Some((name.to_owned(), std::env::var(name).ok()?)))
+        .collect();
+    let mut state =
+        crate::context_usage_meter::read(&home, std::path::Path::new(&config.guard_home), env);
+    state["savings"] = workspace("savings", Map::new(), resident)
+        .ok()
+        .and_then(|mut data| data.remove("result"))
+        .unwrap_or(Value::Null);
+    ok(state)
 }
 
 /// The workspace result: `{schema, data_role, result}`.
