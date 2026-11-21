@@ -10,7 +10,7 @@
 //!
 //! - `native_review_policy_binding` (`hook_native_review_binding.py`) on the
 //!   edge's own receipt;
-//! - `native_exact_action` (`hook_native_exact_action.py`) with the process
+//! - `native_exact_action_op` with the process
 //!   environment and extension-control digest the daemon published;
 //! - the decision probe and the non-consuming `resolve_policy_decision_lookup`
 //!   against the integrity state the daemon published, which must still be
