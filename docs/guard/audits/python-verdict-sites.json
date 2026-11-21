@@ -121,16 +121,6 @@
       "note": "Blocks a continuation it cannot settle."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
-      "func": "cursor_shell_route_response",
-      "root": "hook",
-      "reading": "routes-guard-own-sink",
-      "actions": [
-        "allow"
-      ],
-      "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
       "func": "render_silent_review_block",
       "root": "hook",

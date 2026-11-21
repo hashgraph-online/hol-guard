@@ -1,96 +1,58 @@
-"""Cursor's silent ``preToolUse`` probe: the daemon's shim over the resident's route ops.
-
-Which route a call takes, what a reviewed probe is answered and whether a sink
-command is admitted are the resident's, and are tested in
-``hook_direct_cursor_route_ops_tests.rs`` and ``hook_direct_cursor_route_tests.rs``.
-These tests prove the shim asks the resident and returns its answer.
-"""
+"""The Python worker relays Cursor's native route and its workspace binding."""
 
 from __future__ import annotations
 
-import sys
+import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import contained_sink_command, native_hook_render
-from codex_plugin_scanner.guard.hook_review import cursor_shell_route as route
 
 _SHELL = {"hook_event_name": "PreToolUse", "tool_name": "Shell", "tool_input": {"command": "pytest -q"}}
 _PROBE = {**_SHELL, "cursor_route_probe": True}
-_BEFORE_SHELL = {**_SHELL, "cursor_source_hook_event": "beforeShellExecution"}
-_ROUTED = "native_contained_execution_routed"
-_SINK = {"command": "guard execute-contained-test", "cwd": "/w"}
-_SINK_PAYLOAD = {**_BEFORE_SHELL, "tool_input": {"command": "guard execute-contained-test --harness cursor"}}
 _ALLOW = {"policy_action": "allow"}
-_SNAPSHOT = {"mode": "enforce", "generation": 7}
-_ROUTED_ANSWER = {"policy_action": "allow", "reason_code": _ROUTED, "hookSpecificOutput": {"updatedInput": _SINK}}
-
-posix_only = pytest.mark.skipif(sys.platform == "win32", reason="Cursor's contained route is macOS and Linux only")
+_BINDING = {"generation": 7, "policy_digest": "a" * 64, "runtime_identity": "b" * 64}
 
 
-class _Resident:
-    """A stand-in for the resident's ``cursor_shell_route`` render."""
-
-    def __init__(
-        self, monkeypatch: pytest.MonkeyPatch, *, route: object = "review", answers: dict[str, object] | None = None
-    ):
-        self.route = route
-        self.answers = answers or {}
-        self.calls: list[tuple[str, str, dict[str, object], object]] = []
-        monkeypatch.setattr(native_hook_render, "native_render_cli", self._render)
-        monkeypatch.setattr(contained_sink_command, "contained_sink_command_prefix", lambda: ("guard", "-I"))
-
-    def _render(
-        self, kind: str, harness: str, params: dict[str, object], *, deadline: object = None, **_kwargs: object
-    ) -> tuple[str, object]:
-        self.calls.append((kind, harness, params, deadline))
-        op = params.get("op")
-        if op == "route":
-            return ("document", {"value": self.route})
-        if op == "probe_gate":
-            return ("document", {"value": self.answers.get("probe_gate", True)})
-        if op == "probe_response":
-            return ("document", {"value": self.answers.get("probe_response")})
-        return ("document", {"value": self.answers.get("sink")})
-
-    def ops(self) -> list[object]:
-        return [params.get("op") for _kind, _harness, params, _deadline in self.calls]
-
-
-class _FailingWorker:
-    def __init__(self) -> None:
-        self.asked = False
-
-    def _native_policy_snapshot(self, *_args: object, **_kwargs: object) -> object:
-        self.asked = True
-        raise RuntimeError("snapshot unavailable")
-
-
-class _RoutingWorker:
-    def __init__(self, edge: dict[str, object] | None = None):
-        self.edge = edge
-        self.containment_sink: list[object] = []
-
-    def _native_policy_snapshot(self, *_args: object, **_kwargs: object) -> object:
-        return _SNAPSHOT
-
-    def _review_raw_hook_native(self, **kwargs: object) -> dict[str, object] | None:
-        self.containment_sink.append(kwargs.get("containment_sink"))
-        return self.edge
+def _unexpected_binding() -> Mapping[str, object]:
+    pytest.fail("the resident did not request a workspace binding")
 
 
 def _respond(
-    payload: dict[str, object], workspace: Path | None, worker: object | None = None, deadline: float | None = None
+    root: Path,
+    payload: dict[str, object],
+    *,
+    binding: Callable[[], Mapping[str, object] | None] = _unexpected_binding,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
-    return route.cursor_shell_route_response(
-        worker or _FailingWorker(),  # type: ignore[arg-type]
-        payload=payload,
-        home_dir=Path("/home/tester"),
-        guard_home=Path("/home/tester/.hol-guard"),
-        workspace=workspace,
+    return native_hook_render.native_cursor_shell_route(
+        payload,
+        guard_home=root / "guard",
+        home_dir=root,
+        workspace=root / "work",
+        binding=binding,
         deadline=deadline,
     )
+
+
+@pytest.fixture
+def resident(monkeypatch: pytest.MonkeyPatch):
+    calls = []
+    replies = []
+
+    def render(kind, harness, params, *, guard_home, deadline):
+        assert (kind, harness, params["op"]) == ("cursor_shell_route", "cursor", "answer")
+        calls.append((dict(params), guard_home, deadline))
+        reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(native_hook_render, "native_render_cli", render)
+    monkeypatch.setattr(contained_sink_command, "contained_sink_command_prefix", lambda: ("guard",))
+    return calls, replies
 
 
 def test_the_sink_command_accepts_the_cursor_harness(tmp_path: Path) -> None:
@@ -116,119 +78,79 @@ def test_the_sink_command_accepts_the_cursor_harness(tmp_path: Path) -> None:
     assert args.harness == "cursor"
 
 
-def test_the_route_is_the_residents_and_the_call_travels_whole(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    resident = _Resident(monkeypatch, route="review")
-    assert _respond(_PROBE, tmp_path) is None
-    kind, harness, params, _deadline = resident.calls[0]
-    assert (kind, harness) == ("cursor_shell_route", "cursor")
-    assert params == {"op": "route", "payload": _PROBE}
+@pytest.mark.parametrize("reply", [None, ("document", {"value": None, "needs": None})])
+def test_an_unanswered_call_uses_ordinary_review_without_resolving_a_sink(tmp_path, resident, reply, monkeypatch):
+    calls, replies = resident
+    replies.append(reply)
+    monkeypatch.setattr(
+        contained_sink_command, "contained_sink_command_prefix", lambda: pytest.fail("the resident did not ask")
+    )
+    assert _respond(tmp_path, _SHELL) is None
+    assert len(calls) == 1
 
 
-@pytest.mark.parametrize("answer", ["review", None, 3, "unknown"])
-def test_a_call_the_resident_does_not_route_is_reviewed_as_usual(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object
-) -> None:
-    resident = _Resident(monkeypatch, route=answer)
-    assert _respond(_SINK_PAYLOAD, tmp_path) is None
-    assert resident.ops() == ["route"]
+def test_sink_admission_uses_the_native_answer_and_original_payload(tmp_path, resident):
+    calls, replies = resident
+    answer = {"policy_action": "allow", "reason_code": "native_contained_execution_sink"}
+    replies.extend(
+        [
+            ("document", {"value": None, "needs": "sink_command"}),
+            ("document", {"value": answer, "needs": None}),
+        ]
+    )
+    payload = {**_SHELL, "cursor_source_hook_event": "beforeShellExecution"}
+    deadline = time.monotonic() + 1.0
+    assert _respond(tmp_path, payload, deadline=deadline) == answer
+    request = {
+        "op": "answer",
+        "payload": payload,
+        "workspace": str(tmp_path / "work"),
+        "guard_home": str(tmp_path / "guard"),
+        "home_dir": str(tmp_path),
+        "native_sink": True,
+    }
+    assert calls == [
+        (request, tmp_path / "guard", deadline),
+        ({**request, "sink_command": ["guard"]}, tmp_path / "guard", deadline),
+    ]
 
 
-def test_a_route_the_resident_cannot_answer_is_reviewed_as_usual(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def unavailable(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("resident unavailable")
-
-    monkeypatch.setattr(native_hook_render, "native_render_cli", unavailable)
-    assert _respond(_PROBE, tmp_path) is None
-    monkeypatch.setattr(native_hook_render, "native_render_cli", lambda *_a, **_k: None)
-    assert _respond(_PROBE, tmp_path) is None
-
-
-@posix_only
-def test_a_failed_probe_is_a_plain_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _Resident(monkeypatch, route="probe")
-    assert _respond(_PROBE, tmp_path) == _ALLOW
-    assert _respond(_PROBE, None) == _ALLOW
-
-
-@posix_only
-def test_a_probe_the_edge_does_not_review_is_a_plain_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    resident = _Resident(monkeypatch, route="probe")
-    assert _respond(_PROBE, tmp_path, _RoutingWorker(None)) == _ALLOW
-    # beforeShellExecution still reviews the call; the resident is not asked for an answer.
-    assert resident.ops() == ["route", "probe_gate"]
+def test_probe_relays_only_the_requested_binding_under_the_same_deadline(tmp_path, resident):
+    calls, replies = resident
+    routed = {**_ALLOW, "reason_code": "native_contained_execution_routed"}
+    replies.extend(
+        [
+            ("document", {"value": _ALLOW, "needs": "probe_binding"}),
+            ("document", {"value": routed, "needs": None}),
+        ]
+    )
+    deadline = time.monotonic() + 7.0
+    postures = {"cursor": "protected"}
+    snapshot = {**_BINDING, "policy": {}, "harness_postures": postures}
+    assert _respond(tmp_path, _PROBE, binding=lambda: snapshot, deadline=deadline) == routed
+    assert len(calls) == 2
+    assert calls[0][2] == calls[1][2] == deadline
+    assert "snapshot" not in calls[0][0]
+    assert "sink_command" not in calls[0][0]
+    assert calls[1][0]["snapshot"] == _BINDING
+    assert calls[1][0]["sink_command"] == ["guard"]
+    assert calls[1][0]["harness_postures"] == postures
+    assert 0 < calls[1][0]["probe_budget_ms"] <= 7000
 
 
-@posix_only
-def test_a_reviewed_probe_is_answered_as_the_resident_reads_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    resident = _Resident(monkeypatch, route="probe", answers={"probe_response": _ROUTED_ANSWER})
-    edge = {"containment_route": "sink", "containment_rewrite": "routed", "harness_response": _ROUTED_ANSWER}
-    worker = _RoutingWorker(edge)
-    assert _respond(_PROBE, tmp_path, worker) == _ROUTED_ANSWER
-    # The edge is asked for the sink rewrite, and the resident reads its whole answer.
-    assert worker.containment_sink == [True]
-    assert resident.ops() == ["route", "probe_gate", "probe_response"]
-    assert resident.calls[1][2] == {"op": "probe_gate", "snapshot": _SNAPSHOT, "has_workspace": True}
-    assert resident.calls[2][2] == {"op": "probe_response", "edge": edge}
+def test_probe_keeps_the_first_native_answer_when_binding_is_unavailable(tmp_path, resident):
+    calls, replies = resident
+    replies.append(("document", {"value": _ALLOW, "needs": "probe_binding"}))
+
+    def binding():
+        raise RuntimeError("binding unavailable")
+
+    assert _respond(tmp_path, _PROBE, binding=binding) == _ALLOW
+    assert len(calls) == 1
 
 
-@posix_only
-@pytest.mark.parametrize("gate", [False, None, "yes"])
-def test_a_probe_the_resident_does_not_gate_in_is_not_reviewed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gate: object
-) -> None:
-    resident = _Resident(monkeypatch, route="probe", answers={"probe_gate": gate})
-    worker = _RoutingWorker({"containment_route": "sink"})
-    assert _respond(_PROBE, tmp_path, worker) == _ALLOW
-    assert worker.containment_sink == []
-    assert resident.ops() == ["route", "probe_gate"]
-
-
-@posix_only
-def test_a_probe_answer_that_is_not_an_object_is_a_plain_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _Resident(monkeypatch, route="probe", answers={"probe_response": None})
-    assert _respond(_PROBE, tmp_path, _RoutingWorker({"containment_route": "none"})) == _ALLOW
-
-
-@posix_only
-def test_before_shell_asks_the_resident_about_a_call_naming_the_sink(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    resident = _Resident(monkeypatch, route="sink")
-    # The resident admits only the exact sink command; anything else is reviewed.
-    assert _respond(_SINK_PAYLOAD, tmp_path) is None
-    admitted = {"policy_action": "allow", "reason_code": _ROUTED}
-    resident.answers["sink"] = admitted
-    assert _respond(_SINK_PAYLOAD, tmp_path) == admitted
-    kind, harness, params, _deadline = resident.calls[-1]
-    assert (kind, harness) == ("cursor_shell_route", "cursor")
-    assert "op" not in params
-    assert params["payload"] == _SINK_PAYLOAD
-    assert params["workspace"] == str(tmp_path)
-    assert "edge" not in params
-    assert params["sink_command"] and all(isinstance(part, str) for part in params["sink_command"])  # type: ignore[union-attr]
-    assert params["native_sink"] is True
-    # Without a workspace the sink cannot be bound, so the call is reviewed.
-    calls = len(resident.calls)
-    assert _respond(_SINK_PAYLOAD, None) is None
-    assert len(resident.calls) == calls + 1
-
-
-@posix_only
-def test_before_shell_bounds_every_resident_call_by_the_hook_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    resident = _Resident(monkeypatch, route="sink")
-    _respond(_SINK_PAYLOAD, tmp_path, deadline=123.5)
-    assert [call[3] for call in resident.calls] == [123.5, 123.5]
-
-
-@posix_only
-def test_a_sink_check_that_fails_is_reviewed_as_usual(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def unavailable() -> tuple[str, ...]:
-        raise RuntimeError("Guard CLI unavailable")
-
-    _Resident(monkeypatch, route="sink")
-    monkeypatch.setattr(contained_sink_command, "contained_sink_command_prefix", unavailable)
-    assert _respond(_SINK_PAYLOAD, tmp_path) is None
+def test_probe_keeps_the_first_native_answer_when_second_call_fails(tmp_path, resident):
+    calls, replies = resident
+    replies.extend([("document", {"value": _ALLOW, "needs": "probe_binding"}), RuntimeError("resident stopped")])
+    assert _respond(tmp_path, _PROBE, binding=lambda: _BINDING) == _ALLOW
+    assert len(calls) == 2

@@ -403,7 +403,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 )
             }
             ResidentOperationV1::HookRender(request) => {
-                crate::hook_render_op::evaluate_hook_render_request(&request)
+                crate::hook_render_op::evaluate_with_store(&request, policy_store)
             }
             ResidentOperationV1::ApprovalScope(request) => {
                 crate::approval_scope_op::evaluate_approval_scope_request(&request, policy_store)

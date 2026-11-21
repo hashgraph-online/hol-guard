@@ -31,12 +31,29 @@ use serde_json::{json, Value};
 
 use crate::package_authority_op::request_digest_with_limit;
 
-pub(crate) fn evaluate_hook_render_request(
+#[cfg(test)]
+fn evaluate_hook_render_request(request: &HookRenderRequestV1) -> Result<Vec<u8>, String> {
+    evaluate_with_store(request, None)
+}
+
+pub(crate) fn evaluate_with_store(
     request: &HookRenderRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest_with_limit(request, hook_render_max_bytes(&request.kind))
         .map_err(|_| "native_hook_render_too_large".to_owned())?;
-    let (status, code, payload) = match render(request) {
+    let params = object_of(request.cli.as_ref());
+    let result = match params {
+        Some(params)
+            if request.kind == "cursor_shell_route"
+                && params.get("op").and_then(Value::as_str) == Some("answer") =>
+        {
+            crate::hook_direct::cursor_route::answer(params, &request.request_id, store)
+                .map(|document| cli_payload(CliOutcome::Document(document)))
+        }
+        _ => render(request),
+    };
+    let (status, code, payload) = match result {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
