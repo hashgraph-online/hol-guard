@@ -24,13 +24,11 @@ from ..native_runner_authority import native_runner_authority
 from .fleet_posture_common import (
     CAPABILITY,
     FOLLOWUP_STATE_KEY,
-    FORCE_FULL_STATE_KEY,
     HARNESS_IDS,
     HASH_KEY_STATE_KEY,
     LAST_SENT_STATE_KEY,
     MAX_PAYLOAD_BYTES,
     SCHEMA_VERSION,
-    SETTINGS_STATE_KEY,
     iso,
     load_hash_key,
     utc,
@@ -91,16 +89,13 @@ def fleet_posture_managed(config: GuardConfig | None) -> bool:
 def fleet_posture_opted_out(store: GuardStore) -> bool:
     """Whether the user ran ``hol-guard settings set fleet-posture off``."""
 
-    raw = store.get_sync_payload(SETTINGS_STATE_KEY)
-    return isinstance(raw, dict) and raw.get("enabled") is False
+    return bool(store.fleet_posture_state()["opted_out"])
 
 
 def set_fleet_posture_reporting(store: GuardStore, *, enabled: bool, now: str) -> dict[str, object]:
     """Persist the opt-out choice and return the new settings record."""
 
-    record: dict[str, object] = {"enabled": enabled, "updatedAt": now}
-    store.set_sync_payload(SETTINGS_STATE_KEY, record, now)
-    return record
+    return store.set_fleet_posture_reporting(enabled=enabled, now=now)
 
 
 def fleet_posture_reporting_enabled(store: GuardStore, config: GuardConfig | None) -> bool:
@@ -112,17 +107,11 @@ def fleet_posture_reporting_enabled(store: GuardStore, config: GuardConfig | Non
 def request_full_inventory(store: GuardStore, *, source: str, now: str) -> None:
     """Make the next posture go out with ``inventory.mode = "full"``."""
 
-    store.set_sync_payload(FORCE_FULL_STATE_KEY, {"requestedAt": now, "source": source}, now)
+    store.request_full_fleet_inventory(source=source, now=now)
 
 
 def full_inventory_requested(store: GuardStore) -> bool:
-    raw = store.get_sync_payload(FORCE_FULL_STATE_KEY)
-    return isinstance(raw, dict) and bool(raw)
-
-
-def _clear_full_inventory_request(store: GuardStore, now: str) -> None:
-    if full_inventory_requested(store):
-        store.set_sync_payload(FORCE_FULL_STATE_KEY, {}, now)
+    return bool(store.fleet_posture_state()["full_inventory_requested"])
 
 
 # --------------------------------------------------------------------------- policy
@@ -166,9 +155,9 @@ def build_fleet_posture_state(
     )
     if settings.reporting_enabled is not None:
         detail = bool(settings.reporting_enabled) or fleet_posture_managed(config)
-    force_full = settings.force_full if settings.force_full is not None else full_inventory_requested(store)
-    last_raw = store.get_sync_payload(LAST_SENT_STATE_KEY)
-    last = last_raw if isinstance(last_raw, dict) else None
+    state = store.fleet_posture_state()
+    force_full = settings.force_full if settings.force_full is not None else state["full_inventory_requested"]
+    last = state["last_sent"]
 
     now_text = iso(now)
     # Raises when the inventory cannot be read: the runner then omits this posture
@@ -224,14 +213,12 @@ def build_fleet_posture_state(
 def commit_fleet_posture_sent(store: GuardStore, built: FleetPostureBuild, *, now: str) -> None:
     """Record what Guard Cloud accepted so the next build can send a delta."""
 
-    store.set_sync_payload(LAST_SENT_STATE_KEY, built.next_state, now)
-    if built.advanced_inventory:
-        _clear_full_inventory_request(store, now)
+    store.commit_fleet_posture_sent(next_state=built.next_state, advanced_inventory=built.advanced_inventory, now=now)
 
 
 def last_sent_fleet_posture(store: GuardStore) -> dict[str, object] | None:
-    raw = store.get_sync_payload(LAST_SENT_STATE_KEY)
-    return raw if isinstance(raw, dict) and raw else None
+    last = store.fleet_posture_state()["last_sent"]
+    return last or None
 
 
 __all__ = [
