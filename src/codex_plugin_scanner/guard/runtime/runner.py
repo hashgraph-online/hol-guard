@@ -54,10 +54,10 @@ from ..policy_bundle_decisions import build_policy_bundle_decisions as _material
 from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
     is_failed_policy_bundle_acknowledgement,
+    reportable_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
     CANONICAL_COMPILE_REJECTION_PREFIX,
-    non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_admission_rejection,
     policy_bundle_downgrade_verdict,
@@ -74,7 +74,6 @@ from ..policy_bundle_trusted_keys import (
 )
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
-    validated_policy_bundle_v2_acknowledgement,
 )
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
@@ -2316,16 +2315,6 @@ def _auth_context_sync_url(auth_context: dict[str, object]) -> str:
     return sync_url
 
 
-def _normalized_timestamp_string(value: object) -> str | None:
-    raw_value = _optional_string(value)
-    if raw_value is None:
-        return None
-    parsed = _parse_iso_timestamp(raw_value)
-    if parsed is None:
-        return None
-    return parsed.isoformat()
-
-
 def _stored_policy_bundle_acknowledgement(store: GuardStore) -> object:
     """A failed acknowledgement describes a dropped bundle; never carry it onto a new one."""
 
@@ -2381,31 +2370,12 @@ def _validated_policy_bundle_acknowledgement(
     )
     if failure is not None:
         return failure or None
-    if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
-        return validated
-
-    policy_bundle = validated_synced_policy_bundle(store)
-    if policy_bundle is None:
-        return None
-
-    bundle_hash = non_empty_string(policy_bundle.get("bundleHash"))
-    bundle_version = non_empty_string(policy_bundle.get("bundleVersion"))
-    if bundle_hash is None or bundle_version is None:
-        return None
-    if acknowledgement.get("bundleHash") != bundle_hash:
-        return None
-    if acknowledgement.get("bundleVersion") != bundle_version:
-        return None
-    if acknowledgement.get("deviceId") != device_id:
-        return None
-    if acknowledgement.get("deviceName") != device_name:
-        return None
-    if acknowledgement.get("status") != "synced":
-        return None
-    if _normalized_timestamp_string(acknowledgement.get("appliedAt")) is None:
-        return None
-    return acknowledgement
+    return reportable_policy_bundle_acknowledgement(
+        acknowledgement,
+        device_id=device_id,
+        device_name=device_name,
+        validated_bundle=lambda: validated_synced_policy_bundle(store),
+    )
 
 
 def _sync_context_acknowledgement(sync_context: dict[str, object]) -> dict[str, object] | None:
