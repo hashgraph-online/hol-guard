@@ -35,14 +35,29 @@ def configure(actions: argparse._SubParsersAction[Any]) -> None:
     usage.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
 
+def folder_setting(name: str) -> str | None:
+    """A folder environment setting as the tools read it from this working folder.
+
+    The runtime runs elsewhere, so a relative folder is made absolute here. A
+    `~` folder is left for the runtime to expand against the home folder.
+    """
+
+    raw = os.environ.get(name)
+    if not raw or not raw.strip():
+        return None
+    if raw.strip().startswith("~"):
+        return raw
+    return os.path.abspath(raw.strip())
+
+
 def _read(guard_home: Path, *, text: bool) -> dict[str, Any] | None:
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     args = {
         "op": "read",
         "home_dir": str(Path.home()),
-        "codex_home": os.environ.get("CODEX_HOME") or None,
-        "claude_config_dir": os.environ.get("CLAUDE_CONFIG_DIR") or None,
+        "codex_home": folder_setting("CODEX_HOME"),
+        "claude_config_dir": folder_setting("CLAUDE_CONFIG_DIR"),
         "text": text,
     }
     deadline = time.monotonic() + WAIT_SECONDS
@@ -66,9 +81,14 @@ def _read(guard_home: Path, *, text: bool) -> dict[str, Any] | None:
 def run(args: argparse.Namespace, output: TextIO) -> int:
     from ..config import resolve_guard_home
 
-    answer = _read(resolve_guard_home(args.guard_home), text=not args.json)
-    state = answer.get("usage") if answer else None
-    if not isinstance(state, dict) or state.get("state") != "ready":
+    try:
+        guard_home = resolve_guard_home(args.guard_home)
+    except (OSError, RuntimeError, ValueError):
+        answer = None
+    else:
+        answer = _read(guard_home, text=not args.json)
+    state = answer.get("usage") if answer is not None else None
+    if answer is None or not isinstance(state, dict) or state.get("state") != "ready":
         if args.json:
             print(json.dumps({"schema": SCHEMA, "state": "unavailable"}), file=output)
         else:

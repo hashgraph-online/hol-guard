@@ -123,6 +123,18 @@ pub(crate) fn empty(state: &str) -> Value {
     })
 }
 
+/// How many callers' counts the resident keeps at once. Each caller is one
+/// set of folders; past this, idle counts are dropped for the newest caller.
+const MAX_CALLERS: usize = 8;
+
+/// The folders and settings one count was made from.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct Key {
+    home: PathBuf,
+    guard_home: PathBuf,
+    env: Vec<(String, String)>,
+}
+
 #[derive(Default)]
 struct Meter {
     files: Option<Arc<Files>>,
@@ -133,17 +145,30 @@ struct Meter {
     failure_unseen: bool,
 }
 
-fn meter() -> &'static Mutex<Meter> {
-    static METER: std::sync::OnceLock<Mutex<Meter>> = std::sync::OnceLock::new();
-    METER.get_or_init(Default::default)
+fn meters() -> &'static Mutex<HashMap<Key, Meter>> {
+    static METERS: std::sync::OnceLock<Mutex<HashMap<Key, Meter>>> = std::sync::OnceLock::new();
+    METERS.get_or_init(Default::default)
 }
 
-fn count(home: PathBuf, guard_home: PathBuf, env: HashMap<String, String>) {
+fn count(key: Key) {
     let counted = std::panic::catch_unwind(|| {
         let now = super::now();
-        scan(&home, &guard_home, |name| env.get(name).cloned(), now)
+        let env: HashMap<&str, &str> = key
+            .env
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        scan(
+            &key.home,
+            &key.guard_home,
+            |name| env.get(name).map(|value| (*value).to_owned()),
+            now,
+        )
     });
-    let Ok(mut held) = meter().lock() else {
+    let Ok(mut held) = meters().lock() else {
+        return;
+    };
+    let Some(held) = held.get_mut(&key) else {
         return;
     };
     held.running = false;
@@ -159,14 +184,26 @@ fn count(home: PathBuf, guard_home: PathBuf, env: HashMap<String, String>) {
     }
 }
 
-/// The meter's latest totals, starting a count in the background when they
+/// The caller's latest totals, starting a count in the background when they
 /// are missing or older than [`MAX_AGE`]. Totals from the last count stay on
-/// screen while a newer count runs.
+/// screen while a newer count runs. Each set of folders is counted on its
+/// own: one caller never sees totals read from another's folders.
 pub(crate) fn read(home: &Path, guard_home: &Path, env: HashMap<String, String>) -> Value {
+    let mut env: Vec<(String, String)> = env.into_iter().collect();
+    env.sort();
+    let key = Key {
+        home: home.to_path_buf(),
+        guard_home: guard_home.to_path_buf(),
+        env,
+    };
     let files = {
-        let Ok(mut held) = meter().lock() else {
+        let Ok(mut all) = meters().lock() else {
             return empty("unavailable");
         };
+        if !all.contains_key(&key) && all.len() >= MAX_CALLERS {
+            all.retain(|_, meter| meter.running);
+        }
+        let held = all.entry(key.clone()).or_default();
         if held.failure_unseen && !held.running {
             held.failure_unseen = false;
             if held.files.is_none() {
@@ -175,10 +212,9 @@ pub(crate) fn read(home: &Path, guard_home: &Path, env: HashMap<String, String>)
         }
         let stale = held.files.is_none() || held.read_at.is_none_or(|at| at.elapsed() > MAX_AGE);
         if stale && !held.running {
-            let (home, guard_home) = (home.to_path_buf(), guard_home.to_path_buf());
             let started = std::thread::Builder::new()
                 .name("guard-usage-meter".to_owned())
-                .spawn(move || count(home, guard_home, env));
+                .spawn(move || count(key));
             held.running = started.is_ok();
         }
         (held.files.clone(), held.running)

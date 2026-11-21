@@ -140,33 +140,24 @@ def run_context_command(
 _LEAN_ACTIONS = {"on": "enable", "off": "disable", "status": "status"}
 
 
-def _codex_home() -> str | None:
-    """`CODEX_HOME` as Codex reads it from this working folder."""
-    import os
-
-    raw = os.environ.get("CODEX_HOME")
-    if not raw or not raw.strip() or raw.strip().startswith("~"):
-        return raw or None
-    return os.path.abspath(raw.strip())
-
-
 def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
     from pathlib import Path
 
     from ..config import resolve_guard_home
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .context_usage_commands import folder_setting
 
     request = {
         "switch": "lean",
         "action": _LEAN_ACTIONS[args.lean_action],
         "home_dir": str(Path.home()),
-        "codex_home": _codex_home(),
+        "codex_home": folder_setting("CODEX_HOME"),
         "limit": args.limit,
         "text": not args.json,
     }
     try:
         answer = native_runner_authority("codex_config", request, resolve_guard_home(args.guard_home))
-    except (NativeRunnerAuthorityError, OSError):
+    except (NativeRunnerAuthorityError, OSError, RuntimeError, ValueError):
         answer = None
     if not isinstance(answer, dict):
         answer = {"ok": False, "code": "codex_config_unavailable", "text": None}

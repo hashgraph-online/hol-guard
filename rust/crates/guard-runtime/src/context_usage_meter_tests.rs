@@ -263,6 +263,45 @@ fn tool_homes_follow_their_environment_variables() {
     assert_eq!(week(&files, "codex")["totals"]["uncached_input_tokens"], 10);
 }
 
+/// `read` until its background count is ready.
+fn read_ready(homes: &Homes, env: &HashMap<String, String>) -> Value {
+    for _ in 0..500 {
+        let state = super::read(&homes.home, &homes.guard, env.clone());
+        if state["state"] == "ready" {
+            return state;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    panic!("the usage count never finished");
+}
+
+#[test]
+fn each_callers_folders_are_counted_apart() {
+    let homes = homes();
+    let at = stamp();
+    let custom = homes.home.parent().unwrap().join("custom-codex");
+    std::fs::create_dir_all(custom.join("sessions")).unwrap();
+    std::fs::write(
+        custom.join("sessions/rollout-f.jsonl"),
+        codex_usage(10, 0, 1, &at),
+    )
+    .unwrap();
+    std::fs::write(
+        homes.rollouts.join("rollout-g.jsonl"),
+        codex_usage(99, 0, 1, &at),
+    )
+    .unwrap();
+    let custom_env = HashMap::from([(
+        "CODEX_HOME".to_owned(),
+        custom.to_string_lossy().into_owned(),
+    )]);
+    let codex_input = |state: &Value| state["week"][0]["totals"]["uncached_input_tokens"].clone();
+    assert_eq!(codex_input(&read_ready(&homes, &custom_env)), 10);
+    // A second caller within the refresh window still gets its own folders.
+    assert_eq!(codex_input(&read_ready(&homes, &HashMap::new())), 99);
+    assert_eq!(codex_input(&read_ready(&homes, &custom_env)), 10);
+}
+
 #[test]
 fn no_records_reports_zero_sessions_not_an_estimate() {
     let homes = homes();
