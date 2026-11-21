@@ -911,6 +911,30 @@ class StoreOAuthConnectMixin:
             sync_payload=sync_payload,
         )
 
+    def record_sync_summary(
+        self,
+        summary: dict[str, object],
+        *,
+        now: str,
+        persist_summary: bool = True,
+        record_connect: bool = True,
+    ) -> dict[str, object] | None:
+        """Store a successful sync's summary and mark the latest connect state synced, in one write.
+
+        Returns the connect state when ``record_connect`` found one to update.
+        """
+
+        state = self._native_store_call(
+            "record_sync_summary",
+            {
+                "summary_json": json.dumps(summary),
+                "now": now,
+                "persist_summary": persist_summary,
+                "record_connect": record_connect,
+            },
+        )
+        return state if isinstance(state, dict) else None
+
     @staticmethod
     def _cloud_workspace_id_from_connection(connection: sqlite3.Connection) -> str | None:
         oauth_row = connection.execute(

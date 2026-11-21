@@ -948,10 +948,13 @@ def sync_receipts(
                 "run hol-guard sync --deep to refresh now."
             ),
         }
-    if persist_sync_summary:
-        store.set_sync_payload("sync_summary", summary, now)
-    if persist_connect_state:
-        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
+    if persist_sync_summary or persist_connect_state:
+        store.record_sync_summary(
+            summary,
+            now=now,
+            persist_summary=persist_sync_summary,
+            record_connect=persist_connect_state,
+        )
     return summary
 
 
@@ -1216,8 +1219,7 @@ def sync_local_guard_cloud_proof(
             }
         )
         recorded_at = str(summary.get("synced_at") or summary.get("runtime_session_synced_at") or _now())
-        store.set_sync_payload("sync_summary", summary, recorded_at)
-        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=recorded_at)
+        store.record_sync_summary(summary, now=recorded_at)
         return summary
 
 

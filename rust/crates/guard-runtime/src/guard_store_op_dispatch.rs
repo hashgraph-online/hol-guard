@@ -159,6 +159,9 @@ pub(crate) fn dispatch(
         "record_policy_bundle_rejection" => {
             crate::guard_store_receipt_redaction::policy_bundle_rejection::method(connection, args)
         }
+        "record_sync_summary" => {
+            crate::guard_store_receipt_redaction::sync_summary::method(connection, args)
+        }
         "repair_rejected_review_correlation" => {
             repair_rejected_correlation(connection, source, args)
         }

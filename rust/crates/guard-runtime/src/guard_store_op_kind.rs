@@ -144,6 +144,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_redaction_bookkeeping"
         | "record_policy_bundle_activation"
         | "record_policy_bundle_rejection"
+        | "record_sync_summary"
         | "repair_rejected_review_correlation"
         | "recover_review_snapshot_sequences"
         | "settle_rejected_review_events"

@@ -276,6 +276,9 @@ pub(crate) mod policy_bundle_activated;
 #[path = "guard_store_policy_bundle_rejection.rs"]
 pub(crate) mod policy_bundle_rejection;
 
+#[path = "guard_store_sync_summary.rs"]
+pub(crate) mod sync_summary;
+
 #[cfg(test)]
 #[path = "guard_store_receipt_redaction_tests.rs"]
 pub(crate) mod tests;
