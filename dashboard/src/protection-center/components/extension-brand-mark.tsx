@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import type { IconType } from "react-icons";
+import { DiHeroku } from "react-icons/di";
 import { FaAws, FaWindows } from "react-icons/fa";
 import {
   HiMiniBolt,
@@ -30,7 +31,6 @@ import {
   SiGooglecloud,
   SiGradle,
   SiHelm,
-  SiHeroku,
   SiHomebrew,
   SiKubernetes,
   SiMinio,
@@ -122,7 +122,7 @@ const BRAND_ICONS: Record<ExtensionBrandSlug, MarkIcon> = {
   supabase: SiSupabase,
   vercel: SiVercel,
   netlify: SiNetlify,
-  heroku: SiHeroku,
+  heroku: DiHeroku,
   minio: SiMinio,
   elasticsearch: SiElasticsearch,
   kafka: SiApachekafka,
