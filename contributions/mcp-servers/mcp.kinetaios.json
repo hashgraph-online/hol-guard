@@ -22,8 +22,8 @@
     "kind": "remote-http",
     "url": "https://your-kinetaios-host.example/mcp",
     "serverNames": [
-      "KinetAios MCP Server",
-      "KinetAios"
+      "kinetaios",
+      "kinetaios-mcp"
     ]
   },
   "riskClasses": [
