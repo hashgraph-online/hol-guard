@@ -19,6 +19,64 @@ fn view(health: &str, revision: u64, managed: u64) -> ApprovalExtensionControlVi
     .unwrap()
 }
 
+fn coverage_hint(digest: &str) -> Value {
+    json!({
+        "schema": "guard.extension-coverage-hint.v1",
+        "catalog_digest": digest,
+        "segment_total": 1,
+        "segments": [{
+            "index": 0,
+            "executable": "git",
+            "extension_ids": ["command.git"],
+            "rule_ids": ["command.git.example"],
+            "permission_ids": [],
+        }],
+    })
+}
+
+fn allow_hint() -> Value {
+    json!({
+        "schema": "guard.extension-allow-hint.v1",
+        "permission_ids": ["command.git.permission.example"],
+        "rule_ids": ["command.git.example"],
+        "extension_ids": ["command.git"],
+        "relied_permission_ids": [],
+        "catalog_digest": "b".repeat(64),
+    })
+}
+
+#[test]
+fn stored_coverage_stays_attached_to_a_recovered_allow() {
+    let stored = coverage_hint(&"a".repeat(64));
+    let mut live = allow_hint();
+    live["coverage"] = coverage_hint(&"c".repeat(64));
+
+    let result = recovered(stored.clone(), || Some(live));
+
+    assert_eq!(shape(&result, "allow"), shape(&allow_hint(), "allow"));
+    assert_eq!(shape(&result, "coverage"), Some(stored));
+}
+
+#[test]
+fn existing_settlement_and_connector_hints_skip_recovery() {
+    let mut combined = allow_hint();
+    combined["coverage"] = coverage_hint(&"a".repeat(64));
+    let connector =
+        json!({"schema": "guard.connector-setup-hint.v1", "cli_id": "local-cli.example"});
+    for stored in [combined, allow_hint(), connector] {
+        assert_eq!(
+            recovered(stored.clone(), || panic!("stored hint was reviewed again")),
+            stored
+        );
+    }
+}
+
+#[test]
+fn a_row_without_a_hint_uses_the_live_answer_when_available() {
+    assert_eq!(recovered(Value::Null, || Some(allow_hint())), allow_hint());
+    assert_eq!(recovered(Value::Null, || None), Value::Null);
+}
+
 #[test]
 fn only_a_protected_or_never_enrolled_authority_admits_a_live_hint() {
     assert!(hint_authority_admitted(&view("protected", 4, 2)));

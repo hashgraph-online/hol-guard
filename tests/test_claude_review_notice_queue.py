@@ -65,7 +65,7 @@ class _RowStore(StoreApprovalsMixin):
 def test_a_claude_review_queues_with_its_notice_in_one_store_write() -> None:
     store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}})
     key = {"integrity_key_b64": "a2V5", "integrity_key_id": "kid"}
-    hint = {"budget_ms": 500}
+    hint = {"deadline_left_ms": 850}
     assert store.queue_native_review(_QUERY, "now", hint=hint, claude_key=key) == {"request_id": "req-1"}
     # The key rides in the top-level args the request digest leaves out; the
     # resident builds the notice's facts from the query itself.

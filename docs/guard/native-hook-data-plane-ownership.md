@@ -165,13 +165,12 @@ Rust-owned. A review the direct hook lane queues itself stores its hints without
 a daemon round trip: `rust/crates/guard-runtime/src/hook_direct_review_hint.rs`
 repeats the review with extension evidence under the admitted snapshot, inside
 one command authority lease, and asks `extension_allow_hint_op` only when that
-review matches the one that paused. A review the daemon queues asks the
-`extension_review_hint` resident op
-(`rust/crates/guard-runtime/src/hook_direct_review_hint_op.rs`) for the same
-hints, handing it the paused result; a pending row read back with nothing
-stored asks the same op without one, and the resident reviews the command once
-for both hints. `native_review_allow_hint.py` only picks the command and launch
-directory and shape-checks the answer. The coverage hint
+review matches the one that paused. The resident store decides hints for a
+review the daemon queues. The host forwards the hook's remaining time, and
+the store reserves time for persisting the review. On a pending approval with
+no stored settlement, `rust/crates/guard-runtime/src/daemon_edge_recommend.rs`
+recovers the command and launch directory and asks the resident for both
+hints in one review. The coverage hint
 (`rust/crates/guard-runtime/src/extension_coverage_hint.rs`) rides on every
 queued review an extension observed; Python only validates and delivers it.
 
