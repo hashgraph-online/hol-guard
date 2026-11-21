@@ -84,16 +84,6 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native
 # shows its own approval prompt. Each raises it only after its PreToolUse
 # hook reviewed the same call.
 _PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
-# The Claude hook fields the resident's lifecycle answers read: the session,
-# the prompt's kind and the tool it names.
-_CLAUDE_LIFECYCLE_FIELDS = ("event_name", "session_id", "notification_type", "tool_name", "message", "title")
-# The prompt copy when the resident cannot answer: it says Guard is holding the
-# request, so an unreachable resident never leaves a prompt reading as though
-# Guard allowed the action.
-_CLAUDE_COPY_UNAVAILABLE = (
-    "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render "
-    "the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
-)
 
 
 @final
@@ -339,10 +329,15 @@ class HookWorker(HookWorkerNativeMixin):
                 workspace=workspace,
                 deadline=deadline,
             )
-        if harness.strip().lower().replace("_", "-") == "claude-code":
-            answered = self._claude_lifecycle_response(event_name, payload, deadline=deadline)
-            if answered is not None:
-                return answered
+        if event_name == "PostToolUse" and harness.strip().lower().replace("_", "-") == "claude-code":
+            # Rust owns lifecycle rendering. Approval-question persistence has
+            # a separate Rust authority-state operation and must settle before
+            # the post-tool edge evaluates its ordinary activity.
+            from ..cli import commands_support  # noqa: F401
+            from ..cli.commands_support_claude_approval import _settle_claude_guard_question
+
+            if _settle_claude_guard_question(self.store, payload, deadline=deadline) is not None:
+                return {}
         if (
             event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
@@ -384,72 +379,6 @@ class HookWorker(HookWorkerNativeMixin):
                 claimed_saved_allow_hash=claimed_saved_allow_hash,
                 claimed_approval_request_id=claimed_approval_request_id,
             )
-
-    def _claude_lifecycle_response(
-        self,
-        event_name: str,
-        payload: dict[str, object],
-        *,
-        deadline: float | None = None,
-    ) -> dict[str, object] | None:
-        """Claude Code's answer for a lifecycle hook, or ``None`` for the edge.
-
-        A permission prompt or dialog is answered by one resident call that
-        reads the session's pending Guard review, marks it seen and records
-        the prompt. ``Stop`` drops the session's unanswered prompts, so the
-        next turn reviews the call again instead of inheriting a block nobody
-        chose, and the same call returns its answer; a runtime too old to
-        return one leaves ``Stop`` to the edge. A ``PostToolUse`` that answers
-        the HOL Guard approval question saves that answer.
-        """
-        if event_name == "PostToolUse":
-            # The CLI helper modules resolve shared names through the command
-            # support registry, which a resident built in process has not loaded.
-            from ..cli import commands_support  # noqa: F401
-            from ..cli.commands_support_claude_approval import _settle_claude_guard_question
-
-            return None if _settle_claude_guard_question(self.store, payload, deadline=deadline) is None else {}
-        if not (
-            event_name == "PermissionRequest"
-            or event_name == "Stop"
-            or (event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt")
-        ):
-            return None
-        from ..cli._commands_shared import _now
-        from ..cli.commands_support_runtime_artifacts import _optional_string
-        from ..native_hook_authority_state import (
-            HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
-            hook_authority_state,
-            object_field,
-        )
-
-        reply = hook_authority_state(
-            self.store,
-            "claude_lifecycle",
-            now=_now(),
-            required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
-            session_id=_optional_string(payload.get("session_id")),
-            payload={
-                "event_name": event_name,
-                **{
-                    name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name != "event_name" and name in payload
-                },
-            },
-        )
-        answered = object_field(reply, "harness_response")
-        if answered is not None or event_name == "Stop":
-            return answered
-        if event_name == "PermissionRequest":
-            # Without the resident there is no pending review to present, so
-            # the dialog stays Claude's own, as for a session with none.
-            return {
-                "guard_permission_passthrough": True,
-                "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
-            }
-        return {
-            "systemMessage": _CLAUDE_COPY_UNAVAILABLE,
-            "hookSpecificOutput": {"hookEventName": "Notification", "additionalContext": _CLAUDE_COPY_UNAVAILABLE},
-        }
 
     def _record_post_tool_activity(
         self,

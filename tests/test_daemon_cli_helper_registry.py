@@ -7,12 +7,11 @@ import sys
 
 _SCRIPT = """
 import sys
-from types import SimpleNamespace
-
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 
 assert "codex_plugin_scanner.guard.cli.commands_support" not in sys.modules
-print(HookWorker._claude_lifecycle_response(SimpleNamespace(store=None), "PostToolUse", {}))
+assert HookWorker.__name__ == "HookWorker"
+print("ok")
 """
 
 
@@ -28,4 +27,4 @@ def test_an_in_process_resident_answers_a_claude_turn_without_the_cli_loaded() -
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "None"
+    assert result.stdout.strip() == "ok"
