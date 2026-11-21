@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_authority_state
+from codex_plugin_scanner.guard import native_hook_authority_state, native_hook_direct
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -45,6 +45,26 @@ def _resident(monkeypatch: pytest.MonkeyPatch, reply: dict[str, object] | None) 
 
     monkeypatch.setattr(native_hook_authority_state, "hook_authority_state", answer)
     return calls
+
+
+def test_rust_direct_lifecycle_answer_precedes_python_compatibility_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer = {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
+    monkeypatch.setattr(native_hook_direct, "native_hook_direct", lambda **_kwargs: answer)
+
+    def unexpected_python_fallback(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("Python lifecycle fallback was consulted after Rust answered")
+
+    store = GuardStore(tmp_path / "guard-home")
+    worker = HookWorker(store=store, wait_for_native_policy=False)
+    monkeypatch.setattr(worker, "_claude_lifecycle_response", unexpected_python_fallback)
+    try:
+        response = _review(worker, tmp_path, dict(_PAYLOAD))
+    finally:
+        worker.close()
+
+    assert response == answer
 
 
 @pytest.mark.parametrize("native_mode", ["auto", "force", "off"])

@@ -340,6 +340,21 @@ class HookWorker(HookWorkerNativeMixin):
                 deadline=deadline,
             )
         if harness.strip().lower().replace("_", "-") == "claude-code":
+            # Rust owns Claude lifecycle semantics. The Python implementation
+            # remains only as a compatibility fallback for an unavailable
+            # resident, where it preserves the established fail-safe reply.
+            from ..native_hook_direct import native_hook_direct
+
+            native_answer = native_hook_direct(
+                harness=harness,
+                guard_home=guard_home,
+                payload=payload,
+                workspace=workspace,
+                home_dir=home_dir,
+                deadline=deadline,
+            )
+            if native_answer is not None and native_answer.get("outcome") != "defer":
+                return native_answer
             answered = self._claude_lifecycle_response(event_name, payload, deadline=deadline)
             if answered is not None:
                 return answered
