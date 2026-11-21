@@ -108,7 +108,7 @@ def build_workspace_assessment_sync(store: GuardStore, *, now: str) -> Workspace
             "hash_key": hash_key.decode("utf-8"),
             "now": now,
             "max_bytes": MAX_SUMMARY_BYTES,
-            "delivery": store.get_sync_payload(DELIVERY_STATE_KEY),
+            "delivery": store.workspace_assessment_delivery(),
         },
         getattr(store, "guard_home", None),
     )
@@ -135,7 +135,7 @@ def fit_workspace_assessment_to_request(
 
 
 def commit_workspace_assessment_sent(store: GuardStore, built: WorkspaceAssessmentSyncBuild, *, now: str) -> None:
-    store.set_sync_payload(DELIVERY_STATE_KEY, {"digest": built.digest, "sent_at": now}, now)
+    store.commit_workspace_assessment_sent(digest=built.digest, sent_at=now)
 
 
 def build_workspace_assessment_sync_safely(store: GuardStore) -> WorkspaceAssessmentSyncBuild | None:

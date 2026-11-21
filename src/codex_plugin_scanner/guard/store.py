@@ -56,6 +56,7 @@ from .store_secret_policy_integrity import (
 )
 from .store_sessions import StoreSessionsMixin
 from .store_storage_maintenance import StoreStorageMaintenanceMixin
+from .store_sync_delivery_rows import StoreSyncDeliveryRowsMixin
 from .store_temporary_mcp import StoreTemporaryMcpMixin
 from .store_workflow_capabilities import StoreWorkflowCapabilitiesMixin
 from .store_workflow_capability_secret_control import StoreWorkflowCapabilitySecretControlMixin
@@ -86,6 +87,7 @@ class GuardStore(
     StoreCloudEventsMixin,
     StoreFleetPostureStateMixin,
     StoreCloudReviewSettingsMixin,
+    StoreSyncDeliveryRowsMixin,
     StoreAdvisoryCacheMixin,
     StoreReceiptsRuntimeMixin,
     StoreApprovalQueriesMixin,

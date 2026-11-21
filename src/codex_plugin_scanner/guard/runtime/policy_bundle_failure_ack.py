@@ -17,7 +17,6 @@ from ..policy_bundle_delivery import is_failed_policy_bundle_acknowledgement, po
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
 from ..store import GuardStore
 
-_ACK_STATE_KEY = "policy_bundle_ack"
 _FAILED = "failed"
 
 
@@ -86,7 +85,7 @@ def cached_bundle_failure_acknowledgement(
     request resends the same acknowledgement instead of a conflicting one.
     """
 
-    payload = store.get_sync_payload("policy_bundle")
+    payload = store.cached_policy_bundle()
     has_payload = isinstance(payload, dict) and bool(payload)
     bundle, reason = validate(store, payload) if has_payload else (None, None)
     if bundle is not None:
@@ -109,5 +108,5 @@ def cached_bundle_failure_acknowledgement(
     )
     if not failed:
         return None if reason in (None, NATIVE_UNAVAILABLE_REJECTION) else {}
-    store.set_sync_payload(_ACK_STATE_KEY, failed, synced_at)
+    store.record_policy_bundle_failure_ack(acknowledgement=failed, now=synced_at)
     return failed
