@@ -10897,21 +10897,6 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
         "message": "Claude needs your permission to use Read",
         "tool_name": "Read",
     }
-    # Exercise the Rust-lane outage response directly. The lifecycle bridge is
-    # no longer consulted for this notification, so a Python authority-state
-    # stub alone would leave the resident available and render the full notice.
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_hook_direct._resident_request",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_hook_render._render_payload",
-        lambda *_args, **_kwargs: None,
-    )
     notification_rc, notification_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -11174,9 +11159,7 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
     assert "keep blocked" in notification_output["systemMessage"].lower()
 
 
-def test_guard_hook_claude_notification_uses_native_notice_when_python_bridge_is_unavailable(
-    tmp_path, capsys, monkeypatch
-):
+def test_guard_hook_claude_notification_native_lane_outage_is_fail_closed(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -11184,8 +11167,7 @@ def test_guard_hook_claude_notification_uses_native_notice_when_python_bridge_is
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
 
-    # The Python bridge is unavailable, but the native lifecycle authority remains
-    # the source of the notice rendered for Claude.
+    # The native lane is unavailable, so the fixed lifecycle envelope is used.
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_hook_authority_state.hook_authority_state",
         lambda *_args, **_kwargs: None,
@@ -11221,6 +11203,21 @@ def test_guard_hook_claude_notification_uses_native_notice_when_python_bridge_is
         "message": "Claude needs your permission to use Read",
         "tool_name": "Read",
     }
+    # Exercise the Rust-lane outage response directly. The lifecycle bridge is
+    # no longer consulted for this notification, so a Python authority-state
+    # stub alone would leave the resident available and render the full notice.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_direct._resident_request",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_render._render_payload",
+        lambda *_args, **_kwargs: None,
+    )
     notification_rc, notification_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -11234,13 +11231,12 @@ def test_guard_hook_claude_notification_uses_native_notice_when_python_bridge_is
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
-    # Native lifecycle rendering owns the notice text once Python is bypassed.
-    assert notification_output["systemMessage"] == (
-        "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question. "
-        "This approval flow came from HOL Guard, not from Claude alone. HOL Guard requires fresh approval under "
-        "the installed policy's secret read setting. HOL Guard will ask the user to choose Allow once, Allow "
-        "during this session, or Keep blocked before Claude retries the action."
-    )
+    assert notification_output == {
+        "continue": True,
+        "policy_action": "allow",
+        "reason_code": "native_hook_render_unavailable",
+        "hookSpecificOutput": {"hookEventName": "Notification"},
+    }
 
 
 def test_guard_hook_copilot_reviews_safe_requests(tmp_path, capsys, monkeypatch):
