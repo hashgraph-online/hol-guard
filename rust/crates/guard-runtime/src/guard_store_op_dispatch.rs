@@ -427,6 +427,9 @@ pub(crate) fn dispatch(
         "record_command_queue_lease_limit" => {
             crate::guard_store_sync_state::queue_lease_limit::method(connection, args)
         }
+        "transition_command_queue_state" => {
+            crate::guard_store_sync_state::queue_transition::method(connection, args)
+        }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),

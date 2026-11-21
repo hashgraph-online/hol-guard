@@ -193,6 +193,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "set_device_label"
         | "set_sync_payload"
         | "record_command_queue_lease_limit"
+        | "transition_command_queue_state"
         | "rotate_installation_id"
         | "add_event"
         | "set_managed_install"
