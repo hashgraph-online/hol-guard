@@ -79,6 +79,9 @@ fn is_credential_key(state_key: &str) -> bool {
 #[path = "guard_store_queue_lease_limit.rs"]
 pub(crate) mod queue_lease_limit;
 
+#[path = "guard_store_queue_transition.rs"]
+pub(crate) mod queue_transition;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;

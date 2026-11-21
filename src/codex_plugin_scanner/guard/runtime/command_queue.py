@@ -78,6 +78,7 @@ from .command_queue_state import current_command_queue_lane as _current_lane
 from .command_queue_state import load_command_queue_state as _load_state
 from .command_queue_state import record_exact_route_failure as _record_exact_route_failure
 from .command_queue_state import save_command_queue_state as _save_state
+from .command_queue_state import transition_command_queue_state as _transition
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     exact_cloud_review_operations,
@@ -255,7 +256,6 @@ def _retry_pending_result(
         state,
         post_result=_post_result,
         resolve_auth=_resolve_command_queue_auth_context,
-        save_state=_save_state,
     )
 
 
@@ -394,15 +394,7 @@ def poll_command_queue_once(
     # and its lease scope already requires a ready Review keyring.
     ready = command_environment_allows_queue() if _current_lane().is_drain else command_queue_should_poll(store)
     if not ready:
-        state = _load_state(store)
-        state.update(
-            {
-                "state": "disabled",
-                "last_error": None,
-                "active_job": None,
-            }
-        )
-        _save_state(store, state)
+        _transition(store, {}, "disabled")
         return status(store)
     extras: list[dict[str, object]] = []
     batch_size = 1
@@ -420,16 +412,8 @@ def poll_command_queue_once(
         item = leased_item
     else:
         auth_context = _resolve_command_queue_auth_context(store)
-        state = _load_state(store)
-        state.update(
-            {
-                "state": "polling",
-                "last_poll_at": _now(),
-                "last_error": None,
-                "last_poll_was_empty": False,
-            }
-        )
-        _save_state(store, state)
+        state = dict[str, object]()
+        _transition(store, state, "polling", at=_now())
         if _retry_pending_result(store, auth_context, state):
             return status(store)
         batch_size = (
@@ -485,19 +469,14 @@ def poll_command_queue_once(
             raise
         _LOGGER.warning("Guard heartbeat 401, attempting OAuth refresh retry.")
         auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-        state["state"] = "auth_expired"
-        _save_state(store, state)
+        _transition(store, state, "auth_expired")
         try:
             _heartbeat(auth_context, item)
         except Exception:
-            state.pop("active_job", None)
-            state.update({"state": "error", "last_error": "Guard command heartbeat failed."})
-            _save_state(store, state)
+            _transition(store, state, "heartbeat_failed")
             raise
     except Exception:
-        state.pop("active_job", None)
-        state.update({"state": "error", "last_error": "Guard command heartbeat failed."})
-        _save_state(store, state)
+        _transition(store, state, "heartbeat_failed")
         raise
     try:
         authorized = authorization()
@@ -545,8 +524,7 @@ def poll_command_queue_once(
             raise
         _LOGGER.warning("Guard result 401, attempting OAuth refresh retry.")
         auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-        state["state"] = "auth_expired"
-        _save_state(store, state)
+        _transition(store, state, "auth_expired")
         try:
             refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
         except Exception:
@@ -556,12 +534,9 @@ def poll_command_queue_once(
         _hold_pending_result(store, state, item, payload)
         raise
     if refused is not None:
-        drop_refused_result(store, state, item, refused, save_state=_save_state)
+        drop_refused_result(store, state, item, refused)
         return status(store)
-    state.pop("active_job", None)
-    state.pop("pending_result", None)
-    state.update({"state": "idle", "last_result_at": _now(), "last_poll_was_empty": False})
-    _save_state(store, state)
+    _transition(store, state, "settled", at=_now())
     audit_command_decision(
         store,
         "cloud_command.result",
