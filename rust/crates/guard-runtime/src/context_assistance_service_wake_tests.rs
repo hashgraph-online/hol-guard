@@ -352,3 +352,42 @@ fn old_engine_folders_are_removed_on_every_start() {
     assert!(root.join("work/inner").is_dir());
     assert!(root.join("staging").is_file());
 }
+
+/// Follows saved settings until project context reads `want`, for 5 s at most.
+fn follows_to(service: &Service, home: &std::path::Path, want: bool) -> bool {
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        service.follow_saved_settings(home);
+        let enabled = lock(&service.state).unwrap().settings.requested.enabled;
+        if enabled == want || Instant::now() >= until {
+            return enabled == want;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_prompt_follows_settings_saved_since_the_last_one() {
+    let home = home();
+    let service = Service::default();
+    assert!(
+        follows_to(&service, home.path(), true),
+        "a saved opt-in reaches the prompt lane without a status request"
+    );
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[context_assistance]\nenabled=false\nruntime_id='selected'\n",
+    )
+    .unwrap();
+    assert!(
+        follows_to(&service, home.path(), false),
+        "turning project context off reaches the next prompt"
+    );
+    let generation = service.configuration_generation().unwrap();
+    service.follow_saved_settings(home.path());
+    assert_eq!(
+        service.configuration_generation().unwrap(),
+        generation,
+        "unchanged settings are not loaded again"
+    );
+}

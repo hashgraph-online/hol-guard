@@ -246,9 +246,9 @@ pub(crate) fn wake(harness: &str, store: &PolicySnapshotStore) {
     if (PROMPT_CONTEXT_APPS.contains(&harness) || matches!(harness, "pi" | "omp"))
         && !cigar_off(store, None, harness)
     {
-        store
-            .context_assistance()
-            .warm_prompt_lane(store.guard_home());
+        let service = store.context_assistance();
+        service.follow_saved_settings(store.guard_home());
+        service.warm_prompt_lane(store.guard_home());
     }
 }
 
@@ -264,6 +264,7 @@ fn attach(
         return;
     }
     let service = store.context_assistance();
+    service.follow_saved_settings(store.guard_home());
     if !service.prompt_context_chosen() {
         return;
     }

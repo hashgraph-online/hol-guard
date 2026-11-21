@@ -19,6 +19,8 @@ pub(crate) enum LaneMiss {
 
 /// How long [`Service::prompt_context_chosen`] waits for a busy lock.
 const CHOSEN_WAIT: Duration = Duration::from_millis(40);
+/// How long a prompt waits for settings saved since the last one to load.
+const FOLLOW_WAIT: Duration = Duration::from_millis(250);
 
 pub(super) fn chosen(settings: &AssistanceSettings) -> bool {
     settings.requested.enabled
@@ -30,6 +32,50 @@ pub(super) fn chosen(settings: &AssistanceSettings) -> bool {
 }
 
 impl Service {
+    /// Picks up settings saved since the prompt lane last looked, so turning
+    /// project context on or off reaches the next prompt without anything
+    /// asking for CIGAR's status first. The file is only hashed here; the
+    /// settings are reloaded when its bytes changed, on their own thread, and
+    /// a prompt waits for that briefly at most.
+    pub(crate) fn follow_saved_settings(&self, guard_home: &std::path::Path) {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let path = guard_home.join(crate::package_authority_config::HOME_CONFIG_FILENAME);
+        let Ok(bytes) = std::fs::read(path) else {
+            return;
+        };
+        let mut hasher = DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        let stamp = hasher.finish();
+        match self.followed.lock() {
+            Ok(mut followed) if *followed != Some(stamp) => *followed = Some(stamp),
+            _ => return,
+        }
+        let (done, finished) = std::sync::mpsc::channel();
+        let state = Arc::clone(&self.state);
+        let followed = Arc::clone(&self.followed);
+        let home = guard_home.to_path_buf();
+        let spawned = std::thread::Builder::new()
+            .name("cigar-saved-settings".into())
+            .spawn(move || {
+                let generation = lock(&state).map(|state| state.generation);
+                let loaded = generation.and_then(|generation| {
+                    let settings = crate::guard_config_load::context_assistance_config(&home)?;
+                    configure(&state, settings, Some(generation))
+                });
+                // A change that raced this load is read again by the next prompt.
+                if loaded.is_err_and(|code| code == "native_context_assistance_context_stale") {
+                    forget(&followed, stamp);
+                }
+                let _ = done.send(());
+            });
+        match spawned {
+            Ok(_) => {
+                let _ = finished.recv_timeout(FOLLOW_WAIT);
+            }
+            Err(_) => forget(&self.followed, stamp),
+        }
+    }
+
     /// Whether someone turned on project context for their AI apps. Cheap:
     /// a busy lock is waited for a few milliseconds at most. When it stays
     /// busy, the answer is the value last published under the lock, so a
@@ -113,6 +159,14 @@ impl Service {
                     .as_ref()
                     .is_some_and(|current| Arc::ptr_eq(current, &lane.actor))
         })
+    }
+}
+
+fn forget(followed: &Mutex<Option<u64>>, stamp: u64) {
+    if let Ok(mut followed) = followed.lock() {
+        if *followed == Some(stamp) {
+            *followed = None;
+        }
     }
 }
 
