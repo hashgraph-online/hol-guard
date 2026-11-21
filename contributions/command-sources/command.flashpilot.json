@@ -1,0 +1,222 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.flashpilot",
+    "version": "1.0.0",
+    "name": "FlashPilot command protection",
+    "description": "Reviews the supported FlashPilot Bridge firmware-flashing commands after local opt-in. Device detection and listing retain their usual Guard handling.",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "flashpilot"
+    ],
+    "delegated_protection": null,
+    "executables": [
+      "flashpilot-bridge"
+    ],
+    "project_markers": [],
+    "reference_urls": [
+      "https://github.com/Legendary-Brilliantforous/flashpilot/releases/tag/v1.2.1",
+      "https://github.com/Legendary-Brilliantforous/flashpilot/blob/986260162d2c4297ca76f2f8358496ebf809aa44/Cargo.toml"
+    ],
+    "action_classes": [
+      "FlashPilot firmware flashing command"
+    ],
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "safer_alternatives": [
+      "Use device detection to confirm the intended device before reviewing a firmware write.",
+      "Verify the firmware image and confirm that a backup is available."
+    ],
+    "required": false,
+    "source": "built-in",
+    "publisher": {
+      "id": "community.flashpilot",
+      "display_name": "FlashPilot community",
+      "url": "https://github.com/Legendary-Brilliantforous/flashpilot"
+    },
+    "homepage": "https://github.com/Legendary-Brilliantforous/flashpilot",
+    "license": "MIT",
+    "icon": {
+      "kind": "none"
+    },
+    "permissions": [
+      {
+        "permission_id": "command.flashpilot.permission.firmware-write",
+        "implementation_version": "1.0.0",
+        "label": "FlashPilot firmware writes",
+        "description": "Identifies FlashPilot Bridge commands that write firmware to device storage.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "fixed_reason": null,
+        "typed_capabilities": [],
+        "action_classes": [
+          "FlashPilot firmware flashing command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "deprecated": false,
+        "replacement_permission_id": null,
+        "safer_guidance": [
+          "Use device detection to confirm the intended device before reviewing a firmware write.",
+          "Verify the firmware image and confirm that a backup is available."
+        ],
+        "example_command": "flashpilot-bridge odin-flash",
+        "family": null
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.flashpilot.destructive-flash",
+        "rule_version": "1.0.0",
+        "title": "FlashPilot firmware flashing command",
+        "description": "Identifies FlashPilot Bridge commands that write firmware to device storage.",
+        "severity": "critical",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "FlashPilot firmware flashing command"
+        ],
+        "safer_alternatives": [
+          "Use device detection to confirm the intended device before reviewing a firmware write.",
+          "Verify the firmware image and confirm that a backup is available."
+        ],
+        "default_mode": "review",
+        "permission_id": "command.flashpilot.permission.firmware-write",
+        "family": null,
+        "native_capability": null,
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "mtk-flash"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "mtk-flash-part"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "mtk-flash-samsung"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "odin-flash"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "odin-flash-multi"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "qcom-flash"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "qcom-flash-one"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "spd-flash"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "unified-flash"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
