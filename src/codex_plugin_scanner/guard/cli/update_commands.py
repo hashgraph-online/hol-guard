@@ -92,6 +92,7 @@ from .update_release_candidates import newest_live_pypi_version, newest_pypi_ver
 from .update_repair_notes import attach_repair_notes
 from .update_resident_barrier import release_before_post_update_repair, subprocess_failure_summary
 from .update_retirement import retire_native_resident_for_home
+from .update_stale_daemon import stale_live_daemon_version
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -934,6 +935,32 @@ def _run_guard_update_unlocked(
             return payload, 0
         # Skip force-reinstall/upgrade noise when PyPI already reports current.
         release_before_post_update_repair(resident_update_lock, _bundled_runtime_candidate())
+        if (
+            context is not None
+            and daemon_refresh_required
+            and stale_live_daemon_version(context.guard_home, current_version) is not None
+        ):
+            # An earlier update can leave the daemon on the old package (a failed restart); load this one now.
+            daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
+                context,
+                update_context=update_context,
+                minimum_version=current_version,
+            )
+            if daemon_refresh is not None:
+                payload["daemon_refresh"] = daemon_refresh
+            _append_payload_note(payload, daemon_refresh_note)
+            if not _daemon_refresh_outcome_succeeded(daemon_refresh, allow_not_running=True):
+                payload.update(
+                    {
+                        "status": "failed",
+                        "reason_code": "update_daemon_refresh_failed",
+                        "message": "HOL Guard is current, but its daemon still runs an older version "
+                        "and could not be restarted safely.",
+                    }
+                )
+                return payload, 1
+            if isinstance(daemon_refresh, dict) and daemon_refresh.get("status") == "restarted":
+                payload["changed"] = True
         package_shims, package_shim_note = _refresh_package_shims_after_update(
             context=context,
             dry_run=dry_run,
