@@ -102,10 +102,11 @@ pub(super) fn recover(call: &mut Call<'_>) -> Step<Value> {
     if payload.contains_key("publication_inverse") {
         return Err(recovery("explicit_inverse_pending"));
     }
-    if field(&payload, "phase").as_str() == Some("config_conflict") {
-        return Err(recovery("config_conflict"));
-    }
     let config = config_of(&payload)?;
+    if field(&payload, "phase").as_str() == Some("config_conflict") {
+        retire_conflict(call, &home, &payload, &config)?;
+        return Ok(json!(false));
+    }
     require_config_identity(call, &payload, &config)?;
     let changes = changes(&home, &payload, &config)?;
     // A foreign edit or newer generation of either file must survive, even
@@ -137,22 +138,55 @@ pub(super) fn recover(call: &mut Call<'_>) -> Step<Value> {
         }
     }
     remove_record(&home)?;
-    if payload.get("key_created").and_then(Value::as_bool) == Some(true) {
-        let home_text = home.to_string_lossy();
-        if let Some(reason) = codex_hook_key::answer("key_remove_if_unused", &home_text)
-            .as_ref()
-            .and_then(|answer| answer.get("error"))
-            .and_then(Value::as_str)
-        {
-            return Err(Fault::Integrity(
-                reason.to_owned(),
-                "The private Codex hook authentication key is not usable; repair the Codex \
-                 installation."
-                    .to_owned(),
-            ));
+    remove_created_key(&home, &payload)?;
+    Ok(json!(true))
+}
+
+/// A key this transaction created goes with it when no manifest uses it, so
+/// the next install does not meet a key without its manifest baseline.
+fn remove_created_key(home: &Path, payload: &Map<String, Value>) -> Step<()> {
+    if payload.get("key_created").and_then(Value::as_bool) != Some(true) {
+        return Ok(());
+    }
+    let home_text = home.to_string_lossy();
+    match codex_hook_key::answer("key_remove_if_unused", &home_text)
+        .as_ref()
+        .and_then(|answer| answer.get("error"))
+        .and_then(Value::as_str)
+    {
+        Some(reason) => Err(Fault::Integrity(
+            reason.to_owned(),
+            "The private Codex hook authentication key is not usable; repair the Codex \
+             installation."
+                .to_owned(),
+        )),
+        None => Ok(()),
+    }
+}
+
+/// A `config_conflict` record names a publication a foreign writer overtook:
+/// the config is theirs, so the inverse is refused for good. Left in place it
+/// refuses every later install, so recovery retires it when nothing else is
+/// unresolved: no repair or explicit inverse is pending and Guard's own
+/// authority files still hold this transaction's before or after bytes.
+/// No file is touched; the next install republishes over the foreign config.
+fn retire_conflict(
+    call: &Call<'_>,
+    home: &Path,
+    payload: &Map<String, Value>,
+    config: &Path,
+) -> Step<()> {
+    if payload.contains_key("repair_plan") {
+        return Err(recovery("config_conflict"));
+    }
+    for (target, before, after) in changes(home, payload, config)?.iter().skip(1) {
+        let current = call.snapshot(target)?;
+        if &current != before && &current != after {
+            return Err(recovery("config_conflict"));
         }
     }
-    Ok(json!(true))
+    remove_record(home)?;
+    remove_created_key(home, payload)
 }
 
 /// `commit_hook_publication`, after authenticated native hook readback.

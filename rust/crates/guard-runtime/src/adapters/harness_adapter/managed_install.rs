@@ -70,6 +70,11 @@ pub(super) fn within<T>(
             .and_then(|found| found.get("budget")),
     )
     .map_err(|_| INVALID)?;
+    let codex = codex_directories(ctx, fields);
+    // A Codex install or uninstall recovers an interrupted hook publication
+    // first, as `CodexHarnessAdapter.install` did with `recover=True`, under
+    // the Codex configuration locks it takes here.
+    let recover = !codex.is_empty();
     if let Some(token) = fields.get("owner").and_then(Value::as_str) {
         return with_registered(token, pid, thread, |owner| {
             // The owner holds the locks of its own Guard home and journals there.
@@ -79,6 +84,7 @@ pub(super) fn within<T>(
             if transition_pending(&ctx.guard_home) {
                 return Err(OwnedFailure::Transition("pending_transition"));
             }
+            // Its Codex adapter recovers once it holds the configuration locks.
             work(owner)
         });
     }
@@ -93,9 +99,9 @@ pub(super) fn within<T>(
         deadline: Instant::now() + wait,
         // The lifecycle lock of the Guard home itself, as `config_path.parent`.
         lock_dirs: vec![ctx.guard_home.clone()],
-        exclusive_dirs: codex_directories(ctx, fields),
+        exclusive_dirs: codex,
         check_pending: true,
-        recover: false,
+        recover,
     };
     with_owned(&spec, &budget, work)
 }

@@ -306,8 +306,10 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         }
         match launch_once(context, *port) {
             Ok(Some(url)) => return Ok(url),
+            // The launched process exited without a handoff; the next port
+            // gets its own launch.
             Ok(None) => {}
-            // The launched process exited without a handoff. When another
+            // The launched process could not be proven gone. When another
             // program holds every port Guard can use, that is why.
             Err(Failure::Runtime(message))
                 if message == NOT_CONTAINED && super::failure::all_ports_in_use(&ports) =>
@@ -859,7 +861,16 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         Ok(Handoff::StillStarting) => Err(still_starting(home)),
         Ok(Handoff::Missing) => {
             terminate(context.caller, &mut child);
-            Err(runtime(NOT_CONTAINED))
+            // A child that is gone launched nothing: a port bound after the
+            // free-port check, or one a retired daemon is still releasing, is
+            // the usual cause, so the caller tries its next candidate port.
+            // A child that outlived termination, or whose status cannot be
+            // read, stays unproven.
+            if child_confirmed_exited(&mut child) {
+                Ok(None)
+            } else {
+                Err(runtime(NOT_CONTAINED))
+            }
         }
         Err(failure) => {
             terminate(context.caller, &mut child);
@@ -903,6 +914,11 @@ fn detach(command: &mut Command, native: bool, allow_breakaway: bool) {
 
 fn child_exited(child: &mut Child) -> bool {
     !matches!(child.try_wait(), Ok(None))
+}
+
+/// Only an observed exit status proves the child gone; a failed status read does not.
+fn child_confirmed_exited(child: &mut Child) -> bool {
+    matches!(child.try_wait(), Ok(Some(_)))
 }
 
 fn retried_marker(child: &mut Child, read: fn(i64) -> Option<String>, pid: i64) -> Option<String> {
@@ -1069,7 +1085,7 @@ fn handoff_binds(
 /// A child that already exited was not retired, so it gets no record and
 /// no signal: its own exit record says why it stopped.
 fn terminate(caller: &Caller, child: &mut Child) {
-    if child_exited(child) {
+    if child_confirmed_exited(child) {
         return;
     }
     let pid = i64::from(child.id());
