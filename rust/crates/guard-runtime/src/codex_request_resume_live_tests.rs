@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
-use super::hook_is_waiting;
+use super::{dispatch_target, hook_is_waiting};
 use crate::codex_hook_identity::current_process_identity;
 use crate::codex_request_resume_op::Call;
 use crate::guard_store_cmd_vectors_tests::temp_home;
@@ -69,6 +69,34 @@ fn pretool(extra: Value) -> Value {
         .unwrap()
         .extend(extra.as_object().unwrap().clone());
     metadata
+}
+
+#[test]
+fn continuation_target_keeps_deadline_offset_and_refuses_stale_process_identity() {
+    let guard_home = home("continuation-target", "approval_wait_timeout_seconds = 1\n");
+    let mut args = json!({
+        "operation": {"status": "waiting_on_approval", "updated_at": STARTED},
+        "metadata": pretool(json!({
+            "codex_hook_waits_for_browser_approval": true,
+            "codex_browser_wait_deadline_at": "2026-05-19T15:40:00+05:30",
+        })),
+    });
+    let facts = |args: &Value| dispatch_target(args, guard_home.to_str().unwrap()).unwrap();
+    assert_eq!(
+        facts(&args),
+        json!({"process_unavailable": false, "wait_deadline": "2026-05-19T15:40:00+05:30"}),
+    );
+
+    args["metadata"]["codex_browser_wait_deadline_at"] = json!("2026-05-19T10:10:00");
+    assert_eq!(facts(&args)["wait_deadline"], "2026-05-19T10:00:04+00:00");
+
+    args["metadata"]["codex_browser_wait_process"]["startToken"] = json!("stale");
+    assert_eq!(
+        facts(&args),
+        json!({"process_unavailable": true, "wait_deadline": null}),
+    );
+    args["operation"] = Value::Null;
+    assert_eq!(facts(&args)["process_unavailable"], true);
 }
 
 #[test]

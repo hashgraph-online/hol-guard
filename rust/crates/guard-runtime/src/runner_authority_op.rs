@@ -325,6 +325,9 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "context_usage" => crate::context_usage_meter::dispatch(&request.args, &request.guard_home),
         // The Codex config switches take the Codex install lock as that home's owner.
         "codex_config" => crate::codex_config_switch::dispatch(&request.args, &request.guard_home),
+        "codex_live_hook_target" => {
+            crate::codex_request_resume_live::dispatch_target(&request.args, &request.guard_home)
+        }
         _ => dispatch(&request.kind, &request.args),
     }
 }
