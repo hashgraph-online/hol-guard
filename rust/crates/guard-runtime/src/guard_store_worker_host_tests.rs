@@ -206,3 +206,34 @@ fn repair_self_check_status_round_trips_objects_only() {
     );
     assert!(bad.is_err());
 }
+
+#[test]
+fn a_large_backlog_is_taken_in_bounded_batches() {
+    let connection = store();
+    let filler = "x".repeat(ATTENTION_BATCH_BYTES * 3 / 5);
+    for operation in ["op-a", "op-b"] {
+        let row = json!({"operation_id": operation, "requests": [{"pad": filler}]});
+        put(
+            &connection,
+            &format!("daemon_approval_attention:{operation}"),
+            &row.to_string(),
+        );
+    }
+    let oversized =
+        json!({"operation_id": "op-0", "requests": [{"pad": "y".repeat(ATTENTION_BATCH_BYTES)}]});
+    put(
+        &connection,
+        "daemon_approval_attention:op-0",
+        &oversized.to_string(),
+    );
+    let first = call(&connection, "take_approval_attention", json!({})).unwrap();
+    assert_eq!(first.as_array().unwrap().len(), 1);
+    assert_eq!(first[0]["operation_id"], "op-a");
+    assert_eq!(
+        keys(&connection),
+        vec!["daemon_approval_attention:op-b".to_owned()]
+    );
+    let second = call(&connection, "take_approval_attention", json!({})).unwrap();
+    assert_eq!(second[0]["operation_id"], "op-b");
+    assert!(keys(&connection).is_empty());
+}

@@ -12,7 +12,9 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{exec, query_all, text, value_error, StoreError, StoreResult};
+use crate::guard_store_db::{
+    exec, placeholders, query_each, text, value_error, StoreError, StoreResult,
+};
 use crate::guard_store_sync_state::{read_payload, write_encoded};
 
 /// `ATTENTION_PREFIX`; the operation id follows it.
@@ -23,6 +25,11 @@ const REFRESH_REQUEST_KEY: &str = "daemon_worker_refresh_request";
 const REFRESH_STATUS_KEY: &str = "daemon_worker_refresh_status";
 /// `REPAIR_SELF_CHECK_KEY`.
 const REPAIR_SELF_CHECK_KEY: &str = "daemon_repair_self_check_status";
+/// Row text one attention take may return, well inside the store client's
+/// response limit.
+const ATTENTION_BATCH_BYTES: usize = 1024 * 1024;
+/// Keys removed per delete statement.
+const DELETE_CHUNK: usize = 200;
 
 /// Whether `method` is one of the worker-host handoff methods.
 pub(crate) fn handles(method: &str) -> bool {
@@ -115,29 +122,52 @@ fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Valu
     )
 }
 
-/// `_take_attention`: every queued attention row, removed as it is read.
-/// Rows whose text is not a JSON object are removed and skipped.
+/// `_take_attention`: queued attention rows in operation-id order, removed in
+/// the same write that reads them. One take returns at most
+/// [`ATTENTION_BATCH_BYTES`] of row text so the answer always fits the store
+/// client's response limit; the rest stays queued for the next take. A row
+/// larger than the whole budget could never be delivered, so it is removed
+/// without being returned, as is a row whose text is not a JSON object.
 fn take_attention(connection: &Connection) -> StoreResult<Value> {
     let pattern = [Value::from(format!(
         "{}%",
         ATTENTION_PREFIX.replace('_', "\\_")
     ))];
-    let rows = query_all(
+    let mut taken = Vec::new();
+    let mut removed = Vec::new();
+    let mut used = 0usize;
+    query_each(
         connection,
-        "select payload_json from sync_state \
+        "select state_key, payload_json from sync_state \
          where state_key like ? escape '\\' order by state_key",
         &pattern,
+        |row| {
+            let payload = text(&row, "payload_json");
+            if payload.len() <= ATTENTION_BATCH_BYTES {
+                if used + payload.len() > ATTENTION_BATCH_BYTES {
+                    return Ok(false);
+                }
+                used += payload.len();
+                if let Ok(value) = serde_json::from_str::<Value>(payload) {
+                    if value.is_object() {
+                        taken.push(value);
+                    }
+                }
+            }
+            removed.push(Value::from(text(&row, "state_key")));
+            Ok(true)
+        },
     )?;
-    exec(
-        connection,
-        "delete from sync_state where state_key like ? escape '\\'",
-        &pattern,
-    )?;
-    let taken = rows
-        .iter()
-        .filter_map(|row| serde_json::from_str::<Value>(text(row, "payload_json")).ok())
-        .filter(Value::is_object)
-        .collect();
+    for keys in removed.chunks(DELETE_CHUNK) {
+        exec(
+            connection,
+            &format!(
+                "delete from sync_state where state_key in ({})",
+                placeholders(keys.len())
+            ),
+            keys,
+        )?;
+    }
     Ok(Value::Array(taken))
 }
 
