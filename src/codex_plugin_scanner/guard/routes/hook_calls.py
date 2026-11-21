@@ -78,9 +78,7 @@ def hook_warm(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
 
 
 def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Applies the native-policy barrier before the daemon admits the hook."""
-
-    from ..hook_review.hook_policy_admission import _native_policy_not_ready_reason
+    """Wait for publication and return the facts the native daemon renders."""
 
     server = _server(store, args)
     workspace = _text(args.get("workspace"))
@@ -89,10 +87,20 @@ def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=deadline)
     if prepared is None:
         worker.metrics.record_route("native_fail_safe")
+        publisher = getattr(worker, "policy_snapshot_publisher", None)
+        last_error = getattr(publisher, "last_error", None)
+        read_streak = getattr(publisher, "resident_failure_streak", None)
+        streak = read_streak() if callable(read_streak) else 0
         return {
             "fail_safe": {
-                "reason": _native_policy_not_ready_reason(server, deadline=deadline),
+                # Older native callers still need a complete refusal.
+                "reason": "HOL Guard could not prepare the native policy safely. "
+                "This is usually temporary. Retry this action.",
                 "reason_code": "native_policy_not_ready",
+                "policy_failure": {
+                    "last_error": last_error if isinstance(last_error, str) and len(last_error) <= 128 else None,
+                    "resident_failure_streak": min(max(0, streak), 1_000_000) if type(streak) is int else 0,
+                },
             }
         }
     return {}

@@ -20,6 +20,21 @@ pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
+pub(super) fn prepare_refusal(harness: &str, event: &str, refused: &Value) -> Option<Value> {
+    let (fallback, code) = refusal(refused)?;
+    let reason = refused
+        .get("policy_failure")
+        .and_then(Value::as_object)
+        .filter(|_| code == "native_policy_not_ready")
+        .map(crate::hook_policy_admission_op::daemon_reason);
+    Some(fail_safe(
+        harness,
+        event,
+        reason.as_deref().unwrap_or(fallback),
+        code,
+    ))
+}
+
 /// The message a capacity refusal carries. A retry usually succeeds once a
 /// cold start or a burst has passed; one that keeps failing points at a
 /// daemon that needs repair, so each message names the command for that.

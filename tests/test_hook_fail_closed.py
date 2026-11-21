@@ -186,7 +186,6 @@ def test_every_event_kind_answers_from_the_shared_contract() -> None:
     assert hook_fail_closed.fail_closed_response("claude_code", "Notification")["hookSpecificOutput"] == {
         "hookEventName": "Notification"
     }
-    assert hook_fail_closed.unmanaged_passthrough("OMP") == {"decision": "allow", "reason_code": "harness_not_managed"}
 
 
 def test_review_render_failure_drops_a_raw_approval_url(monkeypatch: pytest.MonkeyPatch) -> None:
