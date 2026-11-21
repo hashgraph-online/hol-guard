@@ -552,7 +552,6 @@
     "src/codex_plugin_scanner/guard/native_command_control_*.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_readiness.py",
     "src/codex_plugin_scanner/guard/store_approvals.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
     "src/codex_plugin_scanner/guard/native_package_review_plan.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_native_review_binding.py",

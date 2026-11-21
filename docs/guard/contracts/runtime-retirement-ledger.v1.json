@@ -13,6 +13,7 @@
   "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",

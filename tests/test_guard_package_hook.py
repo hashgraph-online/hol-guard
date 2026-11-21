@@ -245,6 +245,7 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    native_hook_force: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -260,12 +261,7 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     def unexpected_browser_approval(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("terminal package block must not queue or wait for browser approval")
 
-    isolate_terminal_block_patches(monkeypatch, unexpected_browser_approval)
-
-    def fail_subprocess(*args: object, **kwargs: object) -> object:
-        raise AssertionError("blocked package request must not launch a subprocess")
-
-    monkeypatch.setattr(guard_commands_module.subprocess, "run", fail_subprocess)
+    isolate_terminal_block_patches(monkeypatch, unexpected_browser_approval, launcher=str(native_hook_force))
 
     rc = main(
         [

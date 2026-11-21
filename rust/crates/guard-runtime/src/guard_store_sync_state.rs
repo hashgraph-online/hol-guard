@@ -76,6 +76,9 @@ fn is_credential_key(state_key: &str) -> bool {
             .is_some_and(|rest| rest.starts_with(':'))
 }
 
+#[path = "guard_store_queue_lease_limit.rs"]
+pub(crate) mod queue_lease_limit;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;
