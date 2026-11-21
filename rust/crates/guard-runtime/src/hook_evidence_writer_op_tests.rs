@@ -113,6 +113,30 @@ fn a_pre_event_without_a_guard_action_is_not_queued() {
 }
 
 #[test]
+fn a_daemon_post_tool_failure_is_persisted_with_the_failed_phase() {
+    let home = store_home("writer-op-post-tool", "record_basic");
+    let queued = call(
+        &home,
+        json!({
+            "action": "submit_post_tool_activity",
+            "harness": "claude-code",
+            "event": "PostToolUseFailure",
+            "payload": {"tool_name": "Bash", "tool_input": {"command": "pwd"}},
+        }),
+    );
+    assert_eq!(queued["payload"]["queued"], json!(true));
+    assert_eq!(
+        call(&home, json!({"action": "stop", "timeout_seconds": 10.0}))["payload"]["drained"],
+        json!(true)
+    );
+    let rows = activity_rows(&home);
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["hook_phase"], json!("post_failure"));
+    assert_eq!(rows[0]["execution_status"], json!("unpaired_post"));
+    assert_eq!(rows[0]["policy_action"], Value::Null);
+}
+
+#[test]
 fn a_receipt_the_validator_refuses_is_not_queued() {
     let home = store_home("writer-op-receipt", "record_basic");
     let answer = call(

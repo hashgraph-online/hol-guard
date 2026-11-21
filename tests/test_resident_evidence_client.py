@@ -157,6 +157,25 @@ def test_a_reply_bound_to_another_request_is_never_read_as_queued(
         writer.submit_native_decision_receipt({"receipt": "shaped"})
 
 
+def test_post_tool_submission_leaves_result_interpretation_to_the_resident(
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer = _answer({"queued": True})
+
+    def respond(*, required_feature: str, **kwargs: Any) -> dict[str, Any]:
+        assert required_feature == "hook-evidence-post-tool-v1"
+        return answer(**kwargs)
+
+    _install(monkeypatch, respond)
+    payload = {"tool_name": "Bash", "exit_code": 3}
+    assert writer.submit_post_tool_activity(harness="claude-code", event="PostToolUseFailure", payload=payload)
+    (request,) = answer.sent
+    assert request["action"] == "submit_post_tool_activity"
+    assert request["event"] == "PostToolUseFailure"
+    assert request["payload"] == payload
+    assert "succeeded" not in request
+
+
 def test_a_resident_error_raises_the_store_exception_its_code_names(
     writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

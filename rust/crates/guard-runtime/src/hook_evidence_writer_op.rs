@@ -72,6 +72,7 @@ pub(crate) const HOOK_EVIDENCE_WRITER_REQUEST_SCHEMA: &str =
 pub(crate) const HOOK_EVIDENCE_WRITER_RESULT_SCHEMA: &str = "guard-hook-evidence-writer-result.v1";
 /// The feature advertised to callers that route evidence here.
 pub(crate) const HOOK_EVIDENCE_WRITER_FEATURE: &str = "hook-evidence-writer-v1";
+pub(crate) const HOOK_EVIDENCE_POST_TOOL_FEATURE: &str = "hook-evidence-post-tool-v1";
 
 /// `RuntimeHookEvidenceWriter.__init__` defaults (:88-92).
 const MAX_RECORDS: usize = 2_000;
@@ -126,6 +127,12 @@ pub(crate) enum HookEvidenceWriterActionV1 {
         harness: String,
         payload: Map<String, Value>,
         succeeded: bool,
+    },
+    /// Classify the tool result and queue discovery before command activity.
+    SubmitPostToolActivity {
+        harness: String,
+        event: String,
+        payload: Map<String, Value>,
     },
     /// `submit_native_decision_receipt` (:243).
     SubmitNativeDecisionReceipt { receipt: Map<String, Value> },
@@ -678,6 +685,23 @@ fn evaluate(request: &HookEvidenceWriterRequestV1) -> Result<Value, WriterError>
         HookEvidenceWriterActionV1::SubmitNativeDecisionReceipt { receipt } => {
             let (queued, reported) = with_writer(&guard_home, &request.source, |resident| {
                 let queued = resident.writer.submit_native_decision_receipt(receipt);
+                (queued, signals(resident))
+            })
+            .map_err(started)?;
+            Ok(queued_payload(queued, reported))
+        }
+        HookEvidenceWriterActionV1::SubmitPostToolActivity {
+            harness,
+            event,
+            payload,
+        } => {
+            let (queued, reported) = with_writer(&guard_home, &request.source, |resident| {
+                let queued = crate::edge_receipt::queue_post_tool_activity(
+                    &resident.writer,
+                    harness,
+                    event,
+                    payload,
+                );
                 (queued, signals(resident))
             })
             .map_err(started)?;

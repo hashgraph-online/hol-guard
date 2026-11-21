@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from .store_connection_schema import GuardStore
 
 HOOK_EVIDENCE_WRITER_FEATURE: Final = "hook-evidence-writer-v1"
+_POST_TOOL_FEATURE: Final = "hook-evidence-post-tool-v1"
 _REQUEST_SCHEMA: Final = "guard-hook-evidence-writer-request.v1"
 _RESULT_SCHEMA: Final = "guard-hook-evidence-writer-result.v1"
 # The writer queues bounded records; the resident's own submission bound plus
@@ -136,7 +137,13 @@ class ResidentEvidenceClient:
     def guard_home(self) -> Path:
         return self._guard_home
 
-    def _call(self, action: Mapping[str, object], *, timeout_seconds: float) -> dict[str, object]:
+    def _call(
+        self,
+        action: Mapping[str, object],
+        *,
+        timeout_seconds: float,
+        required_feature: str = HOOK_EVIDENCE_WRITER_FEATURE,
+    ) -> dict[str, object]:
         if not ensure_resident_prerequisite(self._guard_home):
             raise _unavailable(
                 prerequisite_unavailable_code("resident_evidence_client_prerequisite_unavailable", self._guard_home)
@@ -161,7 +168,7 @@ class ResidentEvidenceClient:
             request=request,
             guard_home=self._guard_home,
             timeout_seconds=timeout_seconds,
-            required_feature=HOOK_EVIDENCE_WRITER_FEATURE,
+            required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,
@@ -222,8 +229,8 @@ class ResidentEvidenceClient:
         self._consume_signals(payload)
         return payload.get("running") is True
 
-    def _queued(self, action: Mapping[str, object]) -> bool:
-        payload = self._call(action, timeout_seconds=_TIMEOUT_SECONDS)
+    def _queued(self, action: Mapping[str, object], *, required_feature: str = HOOK_EVIDENCE_WRITER_FEATURE) -> bool:
+        payload = self._call(action, timeout_seconds=_TIMEOUT_SECONDS, required_feature=required_feature)
         # A submission is the one call a daemon always makes, so it is the path
         # that has to carry the signals a running writer raised.
         self._consume_signals(payload)
@@ -276,6 +283,14 @@ class ResidentEvidenceClient:
 
     def submit_native_decision_receipt(self, receipt: Mapping[str, object]) -> bool:
         return self._queued({"action": "submit_native_decision_receipt", "receipt": dict(receipt)})
+
+    def submit_post_tool_activity(self, *, harness: str, event: str, payload: Mapping[str, object]) -> bool:
+        """Hand the event and its evidence to the same writer as direct hooks."""
+
+        return self._queued(
+            {"action": "submit_post_tool_activity", "harness": harness, "event": event, "payload": dict(payload)},
+            required_feature=_POST_TOOL_FEATURE,
+        )
 
     def stats(self) -> dict[str, Any]:
         """The writer's counters, with the two signals the resident hands back.

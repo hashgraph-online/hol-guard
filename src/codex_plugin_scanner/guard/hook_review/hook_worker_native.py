@@ -6,7 +6,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
-from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
@@ -356,7 +355,7 @@ class HookWorkerNativeMixin:
                 self._record_post_tool_activity(
                     harness=harness,
                     payload=payload,
-                    succeeded=hook_post_succeeded(event_name, payload),
+                    event=event_name,
                 )
             reason_code = {
                 "PostToolUse": "native_post_tool_unavailable",
@@ -553,7 +552,7 @@ class HookWorkerNativeMixin:
             self._record_post_tool_activity(
                 harness=native_harness,
                 payload=payload,
-                succeeded=hook_post_succeeded(native_event, payload),
+                event=native_event,
             )
         return (_edge_harness_response(edge), True)
 

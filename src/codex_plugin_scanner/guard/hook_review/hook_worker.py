@@ -58,13 +58,12 @@ if TYPE_CHECKING:
 
 
 class CommandActivityWriter(Protocol):
-    def submit_command_activity(
+    def submit_post_tool_activity(
         self,
         *,
         harness: str,
         event: str,
         payload: Mapping[str, object],
-        succeeded: bool,
     ) -> bool: ...
 
 
@@ -454,33 +453,19 @@ class HookWorker(HookWorkerNativeMixin):
         self,
         *,
         harness: str,
+        event: str,
         payload: Mapping[str, object],
-        succeeded: bool,
     ) -> None:
         # A worker built without the resident writer (a qualification probe,
         # a bound Bash sink) never answers a post-tool call it should record.
         writer = self.activity_writer
         if writer is None:
             return
-        discovery_writer = getattr(writer, "submit_composio_discovery", None)
 
-        # Recording what a hook decided must not change what it decided.
-        # The writer reaches the resident now, so these calls can fail
-        # where the in-process writer could not, and each costs a round
-        # trip the response the caller is waiting on should not pay for.
-        # Both go to the dispatch as one unit so the discovery is still
-        # submitted before the activity.
+        # Keep the writer round trip out of the hook's decision budget.
         def record() -> None:
-            if callable(discovery_writer):
-                with suppress(Exception):
-                    discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
             with suppress(Exception):
-                _ = writer.submit_command_activity(
-                    harness=harness,
-                    event="PostToolUse",
-                    payload=payload,
-                    succeeded=succeeded,
-                )
+                _ = writer.submit_post_tool_activity(harness=harness, event=event, payload=payload)
 
         run_resident_evidence(self, record)
 
