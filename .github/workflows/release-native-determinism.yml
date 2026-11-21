@@ -102,7 +102,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
       - name: Restore trusted release dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           prefix-key: release-native-v1
           workspaces: rust
