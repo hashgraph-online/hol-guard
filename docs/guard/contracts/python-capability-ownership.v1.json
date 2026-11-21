@@ -2274,6 +2274,18 @@
  ],
  "retired_bodies": [
   {
+   "path": "src/codex_plugin_scanner/guard/hook_removal_sweep.py",
+   "source_sha256": "f7578a2ffa36564a9de0d8fdcd54953b063bb880ea8097ba0ab3dfb1e74e2741",
+   "forbidden_symbols": [
+    "_candidate_request",
+    "_EXTRA_HOOK_FILES",
+    "_WORKSPACE_EXTRA_FILES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_removal_sweep.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/approvals.py",
    "source_sha256": "5346be52329d926839cab70b1cb34838b0dde666e3acecf3346b66a6fdbbfa7d",
    "forbidden_symbols": [
