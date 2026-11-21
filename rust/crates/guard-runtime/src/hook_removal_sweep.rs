@@ -29,6 +29,7 @@ use crate::pyjson::{parse, parse_mapping_lone_surrogates, PyVal};
 const SCHEMA: &str = "hook-removal-sweep.v1";
 pub(crate) const DISCOVERY_FEATURE: &str = "native-hook-removal-discovery-v1";
 pub(crate) const PLAN_FEATURE: &str = "native-hook-removal-plan-v1";
+pub(crate) const REPORT_FEATURE: &str = "native-hook-removal-report-v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const MAX_CANDIDATES: usize = 512;
 const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
@@ -44,6 +45,7 @@ struct Request {
     roots: Vec<String>,
     scope: Option<HarnessScope>,
     plan: Option<plan::PlanRequest>,
+    report: Option<plan::ReportRequest>,
     #[serde(default)]
     path: Option<String>,
     #[serde(default)]
@@ -161,6 +163,7 @@ fn absolute(value: &str) -> Result<PathBuf, String> {
 fn answer(request: &Request) -> Result<Value, String> {
     if request.schema != SCHEMA
         || request.plan.is_some() != (request.op == "plan")
+        || request.report.is_some() != (request.op == "report")
         || (request.scope.is_some()
             && (!matches!(request.op.as_str(), "files" | "sweep")
                 || !request.candidates.is_empty()
@@ -178,13 +181,16 @@ fn answer(request: &Request) -> Result<Value, String> {
             backup::finalize(request)
         }
         _ if request.has_backup_fields() => Err(invalid()),
-        "plan"
+        "plan" | "report"
             if request.path.is_none()
                 && request.candidates.is_empty()
                 && request.roots.is_empty()
                 && !request.dry_run =>
         {
-            plan::answer(request.plan.as_ref().ok_or_else(invalid)?)
+            match &request.plan {
+                Some(plan) => plan::answer(plan),
+                None => plan::report(request.report.as_ref().ok_or_else(invalid)?),
+            }
         }
         "sweep-file" if request.candidates.is_empty() && request.roots.is_empty() => {
             let path = absolute(request.path.as_deref().ok_or_else(invalid)?)?;
@@ -239,11 +245,9 @@ fn sweep_results<'a>(
     files
         .iter()
         .map(move |(text, path)| sweep_config_file(text, path, dry_run))
-        .chain(
-            links
-                .iter()
-                .filter_map(move |(text, path)| inspect_symlinked(text, path, dry_run)),
-        )
+        .chain(links.iter().filter_map(move |(text, path)| {
+            plan::inspect_symlinked(text, path, dry_run).ok().flatten()
+        }))
 }
 
 /// Existing candidates with a sweepable suffix, split into regular files
@@ -428,19 +432,6 @@ fn render(config: Config, pruned: &PyVal, removed: usize) -> Option<String> {
             same(&table_value(reparsed.as_table()), pruned).then_some(rendered)
         }
     }
-}
-
-fn inspect_symlinked<'a>(text: &'a str, path: &Path, dry_run: bool) -> Option<SweepResult<'a>> {
-    let target = fs::canonicalize(path).ok()?;
-    let config = load(&target).ok()?;
-    let (_, removed) = prune_guard_hooks(&config.payload())?;
-    Some(SweepResult {
-        path: text,
-        removed: if dry_run { removed.len() } else { 0 },
-        wrote: false,
-        error: Some("symlink_not_followed"),
-        events: event_names(&removed),
-    })
 }
 
 /// Write `bytes` beside `path` and rename it over the original, keeping the
