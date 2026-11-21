@@ -48,9 +48,7 @@ Keep Guard's desktop app or daemon running for `check`, `start` and context tool
 
 ## Runtime requirement
 
-The actual selected executable must be a verified final CPython 3.14 process with the supported build/ABI, approved CIGAR 0.14.1 package and matching bundled worker. Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify. Guard retains its broader base Python support; a separate verified Python 3.14 environment is valid. The dashboard reports the Guard host's state, including when viewed from another device.
-
-The bundled catalog lists builds for darwin-arm64, darwin-x64, linux-x64 and linux-arm64 (glibc and musl each) and win32-x64. On Linux, Guard picks the glibc or musl build from the C library the system shell loads, because Guard's own Linux runtime is a static musl binary and says nothing about the host. Windows activation still refuses until persistent Job Object transport is implemented, so Windows hosts see the install as not available yet.
+CIGAR runs on its built-in engine: the official `hol-cigar` Rust crate, compiled into Guard's native runtime. There is no separate CIGAR download, Python package or Python process, so the machine's Python installations do not affect it, and it runs wherever Guard's native runtime runs. The dashboard reports the Guard host's state, including when viewed from another device.
 
 ## Local candidate enrollment
 
