@@ -9,17 +9,17 @@ mediation). These tests pin what the daemon sends and what it lets through.
 from __future__ import annotations
 
 from pathlib import Path
+from time import monotonic
 
 import pytest
 
 from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import (
     MEDIATION_FIELD,
     read_structured_view,
-    structured_destination_required,
+    structured_outage_overlay,
     withhold_structured_destination,
     withholds_structured_destination,
 )
-from codex_plugin_scanner.guard.native_content_sensitivity import NativeContentSensitivityError
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured import structured_output_view
 from tests.structured_output_mediation_support import (
     _config,
@@ -95,42 +95,49 @@ def test_a_view_is_read_from_the_config_and_an_unreadable_config_reads_as_empty(
     assert read_structured_view(lambda: unsendable) == {}
 
 
-def test_an_empty_view_requires_the_destination_without_asking_native(monkeypatch: pytest.MonkeyPatch) -> None:
-    def refuse(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("an empty view needs no native resolution")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker_unavailable.content_query", refuse)
-    assert structured_destination_required({}, harness="omp") is True
-
-
 @pytest.mark.parametrize(
-    ("answer", "required"),
+    ("answer", "withholds"),
     [
-        ({"binding": None, "required": False, "reason_code": None}, False),
-        ({"binding": None, "required": True, "reason_code": "structured_managed_authority_revoked"}, True),
-        ({"binding": None, "required": "no"}, True),
-        ({"binding": None}, True),
-        ("not an object", True),
-        (NativeContentSensitivityError("down"), True),
+        (("document", {}), False),
+        (("document", withhold_structured_destination({})), True),
+        (("document", {MEDIATION_FIELD: {"action": "forward"}}), True),
+        (("document", {"decision": "allow"}), True),
+        (("document", None), True),
+        (("silent", None), True),
+        (None, True),
         (RuntimeError("down"), True),
     ],
-    ids=["not-required", "required", "malformed-flag", "missing-flag", "not-a-mapping", "native-error", "other-error"],
 )
 def test_only_a_native_answer_that_requires_nothing_leaves_the_destination_open(
     monkeypatch: pytest.MonkeyPatch,
     answer: object,
-    required: bool,
+    withholds: bool,
+    tmp_path: Path,
 ) -> None:
-    seen: list[tuple[str, dict[str, object]]] = []
+    seen: list[tuple[object, ...]] = []
 
-    def resolve(query: str, body: dict[str, object]) -> object:
-        seen.append((query, body))
+    def render(kind: str, harness: str, body: dict[str, object], *, guard_home: Path, deadline: float) -> object:
+        seen.append((kind, harness, body, guard_home, deadline))
         if isinstance(answer, Exception):
             raise answer
         return answer
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker_unavailable.content_query", resolve)
-    view = structured_output_view(_config())
-    assert view is not None
-    assert structured_destination_required(view, harness="omp") is required
-    assert seen == [("resolution", {"config": view, "harness": "omp"})]
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker_unavailable.native_render_cli", render)
+    deadline = monotonic() + 2
+    overlay = structured_outage_overlay(
+        harness="omp", event_name="PostToolUse", guard_home=tmp_path, deadline=deadline, load_config=_config
+    )
+    assert overlay == (withhold_structured_destination({}) if withholds else {})
+    params = {"event_name": "PostToolUse", "view": structured_output_view(_config())}
+    assert seen == [("structured_outage", "omp", params, tmp_path, deadline)]
+
+
+def test_a_late_native_reply_keeps_the_destination_withheld(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    module = "codex_plugin_scanner.guard.hook_review.hook_worker_unavailable"
+    times = iter([1.0, 3.0])
+    monkeypatch.setattr(f"{module}.monotonic", lambda: next(times))
+    monkeypatch.setattr(f"{module}.native_render_cli", lambda *_args, **_kwargs: ("document", {}))
+    overlay = structured_outage_overlay(
+        harness="pi", event_name="PostToolUse", guard_home=tmp_path, deadline=2.0, load_config=_config
+    )
+    assert overlay == withhold_structured_destination({})

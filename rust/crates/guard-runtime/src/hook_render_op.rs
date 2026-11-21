@@ -72,6 +72,16 @@ fn cli_payload(outcome: CliOutcome) -> Value {
 
 fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
+    if request.kind == "structured_outage" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let event = params
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        return Ok(cli_payload(CliOutcome::Document(
+            crate::hook_direct::pi::outage_overlay(harness, event, params.get("view")),
+        )));
+    }
     if request.kind == "availability" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;

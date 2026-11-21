@@ -34,12 +34,7 @@ from .hook_worker_native_review import (
     review_native_edge,
     superseded_post_tool_snapshot,
 )
-from .hook_worker_unavailable import (
-    read_structured_view,
-    structured_destination_required,
-    withhold_structured_destination,
-    withholds_structured_destination,
-)
+from .hook_worker_unavailable import structured_outage_overlay
 
 
 def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
@@ -223,6 +218,7 @@ class HookWorkerNativeMixin:
         event_name: str,
         guard_home: Path,
         workspace: Path | None,
+        deadline: float | None = None,
     ) -> dict[str, object]:
         """Withhold a managed structured destination when native proof is absent.
 
@@ -231,15 +227,14 @@ class HookWorkerNativeMixin:
         structured destination keeps the existing availability response.
         """
 
-        if not withholds_structured_destination(harness=harness, event_name=event_name):
-            return response
-        # The edge never answered, so nothing resolved the policy. Read the
-        # managed view for the outage-only overlay: an active destination
-        # still must not receive unreviewed content.
-        resolved = read_structured_view(lambda: self._load_config(guard_home, workspace))
-        if not structured_destination_required(resolved, harness=harness):
-            return response
-        return withhold_structured_destination(response)
+        overlay = structured_outage_overlay(
+            harness=harness,
+            event_name=event_name,
+            guard_home=guard_home,
+            deadline=deadline,
+            load_config=lambda: self._load_config(guard_home, workspace),
+        )
+        return {**response, **overlay} if overlay else response
 
     def _review_native_edge(
         self: _HookWorkerNativeHost,
@@ -381,6 +376,7 @@ class HookWorkerNativeMixin:
                     event_name=event_name,
                     guard_home=guard_home,
                     workspace=workspace,
+                    deadline=deadline,
                 ),
                 False,
             )

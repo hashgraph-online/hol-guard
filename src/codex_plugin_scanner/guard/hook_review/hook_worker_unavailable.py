@@ -8,11 +8,12 @@ direct-lane binding.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
+from time import monotonic
 from typing import TYPE_CHECKING
 
-from ..native_content_sensitivity import content_query
+from ..native_hook_render import native_render_cli
 from ..native_policy_snapshot_direct_lane_structured import structured_output_view
 from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 
@@ -27,25 +28,24 @@ _PI_ALIASES = {"pi-agent": "pi", "pi-coding-agent": "pi", "oh-my-pi": "omp"}
 
 
 def withholds_structured_destination(*, harness: str, event_name: str) -> bool:
+    """Identify which adapters need the fixed response during a full outage."""
+
     normalized = harness.strip().lower().replace("_", "-")
     return event_name == "PostToolUse" and _PI_ALIASES.get(normalized, normalized) in {"pi", "omp"}
 
 
-def _withheld(reason_code: str, native_decision_id: object = None) -> dict[str, object]:
-    disposition: dict[str, object] = {
+def _withheld() -> dict[str, object]:
+    return {
         "schema": _MEDIATION_SCHEMA,
         "action": "withhold",
-        "reason_code": reason_code,
+        "reason_code": "structured_native_edge_unavailable",
     }
-    if isinstance(native_decision_id, str) and native_decision_id:
-        disposition["native_decision_id"] = native_decision_id
-    return disposition
 
 
 def withhold_structured_destination(response: dict[str, object]) -> dict[str, object]:
-    """Withhold structured output when native proof is unavailable."""
+    """Fixed adapter response for an unreachable native authority."""
 
-    return {**response, MEDIATION_FIELD: _withheld("structured_native_edge_unavailable")}
+    return {**response, MEDIATION_FIELD: _withheld()}
 
 
 def read_structured_view(load_config: Callable[[], object]) -> dict[str, object]:
@@ -60,16 +60,36 @@ def read_structured_view(load_config: Callable[[], object]) -> dict[str, object]
     return view if view is not None else {}
 
 
-def structured_destination_required(view: Mapping[str, object], *, harness: str) -> bool:
-    """Return whether the managed policy requires withholding this destination."""
-
-    if not view:
-        return True
+def structured_outage_overlay(
+    *,
+    harness: str,
+    event_name: str,
+    guard_home: Path,
+    deadline: float | None,
+    load_config: Callable[[], object],
+) -> dict[str, object]:
+    if not withholds_structured_destination(harness=harness, event_name=event_name):
+        return {}
+    withhold = withhold_structured_destination({})
+    if deadline is not None and monotonic() >= deadline:
+        return withhold
     try:
-        result = content_query("resolution", {"config": dict(view), "harness": harness})
-    except Exception:
-        return True
-    return not (isinstance(result, dict) and result.get("required") is False)
+        rendered = native_render_cli(
+            "structured_outage",
+            harness,
+            {"event_name": event_name, "view": read_structured_view(load_config)},
+            guard_home=guard_home,
+            deadline=deadline,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return withhold
+    if deadline is not None and monotonic() >= deadline:
+        return withhold
+    if rendered is not None and rendered[0] == "document":
+        overlay = rendered[1]
+        if overlay is not None and (not overlay or overlay == withhold):
+            return overlay
+    return withhold
 
 
 def unavailable_event_response(
@@ -116,4 +136,5 @@ def unavailable_event_response(
         event_name=fallback_event,
         guard_home=guard_home,
         workspace=workspace,
+        deadline=deadline,
     )
