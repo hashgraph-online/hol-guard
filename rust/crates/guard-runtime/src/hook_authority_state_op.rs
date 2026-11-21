@@ -112,7 +112,14 @@ const DIRECT_BUSY_TIMEOUT_MS: u64 = 250;
 pub(crate) fn evaluate_hook_authority_state_request(
     request: &HookAuthorityStateRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest_with_limit(request, HOOK_AUTHORITY_STATE_MAX_BYTES)
+    // A local question carries JSON text to preserve answer order. Allow its
+    // escaping overhead here. The projected question still uses the usual bound.
+    let limit = if request.op == "claude_question_settle_hook" {
+        HOOK_AUTHORITY_STATE_MAX_BYTES * 2
+    } else {
+        HOOK_AUTHORITY_STATE_MAX_BYTES
+    };
+    let request_sha256 = request_digest_with_limit(request, limit)
         .map_err(|_| "native_hook_authority_state_too_large".to_owned())?;
     let (status, code, payload) = match evaluate(request) {
         Ok(payload) => ("ok", "ok".to_owned(), Some(payload)),
@@ -146,39 +153,12 @@ pub(crate) fn evaluate_within(
             json!({ "fresh": is_fresh(request.saved_at.as_deref(), &request.now, max_age) }),
         );
     }
-    let connection =
-        Connection::open_with_flags(&request.store_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
-            .map_err(|_| ERROR_STORE)?;
-    connection.busy_timeout(busy).map_err(|_| ERROR_STORE)?;
-    // One writer at a time: every flow reads, then rewrites or consumes state,
-    // so concurrent hooks must not interleave between those steps.
-    connection
-        .execute_batch("BEGIN IMMEDIATE")
-        .map_err(|_| ERROR_STORE)?;
-    let env = Env {
-        connection: &connection,
-        guard_home: Some(Path::new(&request.guard_home)),
-        key: request
-            .integrity_key_b64
-            .as_deref()
-            .and_then(|encoded| Base64UrlUnpadded::decode_vec(encoded).ok().map(Into::into)),
-        key_id: request.integrity_key_id.as_deref(),
-        now: &request.now,
-        foreign_key: None,
-    };
-    match env.dispatch(request) {
-        Ok(value) => {
-            connection
-                .execute_batch("COMMIT")
-                .map_err(|_| ERROR_STORE)?;
-            Ok(value)
-        }
-        Err(code) => {
-            let _ = connection.execute_batch("ROLLBACK");
-            Err(code)
-        }
-    }
+    transaction::write(request, busy, |env| env.dispatch(request))
 }
+
+mod local_question;
+mod transaction;
+pub(crate) use local_question::{save_locked_question, QuestionWrite};
 
 /// `_hook_authority_state_is_fresh`: `saved_at` is not in the future and no
 /// older than `max_age_seconds`. An unreadable timestamp is never fresh.

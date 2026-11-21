@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .harness_context import HarnessContext
 from .hook_removal_sweep import (
@@ -27,6 +27,8 @@ from .hook_removal_sweep import (
     backup_harness_files,
     finalize_backups,
     harness_hook_files,
+    removal_plans,
+    removal_report,
     sweep_harness,
 )
 from .native_harness_ops import list_harnesses
@@ -62,27 +64,40 @@ def plan_hook_removal(context: HarnessContext, store: GuardStore) -> list[Harnes
         for item in store.list_managed_installs()
         if bool(item.get("active")) and isinstance(item.get("harness"), str)
     }
-    plans: list[HarnessPlan] = []
-    for harness in list_harnesses():
-        plan = HarnessPlan(harness=harness)
-        if harness in active:
-            plan.reasons.append("managed_install")
-        try:
-            found = sweep_harness(harness, context, dry_run=True).files
-        except SweepUnavailableError:
-            # Without the scan nothing proves the app is clean, so it stays
-            # in the plan and removal reports why it could not finish.
-            plan.reasons.append("hook_scan_unavailable")
-            found = []
-        for result in found:
-            if result.removed:
-                plan.files_with_hooks.append(str(result.path))
-                plan.hook_count += result.removed
-        if plan.hook_count:
-            plan.reasons.append("hooks_in_config")
-        if plan.reasons:
-            plans.append(plan)
-    return plans
+    harnesses = list_harnesses()
+    try:
+        return [_decode_plan(row, harnesses) for row in removal_plans(context, harnesses, active)]
+    except SweepUnavailableError:
+        # An unavailable scanner leaves the config state unknown.
+        return [
+            HarnessPlan(
+                harness=harness,
+                reasons=(["managed_install"] if harness in active else []) + ["hook_scan_unavailable"],
+            )
+            for harness in harnesses
+        ]
+
+
+def _decode_plan(row: object, harnesses: tuple[str, ...]) -> HarnessPlan:
+    if not isinstance(row, dict):
+        raise SweepUnavailableError("native hook removal plan malformed")
+    harness = row.get("harness")
+    reasons = row.get("reasons")
+    files = row.get("files_with_hooks")
+    count = row.get("hook_count")
+    if (
+        not isinstance(harness, str)
+        or harness not in harnesses
+        or not isinstance(reasons, list)
+        or not all(isinstance(reason, str) for reason in reasons)
+        or not isinstance(files, list)
+        or not all(isinstance(file, str) for file in files)
+        or isinstance(count, bool)
+        or not isinstance(count, int)
+        or count < 0
+    ):
+        raise SweepUnavailableError("native hook removal plan malformed")
+    return HarnessPlan(harness, cast("list[str]", reasons), cast("list[str]", files), count)
 
 
 def _error_text(error: BaseException) -> str:
@@ -110,6 +125,25 @@ def remove_all_guard_hooks(
         return {**base, "status": "planned" if plans else "nothing_to_remove", "removed_hook_count": 0}
     if not plans:
         return {**base, "status": "nothing_to_remove", "removed_hook_count": 0, "backup_dir": None}
+    if any("hook_scan_unavailable" in plan.reasons for plan in plans):
+        return {
+            **base,
+            "status": "partial",
+            "harnesses": [
+                {
+                    "harness": plan.harness,
+                    "reasons": list(plan.reasons),
+                    "adapter_uninstall": "skipped",
+                    "backup_error": "native hook removal plan unavailable",
+                }
+                for plan in plans
+            ],
+            "removed_hook_count": 0,
+            "backup_dir": None,
+            "backups": [],
+            "remaining": [{"harness": plan.harness, "path": "", "hook_count": 0} for plan in plans],
+            "affected_harness_count": 0,
+        }
 
     from .cli.install_commands import apply_managed_install
 
@@ -146,31 +180,25 @@ def remove_all_guard_hooks(
         results.append(entry)
 
     final_backup_dir, backups = finalize_backups(backup_dir, list(backed_up.values()), stamp=stamp)
-    remaining: list[dict[str, object]] = []
-    remaining_count = 0
-    for plan in plans:
-        try:
-            rescanned = sweep_harness(plan.harness, context, dry_run=True).files
-        except SweepUnavailableError:
-            remaining.append({"harness": plan.harness, "path": "", "hook_count": plan.hook_count})
-            remaining_count += plan.hook_count
-            continue
-        for item in rescanned:
-            if item.removed:
-                remaining.append({"harness": plan.harness, "path": str(item.path), "hook_count": item.removed})
-                remaining_count += item.removed
-    removed_total = max(0, sum(plan.hook_count for plan in plans) - remaining_count)
-    failed = [item for item in results if item.get("adapter_uninstall") in {"error", "skipped"}]
-    status = "removed" if not remaining and not failed else "partial"
+    outcomes = [
+        {"harness": plan.harness, "hook_count": plan.hook_count, "adapter_uninstall": result["adapter_uninstall"]}
+        for plan, result in zip(plans, results, strict=True)
+    ]
+    try:
+        verification = removal_report(context, outcomes)
+    except SweepUnavailableError:
+        verification = {
+            "status": "partial",
+            "remaining": [{"harness": plan.harness, "path": "", "hook_count": plan.hook_count} for plan in plans],
+            "removed_hook_count": 0,
+            "affected_harness_count": sum(result["adapter_uninstall"] == "ok" for result in results),
+        }
     return {
         **base,
+        **verification,
         "harnesses": results,
-        "status": status,
-        "removed_hook_count": removed_total,
         "backup_dir": str(final_backup_dir) if final_backup_dir is not None else None,
         "backups": backups,
-        "remaining": remaining,
-        "affected_harness_count": len(results) - len(failed),
     }
 
 

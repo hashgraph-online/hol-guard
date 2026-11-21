@@ -45,7 +45,7 @@ fn python_parity_vectors_match() {
     for case in &cases {
         let name = case["name"].as_str().unwrap();
         let root = scratch("vector");
-        let outcome = load(&request_for(&root, case));
+        let outcome = load(&request_for(&root, case)).map(python_view);
         let expected = &case["expected"];
         let matched = match (&outcome, expected.get("config")) {
             (Ok(actual), Some(config)) => actual == config,

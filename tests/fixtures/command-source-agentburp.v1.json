@@ -1,0 +1,699 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "extension_id": "command.agentburp",
+          "version": "1.0.0",
+          "name": "AgentBurp project protection",
+          "description": "Reviews project creation, active project changes, and project deletion after local opt-in.",
+          "action_classes": [
+            "AgentBurp project modification"
+          ],
+          "risk_classes": [
+            "data_modification"
+          ],
+          "safer_alternatives": [
+            "List projects with agentburp project list before changing the active project.",
+            "Confirm the project name before deleting it."
+          ],
+          "reference_urls": [
+            "https://github.com/msdbg/AgentBurp/blob/69da946fc13f2dbff6d37ab30fd26a403c054051/cmd/project.go",
+            "https://github.com/msdbg/AgentBurp/blob/69da946fc13f2dbff6d37ab30fd26a403c054051/cmd/root.go"
+          ],
+          "required": false,
+          "source": "built-in",
+          "aliases": [],
+          "dependencies": [],
+          "conflicts": [],
+          "ecosystem_ids": [
+            "agentburp"
+          ],
+          "executables": [
+            "agentburp"
+          ],
+          "project_markers": [],
+          "publisher": {
+            "id": "community.agentburp",
+            "display_name": "AgentBurp community",
+            "url": "https://github.com/msdbg/AgentBurp"
+          },
+          "homepage": "https://github.com/msdbg/AgentBurp",
+          "license": "MIT",
+          "icon": {
+            "kind": "none"
+          },
+          "permissions": [
+            {
+              "permission_id": "command.agentburp.permission.project-modify",
+              "implementation_version": "1.0.0",
+              "label": "AgentBurp project changes",
+              "description": "Reviews project creation, selection, and deletion.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "AgentBurp project modification"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "List projects with agentburp project list before changing the active project.",
+                "Confirm the project name before deleting it."
+              ],
+              "example_command": "agentburp project delete example-project"
+            }
+          ],
+          "rules": [
+            {
+              "rule_id": "command.agentburp.project-modify",
+              "rule_version": "1.0.0",
+              "title": "AgentBurp project changes",
+              "description": "Matches commands that create a project, write the active project setting, or delete a project.",
+              "severity": "medium",
+              "risk_classes": [
+                "data_modification"
+              ],
+              "action_classes": [
+                "AgentBurp project modification"
+              ],
+              "safer_alternatives": [
+                "List projects with agentburp project list before changing the active project.",
+                "Confirm the project name before deleting it."
+              ],
+              "default_mode": "review",
+              "permission_id": "command.agentburp.permission.project-modify",
+              "safe_variants": [
+                {
+                  "variant_id": "dry-run",
+                  "title": "AgentBurp project preview",
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "executables": [
+                        "agentburp",
+                        "agentburp.cmd",
+                        "agentburp.exe"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "-p"
+                      ],
+                      "interspersed_flags": [
+                        "--dry-run",
+                        "--help",
+                        "-h",
+                        "--json",
+                        "--no-color",
+                        "--force"
+                      ],
+                      "required_flags": [
+                        "--dry-run"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "fail_secure_unknown_options": true,
+                      "paths": [
+                        [
+                          "project",
+                          "create"
+                        ],
+                        [
+                          "project",
+                          "open"
+                        ],
+                        [
+                          "project",
+                          "delete"
+                        ]
+                      ]
+                    },
+                    "matchers": []
+                  }
+                },
+                {
+                  "variant_id": "help",
+                  "title": "AgentBurp project help",
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "executables": [
+                        "agentburp",
+                        "agentburp.cmd",
+                        "agentburp.exe"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--project",
+                        "-p"
+                      ],
+                      "interspersed_flags": [
+                        "--dry-run",
+                        "--help",
+                        "-h",
+                        "--json",
+                        "--no-color",
+                        "--force"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "-h"
+                      ],
+                      "paths": [
+                        [
+                          "project",
+                          "create"
+                        ],
+                        [
+                          "project",
+                          "open"
+                        ],
+                        [
+                          "project",
+                          "delete"
+                        ]
+                      ]
+                    },
+                    "matchers": []
+                  }
+                }
+              ],
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "executables": [
+                    "agentburp",
+                    "agentburp.cmd",
+                    "agentburp.exe"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--project",
+                    "-p"
+                  ],
+                  "interspersed_flags": [
+                    "--dry-run",
+                    "--help",
+                    "-h",
+                    "--json",
+                    "--no-color",
+                    "--force"
+                  ],
+                  "paths": [
+                    [
+                      "project",
+                      "create"
+                    ],
+                    [
+                      "project",
+                      "open"
+                    ],
+                    [
+                      "project",
+                      "delete"
+                    ]
+                  ],
+                  "fail_secure_unknown_options": true
+                },
+                "matchers": []
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "classes": {
+        "first-party": [],
+        "trusted-library": [],
+        "external": [
+          "command.agentburp"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "HOL"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "agentburp-create",
+      "command": "agentburp project create example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-open",
+      "command": "agentburp project open example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-delete",
+      "command": "agentburp project delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-windows-executable",
+      "command": "\"./example tools/agentburp.exe\" project delete example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-global-value-option",
+      "command": "agentburp --project example-current project delete example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-interleaved-value-option",
+      "command": "agentburp project -p example-current open example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-global-valueless-flag",
+      "command": "agentburp --json project create example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-list",
+      "command": "agentburp project list --json",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-list-alias",
+      "command": "agentburp.exe project ls",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-argument-decoy",
+      "command": "agentburp project list delete",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-compound",
+      "command": "pwd && agentburp project open example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "agentburp-malformed",
+      "command": "agentburp project delete \"example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-interleaved-flag",
+      "command": "agentburp project --json delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-attached-short-option",
+      "command": "agentburp project -pexample-current open example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-preview",
+      "command": "agentburp project delete example-project --dry-run",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-preview-before-subcommand",
+      "command": "agentburp project --dry-run delete example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-help",
+      "command": "agentburp project open --help",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-short-help-review",
+      "command": "agentburp -h project open",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-preview-option-value",
+      "command": "agentburp project --project=--dry-run delete example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-preview-after-terminator",
+      "command": "agentburp project delete -- --dry-run",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-unrecognized-option-preview",
+      "command": "agentburp project delete example-project --unknown --dry-run",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-short-help",
+      "command": "agentburp project delete example-project --force -h=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-long-help",
+      "command": "agentburp project delete example-project --force --help=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-dry-run",
+      "command": "agentburp project delete example-project --force --dry-run=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-long-help-overrides-short",
+      "command": "agentburp project open example-project -h --help=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-short-help-overrides-long",
+      "command": "agentburp project open example-project --help -h=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-short-help-overrides-itself",
+      "command": "agentburp project open example-project -h -h=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-shorthand-cluster",
+      "command": "agentburp project delete example-project --force -hh=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-cluster-disables-short-help",
+      "command": "agentburp project open example-project -h -hh=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-cluster-disables-long-help",
+      "command": "agentburp project open example-project --help -hh=false",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-help-before-project",
+      "command": "agentburp -h=false project delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-help-between-subcommands",
+      "command": "agentburp project -h=false delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-help-permission-off",
+      "command": "agentburp project -h=false delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [
+        "command.agentburp.permission.project-modify"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-default-off",
+      "command": "agentburp project delete example-project",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "agentburp-permission-off",
+      "command": "agentburp project delete example-project",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [
+        "command.agentburp.permission.project-modify"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

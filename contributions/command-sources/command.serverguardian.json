@@ -1,0 +1,228 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.serverguardian",
+    "version": "1.0.0",
+    "name": "Server Guardian command protection",
+    "description": "Reviews direct Server Guardian daemon starts, manual nightly maintenance, and configuration after local opt-in. Status checks do not match these rules. Operations inside the interactive dashboard or already-running daemon are outside command-level coverage.",
+    "action_classes": [
+      "Server Guardian maintenance command",
+      "Server Guardian configuration command"
+    ],
+    "risk_classes": [
+      "execution",
+      "data_modification"
+    ],
+    "safer_alternatives": [
+      "Check daemon status and inspect the scheduled maintenance settings before starting maintenance."
+    ],
+    "reference_urls": [
+      "https://github.com/GonnyTech/ServerManager/blob/76fa1fed37dfe0ee696d313fca4186514769bf8d/server_guardian/cli.py",
+      "https://github.com/GonnyTech/ServerManager/blob/76fa1fed37dfe0ee696d313fca4186514769bf8d/pyproject.toml"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "server-guardian"
+    ],
+    "executables": [
+      "server-guardian"
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.serverguardian",
+      "display_name": "Server Guardian community",
+      "url": "https://github.com/GonnyTech/ServerManager"
+    },
+    "homepage": "https://github.com/GonnyTech/ServerManager",
+    "license": "MIT",
+    "icon": {
+      "kind": "none"
+    },
+    "permissions": [
+      {
+        "permission_id": "command.serverguardian.permission.maintenance",
+        "implementation_version": "1.0.0",
+        "label": "Server Guardian maintenance",
+        "description": "Reviews direct daemon starts and manual nightly maintenance, which can update packages and containers.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Server Guardian maintenance command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Check daemon status and inspect the scheduled maintenance settings before starting maintenance."
+        ],
+        "example_command": "server-guardian daemon"
+      },
+      {
+        "permission_id": "command.serverguardian.permission.configure",
+        "implementation_version": "1.0.0",
+        "label": "Server Guardian configuration",
+        "description": "Reviews the interactive setup that saves Server Guardian configuration.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Server Guardian configuration command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Check the running daemon status before changing configuration."
+        ],
+        "example_command": "server-guardian configure"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.serverguardian.maintenance",
+        "rule_version": "1.0.0",
+        "title": "Server Guardian maintenance",
+        "description": "Reviews direct daemon starts and manual nightly maintenance, which can update packages and containers.",
+        "severity": "high",
+        "risk_classes": [
+          "execution",
+          "data_modification"
+        ],
+        "action_classes": [
+          "Server Guardian maintenance command"
+        ],
+        "safer_alternatives": [
+          "Check daemon status and inspect the scheduled maintenance settings before starting maintenance."
+        ],
+        "default_mode": "review",
+        "permission_id": "command.serverguardian.permission.maintenance",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "server-guardian"
+                ],
+                "subcommands": [
+                  "daemon"
+                ]
+              },
+              "matchers": []
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "python",
+                  "python3"
+                ],
+                "subcommands": [
+                  "-m",
+                  "server_guardian.cli",
+                  "daemon"
+                ]
+              },
+              "matchers": []
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "server-guardian"
+                ],
+                "subcommands": [
+                  "trigger-nightly"
+                ]
+              },
+              "matchers": []
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "python",
+                  "python3"
+                ],
+                "subcommands": [
+                  "-m",
+                  "server_guardian.cli",
+                  "trigger-nightly"
+                ]
+              },
+              "matchers": []
+            }
+          ]
+        }
+      },
+      {
+        "rule_id": "command.serverguardian.configure",
+        "rule_version": "1.0.0",
+        "title": "Server Guardian configuration",
+        "description": "Reviews the interactive setup that saves Server Guardian configuration.",
+        "severity": "medium",
+        "risk_classes": [
+          "data_modification"
+        ],
+        "action_classes": [
+          "Server Guardian configuration command"
+        ],
+        "safer_alternatives": [
+          "Check the running daemon status before changing configuration."
+        ],
+        "default_mode": "review",
+        "permission_id": "command.serverguardian.permission.configure",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "server-guardian"
+                ],
+                "subcommands": [
+                  "configure"
+                ]
+              },
+              "matchers": []
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "python",
+                  "python3"
+                ],
+                "subcommands": [
+                  "-m",
+                  "server_guardian.cli",
+                  "configure"
+                ]
+              },
+              "matchers": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -11,6 +11,7 @@ import sys
 import threading
 from collections.abc import Callable
 
+from .native_policy_integrity_finalize import native_policy_integrity_finalization
 from .native_policy_integrity_rows import (
     NativePolicyIntegrityUnavailableError,
     PolicyRowSignItem,
@@ -686,7 +687,9 @@ class StoreSecretPolicyIntegrityMixin:
         )
         return True
 
-    def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> bool:
+    def _finalize_policy_integrity_control_state(
+        self, payload: Mapping[str, object], *, deadline: float | None = None
+    ) -> bool:
         """Adopt a native generation, or leave its pending marker for recovery.
 
         Callers must stop reporting success when this returns ``False``. The
@@ -697,29 +700,32 @@ class StoreSecretPolicyIntegrityMixin:
         normalized = self._normalize_policy_integrity_control_state(payload)
         if normalized is None:
             return False
-        with self.hold_policy_integrity_generation_lock():
+        from .native_context import ensure_resident_prerequisite
+
+        lock_options: dict[str, float] = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            lock_options["timeout_seconds"] = min(remaining, _POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS)
+        with self.hold_policy_integrity_generation_lock(**lock_options):
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
             try:
                 current = self._read_policy_integrity_control_state_uncached(strict=True)
             except Exception:
                 return False
-            normalized_generation = normalized.get("generation")
-            current_generation = current.get("generation") if current is not None else None
-            normalized_pending = normalized.get("pending_generation")
-            current_pending = current.get("pending_generation") if current is not None else None
-            if isinstance(normalized_generation, int) and isinstance(current_generation, int):
-                if normalized_generation < current_generation:
-                    return False
-                if normalized_generation == current_generation and normalized_pending != current_pending:
-                    return False
-                if (
-                    isinstance(normalized_pending, int)
-                    and isinstance(current_pending, int)
-                    and normalized_pending < current_pending
-                ):
-                    return False
-            elif current is not None:
+            # Setup can reach finalization before the publisher starts.
+            # Provision the resident from this store's own secret backend.
+            if not ensure_resident_prerequisite(self.guard_home, store=self):
                 return False
-            return self._store_policy_integrity_control_state(normalized)
+            try:
+                next_state = native_policy_integrity_finalization(
+                    self.guard_home, current=current, proposed=normalized, deadline=deadline
+                )
+            except NativePolicyIntegrityUnavailableError:
+                return False
+            return next_state is not None and self._store_policy_integrity_control_state(next_state)
 
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []

@@ -24,8 +24,11 @@ use crate::package_authority_config as base;
 pub(crate) mod cigar_updates;
 #[path = "context_assistance_config_snapshot.rs"]
 mod context_snapshot;
+#[path = "guard_config_python_view.rs"]
+mod python_view;
 #[cfg(all(test, unix))]
 pub(crate) use context_snapshot::with_changed_reads;
+use python_view::python_view;
 
 const SCHEMA: &str = "guard-config-load.v1";
 const MAX_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
@@ -66,7 +69,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     }
     // A load failure is data, not a crash: the caller maps it to its own error.
     let response = match load(&request) {
-        Ok(config) => json!({"ok": true, "config": config}),
+        Ok(config) => json!({"ok": true, "config": python_view(config)}),
         Err(reason) => json!({"ok": false, "error": reason}),
     };
     serde_json::to_vec(&response).map_err(|_| "guard_config_response_encode_failed".to_owned())

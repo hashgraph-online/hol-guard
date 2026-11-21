@@ -340,7 +340,7 @@ class HookWorker(HookWorkerNativeMixin):
                 deadline=deadline,
             )
         if harness.strip().lower().replace("_", "-") == "claude-code":
-            answered = self._claude_lifecycle_response(event_name, payload)
+            answered = self._claude_lifecycle_response(event_name, payload, deadline=deadline)
             if answered is not None:
                 return answered
         if (
@@ -389,6 +389,8 @@ class HookWorker(HookWorkerNativeMixin):
         self,
         event_name: str,
         payload: dict[str, object],
+        *,
+        deadline: float | None = None,
     ) -> dict[str, object] | None:
         """Claude Code's answer for a lifecycle hook, or ``None`` for the edge.
 
@@ -406,7 +408,7 @@ class HookWorker(HookWorkerNativeMixin):
             from ..cli import commands_support  # noqa: F401
             from ..cli.commands_support_claude_approval import _settle_claude_guard_question
 
-            return None if _settle_claude_guard_question(self.store, payload) is None else {}
+            return None if _settle_claude_guard_question(self.store, payload, deadline=deadline) is None else {}
         if not (
             event_name == "PermissionRequest"
             or event_name == "Stop"

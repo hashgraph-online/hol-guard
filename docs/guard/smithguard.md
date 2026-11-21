@@ -83,10 +83,10 @@ checks. Do not retry around quotas or automatically install an alternative.
 Assessment signatures cover every member of the original API response except the
 top-level `signature` member. The remaining document is serialized using
 `smithguard-canonical-json-v1`, then checked with Ed25519. Follow the
-[versioned verification specification](https://github.com/SmithLabsLLC/smithguard-core/blob/e03549d3257d2f09434f836af259000e0b9a86f3/docs/verification-v1.md#signature-and-key-checks)
+[versioned verification specification](https://github.com/SmithLabsLLC/smithguard-core/blob/cadd02f5f68ef6b3d4d1a258a5d4755a477883d2/docs/verification-v1.md#signature-and-key-checks)
 for the exact canonical bytes, key status and freshness rules. Pass the complete
 original response to the
-[maintained verifier](https://github.com/SmithLabsLLC/smithguard-core/blob/e03549d3257d2f09434f836af259000e0b9a86f3/clients/python/src/smithguard_client/verification.py),
+[maintained verifier](https://github.com/SmithLabsLLC/smithguard-core/blob/cadd02f5f68ef6b3d4d1a258a5d4755a477883d2/clients/python/src/smithguard_client/verification.py),
 and verify before summarizing. A valid signature alone is not proof of source
 truth or local exploitability. Do not treat deprecated
 `fixed_versions` or an affected-range boundary as a verified released upgrade.

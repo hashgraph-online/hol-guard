@@ -39,7 +39,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) const HOOK_DIRECT_EVIDENCE_FEATURE: &str = "hook-direct-evidence-v1";
-pub(crate) const HOOK_DIRECT_EVIDENCE_COMMIT_FEATURE: &str = "hook-direct-evidence-commit-v1";
+pub(crate) const HOOK_DIRECT_EVIDENCE_BATCH_FEATURE: &str = "hook-direct-evidence-batch-v1";
 const RECEIPT_VALID: &str = "receipt_valid";
 const MAX_QUEUED_RECORDS: usize = 1_024;
 const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
@@ -416,7 +416,7 @@ impl DirectEvidenceQueue {
 #[path = "hook_direct_evidence_drain.rs"]
 mod drain_ops;
 #[cfg(test)]
-pub(crate) use drain_ops::commit_queued_page;
+pub(crate) use drain_ops::commit_test_batch;
 pub(crate) use drain_ops::{commit_page, drain, HookDirectEvidenceCommitRequestV1};
 
 #[path = "hook_direct_evidence_notice.rs"]

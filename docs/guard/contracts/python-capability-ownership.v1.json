@@ -15,7 +15,6 @@
   "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
   "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
   "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
-  "src/codex_plugin_scanner/guard/muse_hook_render.py",
   "src/codex_plugin_scanner/guard/native_hook_bridge.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
@@ -37,7 +36,6 @@
     "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
     "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
     "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
-    "src/codex_plugin_scanner/guard/muse_hook_render.py",
     "src/codex_plugin_scanner/guard/native_hook_bridge.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
@@ -80,6 +78,54 @@
  },
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
+  {
+   "path": "src/codex_plugin_scanner/guard/codex_live_hook_target.py",
+   "module": "codex_plugin_scanner.guard.codex_live_hook_target",
+   "source_sha256": "6fa7d213d7d312277c0160d4de86f27a31e391fb876635c743c64248d3a7c064",
+   "forbidden_symbols": [
+    "codex_live_hook_process_is_unavailable",
+    "codex_live_hook_wait_deadline"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_request_resume_live.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py",
+   "module": "codex_plugin_scanner.guard.cli.commands_support_hook_state",
+   "source_sha256": "007c10e80fe70a1b1af6a8fa438f88ae73b6769d0c1f0be4f3118c0fbdcd055b",
+   "forbidden_symbols": [
+    "_remove_claude_pending_permission"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_authority_state_op/flows.rs",
+    "rust/crates/guard-runtime/src/hook_authority_state_op/question_settle.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
+   "module": "codex_plugin_scanner.guard.cli.commands_support_permission_store",
+   "source_sha256": "d10e84b377ad2a6456daf5eceb2f02835d0a8df652ef58bcbb3c63b7789a7580",
+   "forbidden_symbols": [
+    "_write_claude_native_permission_plan"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/claude_question_save_command.rs",
+    "rust/crates/guard-runtime/src/hook_authority_state_op/local_question.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/muse_hook_render.py",
+   "module": "codex_plugin_scanner.guard.muse_hook_render",
+   "source_sha256": "97c15b98a3177a20b81b9c342ced9c2625d4947db2017f102ace0187d2bd6ed8",
+   "forbidden_symbols": [
+    "muse_bridge_response"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/bounded_hook_bridge_muse.rs",
+    "rust/crates/guard-runtime/src/hook_cli_emit.rs"
+   ]
+  },
   {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_native_package_review",
@@ -2264,6 +2310,18 @@
  ],
  "retired_bodies": [
   {
+   "path": "src/codex_plugin_scanner/guard/hook_removal_sweep.py",
+   "source_sha256": "f7578a2ffa36564a9de0d8fdcd54953b063bb880ea8097ba0ab3dfb1e74e2741",
+   "forbidden_symbols": [
+    "_candidate_request",
+    "_EXTRA_HOOK_FILES",
+    "_WORKSPACE_EXTRA_FILES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_removal_sweep.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/approvals.py",
    "source_sha256": "5346be52329d926839cab70b1cb34838b0dde666e3acecf3346b66a6fdbbfa7d",
    "forbidden_symbols": [
@@ -2293,6 +2351,17 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/daemon_edge_hook_lifecycle.rs",
     "rust/crates/guard-runtime/src/hook_authority_state_op/question_settle.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
+   "source_sha256": "c9844d45bd472b0f79f581be5657953b451fc0797e6d5ae4de61f6a47abb15bf",
+   "forbidden_symbols": [
+    "_MAX_PAGES_PER_WAKE",
+    "_drain_pages"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_drain.rs"
    ]
   },
   {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -77,7 +78,10 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
 
-def test_remove_all_sweeps_unrecorded_hooks_with_backup(tmp_path: Path) -> None:
+@pytest.mark.parametrize("report_available", [True, False])
+def test_remove_all_sweeps_unrecorded_hooks_with_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, report_available: bool
+) -> None:
     context = _context(tmp_path)
     claude = context.home_dir / ".claude"
     claude.mkdir()
@@ -90,9 +94,23 @@ def test_remove_all_sweeps_unrecorded_hooks_with_backup(tmp_path: Path) -> None:
     assert planned["status"] == "planned"
     assert settings.read_bytes() == original
 
+    if not report_available:
+        native_answer = hook_removal_sweep.runtime_answer
+
+        def without_report(
+            feature: str, command: str, request: Mapping[str, object], *, output_limit: int, timeout_seconds: float
+        ) -> dict[str, object] | None:
+            if request["op"] == "report":
+                return None
+            return native_answer(feature, command, request, output_limit=output_limit, timeout_seconds=timeout_seconds)
+
+        monkeypatch.setattr(hook_removal_sweep, "runtime_answer", without_report)
+
     report = remove_all_guard_hooks(context=context, store=store)
-    assert report["status"] == "removed"
-    assert report["removed_hook_count"] == 2
+    assert report["status"] == ("removed" if report_available else "partial")
+    assert report["removed_hook_count"] == (2 if report_available else 0)
+    if not report_available:
+        assert report["remaining"] == [{"harness": "claude-code", "path": "", "hook_count": 2}]
     assert report["reinstall_command"] == "hol-guard install --all"
     assert GUARD_COMMAND not in settings.read_text()
     assert USER_COMMAND in settings.read_text()
@@ -102,6 +120,36 @@ def test_remove_all_sweeps_unrecorded_hooks_with_backup(tmp_path: Path) -> None:
 
     again = remove_all_guard_hooks(context=context, store=store)
     assert again["status"] == "nothing_to_remove"
+
+
+def test_native_report_refuses_to_verify_an_oversized_config(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    settings = context.home_dir / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    with settings.open("wb") as handle:
+        handle.truncate(8 * 1024 * 1024 + 1)
+
+    with pytest.raises(hook_removal_sweep.SweepUnavailableError):
+        hook_removal_sweep.removal_report(
+            context, [{"harness": "claude-code", "hook_count": 0, "adapter_uninstall": "ok"}]
+        )
+
+
+@pytest.mark.parametrize("target_is_directory", [False, True])
+def test_native_report_ignores_links_without_a_config_file(tmp_path: Path, target_is_directory: bool) -> None:
+    context = _context(tmp_path)
+    settings = context.home_dir / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    target = context.home_dir / "settings-target"
+    if target_is_directory:
+        target.mkdir()
+    settings.symlink_to(target, target_is_directory=target_is_directory)
+
+    report = hook_removal_sweep.removal_report(
+        context, [{"harness": "claude-code", "hook_count": 0, "adapter_uninstall": "ok"}]
+    )
+    assert report["status"] == "removed"
+    assert report["remaining"] == []
 
 
 def test_remove_all_reports_hooks_behind_a_symlinked_config(tmp_path: Path) -> None:
@@ -177,7 +225,7 @@ def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path) -> None:
     assert report["backup_dir"] is None
 
 
-def test_remove_all_without_the_native_sweep_edits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_remove_all_without_a_native_plan_edits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import hook_removal_sweep
 
     context = _context(tmp_path)
@@ -187,10 +235,11 @@ def test_remove_all_without_the_native_sweep_edits_nothing(tmp_path: Path, monke
     settings.write_text(json.dumps(_claude_settings()))
     original = settings.read_bytes()
 
-    def no_runtime(*_args: object, **_kwargs: object) -> None:
+    def no_plan(_feature: object, _command: object, request: dict, **_kwargs: object) -> None:
+        assert request["op"] == "plan", "an unavailable plan must stop before backup or sweep"
         return None
 
-    monkeypatch.setattr(hook_removal_sweep, "runtime_answer", no_runtime)
+    monkeypatch.setattr(hook_removal_sweep, "runtime_answer", no_plan)
     store = GuardStore(context.guard_home)
 
     planned = remove_all_guard_hooks(context=context, store=store, dry_run=True)

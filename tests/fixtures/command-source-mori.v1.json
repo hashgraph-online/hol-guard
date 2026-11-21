@@ -27,7 +27,7 @@
             "kind": "react-icon",
             "name": "HiMiniFolder"
           },
-          "license": "MIT",
+          "license": "Apache-2.0",
           "name": "Mori cognition VCS command protection",
           "permissions": [
             {

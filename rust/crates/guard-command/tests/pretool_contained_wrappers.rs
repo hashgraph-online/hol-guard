@@ -135,6 +135,12 @@ fn other_wrappers_stay_out_of_containment() {
             format!("cd {project}/web && git commit -m wip"),
             "bunx vitest run x | tail -f".into(),
             "bunx vitest run x | tail -20 notes.txt".into(),
+            // A countless stage still opens an operand as a file, and a
+            // count it cannot read is not a bound.
+            "bunx vitest run x | head notes.txt".into(),
+            "bunx vitest run x | tail notes.txt".into(),
+            "bunx vitest run x | head -c".into(),
+            "bunx vitest run x | head -".into(),
             "bunx vitest run x | tail -n 1234567".into(),
             "bunx vitest run x | sh".into(),
             "bunx vitest run x | tee out.txt".into(),

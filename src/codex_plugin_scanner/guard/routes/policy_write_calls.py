@@ -16,9 +16,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
-from ..native_store_policy import encode_key
 from ..store import GuardStore
-from ..store_base import _canonical_utc_timestamp
+from ..store_policy_integrity_handoff import persist_policy_integrity_write, prepare_policy_integrity_write
 
 
 def _invalid() -> Exception:
@@ -38,28 +37,7 @@ def integrity_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
     sign = args.get("sign")
     if not isinstance(now, str) or not isinstance(sign, bool):
         raise _invalid()
-    now = _canonical_utc_timestamp(now)
-    material = store._policy_integrity_secret_material(create=True)
-    with store._connect() as connection:
-        state = store._refresh_policy_integrity_state(
-            connection,
-            now=now,
-            create_key=True,
-            secret_material=material,
-            allow_cutover_resign=False,
-        )
-    mode = state.get("mode")
-    key, key_id = material
-    if sign and mode == "protected" and key is not None and key_id is not None:
-        trusted_state = store._load_policy_integrity_control_state(create=True)
-        if trusted_state is not None:
-            return {
-                "mode": mode,
-                "current_generation": store._begin_policy_integrity_generation(trusted_state),
-                "integrity_key_b64": encode_key(key),
-                "integrity_key_id": key_id,
-            }
-    return {"mode": mode}
+    return prepare_policy_integrity_write(store, now=now, sign=sign)
 
 
 def integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
@@ -70,7 +48,7 @@ def integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
         raise _invalid()
     # A state that does not persist leaves the rows signed past the trusted
     # generation, so the daemon must not report the write as done.
-    if not store._store_policy_integrity_control_state(next_control_state):
+    if not persist_policy_integrity_write(store, next_control_state):
         from ..library_calls import LibraryCallError
 
         raise LibraryCallError("policy_integrity_finalize_failed")

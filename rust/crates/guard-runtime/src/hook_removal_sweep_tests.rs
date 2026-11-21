@@ -414,8 +414,38 @@ fn a_rewrite_keeps_the_file_mode() {
 }
 
 #[test]
+fn discovers_home_and_workspace_hook_files_from_harness_scope() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let home = directory.path().join("home");
+    let workspace = directory.path().join("workspace");
+    let home_settings = home.join(".claude").join("settings.json");
+    let workspace_settings = workspace.join(".claude").join("settings.local.json");
+    let original = claude_settings().to_string();
+    for file in [&home_settings, &workspace_settings] {
+        fs::create_dir_all(file.parent().expect("file parent")).expect("config directory");
+        fs::write(file, &original).expect("config file");
+    }
+    let scope = json!({ "harness": "claude-code", "home": home, "workspace": workspace });
+    let files =
+        run(json!({ "schema": SCHEMA, "op": "files", "scope": scope })).expect("discovery answer");
+    assert_eq!(files["files"], json!([home_settings, workspace_settings]));
+
+    let answer = run(json!({ "schema": SCHEMA, "op": "sweep", "scope": scope, "dry_run": true }))
+        .expect("sweep answer");
+    let files = answer["files"].as_array().expect("file reports");
+    assert_eq!(files.len(), 2);
+    for (file, path) in files.iter().zip([home_settings, workspace_settings]) {
+        assert_eq!(file["path"], json!(path));
+        assert_eq!(file["removed"], 2);
+        assert_eq!(file["wrote"], false);
+        assert_eq!(fs::read_to_string(path).expect("read config"), original);
+    }
+}
+
+#[test]
 fn requests_are_validated() {
     let absolute = std::env::temp_dir().join("settings.json");
+    let scope = json!({ "harness": "claude-code", "home": absolute });
     let refused = [
         json!({ "schema": "hook-removal-sweep.v0", "op": "files" }),
         json!({ "schema": SCHEMA, "op": "sweep-file" }),
@@ -426,6 +456,9 @@ fn requests_are_validated() {
         json!({ "schema": SCHEMA, "op": "sweep", "roots": [absolute, absolute, absolute] }),
         json!({ "schema": SCHEMA, "op": "delete" }),
         json!({ "schema": SCHEMA, "op": "files", "extra": 1 }),
+        json!({ "schema": SCHEMA, "op": "files", "scope": scope, "candidates": [absolute] }),
+        json!({ "schema": SCHEMA, "op": "sweep-file", "scope": scope, "path": absolute }),
+        json!({ "schema": SCHEMA, "op": "sweep", "scope": { "harness": "claude-code", "home": absolute, "workspace": "relative" } }),
     ];
     for request in refused {
         assert!(run(request.clone()).is_err(), "{request}");

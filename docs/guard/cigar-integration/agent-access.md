@@ -1,6 +1,6 @@
 # Paired MCP context access
 
-Context assistance is optional and off by default. The native service must verify the actual selected final CPython 3.14 process, CIGAR 0.14.1 package and approved worker before it accepts a context connection. Guard and its MCP server can continue using a different supported Python.
+Context assistance is optional and off by default. It runs on CIGAR's built-in engine, the official `hol-cigar` Rust crate compiled into Guard's native runtime. There is no CIGAR download, Python package or Python process to verify, and the Python version Guard runs on does not affect it.
 
 ## Connect an app
 

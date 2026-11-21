@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.resident_evidence_drain import ResidentEvidenceDrain, _decode_page
+from codex_plugin_scanner.guard.resident_evidence_drain import ResidentEvidenceDrain, _decode_batch
 from codex_plugin_scanner.guard.resident_route_counters import (
     RouteCounterLog,
     bind_route_counter_sink,
@@ -50,10 +50,12 @@ class _Host:
 
 def _page(*, counters: object | None = None) -> bytes:
     page: dict[str, object] = {
-        "schema": "guard-hook-direct-evidence-commit.v1",
+        "schema": "guard-hook-direct-evidence-batch.v1",
         "epoch": EPOCH,
         "record_count": 0,
-        "remaining": 0,
+        "pages": 1,
+        "more": False,
+        "failed": False,
     }
     if counters is not None:
         page["counters"] = counters
@@ -173,9 +175,9 @@ def test_a_new_daemon_drains_an_old_resident_page(tmp_path: Path) -> None:
 
 
 def test_the_page_counts_are_independent_of_optional_counters() -> None:
-    assert _decode_page(_page(counters=RESIDENT)) == _decode_page(_page()) == (0, 0)
+    assert _decode_batch(_page(counters=RESIDENT)) == _decode_batch(_page()) == (1, 0, False, False)
     log = RouteCounterLog()
-    assert _decode_page(_page(counters={"by_harness": "bad"}), log) == (0, 0)
+    assert _decode_batch(_page(counters={"by_harness": "bad"}), log) == (1, 0, False, False)
     assert log.snapshot()["resident"] == {}
 
 

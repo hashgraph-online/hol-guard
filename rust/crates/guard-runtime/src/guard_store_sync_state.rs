@@ -94,6 +94,9 @@ pub(crate) mod review_enrollment;
 #[path = "guard_store_fleet_posture_state.rs"]
 pub(crate) mod fleet_posture_state;
 
+#[path = "guard_store_cloud_review_settings.rs"]
+pub(crate) mod cloud_review_settings;
+
 #[cfg(test)]
 #[path = "guard_store_sync_state_tests.rs"]
 mod tests;

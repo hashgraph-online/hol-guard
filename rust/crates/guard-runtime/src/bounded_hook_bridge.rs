@@ -51,7 +51,7 @@ pub(crate) use daemon::{
     daemon_target, post_hook_reply_missed, transport_deadline, DaemonTarget, PostFailure,
 };
 #[path = "bounded_hook_bridge_muse.rs"]
-mod muse;
+pub(crate) mod muse;
 #[path = "bounded_hook_bridge_output.rs"]
 mod output;
 pub(crate) use output::write_stdout;

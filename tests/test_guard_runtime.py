@@ -8875,6 +8875,19 @@ def test_guard_hook_claude_repeated_notifications_keep_bound_question_without_lo
 
 
 def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_path, capsys, monkeypatch):
+    from codex_plugin_scanner.guard import store_policy_integrity_handoff
+
+    finalized = []
+    original = store_policy_integrity_handoff.persist_policy_integrity_write
+
+    def check_locked(store, args):
+        with pytest.raises(TimeoutError), store.hold_policy_integrity_generation_lock(timeout_seconds=0.1):
+            pytest.fail("generation lock was released before finalization")
+        result = original(store, args)
+        finalized.append(result)
+        return result
+
+    monkeypatch.setattr(store_policy_integrity_handoff, "persist_policy_integrity_write", check_locked)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8909,6 +8922,7 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
         home_dir,
         "session-claude-guard-question-block",
     )
+    questions = [{"header": "HOL Guard", "question": approval_question, "options": question_options}]
     question_rc, question_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -8917,23 +8931,9 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
             "session_id": "session-claude-guard-question-block",
             "hook_event_name": "PostToolUse",
             "tool_name": "AskUserQuestion",
-            "tool_input": {
-                "questions": [
-                    {
-                        "header": "HOL Guard",
-                        "question": approval_question,
-                        "options": question_options,
-                    }
-                ]
-            },
+            "tool_input": {"questions": questions},
             "tool_response": {
-                "questions": [
-                    {
-                        "header": "HOL Guard",
-                        "question": approval_question,
-                        "options": question_options,
-                    }
-                ],
+                "questions": questions,
                 "answers": {approval_question: "Keep blocked"},
             },
         },
@@ -8959,8 +8959,8 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
     assert question_output == ""
+    assert finalized == [True]
     assert second_rc == 0
-    # The saved block is recorded; the retry stays gated and asks again.
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies[0]["source"] == "claude-ask-user-question"
 
@@ -11168,11 +11168,10 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     )
 
     # Hook authority state lives in the native resident, which reports a locked store as no reply.
-    for target in (
-        "codex_plugin_scanner.guard.cli.commands_support_hook_state.hook_authority_state",
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_hook_authority_state.hook_authority_state",
-    ):
-        monkeypatch.setattr(target, lambda *_args, **_kwargs: None)
+        lambda *_args, **_kwargs: None,
+    )
     pre_tool_event = {
         "session_id": "session-claude-4",
         "tool_name": "Read",

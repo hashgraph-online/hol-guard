@@ -1,6 +1,5 @@
 //! `hook-removal-sweep --stdin`: find and strip Guard-owned hook handlers
-//! from harness config files (`guard/hook_removal_sweep.py` frames the
-//! request and lists the candidate paths).
+//! from harness config files. The caller supplies the harness and its roots.
 //!
 //! The per-harness adapters remove what Guard recorded at install time. This
 //! sweep is the backstop for hooks the store no longer knows about: it scans
@@ -15,7 +14,7 @@
 
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -28,6 +27,9 @@ use crate::hook_removal_prune::{
 use crate::pyjson::{parse, parse_mapping_lone_surrogates, PyVal};
 
 const SCHEMA: &str = "hook-removal-sweep.v1";
+pub(crate) const DISCOVERY_FEATURE: &str = "native-hook-removal-discovery-v1";
+pub(crate) const PLAN_FEATURE: &str = "native-hook-removal-plan-v1";
+pub(crate) const REPORT_FEATURE: &str = "native-hook-removal-report-v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const MAX_CANDIDATES: usize = 512;
 const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
@@ -41,6 +43,9 @@ struct Request {
     candidates: Vec<String>,
     #[serde(default)]
     roots: Vec<String>,
+    scope: Option<HarnessScope>,
+    plan: Option<plan::PlanRequest>,
+    report: Option<plan::ReportRequest>,
     #[serde(default)]
     path: Option<String>,
     #[serde(default)]
@@ -55,6 +60,64 @@ struct Request {
     entries: Vec<backup::BackupEntry>,
     #[serde(default)]
     stamp: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HarnessScope {
+    harness: String,
+    home: String,
+    workspace: Option<String>,
+}
+
+impl HarnessScope {
+    fn candidates(&self) -> Result<(Candidates, Vec<PathBuf>), String> {
+        let home = absolute(&self.home)?;
+        let workspace = self.workspace.as_deref().map(absolute).transpose()?;
+        let extra: &[&str] = match self.harness.as_str() {
+            "codex" => &["~/.codex/hooks.json"],
+            "claude-code" => &["~/.claude/settings.json", "~/.claude/settings.local.json"],
+            "copilot" => &["~/.copilot/hooks.json", "~/.copilot/config.json"],
+            _ => &[],
+        };
+        let contract =
+            crate::harness_contract_registry::config_paths(&self.harness).unwrap_or_default();
+        let mut paths = Vec::new();
+        for spec in contract
+            .iter()
+            .map(String::as_str)
+            .chain(extra.iter().copied())
+        {
+            let path = Path::new(spec);
+            let mut parts = path.components();
+            if matches!(parts.next(), Some(Component::Normal(first)) if first == "~") {
+                paths.push(home.join(parts.as_path()));
+            } else if path.is_absolute() {
+                paths.push(path.to_path_buf());
+            } else {
+                paths.push(home.join(path));
+                if let Some(workspace) = &workspace {
+                    paths.push(workspace.join(path));
+                }
+            }
+        }
+        if let Some(workspace) = &workspace {
+            let workspace_extra: &[&str] = match self.harness.as_str() {
+                "codex" => &[".codex/config.toml", ".codex/hooks.json"],
+                "claude-code" => &[".claude/settings.json", ".claude/settings.local.json"],
+                "cursor" => &[".cursor/hooks.json"],
+                "devin" => &[".devin/hooks.v1.json"],
+                "muse" => &[".muse/settings.json"],
+                _ => &[],
+            };
+            paths.extend(workspace_extra.iter().map(|spec| workspace.join(spec)));
+        }
+        let candidates = paths
+            .into_iter()
+            .map(|path| (path.to_string_lossy().into_owned(), path))
+            .collect();
+        Ok((candidates, std::iter::once(home).chain(workspace).collect()))
+    }
 }
 
 impl Request {
@@ -98,7 +161,14 @@ fn absolute(value: &str) -> Result<PathBuf, String> {
 }
 
 fn answer(request: &Request) -> Result<Value, String> {
-    if request.schema != SCHEMA {
+    if request.schema != SCHEMA
+        || request.plan.is_some() != (request.op == "plan")
+        || request.report.is_some() != (request.op == "report")
+        || (request.scope.is_some()
+            && (!matches!(request.op.as_str(), "files" | "sweep")
+                || !request.candidates.is_empty()
+                || !request.roots.is_empty()))
+    {
         return Err(invalid());
     }
     match request.op.as_str() {
@@ -111,6 +181,17 @@ fn answer(request: &Request) -> Result<Value, String> {
             backup::finalize(request)
         }
         _ if request.has_backup_fields() => Err(invalid()),
+        "plan" | "report"
+            if request.path.is_none()
+                && request.candidates.is_empty()
+                && request.roots.is_empty()
+                && !request.dry_run =>
+        {
+            match &request.plan {
+                Some(plan) => plan::answer(plan),
+                None => plan::report(request.report.as_ref().ok_or_else(invalid)?),
+            }
+        }
         "sweep-file" if request.candidates.is_empty() && request.roots.is_empty() => {
             let path = absolute(request.path.as_deref().ok_or_else(invalid)?)?;
             let text = request.path.clone().unwrap_or_default();
@@ -120,31 +201,33 @@ fn answer(request: &Request) -> Result<Value, String> {
             if request.candidates.len() > MAX_CANDIDATES || request.roots.len() > 2 {
                 return Err(invalid());
             }
-            let candidates = request
-                .candidates
-                .iter()
-                .map(|text| absolute(text).map(|path| (text.clone(), path)))
-                .collect::<Result<Vec<_>, _>>()?;
-            let roots = request
-                .roots
-                .iter()
-                .map(|text| absolute(text.as_str()))
-                .collect::<Result<Vec<_>, _>>()?;
+            let (candidates, roots) = match &request.scope {
+                Some(scope) => scope.candidates()?,
+                None => {
+                    let candidates = request
+                        .candidates
+                        .iter()
+                        .map(|text| absolute(text).map(|path| (text.clone(), path)))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let roots = request
+                        .roots
+                        .iter()
+                        .map(|text| absolute(text))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    (candidates, roots)
+                }
+            };
+            if candidates.len() > MAX_CANDIDATES {
+                return Err(invalid());
+            }
             let (files, links) = split_candidates(candidates, &roots);
             if request.op == "files" {
                 let names: Vec<&str> = files.iter().map(|(text, _)| text.as_str()).collect();
                 return Ok(json!({ "files": names }));
             }
-            let mut results: Vec<Value> = files
-                .iter()
-                .map(|(text, path)| sweep_config_file(text, path, request.dry_run).to_json())
+            let results: Vec<Value> = sweep_results(&files, &links, request.dry_run)
+                .map(|result| result.to_json())
                 .collect();
-            results.extend(
-                links
-                    .iter()
-                    .filter_map(|(text, path)| inspect_symlinked(text, path, request.dry_run))
-                    .map(|result| result.to_json()),
-            );
             Ok(json!({ "files": results }))
         }
         _ => Err(invalid()),
@@ -153,6 +236,19 @@ fn answer(request: &Request) -> Result<Value, String> {
 
 /// Candidate paths, each with the text the request spelled it as.
 type Candidates = Vec<(String, PathBuf)>;
+
+fn sweep_results<'a>(
+    files: &'a Candidates,
+    links: &'a Candidates,
+    dry_run: bool,
+) -> impl Iterator<Item = SweepResult<'a>> {
+    files
+        .iter()
+        .map(move |(text, path)| sweep_config_file(text, path, dry_run))
+        .chain(links.iter().filter_map(move |(text, path)| {
+            plan::inspect_symlinked(text, path, dry_run).ok().flatten()
+        }))
+}
 
 /// Existing candidates with a sweepable suffix, split into regular files
 /// inside a root and symlinks, each kept once in request order.
@@ -338,19 +434,6 @@ fn render(config: Config, pruned: &PyVal, removed: usize) -> Option<String> {
     }
 }
 
-fn inspect_symlinked<'a>(text: &'a str, path: &Path, dry_run: bool) -> Option<SweepResult<'a>> {
-    let target = fs::canonicalize(path).ok()?;
-    let config = load(&target).ok()?;
-    let (_, removed) = prune_guard_hooks(&config.payload())?;
-    Some(SweepResult {
-        path: text,
-        removed: if dry_run { removed.len() } else { 0 },
-        wrote: false,
-        error: Some("symlink_not_followed"),
-        events: event_names(&removed),
-    })
-}
-
 /// Write `bytes` beside `path` and rename it over the original, keeping the
 /// original's permissions.
 fn replace(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -388,6 +471,8 @@ fn write_temporary(
 
 #[path = "hook_removal_backup.rs"]
 mod backup;
+#[path = "hook_removal_plan.rs"]
+mod plan;
 
 #[cfg(test)]
 #[path = "hook_removal_sweep_tests.rs"]
