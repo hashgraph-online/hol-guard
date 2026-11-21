@@ -25,6 +25,7 @@ from .mdm.runtime_request import runtime_answer
 _FEATURE = "native-hook-removal-sweep-v1"
 _DISCOVERY_FEATURE = "native-hook-removal-discovery-v1"
 _PLAN_FEATURE = "native-hook-removal-plan-v1"
+_REPORT_FEATURE = "native-hook-removal-report-v1"
 _BACKUP_FEATURE = "native-hook-removal-backup-v1"
 _COMMAND = "hook-removal-sweep"
 _SCHEMA = "hook-removal-sweep.v1"
@@ -129,6 +130,25 @@ def removal_plans(context: HarnessContext, harnesses: tuple[str, ...], active: s
     return rows
 
 
+def removal_report(context: HarnessContext, outcomes: list[dict[str, object]]) -> dict[str, object]:
+    """Read the runtime's post-removal verification and counts."""
+    answer = _runtime(
+        {"op": "report", "report": {**_roots(context), "outcomes": outcomes}},
+        feature=_REPORT_FEATURE,
+    )
+    if (
+        set(answer) != {"status", "remaining", "removed_hook_count", "affected_harness_count"}
+        or answer.get("status") not in ("removed", "partial")
+        or not isinstance(answer.get("remaining"), list)
+        or any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0
+            for count in (answer.get("removed_hook_count"), answer.get("affected_harness_count"))
+        )
+    ):
+        raise SweepUnavailableError("native hook removal report malformed")
+    return answer
+
+
 def harness_hook_files(harness: str, context: HarnessContext) -> tuple[Path, ...]:
     """Existing regular JSON/TOML config files that may hold hooks for ``harness``."""
 
@@ -222,6 +242,7 @@ __all__ = [
     "finalize_backups",
     "harness_hook_files",
     "removal_plans",
+    "removal_report",
     "sweep_config_file",
     "sweep_harness",
 ]
