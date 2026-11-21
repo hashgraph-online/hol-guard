@@ -166,6 +166,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::mcp_relay::RELAY_FEATURE.into());
     features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_WRITER_FEATURE.into());
     features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_POST_TOOL_FEATURE.into());
+    features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_PRE_TOOL_FEATURE.into());
     features.push(crate::claude_session_start::SESSION_START_FEATURE.into());
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());

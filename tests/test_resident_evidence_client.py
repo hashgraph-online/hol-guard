@@ -178,6 +178,29 @@ def test_post_tool_submission_leaves_result_interpretation_to_the_resident(
     assert "succeeded" not in request
 
 
+def test_pre_tool_submission_leaves_response_interpretation_to_the_resident(
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer = _answer({"queued": True})
+
+    def respond(*, required_feature: str, **kwargs: Any) -> dict[str, Any]:
+        assert required_feature == "hook-evidence-pre-tool-v1"
+        return answer(**kwargs)
+
+    _install(monkeypatch, respond)
+    assert writer.submit_pre_tool_activity(
+        harness="claude-code",
+        payload={"tool_name": "Bash"},
+        response={"policy_action": "block", "prompted": True, "reason": "Review unavailable"},
+        settled=False,
+    )
+    (request,) = answer.sent
+    assert request["action"] == "submit_pre_tool_activity"
+    assert request["response"] == {"policy_action": "block", "prompted": True}
+    assert request["settled"] is False
+    assert "succeeded" not in request
+
+
 def test_post_tool_submission_reports_a_missing_runtime_feature(
     writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
