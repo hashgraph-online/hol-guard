@@ -846,45 +846,16 @@ def sync_receipts(
                     persist_activation_rejection(store, activation_last_error, now)
                 else:
                     remote_policies_stored = len(remote_decisions)
-                    if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                        canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
-                        if isinstance(canonical_last_good, dict) and canonical_last_good.get(
-                            "bundleHash"
-                        ) != effective_policy_bundle.get("bundleHash"):
-                            store.set_sync_payload(
-                                "policy_bundle_canonical_previous_good",
-                                canonical_last_good,
-                                now,
-                            )
-                        store.set_sync_payload(
-                            "policy_bundle_canonical_last_good",
-                            effective_policy_bundle,
-                            now,
-                        )
-                    else:
-                        store.set_sync_payload(
-                            "policy_bundle_legacy_last_good",
-                            effective_policy_bundle,
-                            now,
-                        )
-                    if validated_policy_bundle is None and policy_bundle_field_provided:
-                        store.add_event(
-                            "policy_bundle/rollback",
-                            {
-                                "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
-                                "restored": "policy_bundle_last_good",
-                            },
-                            now,
-                        )
-                    cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
-                    if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                        _persist_cloud_receipt_redaction_level(
-                            store,
-                            level=cloud_redaction_level,
-                            synced_at=now,
-                        )
-                    else:
-                        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+                    store.record_policy_bundle_activation(
+                        effective_policy_bundle,
+                        now=now,
+                        local_level=local_receipt_redaction_level(store.guard_home),
+                        rollback_reason=(
+                            str(activation_last_error.get("reason", "invalid_policy_bundle"))
+                            if validated_policy_bundle is None and policy_bundle_field_provided
+                            else None
+                        ),
+                    )
             except PolicyBundleNativeError as error:
                 cloud_exception_items = []
                 activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))

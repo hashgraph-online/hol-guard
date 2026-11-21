@@ -7,9 +7,10 @@ use serde_json::json;
 use super::*;
 
 #[derive(Default)]
-struct Memory {
-    rows: BTreeMap<String, Value>,
-    requeues: Vec<(String, String)>,
+pub(crate) struct Memory {
+    pub(crate) rows: BTreeMap<String, Value>,
+    pub(crate) requeues: Vec<(String, String)>,
+    pub(crate) events: Vec<(String, String)>,
 }
 
 impl Bookkeeping for Memory {
@@ -35,6 +36,11 @@ impl Bookkeeping for Memory {
             json!({"level": level, "updated_at": changed_at, "requeued": 0}),
         );
         Ok(0)
+    }
+
+    fn add_event(&mut self, name: &str, payload_json: &str, _now: &str) -> StoreResult<()> {
+        self.events.push((name.to_owned(), payload_json.to_owned()));
+        Ok(())
     }
 }
 

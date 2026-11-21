@@ -182,6 +182,25 @@ class StoreReviewEventOutboxMixin:
         )
         return int(result) if isinstance(result, int) else None
 
+    def record_policy_bundle_activation(
+        self,
+        policy_bundle: Mapping[str, object],
+        *,
+        now: str,
+        local_level: str,
+        rollback_reason: str | None = None,
+    ) -> None:
+        """Store the activated bundle's last-good copy, rollback event and redaction level in one write."""
+        self._native_store_call(
+            "record_policy_bundle_activation",
+            {
+                "bundle": dict(policy_bundle),
+                "now": now,
+                "local_level": local_level,
+                "rollback_reason": rollback_reason,
+            },
+        )
+
     def list_pending_review_request_ids(
         self,
         *,
