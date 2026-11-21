@@ -206,6 +206,34 @@ class StoreCloudEventsMixin:
         )
         return isinstance(answer, dict) and answer.get("saved") is True
 
+    def transition_command_queue_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        at: str | None = None,
+        pending: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        """Move a queue lane's stored row through one named job step.
+
+        The native store owns which fields each step sets and removes, and
+        merges them into the stored row so every other field keeps its stored
+        value. ``at`` is the time the step records, ``now`` the row's write
+        time. Returns the merged row.
+        """
+
+        args: dict[str, object] = {"state_key": state_key, "transition": transition, "now": now}
+        if at is not None:
+            args["at"] = at
+        if pending is not None:
+            args["pending"] = pending
+        answer = self._native_store_call("transition_command_queue_state", args)
+        state = answer.get("state") if isinstance(answer, dict) else None
+        if not isinstance(state, dict):
+            raise RuntimeError("native queue state transition returned no state")
+        return dict(state)
+
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .native_runner_authority import NativeRunnerAuthorityError
         from .runtime.runner_native_sync import cloud_exceptions

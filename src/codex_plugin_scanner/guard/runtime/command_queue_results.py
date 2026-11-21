@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from ..store import GuardStore
 from .command_capability import audit_command_decision
+from .command_queue_state import transition_command_queue_state
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,12 +40,7 @@ def drop_refused_result(
     state: dict[str, object],
     job: dict[str, object],
     error: urllib.error.HTTPError,
-    *,
-    save_state: Callable[[GuardStore, dict[str, object]], None],
 ) -> None:
     _LOGGER.warning("Guard Cloud refused a command result (HTTP %s); dropping it.", error.code)
-    state.pop("pending_result", None)
-    state.pop("active_job", None)
-    state.update({"state": "idle", "last_error": None, "last_poll_was_empty": False})
-    save_state(store, state)
+    transition_command_queue_state(store, state, "result_refused")
     audit_command_decision(store, "cloud_command.result_refused", job=job, reason=f"http_{error.code}")

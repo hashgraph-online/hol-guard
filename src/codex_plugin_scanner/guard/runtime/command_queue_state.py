@@ -122,6 +122,32 @@ def save_command_queue_state(store: GuardStore, payload: dict[str, object]) -> N
     store.set_sync_payload(current_command_queue_lane().state_key, payload, command_queue_now())
 
 
+def transition_command_queue_state(
+    store: GuardStore,
+    state: dict[str, object],
+    transition: str,
+    *,
+    at: str | None = None,
+    pending: dict[str, object] | None = None,
+) -> None:
+    """Apply one named job step to this lane's stored row and adopt the result.
+
+    The native store decides the step's fields and merges them into the stored
+    row. ``state`` becomes that merged row, so a caller must have saved every
+    in-memory change it means to keep before taking a step.
+    """
+
+    merged = store.transition_command_queue_state(
+        current_command_queue_lane().state_key,
+        transition,
+        now=command_queue_now(),
+        at=at,
+        pending=pending,
+    )
+    state.clear()
+    state.update(merged)
+
+
 def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTTPError) -> None:
     state["exact_review_route_error"] = redacted_error(
         error,
@@ -269,4 +295,5 @@ __all__ = [
     "record_exact_route_failure",
     "repair_command_queue_state",
     "save_command_queue_state",
+    "transition_command_queue_state",
 ]

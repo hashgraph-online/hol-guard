@@ -42,6 +42,60 @@ class FakeStore:
         self.payloads[state_key] = row
         return True
 
+    def transition_command_queue_state(
+        self,
+        state_key: str,
+        transition: str,
+        *,
+        now: str,
+        at: str | None = None,
+        pending: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        # Mirrors the native step table: each step removes, then sets, its own
+        # fields in the stored row and keeps every other field.
+        at = at or now
+        drop_both = ("active_job", "pending_result")
+        steps: dict[str, tuple[tuple[str, ...], dict[str, object]]] = {
+            "disabled": ((), {"state": "disabled", "last_error": None, "active_job": None}),
+            "polling": (
+                (),
+                {"state": "polling", "last_poll_at": at, "last_error": None, "last_poll_was_empty": False},
+            ),
+            "auth_expired": ((), {"state": "auth_expired"}),
+            "heartbeat_failed": (("active_job",), {"state": "error", "last_error": "Guard command heartbeat failed."}),
+            "settled": (
+                drop_both,
+                {"state": "idle", "last_result_at": at, "last_error": None, "last_poll_was_empty": False},
+            ),
+            "result_refused": (drop_both, {"state": "idle", "last_error": None, "last_poll_was_empty": False}),
+            "stale_result_dropped": (drop_both, {"state": "idle", "last_error": None}),
+            "malformed_result_dropped": (drop_both, {}),
+        }
+        if transition == "result_pending":
+            if (
+                pending is None
+                or not isinstance(pending.get("job"), dict)
+                or not isinstance(pending.get("payload"), dict)
+            ):
+                raise ValueError("invalid_pending_result")
+            steps[transition] = (
+                (),
+                {
+                    "state": "result_pending",
+                    "pending_result": {"job": pending["job"], "payload": pending["payload"], "recorded_at": at},
+                },
+            )
+        if transition not in steps:
+            raise ValueError("invalid_transition")
+        remove, fields = steps[transition]
+        stored = self.payloads.get(state_key)
+        row = dict(stored) if isinstance(stored, dict) else {}
+        for key in remove:
+            row.pop(key, None)
+        row.update(fields)
+        self.payloads[state_key] = row
+        return dict(row)
+
     def get_cloud_sync_profile(self) -> dict[str, str]:
         return {
             "auth_mode": "oauth",
