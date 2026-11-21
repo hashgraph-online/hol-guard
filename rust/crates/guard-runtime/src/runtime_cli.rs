@@ -99,6 +99,9 @@ pub(super) fn run() -> Result<(), String> {
         {
             std::process::exit(mcp_relay::run(python_argv))
         }
+        [command, home, milliseconds] if command == claude_question_save_command::COMMAND => {
+            claude_question_save_command::run(home, milliseconds)
+        }
         [command, flag] if command == "hook" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_hook_bytes(&bytes)?;

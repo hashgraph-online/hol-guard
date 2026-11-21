@@ -8,17 +8,18 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
-    from .commands_support_hook_state import _remove_claude_pending_permission
-    from .commands_support_permission_store import _write_claude_native_permission_plan
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
 
 
-from ..native_claude_guard_question import settle_claude_guard_question
+from ..native_claude_guard_question import question_json, settle_claude_guard_question
+from ..native_claude_question_save import save_claude_guard_question
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
 
-def _settle_claude_guard_question(store: GuardStore, payload: dict[str, object]) -> bool | None:
+def _settle_claude_guard_question(
+    store: GuardStore, payload: dict[str, object], *, deadline: float | None = None
+) -> bool | None:
     """Save the user's answer to the HOL Guard approval question.
 
     ``None`` when the call is not that question for the session's single
@@ -29,29 +30,29 @@ def _settle_claude_guard_question(store: GuardStore, payload: dict[str, object])
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return None
+    event = _hook_event_name(payload)
     settled = settle_claude_guard_question(
         store,
         session_id=session_id,
         payload=payload,
-        event=_hook_event_name(payload),
+        event=event,
         now=_now(),
     )
     if settled is None:
         return None
     if settled["outcome"] != "save":
         return False
-    artifact_id = settled["artifact_id"]
-    saved = _write_claude_native_permission_plan(
-        store=store,
-        plan=settled["plan"],
-        artifact_id=artifact_id,
-        reason=settled["reason"],
-        source=settled["source"],
+    question = question_json(payload, event)
+    if question is None:
+        return False
+    return save_claude_guard_question(
+        store,
+        session_id=session_id,
+        question=question,
+        settlement=settled,
         now=_now(),
+        deadline=deadline,
     )
-    if saved:
-        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
-    return saved
 
 
 __all__ = ["_settle_claude_guard_question"]

@@ -153,39 +153,12 @@ pub(crate) fn evaluate_within(
             json!({ "fresh": is_fresh(request.saved_at.as_deref(), &request.now, max_age) }),
         );
     }
-    let connection =
-        Connection::open_with_flags(&request.store_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
-            .map_err(|_| ERROR_STORE)?;
-    connection.busy_timeout(busy).map_err(|_| ERROR_STORE)?;
-    // One writer at a time: every flow reads, then rewrites or consumes state,
-    // so concurrent hooks must not interleave between those steps.
-    connection
-        .execute_batch("BEGIN IMMEDIATE")
-        .map_err(|_| ERROR_STORE)?;
-    let env = Env {
-        connection: &connection,
-        guard_home: Some(Path::new(&request.guard_home)),
-        key: request
-            .integrity_key_b64
-            .as_deref()
-            .and_then(|encoded| Base64UrlUnpadded::decode_vec(encoded).ok().map(Into::into)),
-        key_id: request.integrity_key_id.as_deref(),
-        now: &request.now,
-        foreign_key: None,
-    };
-    match env.dispatch(request) {
-        Ok(value) => {
-            connection
-                .execute_batch("COMMIT")
-                .map_err(|_| ERROR_STORE)?;
-            Ok(value)
-        }
-        Err(code) => {
-            let _ = connection.execute_batch("ROLLBACK");
-            Err(code)
-        }
-    }
+    transaction::write(request, busy, |env| env.dispatch(request))
 }
+
+mod local_question;
+mod transaction;
+pub(crate) use local_question::{save_locked_question, QuestionWrite};
 
 /// `_hook_authority_state_is_fresh`: `saved_at` is not in the future and no
 /// older than `max_age_seconds`. An unreadable timestamp is never fresh.

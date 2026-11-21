@@ -81,6 +81,18 @@
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
   {
+   "path": "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
+   "module": "codex_plugin_scanner.guard.cli.commands_support_permission_store",
+   "source_sha256": "d10e84b377ad2a6456daf5eceb2f02835d0a8df652ef58bcbb3c63b7789a7580",
+   "forbidden_symbols": [
+    "_write_claude_native_permission_plan"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/claude_question_save_command.rs",
+    "rust/crates/guard-runtime/src/hook_authority_state_op/local_question.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_native_package_review",
    "source_sha256": "1250222cc52b2a2da9117255a97b5e2b7b589063af7fc282132216f065334a82",

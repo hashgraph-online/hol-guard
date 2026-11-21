@@ -10,9 +10,7 @@
 //! Once the gate has run, a step that fails closes the connection rather than
 //! hand the request on, which would run the gate a second time.
 
-use std::fs::{File, OpenOptions};
-use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
@@ -25,15 +23,9 @@ use crate::daemon_handler_policy::{
 };
 use crate::policy_bundle_store_identities::{scoped_artifact_key, scoped_risk_group};
 use crate::policy_decision_lookup_op::{computed_workspace_policy_key, SCOPED_APPROVAL_FAMILIES};
-use crate::resident_state::is_lock_contention;
-
-/// `GuardStore.hold_policy_integrity_generation_lock`'s file, which every
-/// writer that advances the generation takes, the library's included.
-const LOCK_FILE: &str = "policy-integrity-generation.lock";
-/// `_POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS`.
-const LOCK_TIMEOUT: Duration = Duration::from_secs(30);
-/// `_POLICY_INTEGRITY_GENERATION_LOCK_POLL_SECONDS`.
-const LOCK_POLL: Duration = Duration::from_millis(50);
+#[cfg(all(test, unix))]
+use crate::policy_generation_lock::LOCK_FILE;
+use crate::policy_generation_lock::{acquire, LOCK_TIMEOUT};
 
 type Answer = Option<(u16, Value)>;
 
@@ -271,45 +263,15 @@ pub(in crate::daemon_edge) fn locked_for<T>(
     wait: Duration,
     work: impl FnOnce() -> Option<T>,
 ) -> Option<T> {
-    let file = generation_lock_for(config.guard_home(), wait)?;
+    let file = acquire(config.guard_home(), wait)?;
     let answer = work();
     let _ = fs2::FileExt::unlock(&file);
     answer
 }
 
-#[cfg(test)]
-fn generation_lock(home: &Path) -> Option<File> {
-    generation_lock_for(home, LOCK_TIMEOUT)
-}
-
-fn generation_lock_for(home: &Path, wait: Duration) -> Option<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).read(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
-    let file = options.open(home.join(LOCK_FILE)).ok()?;
-    if !file.metadata().ok()?.is_file() {
-        return None;
-    }
-    let deadline = Instant::now().checked_add(wait)?;
-    loop {
-        match fs2::FileExt::try_lock_exclusive(&file) {
-            Ok(()) => return Some(file),
-            Err(error) if is_lock_contention(&error) => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    return None;
-                }
-                std::thread::sleep(remaining.min(LOCK_POLL));
-            }
-            Err(_) => return None,
-        }
-    }
+#[cfg(all(test, unix))]
+fn generation_lock(home: &std::path::Path) -> Option<std::fs::File> {
+    acquire(home, LOCK_TIMEOUT)
 }
 
 #[cfg(all(test, unix))]

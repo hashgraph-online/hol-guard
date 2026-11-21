@@ -38,12 +38,12 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_command
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
-from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.native_hook_authority_state import hook_authority_state
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
@@ -2240,14 +2240,20 @@ def _write_native_allow(store: GuardStore, artifact_id: str) -> bool:
         "action": "allow",
         "reason": "native approval",
     }
-    return _write_claude_native_permission_plan(
-        store=store,
-        plan=saved_plan(inputs),
-        artifact_id=artifact_id,
-        reason="native approval",
-        source="claude-native-approval",
+    result = hook_authority_state(
+        store,
+        "claude_question_save",
         now="2026-04-11T00:00:00+00:00",
+        session_id="approval-gate-test",
+        payload={
+            "plan": saved_plan(inputs),
+            "artifact_id": artifact_id,
+            "reason": "native approval",
+            "source": "claude-native-approval",
+            "current_generation": 0,
+        },
     )
+    return result is not None and result.get("saved") is True
 
 
 def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
