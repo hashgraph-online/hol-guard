@@ -132,6 +132,8 @@ fn a_head_or_tail_bound_reads_lines_or_bytes() {
         (&["-n", "40"][..], (40, false)),
         (&["-c", "1500"][..], (1500, true)),
         (&["-c1500"][..], (1500, true)),
+        // No count names the default both programs print.
+        (&[][..], (10, false)),
     ] {
         assert_eq!(
             head_tail_bound(&words(arguments)),
@@ -142,10 +144,9 @@ fn a_head_or_tail_bound_reads_lines_or_bytes() {
 }
 
 #[test]
-fn a_bound_that_names_a_file_or_no_count_is_not_a_filter() {
+fn a_bound_that_names_a_file_or_an_unreadable_count_is_not_a_filter() {
     for arguments in [
-        &[][..],
-        &["-c"],
+        &["-c"][..],
         &["-n"],
         &["-c", "1500", "notes.txt"],
         &["-c", "-1500"],

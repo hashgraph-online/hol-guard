@@ -10676,6 +10676,40 @@
       "requires_sandbox": true
     },
     {
+      "id": "session-vitest-summary-line-countless-head",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run --reporter=dot --silent 2>&1 | grep -E \"Tests \" | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-last-lines-countless-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node node_modules/.bin/vitest run 2>&1 | tail"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "gauntlet-npx-mocha-reporter",
       "fix_area": "shell",
       "harnesses": [
