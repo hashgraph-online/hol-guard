@@ -291,28 +291,6 @@ def _saved_approval_response(
     return dict(value) if isinstance(value, dict) else None
 
 
-def native_hermes_bridge(
-    response: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
-) -> tuple[dict[str, object], int] | None:
-    """Read a Hermes daemon reply into its stdout document and exit status.
-
-    ``None`` when the resident cannot answer; the caller fails closed rather
-    than deciding here what the reply meant. ``deadline`` is the hook's
-    absolute ``time.monotonic()`` budget; the render gets only what remains.
-    """
-
-    rendered = native_render_cli(
-        "hermes_bridge", "hermes", {"response": dict(response)}, guard_home=guard_home, deadline=deadline
-    )
-    if rendered is None or rendered[1] is None:
-        return None
-    document = rendered[1].get("document")
-    exit_code = rendered[1].get("exit_code")
-    if not isinstance(document, dict) or not isinstance(exit_code, int) or isinstance(exit_code, bool):
-        return None
-    return dict(document), exit_code
-
-
 def native_cli_hook_emit(
     harness: str,
     response: Mapping[str, object],

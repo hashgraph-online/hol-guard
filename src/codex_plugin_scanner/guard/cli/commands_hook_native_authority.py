@@ -23,7 +23,7 @@ from ..hook_review.hook_availability_policy import (
 from ..hook_review.hook_fail_closed import fail_closed_response
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
-from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
+from ..native_hook_render import native_cli_hook_emit
 from ..native_payload_facts import native_hook_event
 from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
@@ -85,14 +85,6 @@ def _bridge_hook_output(
     writes for an outage; nothing reads the answer in Python.
     """
 
-    if canonical == "hermes":
-        # The Hermes bridge renders its daemon reply natively; so does the CLI.
-        # When the resident cannot answer, Hermes reads the fixed block document.
-        rendered_hermes = native_hermes_bridge(response, guard_home=guard_home, deadline=deadline)
-        if rendered_hermes is None:
-            return _failure_output("hermes", event_name, _BRIDGE_BLOCK_REASON)
-        payload, exit_code = rendered_hermes
-        return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
     rendered = native_cli_hook_emit(
         canonical, response, event_name=event_name, guard_home=guard_home, deadline=deadline
     )
@@ -107,6 +99,8 @@ def _bridge_hook_output(
             return stdout, stderr, exit_code
     if canonical == "muse":
         return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON)
+    if canonical == "hermes":
+        return _failure_output(canonical, event_name, _BRIDGE_BLOCK_REASON)
     return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
 
 

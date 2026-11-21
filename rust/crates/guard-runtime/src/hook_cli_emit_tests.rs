@@ -96,10 +96,37 @@ fn muse_cli_prints_a_deny_and_stays_silent_on_allow() {
 }
 
 #[test]
+fn hermes_cli_keeps_the_resident_verdict_and_exit_status() {
+    for response in [
+        r#"{}"#,
+        r#"{"policy_action":"warn","reason":"café"}"#,
+        r#"{"decision":"allow","action":"block","message":"cleared"}"#,
+        r#"{"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"review"}}"#,
+        r#"{"policy_action":"\u001callow","reason":"control whitespace"}"#,
+    ] {
+        let reply = cli_hook_emit_document("hermes", "PreToolUse", response, None, false)
+            .expect("Hermes output");
+        let response = serde_json::from_str(response).expect("daemon response");
+        let (expected, exit_code) =
+            guard_command::hook_responses::hermes::bridge_response(&response);
+        let stdout = reply["stdout"].as_str().expect("Hermes stdout");
+        assert!(stdout.is_ascii());
+        assert_eq!(
+            serde_json::from_str::<Value>(stdout).expect("Hermes JSON"),
+            Value::Object(expected)
+        );
+        assert_eq!(reply["stderr"], "");
+        assert_eq!(reply["exit_code"], exit_code);
+    }
+}
+
+#[test]
 fn an_unreadable_answer_has_no_document() {
     for (harness, text) in [
         ("kimi", "[]"),
         ("codex", "not json"),
+        ("hermes", r#"{"policy_action":"allow","reason":"\ud800"}"#),
+        ("muse", r#"{"policy_action":"allow","reason":"\ud800"}"#),
         // Python would print a list reason through `repr`; the caller fails
         // closed instead of guessing that text.
         ("kimi", r#"{"policy_action":"block","reason":["a"]}"#),

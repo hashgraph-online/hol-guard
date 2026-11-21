@@ -169,7 +169,7 @@ def test_pretool_call_args_payload_is_normalized(tmp_path: Path) -> None:
 
 
 def test_hermes_bridge_fails_closed_without_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(commands_hook_native_authority, "native_hermes_bridge", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(commands_hook_native_authority, "native_cli_hook_emit", lambda *_args, **_kwargs: None)
     stdout, stderr, code = commands_hook_native_authority._bridge_hook_output(
         "hermes",
         {"policy_action": "allow", "reason": "ok"},
