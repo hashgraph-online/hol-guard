@@ -58,7 +58,6 @@ _FIELDS = {
 _WORKSPACE_OPERATION = replace(_OPERATION, feature="context-assistance-workspaces-v1", timeout_seconds=8.0)
 _WORKSPACE_SLOTS = BoundedSemaphore(2)
 _VERSIONS_OPERATION = replace(_OPERATION, feature="context-assistance-versions-v1", timeout_seconds=8.0)
-_FOLDERS_OPERATION = replace(_OPERATION, feature="context-assistance-folders-v1", timeout_seconds=8.0)
 _SAVINGS_OPERATION = replace(_OPERATION, feature="context-assistance-savings-v1", timeout_seconds=8.0)
 
 
@@ -138,11 +137,6 @@ def versions(*, guard_home: Path, payload: Mapping[str, object]) -> dict[str, An
         slots=_WORKSPACE_SLOTS,
     )
     return {**answer["data"], "state": answer["state"]}
-
-
-def folders(*, guard_home: Path, payload: Mapping[str, object]) -> dict[str, Any]:
-    """Transport the native project-picker listing; Rust reads and screens every name."""
-    return workspace("folders", guard_home=guard_home, payload=payload, operation=_FOLDERS_OPERATION)["result"]
 
 
 def savings(*, guard_home: Path) -> dict[str, Any]:

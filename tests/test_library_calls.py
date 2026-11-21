@@ -283,9 +283,11 @@ def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
     assert _handler_post(tmp_path, "/v1/context-assistance/stop", [])["error"]["kind"] == "library_call"  # type: ignore[index]
 
 
-def test_handler_post_runs_version_administration(tmp_path: Path) -> None:
-    answer = _handler_post(tmp_path, "/v1/context-assistance/versions", {"input": "releases"})
-    assert answer["ok"] == {"status": 400, "body": {"error": "invalid_context_input"}, "no_store": False}
+def test_handler_post_leaves_the_engine_routes_to_the_daemon(tmp_path: Path) -> None:
+    # The Rust daemon answers these itself; Python no longer runs them.
+    for path in ("/v1/context-assistance/versions", "/v1/context-assistance/workspace-grant"):
+        answer = _handler_post(tmp_path, path, {"input": {"action": "jobs"}})
+        assert answer["error"]["kind"] == "library_call"  # type: ignore[index]
 
 
 def _handler_get(home: Path, path: str, query: str = "") -> dict[str, object]:
