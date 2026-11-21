@@ -177,6 +177,19 @@
                         "flashpilot-bridge.exe"
                       ],
                       "subcommands": [
+                        "qcom-flash"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "flashpilot-bridge",
+                        "flashpilot-bridge.cmd",
+                        "flashpilot-bridge.exe"
+                      ],
+                      "subcommands": [
                         "qcom-flash-one"
                       ]
                     }
@@ -191,6 +204,19 @@
                       ],
                       "subcommands": [
                         "spd-flash"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "flashpilot-bridge",
+                        "flashpilot-bridge.cmd",
+                        "flashpilot-bridge.exe"
+                      ],
+                      "subcommands": [
+                        "unified-flash"
                       ]
                     }
                   }
@@ -283,6 +309,62 @@
       ],
       "disabled_permissions": [],
       "expected_action": "review",
+      "rule_id": "command.flashpilot.destructive-flash",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "flashpilot-qcom-flash",
+      "command": "flashpilot-bridge qcom-flash",
+      "enabled_extensions": [
+        "command.flashpilot"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.flashpilot.destructive-flash",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "flashpilot-qcom-flash-disabled-permission",
+      "command": "flashpilot-bridge qcom-flash",
+      "enabled_extensions": [
+        "command.flashpilot"
+      ],
+      "disabled_permissions": [
+        "command.flashpilot.permission.firmware-write"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.flashpilot.destructive-flash",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "flashpilot-unified-flash",
+      "command": "flashpilot-bridge unified-flash",
+      "enabled_extensions": [
+        "command.flashpilot"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.flashpilot.destructive-flash",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "flashpilot-unified-flash-disabled-permission",
+      "command": "flashpilot-bridge unified-flash",
+      "enabled_extensions": [
+        "command.flashpilot"
+      ],
+      "disabled_permissions": [
+        "command.flashpilot.permission.firmware-write"
+      ],
+      "expected_action": "block",
       "rule_id": "command.flashpilot.destructive-flash",
       "expected_effective_segments": [
         0

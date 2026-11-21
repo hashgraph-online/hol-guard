@@ -171,6 +171,19 @@
                   "flashpilot-bridge.exe"
                 ],
                 "subcommands": [
+                  "qcom-flash"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
                   "qcom-flash-one"
                 ]
               }
@@ -185,6 +198,19 @@
                 ],
                 "subcommands": [
                   "spd-flash"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "flashpilot-bridge",
+                  "flashpilot-bridge.cmd",
+                  "flashpilot-bridge.exe"
+                ],
+                "subcommands": [
+                  "unified-flash"
                 ]
               }
             }
