@@ -89,9 +89,9 @@ def test_local_writer_holds_the_generation_lock_during_preparation(
     monkeypatch.setattr(policy_write_calls, "integrity_begin", prepare)
     args = {"now": "2026-11-21T12:00:00Z"}
     with store.hold_policy_integrity_generation_lock():
-        assert _write_question(store, args, time.monotonic() + 0.25) is None
+        assert not _write_question(store, args, time.monotonic() + 0.25)
     assert calls == 0
-    assert _write_question(store, args, time.monotonic() + 3.0) is None
+    assert not _write_question(store, args, time.monotonic() + 3.0)
     assert calls == 1
 
 

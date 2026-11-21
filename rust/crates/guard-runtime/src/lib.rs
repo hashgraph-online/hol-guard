@@ -150,7 +150,6 @@ mod claude_hook_config;
 mod claude_hook_config_tests;
 #[path = "adapters/claude_hook_plan.rs"]
 mod claude_hook_plan;
-mod claude_question_save_command;
 mod claude_session_start;
 mod claude_session_start_contract;
 mod claude_session_start_live;
@@ -1151,7 +1150,6 @@ mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
 mod policy_file_io;
-mod policy_generation_lock;
 mod policy_integrity_generation;
 mod policy_integrity_resolver;
 mod policy_integrity_rows_op;

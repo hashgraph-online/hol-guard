@@ -9,7 +9,12 @@ answers it here instead of starting a resident.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from codex_plugin_scanner.guard.native_hook_authority_state import hook_authority_state
+
+if TYPE_CHECKING:
+    from codex_plugin_scanner.guard.store import GuardStore
 
 
 def saved_plan(inputs: Mapping[str, Any], *, inventory_approved: bool = True) -> dict[str, Any]:
@@ -33,3 +38,26 @@ def saved_plan(inputs: Mapping[str, Any], *, inventory_approved: bool = True) ->
         ],
         "inventory_approved": inventory_approved,
     }
+
+
+def write_native_allow(store: GuardStore, artifact_id: str) -> bool:
+    inputs = {
+        "artifact_id": artifact_id,
+        "artifact_hash": "hash-native",
+        "action": "allow",
+        "reason": "native approval",
+    }
+    result = hook_authority_state(
+        store,
+        "claude_question_save",
+        now="2026-04-11T00:00:00+00:00",
+        session_id="approval-gate-test",
+        payload={
+            "plan": saved_plan(inputs),
+            "artifact_id": artifact_id,
+            "reason": "native approval",
+            "source": "claude-native-approval",
+            "current_generation": 0,
+        },
+    )
+    return result is not None and result.get("saved") is True

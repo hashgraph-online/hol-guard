@@ -24,8 +24,8 @@ use crate::daemon_handler_policy::{
 use crate::policy_bundle_store_identities::{scoped_artifact_key, scoped_risk_group};
 use crate::policy_decision_lookup_op::{computed_workspace_policy_key, SCOPED_APPROVAL_FAMILIES};
 #[cfg(all(test, unix))]
-use crate::policy_generation_lock::LOCK_FILE;
-use crate::policy_generation_lock::{acquire, LOCK_TIMEOUT};
+use crate::policy_integrity_generation::lock::LOCK_FILE;
+use crate::policy_integrity_generation::lock::{acquire, LOCK_TIMEOUT};
 
 type Answer = Option<(u16, Value)>;
 

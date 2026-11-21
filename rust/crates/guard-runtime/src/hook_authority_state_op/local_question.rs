@@ -1,6 +1,9 @@
 use serde::Deserialize;
 
 use super::*;
+use crate::policy_integrity_resolver::{
+    finalization_state, normalize_policy_integrity_control_state,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -13,6 +16,7 @@ pub(crate) struct QuestionWrite {
     pending_artifact_hash: String,
     pending_id: Option<String>,
     current_generation: Option<i64>,
+    prepared_control_state: Value,
     integrity_key_b64: Option<String>,
     integrity_key_id: Option<String>,
 }
@@ -27,12 +31,20 @@ pub(crate) fn save_locked_question(
     if write.session_id.is_empty()
         || write.integrity_key_b64.is_none()
         || write.integrity_key_id.is_none()
-        || write
-            .current_generation
-            .is_none_or(|generation| generation < 0)
     {
         return Err(ERROR_INVALID);
     }
+    let generation = write
+        .current_generation
+        .filter(|number| *number >= 0)
+        .ok_or(ERROR_INVALID)?;
+    let pending = generation.checked_add(1).ok_or(ERROR_INVALID)?;
+    let prepared = normalize_policy_integrity_control_state(&write.prepared_control_state)
+        .filter(|state| {
+            state["generation"].as_i64() == Some(generation)
+                && state["pending_generation"].as_i64() == Some(pending)
+        })
+        .ok_or(ERROR_INVALID)?;
     let question = crate::claude_guard_question::project_hook_question(&write.question)
         .ok_or(ERROR_INVALID)?;
     let request = HookAuthorityStateRequestV1 {
@@ -64,10 +76,15 @@ pub(crate) fn save_locked_question(
         let Value::Object(mut plan) = plan else {
             return Err(ERROR_INVALID);
         };
-        plan.insert(
-            "current_generation".to_owned(),
-            json!(write.current_generation),
-        );
-        env.claude_question_save(&write.session_id, &plan)
+        plan.insert("current_generation".to_owned(), json!(generation));
+        let mut saved = env.claude_question_save(&write.session_id, &plan)?;
+        let next = finalization_state(Some(&prepared), &saved["next_control_state"])
+            .filter(|state| {
+                state["generation"].as_i64() == Some(pending)
+                    && state["pending_generation"].is_null()
+            })
+            .ok_or(ERROR_STORE)?;
+        saved["next_control_state"] = next;
+        Ok(saved)
     })
 }

@@ -29,6 +29,9 @@ use serde_json::{json, Map, Value};
 use crate::local_store_read::{open_read_only, require_store_path, table_exists};
 use crate::policy_integrity_resolver::normalize_policy_integrity_control_state;
 
+#[path = "policy_generation_lock.rs"]
+pub(crate) mod lock;
+
 const POLICY_INTEGRITY_VERSION: i64 = 2;
 const CONTROL_STATE_VERSION: i64 = 1;
 pub(crate) const ROW_COLUMNS: [&str; 19] = [

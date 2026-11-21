@@ -1,21 +1,42 @@
 //! Keep the policy generation lock in the process that writes the approval.
 
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use guard_contracts::HOOK_AUTHORITY_STATE_MAX_BYTES;
 
 use crate::hook_authority_state_op::{save_locked_question, QuestionWrite};
-use crate::policy_generation_lock::{acquire, LOCK_TIMEOUT};
+use crate::policy_integrity_generation::lock::{acquire, LOCK_TIMEOUT};
+use crate::{claude_hook_bridge, claude_session_start};
 
-pub(crate) const COMMAND: &str = "claude-question-save";
-pub(crate) const FEATURE: &str = "claude-question-save-locked-v1";
+pub(crate) const FEATURE: &str = "claude-question-save-locked-v2";
 const INVALID: &str = "native_claude_question_save_invalid";
 const TIMED_OUT: &str = "native_claude_question_save_expired";
 const PIPE: &str = "native_claude_question_save_pipe";
 
-pub(crate) fn run(home: &str, milliseconds: &str) -> Result<(), String> {
+pub(super) fn route(args: &[String]) -> Option<Result<(), String>> {
+    match args {
+        [command, mode, marker, config]
+            if command == "claude-hook-bridge"
+                && mode == claude_session_start::SESSION_START_MODE
+                && marker == claude_session_start::SESSION_START_MARKER =>
+        {
+            std::process::exit(claude_session_start::run(config))
+        }
+        [command, marker, config]
+            if command == "claude-hook-bridge" && marker == claude_hook_bridge::BRIDGE_MARKER =>
+        {
+            Some(claude_hook_bridge::run(config))
+        }
+        [command, home, milliseconds] if command == "claude-question-save" => {
+            Some(run(home, milliseconds))
+        }
+        _ => None,
+    }
+}
+
+fn run(home: &str, milliseconds: &str) -> Result<(), String> {
     let home = Path::new(home);
     if !home.is_absolute() {
         return Err(INVALID.to_owned());
@@ -33,16 +54,15 @@ pub(crate) fn run(home: &str, milliseconds: &str) -> Result<(), String> {
         .map_err(|_| PIPE)?;
 
     // The host prepares the secret-store generation only after this handshake.
-    // A closed pipe means it abandoned the save. Keep the lock until it
-    // finishes preparation and sends the request, or closes the pipe.
     let limit = HOOK_AUTHORITY_STATE_MAX_BYTES * 2;
     let mut input = Vec::new();
-    io::stdin()
-        .lock()
+    let mut stdin = io::stdin().lock();
+    stdin
+        .by_ref()
         .take((limit + 1) as u64)
-        .read_to_end(&mut input)
+        .read_until(b'\n', &mut input)
         .map_err(|_| PIPE)?;
-    if input.len() > limit {
+    if input.len() > limit || input.pop() != Some(b'\n') {
         return Err(INVALID.to_owned());
     }
     let request: QuestionWrite =
@@ -53,6 +73,14 @@ pub(crate) fn run(home: &str, milliseconds: &str) -> Result<(), String> {
     }
     let answer = save_locked_question(home, request, remaining)?;
     serde_json::to_writer(&mut output, &answer).map_err(|_| PIPE)?;
-    output.flush().map_err(|_| PIPE)?;
+    output
+        .write_all(b"\n")
+        .and_then(|_| output.flush())
+        .map_err(|_| PIPE)?;
+    // Hold the lock through secret-store finalization. EOF also releases it
+    // if the host exits before it can finish.
+    if stdin.read(&mut [0]).map_err(|_| PIPE)? != 0 {
+        return Err(INVALID.to_owned());
+    }
     Ok(())
 }
