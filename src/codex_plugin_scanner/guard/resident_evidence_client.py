@@ -173,7 +173,15 @@ class ResidentEvidenceClient:
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,
         )
-        identity = native_runtime_status().identity
+        runtime = native_runtime_status()
+        identity = runtime.identity
+        if (
+            response is None
+            and required_feature == _POST_TOOL_FEATURE
+            and runtime.capabilities is not None
+            and required_feature not in runtime.capabilities.features
+        ):
+            raise _unavailable("resident_evidence_client_post_tool_feature_missing")
         if (
             response is None
             or response.get("request_id") != request["request_id"]

@@ -113,15 +113,14 @@ class _ActivityWriter:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def submit_command_activity(
+    def submit_post_tool_activity(
         self,
         *,
         harness: str,
         event: str,
         payload: object,
-        succeeded: bool,
     ) -> bool:
-        self.calls.append({"harness": harness, "event": event, "payload": payload, "succeeded": succeeded})
+        self.calls.append({"harness": harness, "event": event, "payload": payload})
         return True
 
 

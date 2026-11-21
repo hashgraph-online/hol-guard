@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -29,6 +30,7 @@ class _Identity:
 
 class _Status:
     identity = _Identity()
+    capabilities: SimpleNamespace | None = None
 
 
 class _Store:
@@ -174,6 +176,18 @@ def test_post_tool_submission_leaves_result_interpretation_to_the_resident(
     assert request["event"] == "PostToolUseFailure"
     assert request["payload"] == payload
     assert "succeeded" not in request
+
+
+def test_post_tool_submission_reports_a_missing_runtime_feature(
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    status = _Status()
+    status.capabilities = SimpleNamespace(features=("hook-evidence-writer-v1",))
+    monkeypatch.setattr(resident_evidence_client, "native_runtime_status", lambda: status)
+    _install(monkeypatch, lambda **_kwargs: None)
+
+    with pytest.raises(ResidentEvidenceUnavailableError, match="post_tool_feature_missing"):
+        writer.submit_post_tool_activity(harness="pi", event="PostToolUse", payload={})
 
 
 def test_a_resident_error_raises_the_store_exception_its_code_names(

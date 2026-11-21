@@ -464,8 +464,7 @@ class HookWorker(HookWorkerNativeMixin):
 
         # Keep the writer round trip out of the hook's decision budget.
         def record() -> None:
-            with suppress(Exception):
-                _ = writer.submit_post_tool_activity(harness=harness, event=event, payload=payload)
+            _ = writer.submit_post_tool_activity(harness=harness, event=event, payload=payload)
 
         run_resident_evidence(self, record)
 
