@@ -150,6 +150,36 @@ def test_native_hook_direct_records_health_after_invalid_answer(monkeypatch, tmp
     assert recorded == ["failure"]
 
 
+def test_native_hook_direct_rejects_malformed_review_edge_with_harness_response(monkeypatch, tmp_path: Path) -> None:
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64))
+    )
+    monkeypatch.setattr(direct, "native_record_resident_failure", lambda *_args, **_kwargs: recorded.append("failure"))
+    monkeypatch.setattr(
+        direct,
+        "_resident_request",
+        lambda **_kwargs: {
+            "schema": "guard-hook-direct-result.v1",
+            "outcome": "answer",
+            "edge": {"schema": "guard-hook-edge-result.v2", "harness_response": {}},
+        },
+    )
+
+    assert (
+        direct.native_hook_direct(
+            harness="codex",
+            guard_home=tmp_path,
+            payload={"hook_event_name": "PreToolUse"},
+            workspace=None,
+            home_dir=None,
+            deadline=None,
+        )
+        is None
+    )
+    assert recorded == ["failure"]
+
+
 def test_resident_request_accepts_a_direct_union_without_a_status_field(monkeypatch, tmp_path: Path) -> None:
     runtime = tmp_path / "runtime"
     runtime.write_bytes(b"runtime")

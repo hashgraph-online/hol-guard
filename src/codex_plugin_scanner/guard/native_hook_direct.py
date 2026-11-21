@@ -66,7 +66,7 @@ def native_hook_direct(
         # Lifecycle answers are intentionally smaller than a review edge. The
         # resident has no tool-review receipt to return, only the rendered
         # harness response.
-        if decoded is None and isinstance(edge, Mapping):
+        if decoded is None and isinstance(edge, Mapping) and set(edge) == {"harness_response"}:
             rendered = edge.get("harness_response")
             if isinstance(rendered, Mapping):
                 decoded = cast(
