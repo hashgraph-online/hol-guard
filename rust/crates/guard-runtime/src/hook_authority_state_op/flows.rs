@@ -162,12 +162,23 @@ impl Env<'_> {
 
     pub(super) fn claude_load_single_pending(&self, session_id: &str) -> Option<(String, Object)> {
         let mut items = Vec::new();
+        let mut invalid = Vec::new();
         for pending_key in self.load_index(&CLAUDE_FAMILY, session_id) {
             if let Some(pending) =
                 self.claude_load_pending(session_id, &pending_key, None, None, None)
             {
                 items.push((pending_key, pending));
+            } else {
+                invalid.push(pending_key);
             }
+        }
+        if !invalid.is_empty() {
+            let remaining = self
+                .load_index(&CLAUDE_FAMILY, session_id)
+                .into_iter()
+                .filter(|key| !invalid.contains(key))
+                .collect::<Vec<_>>();
+            let _ = self.store_index(&CLAUDE_FAMILY, session_id, &remaining);
         }
         let seen = items
             .iter()

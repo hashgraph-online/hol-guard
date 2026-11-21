@@ -1,58 +1,39 @@
-"""Guard CLI helper definitions."""
+"""Compatibility transport for Claude approval-question hooks.
 
-# ruff: noqa: F403, F405
+The Rust resident owns question matching, persistence, integrity finalization,
+and pending-row consumption. This module remains only for callers that still
+import the historical helper name.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_hook_direct import native_hook_direct
+
 if TYPE_CHECKING:
-    from ._commands_shared import _now
-    from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
-
-
-from ..native_claude_guard_question import question_json, settle_claude_guard_question
-from ..native_claude_question_save import save_claude_guard_question
-from ._commands_shared import *
-from .commands_parser_helpers import *
+    from ..store import GuardStore
 
 
 def _settle_claude_guard_question(
     store: GuardStore, payload: dict[str, object], *, deadline: float | None = None
 ) -> bool | None:
-    """Save the user's answer to the HOL Guard approval question.
+    """Ask the Rust resident to settle one Claude approval question."""
 
-    ``None`` when the call is not that question for the session's single
-    pending review (or the resident cannot say); otherwise whether a decision
-    was saved. The resident records an unseen prompt itself.
-    """
-
-    session_id = _optional_string(payload.get("session_id"))
-    if session_id is None:
-        return None
-    event = _hook_event_name(payload)
-    settled = settle_claude_guard_question(
-        store,
-        session_id=session_id,
+    response = native_hook_direct(
+        harness="claude-code",
+        guard_home=store.guard_home,
         payload=payload,
-        event=event,
-        now=_now(),
-    )
-    if settled is None:
-        return None
-    if settled["outcome"] != "save":
-        return False
-    question = question_json(payload, event)
-    if question is None:
-        return False
-    return save_claude_guard_question(
-        store,
-        session_id=session_id,
-        question=question,
-        settlement=settled,
-        now=_now(),
+        workspace=None,
+        home_dir=Path(store.guard_home),
         deadline=deadline,
     )
+    if response is None:
+        return None
+    if "outcome" in response:
+        return None
+    return False
 
 
 __all__ = ["_settle_claude_guard_question"]

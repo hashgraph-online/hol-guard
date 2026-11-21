@@ -32,7 +32,10 @@
 //! has one keeps the daemon path when the key is not bound.
 
 use std::path::Path;
+use std::time::{Duration, Instant};
 
+use base64ct::{Base64UrlUnpadded, Encoding};
+use guard_contracts::{HookAuthorityStateRequestV1, HOOK_AUTHORITY_STATE_REQUEST_SCHEMA};
 use serde_json::{json, Map, Value};
 
 use super::claude_permission_text::{
@@ -44,10 +47,17 @@ use super::{
     HookDirectDefer, CLAUDE_CODE, CURSOR, EVENT_NAME_FIELDS, GROK, PAYLOAD_REFERENCE_FIELDS,
     TRANSITION_PROBE_FIELD,
 };
+use crate::encrypted_secret_store::EncryptedFileSecretStore;
+use crate::hook_authority_state_op;
 use crate::hook_authority_state_op::{
     claude_permission_notice_direct, claude_permission_prompt_direct, claude_turn_stop_direct,
 };
 use crate::policy_bundle_time::micros_to_utc_isoformat;
+use crate::policy_integrity_generation::lock as policy_generation_lock;
+use crate::policy_integrity_resolver::{
+    build_scoped_secret_ref, finalization_state, load_policy_integrity_control_state,
+    policy_integrity_secret_material, POLICY_INTEGRITY_CONTROL_REF,
+};
 use crate::policy_store::PolicySnapshotStore;
 
 /// The daemon's `reason_code` when the edge does not review an event.
@@ -73,6 +83,10 @@ const PASSTHROUGH_PERMISSION_HARNESSES: [&str; 4] = ["codex", "copilot", "devin"
 const CLAUDE_PERMISSION_EVENTS: [&str; 2] = ["permissionrequest", "permissionrequestv2"];
 /// A longer or unusual name is left to the daemon.
 const MAX_EVENT_NAME_BYTES: usize = 64;
+const QUESTION_SETTLE: &str = "claude_question_settle_hook";
+const QUESTION_SAVE: &str = "claude_question_save";
+const QUESTION_CONSUME: &str = "claude_question_consume";
+const QUESTION_LOCK_WAIT: Duration = Duration::from_millis(250);
 
 /// `runtime_hook_event_name` for an event `direct_event` does not review:
 /// the first non-blank event field, stripped.
@@ -200,6 +214,268 @@ pub(super) fn answer(
         crate::context_assistance_prompt::wake(harness, policy_store);
     }
     Ok(json!({ "harness_response": constant_response(harness, event) }))
+}
+
+/// Answer Claude's HOL Guard `AskUserQuestion` in the direct resident lane.
+///
+/// The daemon used to reach this path through a Python worker bridge. The
+/// resident now performs the same settle, signed policy write, integrity
+/// finalization and pending-row consume sequence itself. `None` means the
+/// payload is an ordinary post-tool event and should continue through the
+/// normal direct edge.
+pub(crate) fn claude_question_answer(
+    guard_home: &str,
+    home_dir: Option<&str>,
+    payload: &Map<String, Value>,
+    deadline: Instant,
+) -> Result<Option<Value>, HookDirectDefer> {
+    let Some(session_id) = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .and_then(|value| python_strip(value).ok())
+        .flatten()
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+    else {
+        return Ok(None);
+    };
+    let Some(question) = question_wire(payload) else {
+        return Ok(None);
+    };
+    let resolved_home = Path::new(guard_home)
+        .canonicalize()
+        .map_err(|_| HookDirectDefer::PermissionNotice)?;
+    let store_path = resolved_home.join("guard.db");
+    let mut secrets = EncryptedFileSecretStore::new(&resolved_home);
+    let Some(material) = policy_integrity_secret_material(&mut secrets, &resolved_home) else {
+        return Ok(None);
+    };
+    let key_b64 = Base64UrlUnpadded::encode_string(&material.raw_key);
+    let now = utc_now_isoformat().ok_or(HookDirectDefer::PermissionNotice)?;
+    let settle = authority_request(
+        &store_path,
+        &resolved_home,
+        QUESTION_SETTLE,
+        &now,
+        Some(&session_id),
+        Some((&key_b64, &material.key_id)),
+        Some(Value::String(question)),
+        home_dir,
+    )?;
+    let reply = hook_authority_state_op::evaluate_within(&settle, remaining(deadline))
+        .map_err(|_| HookDirectDefer::PermissionNotice)?;
+    match settled_reply(&reply)? {
+        QuestionSettlement::Answered => return Ok(Some(json!({}))),
+        QuestionSettlement::None => return Ok(None),
+        QuestionSettlement::Save(mut save) => {
+            let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, &resolved_home);
+            let current = match load_policy_integrity_control_state(&mut secrets, &resolved_home) {
+                Some(current) => current,
+                None => {
+                    let initial = json!({
+                        "cutover_complete": true,
+                        "generation": 0,
+                        "pending_generation": null,
+                        "version": 1,
+                    });
+                    secrets
+                        .set_secret(
+                            &control_ref,
+                            &serde_json::to_string(&initial)
+                                .map_err(|_| HookDirectDefer::PermissionNotice)?,
+                        )
+                        .map_err(|_| HookDirectDefer::PermissionNotice)?;
+                    initial
+                }
+            };
+            let generation = current
+                .get("generation")
+                .and_then(Value::as_i64)
+                .filter(|value| *value >= 0)
+                .ok_or(HookDirectDefer::PermissionNotice)?;
+            if !current.get("pending_generation").is_none_or(Value::is_null) {
+                return Err(HookDirectDefer::PermissionNotice);
+            }
+            let next_generation = generation
+                .checked_add(1)
+                .ok_or(HookDirectDefer::PermissionNotice)?;
+            let pending = json!({
+                "cutover_complete": current["cutover_complete"].as_bool().unwrap_or(true),
+                "generation": generation,
+                "pending_generation": next_generation,
+                "version": 1,
+            });
+            let lock_wait = remaining(deadline).min(QUESTION_LOCK_WAIT);
+            let lock = policy_generation_lock::acquire(&resolved_home, lock_wait)
+                .ok_or(HookDirectDefer::PermissionNotice)?;
+            if secrets
+                .set_secret(
+                    &control_ref,
+                    &serde_json::to_string(&pending)
+                        .map_err(|_| HookDirectDefer::PermissionNotice)?,
+                )
+                .is_err()
+            {
+                drop(lock);
+                return Err(HookDirectDefer::PermissionNotice);
+            }
+            save.insert("session_id".to_owned(), session_id.clone().into());
+            save.insert("current_generation".to_owned(), generation.into());
+            let save_request = authority_request(
+                &store_path,
+                &resolved_home,
+                QUESTION_SAVE,
+                &now,
+                Some(&session_id),
+                Some((&key_b64, &material.key_id)),
+                Some(Value::Object(save.clone())),
+                home_dir,
+            )?;
+            let saved =
+                hook_authority_state_op::evaluate_within(&save_request, remaining(deadline))
+                    .map_err(|_| HookDirectDefer::PermissionNotice)?;
+            if saved.get("saved") != Some(&Value::Bool(true)) {
+                drop(lock);
+                return Err(HookDirectDefer::PermissionNotice);
+            }
+            let proposed = saved
+                .get("next_control_state")
+                .ok_or(HookDirectDefer::PermissionNotice)?;
+            let finalized = finalization_state(Some(&pending), proposed)
+                .ok_or(HookDirectDefer::PermissionNotice)?;
+            secrets
+                .set_secret(
+                    &control_ref,
+                    &serde_json::to_string(&finalized)
+                        .map_err(|_| HookDirectDefer::PermissionNotice)?,
+                )
+                .map_err(|_| HookDirectDefer::PermissionNotice)?;
+            drop(lock);
+            let consume_request = authority_request(
+                &store_path,
+                &resolved_home,
+                QUESTION_CONSUME,
+                &now,
+                Some(&session_id),
+                Some((&key_b64, &material.key_id)),
+                Some(Value::Object(save)),
+                home_dir,
+            )?;
+            let consumed =
+                hook_authority_state_op::evaluate_within(&consume_request, remaining(deadline))
+                    .map_err(|_| HookDirectDefer::PermissionNotice)?;
+            if consumed.get("consumed") == Some(&Value::Bool(true)) {
+                Ok(Some(json!({})))
+            } else {
+                Err(HookDirectDefer::PermissionNotice)
+            }
+        }
+    }
+}
+
+fn remaining(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now())
+}
+
+fn question_wire(payload: &Map<String, Value>) -> Option<String> {
+    let tool_name = payload.get("tool_name")?.as_str()?;
+    if python_strip(tool_name).ok()??.to_ascii_lowercase() != "askuserquestion" {
+        return None;
+    }
+    serde_json::to_string(&json!({
+        "event": "PostToolUse",
+        "tool_name": tool_name,
+        "tool_input": payload.get("tool_input").cloned().unwrap_or(Value::Null),
+        "tool_response": payload.get("tool_response").cloned().unwrap_or(Value::Null),
+    }))
+    .ok()
+}
+
+#[derive(Debug, PartialEq)]
+enum QuestionSettlement {
+    None,
+    Answered,
+    Save(Map<String, Value>),
+}
+
+fn settled_reply(reply: &Value) -> Result<QuestionSettlement, HookDirectDefer> {
+    let fields = reply.as_object().ok_or(HookDirectDefer::PermissionNotice)?;
+    let outcome = fields
+        .get("outcome")
+        .and_then(Value::as_str)
+        .ok_or(HookDirectDefer::PermissionNotice)?;
+    if matches!(outcome, "none" | "unseen" | "unanswered") && fields.len() == 1 {
+        return Ok(if outcome == "none" {
+            QuestionSettlement::None
+        } else {
+            QuestionSettlement::Answered
+        });
+    }
+    let has_pending_id = fields.contains_key("pending_id");
+    if outcome != "save"
+        || fields.len() != 6 + usize::from(has_pending_id)
+        || ![
+            "artifact_id",
+            "pending_artifact_hash",
+            "reason",
+            "source",
+            "plan",
+        ]
+        .iter()
+        .all(|name| fields.contains_key(*name))
+        || (has_pending_id && fields["pending_id"].as_str().is_none_or(str::is_empty))
+    {
+        return Err(HookDirectDefer::PermissionNotice);
+    }
+    for name in ["artifact_id", "pending_artifact_hash", "reason", "source"] {
+        if fields[name].as_str().is_none_or(str::is_empty) {
+            return Err(HookDirectDefer::PermissionNotice);
+        }
+    }
+    let mut save = fields.clone();
+    save.remove("outcome");
+    Ok(QuestionSettlement::Save(save))
+}
+
+fn authority_request(
+    store_path: &Path,
+    guard_home: &Path,
+    op: &str,
+    now: &str,
+    session_id: Option<&str>,
+    key: Option<(&str, &str)>,
+    payload: Option<Value>,
+    tilde_home: Option<&str>,
+) -> Result<HookAuthorityStateRequestV1, HookDirectDefer> {
+    let mut nonce = [0u8; 16];
+    getrandom::fill(&mut nonce).map_err(|_| HookDirectDefer::PermissionNotice)?;
+    let request_id = nonce
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut request = HookAuthorityStateRequestV1 {
+        schema: HOOK_AUTHORITY_STATE_REQUEST_SCHEMA.to_owned(),
+        request_id: format!("hook-authority-state-{request_id}"),
+        store_path: store_path.to_string_lossy().into_owned(),
+        guard_home: guard_home.to_string_lossy().into_owned(),
+        op: op.to_owned(),
+        now: now.to_owned(),
+        session_id: session_id.map(str::to_owned),
+        payload,
+        tilde_home: tilde_home.map(str::to_owned),
+        ..HookAuthorityStateRequestV1::default()
+    };
+    if let Some((encoded, key_id)) = key {
+        request.integrity_key_b64 = Some(encoded.to_owned());
+        request.integrity_key_id = Some(key_id.to_owned());
+    }
+    if serde_json::to_vec(&request)
+        .ok()
+        .is_none_or(|bytes| bytes.len() > guard_contracts::HOOK_AUTHORITY_STATE_MAX_BYTES * 2)
+    {
+        return Err(HookDirectDefer::PermissionNotice);
+    }
+    Ok(request)
 }
 
 /// Whether `harness` only records, read as `hook_direct::answer` reads it:

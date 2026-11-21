@@ -222,6 +222,22 @@ fn answer(
             policy_store,
         );
     };
+    if request.harness == CLAUDE_CODE && event == POST_TOOL_USE {
+        if let Some(answer) = lifecycle::claude_question_answer(
+            &request.guard_home,
+            request.home_dir.as_deref(),
+            &payload,
+            started
+                + Duration::from_millis(
+                    request
+                        .deadline_budget_ms
+                        .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
+                        .clamp(1, MAX_DEADLINE_BUDGET_MS),
+                ),
+        )? {
+            return Ok(json!({"harness_response": answer}));
+        }
+    }
     let pre_tool = event == PRE_TOOL_USE;
     let cursor_harness = request.harness == CURSOR;
     if payload.contains_key(TRANSITION_PROBE_FIELD) {

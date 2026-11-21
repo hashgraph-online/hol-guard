@@ -332,14 +332,27 @@ class HookWorker(HookWorkerNativeMixin):
                 workspace=workspace,
                 deadline=deadline,
             )
-        if event_name == "PostToolUse" and harness.strip().lower().replace("_", "-") == "claude-code":
-            # Rust owns the settlement operation. Keep this bounded transport
-            # bridge until the direct lane can execute its signed save/consume
-            # transaction without changing the daemon's response contract.
-            from ..cli import commands_support  # noqa: F401
-            from ..cli.commands_support_claude_approval import _settle_claude_guard_question
+        question_tool_name = payload.get("tool_name")
+        if (
+            event_name.strip().lower().replace("_", "") == "posttooluse"
+            and harness.strip().lower().replace("_", "-") == "claude-code"
+            and isinstance(question_tool_name, str)
+            and question_tool_name.strip().lower() == "askuserquestion"
+        ):
+            # The Rust resident owns the settlement transaction. Ask it before
+            # the normal review fence so a question can settle even when no
+            # direct policy snapshot is currently leased.
+            from ..native_hook_direct import native_hook_direct
 
-            if _settle_claude_guard_question(self.store, payload, deadline=deadline) is not None:
+            settled = native_hook_direct(
+                harness=harness,
+                guard_home=guard_home,
+                payload=payload,
+                workspace=workspace,
+                home_dir=home_dir,
+                deadline=deadline,
+            )
+            if isinstance(settled, Mapping) and settled.get("harness_response") == {}:
                 return {}
         if (
             event_name in {"PermissionRequest", "copilotPermissionRequest"}

@@ -8875,19 +8875,6 @@ def test_guard_hook_claude_repeated_notifications_keep_bound_question_without_lo
 
 
 def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_path, capsys, monkeypatch):
-    from codex_plugin_scanner.guard import store_policy_integrity_handoff
-
-    finalized = []
-    original = store_policy_integrity_handoff.persist_policy_integrity_write
-
-    def check_locked(store, args):
-        with pytest.raises(TimeoutError), store.hold_policy_integrity_generation_lock(timeout_seconds=0.1):
-            pytest.fail("generation lock was released before finalization")
-        result = original(store, args)
-        finalized.append(result)
-        return result
-
-    monkeypatch.setattr(store_policy_integrity_handoff, "persist_policy_integrity_write", check_locked)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8959,7 +8946,6 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
     assert question_output == ""
-    assert finalized == [True]
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies[0]["source"] == "claude-ask-user-question"
@@ -9439,10 +9425,9 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
 
     assert persisted is None
     assert policies == []
-    assert store.get_sync_payload(f"claude_pending_permissions:{session_id}") is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
-    assert any(event_payload.get("integrity_status") == "missing_integrity" for event_payload in event_payloads)
+    # The native authority refuses the unsigned row without mutating the
+    # caller-owned legacy index.
+    assert store.get_sync_payload(f"claude_pending_permissions:{session_id}") == [pending_key]
 
 
 def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persist_decision(tmp_path):
