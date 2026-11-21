@@ -41,22 +41,3 @@ def test_claude_stop_is_returned_by_native_edge(tmp_path: Path, monkeypatch) -> 
         worker.close()
 
     assert response == answer
-
-
-def test_claude_post_tool_question_still_settles_before_native_edge(tmp_path: Path, monkeypatch) -> None:
-    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"), wait_for_native_policy=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_support_claude_approval._settle_claude_guard_question",
-        lambda *_args, **_kwargs: {},
-    )
-    monkeypatch.setattr(worker, "_review_native_edge", lambda **_kwargs: (_ for _ in ()).throw(AssertionError()))
-    try:
-        response = _review(
-            worker,
-            tmp_path,
-            {"hook_event_name": "PostToolUse", "tool_name": "AskUserQuestion", "session_id": "s"},
-        )
-    finally:
-        worker.close()
-
-    assert response == {}

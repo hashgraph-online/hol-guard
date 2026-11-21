@@ -332,15 +332,6 @@ class HookWorker(HookWorkerNativeMixin):
                 workspace=workspace,
                 deadline=deadline,
             )
-        if event_name == "PostToolUse" and harness.strip().lower().replace("_", "-") == "claude-code":
-            # Rust owns lifecycle rendering. Approval-question persistence has
-            # a separate Rust authority-state operation and must settle before
-            # the post-tool edge evaluates its ordinary activity.
-            from ..cli import commands_support  # noqa: F401
-            from ..cli.commands_support_claude_approval import _settle_claude_guard_question
-
-            if _settle_claude_guard_question(self.store, payload, deadline=deadline) is not None:
-                return {}
         if (
             event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
