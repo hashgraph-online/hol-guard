@@ -242,13 +242,17 @@ fn a_lease_records_the_job_and_a_hand_over_also_restarts_the_poll() {
                "last_lease_at": NOW, "active_job": job, "last_poll_was_empty": false})
     );
     for name in ["leased", "handed_over"] {
-        for job in [json!(null), json!([1])] {
-            let result = run(
-                &connection,
-                json!({"state_key": MAIN, "transition": name, "now": NOW, "job": job}),
-            );
-            assert_eq!(error_code(result), "invalid_job", "{name}");
-        }
+        let missing = run(
+            &connection,
+            json!({"state_key": MAIN, "transition": name, "now": NOW, "job": null}),
+        );
+        assert_eq!(error_code(missing), "invalid_job", "{name}");
+        // A job that is not an object fails the method's argument contract.
+        let malformed = run(
+            &connection,
+            json!({"state_key": MAIN, "transition": name, "now": NOW, "job": [1]}),
+        );
+        assert!(matches!(malformed, Err(StoreError::Invalid(_))), "{name}");
     }
 }
 
