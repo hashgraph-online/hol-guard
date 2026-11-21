@@ -251,6 +251,43 @@ def _record_posture(store: object, posture: Mapping[str, object] | None, respons
             _LOGGER.debug("Full inventory request could not be recorded", exc_info=True)
 
 
+def _apply_answers(
+    store: object, advisories: list[dict[str, object]], preferences: dict[str, object] | None, now: str
+) -> int:
+    """Cache the advisories, store the alert preferences and record the advisory events, as the native upload does."""
+
+    seen: set[str] = set()
+    deduped: list[dict[str, object]] = []
+    for item in advisories:
+        fingerprint = json.dumps(item, sort_keys=True)
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            deduped.append(item)
+    stored = store.cache_advisories(deduped, now) if deduped else 0
+    store.set_sync_payload("alert_preferences", preferences if preferences is not None else {}, now)
+    if isinstance(preferences, dict) and preferences.get("advisoriesEnabled") is False:
+        return stored
+    for item in deduped:
+        artifact_id = _text(item.get("artifactId"))
+        if artifact_id is None:
+            continue
+        store.add_event(
+            "premium_advisory",
+            {
+                "artifact_id": artifact_id,
+                "artifact_name": _text(item.get("artifactName")) or artifact_id,
+                "severity": _text(item.get("severity")),
+                "reason": _text(item.get("reason")),
+            },
+            now,
+        )
+    return stored
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def upload_receipts(
     guard_home: Path, upload: dict[str, object], *, auth_context: Mapping[str, object] | None
 ) -> dict[str, object]:
@@ -350,14 +387,21 @@ def upload_receipts(
         store.set_sync_payload(RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER, marker, now)
     cursor = latest if latest is not None else prior_cursor
     _save_cursor(store, cursor, now)
+    advisories_stored = 0
+    answers_error: str | None = None
+    if upload.get("contextOnly") is not True:
+        try:
+            advisories_stored = _apply_answers(store, tally["advisories"], preferences, now)
+        except Exception as error:
+            answers_error = str(error)
     return {
         "synced_at": payload.get("syncedAt"),
         "now": now,
         "receipts": len(receipts),
         "receipts_stored": tally["stored"],
-        "advisories": tally["advisories"],
+        "advisories_stored": advisories_stored,
+        "answers_error": answers_error,
         "policy_bundle": {**flags, "sync_payload": tally["sync_payload"], "delivery": delivery},
-        "alert_preferences": preferences,
         "review_verification_keys": review_keys,
         "receipt_cursor_rowid": cursor,
         "receipt_cursor_backfill": bool(
