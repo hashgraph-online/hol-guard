@@ -70,6 +70,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
     def __init__(self, primary: SecretStore, fallback: SecretStore, *, guard_home: Path | None = None) -> None:
         super().__init__(primary, fallback)
         self._guard_home = guard_home
+        self._fallback_preferred_secret_ids: set[str] = set()
 
     def _read_primary(self, secret_id: str) -> str | None:
         if isinstance(self.primary, SystemKeyringSecretStore):
@@ -99,9 +100,20 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
 
     def _fallback_is_preferred(self, secret_id: str) -> bool:
         try:
-            return self.fallback.get_secret(self._fallback_preference_ref(secret_id)) == "1"
+            preferred = self.fallback.get_secret(self._fallback_preference_ref(secret_id)) == "1"
         except Exception:
-            return False
+            # A transient vault read failure must not make a previously
+            # successful fallback write unsafe; retain the fail-closed cache
+            # until the durable marker can be checked again.
+            return secret_id in self._fallback_preferred_secret_ids
+        if preferred:
+            self._fallback_preferred_secret_ids.add(secret_id)
+        else:
+            # The marker is authoritative.  Clear stale process-local state
+            # when another store has restored the primary keyring or removed
+            # the fallback preference.
+            self._fallback_preferred_secret_ids.discard(secret_id)
+        return preferred
 
     def _policy_source(
         self, primary_key: str | None, fallback_key: str | None
@@ -204,19 +216,12 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
             if source == "unverified":
                 raise RuntimeError("policy identity could not be verified for a control-state update")
         is_control_update = refs is not None and secret_id == refs[1]
-        fallback_preferred = refs is not None and secret_id == refs[0] and self._fallback_is_preferred(secret_id)
         primary_error: Exception | None = None
-        marker_error: Exception | None = None
         try:
-            if fallback_preferred and refs is not None:
-                fallback_control = self._read_or_none(self.fallback, refs[1])
-                if fallback_control is not None:
-                    self.primary.set_secret(refs[1], fallback_control)
             self.primary.set_secret(secret_id, value)
-            try:
+            self._fallback_preferred_secret_ids.discard(secret_id)
+            with suppress(Exception):
                 self.fallback.delete_secret(self._fallback_preference_ref(secret_id))
-            except Exception as error:
-                marker_error = error
         except Exception as error:
             if is_control_update:
                 raise
@@ -225,12 +230,11 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
             self.fallback.set_secret(secret_id, value)
             if primary_error is not None:
                 # Keep the successful fallback authoritative until the primary catches up.
+                self._fallback_preferred_secret_ids.add(secret_id)
                 self.fallback.set_secret(self._fallback_preference_ref(secret_id), "1")
         except Exception as fallback_error:
             if primary_error is not None:
                 raise primary_error from fallback_error
-            if marker_error is not None:
-                raise RuntimeError("policy integrity fallback preference could not be cleared") from fallback_error
             _store_logger.debug("Policy-integrity fallback mirror update failed.", exc_info=True)
 
     def delete_secret(self, secret_id: str) -> None:
