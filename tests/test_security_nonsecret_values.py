@@ -143,3 +143,48 @@ def test_future_broader_detector_cannot_cross_an_exempted_region(path, content, 
     assert not _should_skip_secret_match(
         Path(path), content, detector, match, field_name_spans=_field_name_map_spans(Path(path), content)
     )
+
+
+def test_dummy_secrets_in_test_files_are_skipped():
+    from pathlib import Path
+    from codex_plugin_scanner.checks.security import _first_hardcoded_secret_line
+
+    # Dummy exact values on test surfaces should be skipped.
+    content = 'const TOKEN = "fake-not-a-real-token";\n'
+    assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is None
+
+    # Realistic credentials on README/docs/test paths must still be reported.
+    for path, value in [
+        ("README.md", "prodsecret"),
+        ("docs/guide.md", "opensesame"),
+        ("tests/foo_test.ts", "mysecretP4ssword2026"),
+        ("tests/foo_test.ts", "live_token_9f8a7b6c5d"),
+    ]:
+        content = f'password = "{value}"\n'
+        assert _first_hardcoded_secret_line(Path(path), content) is not None, (path, value)
+
+    # Dummy markers remain reportable on production paths.
+    content = 'const TOKEN = "fake-not-a-real-token";\n'
+    assert _first_hardcoded_secret_line(Path("src/app.ts"), content) is not None
+
+    # Interpolated mixed value stays a finding.
+    content = 'TOKEN = "$(TOKEN)actual-secret-937"\n'
+    assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is not None
+
+
+def test_quoted_command_substitution_literal_is_reported():
+    """Regression: '$(mysecret...)' is not a pure env interpolation and must still flag."""
+    from pathlib import Path
+    from codex_plugin_scanner.checks.security import _first_hardcoded_secret_line
+
+    # Production path
+    content = "password='$(mysecretP4ssword2026)'\n"
+    assert _first_hardcoded_secret_line(Path("src/app.py"), content) is not None
+
+    # Test path
+    content = 'password="$(mysecretP4ssword2026)"\n'
+    assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is not None
+
+    # Pure env expansion still skipped
+    content = 'password="${OPENAI_API_KEY}"\n'
+    assert _first_hardcoded_secret_line(Path("src/app.py"), content) is None
