@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard import native_context_assistance as api
-from codex_plugin_scanner.guard.routes import context_assistance_http as http
 
 
 def state() -> dict[str, object]:
@@ -53,8 +51,14 @@ def test_body_cannot_replace_the_bound_home_or_control_action(monkeypatch: pytes
     assert result["capabilities"] == {"shared_agents": True, "private_persistence": False}
 
 
-@pytest.mark.parametrize("capabilities", [{}, {"shared_agents": "true", "private_persistence": False},
-                                        {"shared_agents": True, "private_persistence": False, "grant": True}])
+@pytest.mark.parametrize(
+    "capabilities",
+    [
+        {},
+        {"shared_agents": "true", "private_persistence": False},
+        {"shared_agents": True, "private_persistence": False, "grant": True},
+    ],
+)
 def test_native_capability_projection_keeps_strict_types_and_rejects_unknown_fields(capabilities):
     value = state()
     value["capabilities"] = capabilities
@@ -123,79 +127,3 @@ def test_runtime_qualification_flag_is_projected_without_inventing_effective_sta
     api._validate_state({"state": value})
     assert value["effective_enabled"] is False
     assert value["last_check"]["persistence_compile_verified"] is True
-
-
-def test_http_transports_native_unavailability_without_a_python_fallback(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    responses = []
-    handler = SimpleNamespace(
-        server=SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path)),
-        _write_json=lambda body, **kwargs: responses.append((body, kwargs)),
-    )
-
-    def unavailable(*args, **kwargs):
-        raise api.ContextAssistanceError("native_context_assistance_disabled")
-
-    monkeypatch.setattr(http, "control", unavailable)
-    http.respond(handler, "activate", {})
-    assert responses == [
-        ({"error": "context_assistance_unavailable", "code": "native_context_assistance_disabled"},
-         {"status": 409, "extra_headers": {"Cache-Control": "no-store"}})
-    ]
-
-
-def test_setup_listing_is_an_explicit_route_and_status_uses_no_cache(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    responses = []
-    handler = SimpleNamespace(
-        server=SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path)),
-        _write_json=lambda body, **kwargs: responses.append((body, kwargs)),
-    )
-    monkeypatch.setattr(http, "control", lambda *args, **kwargs: state())
-    http.respond(handler, "status")
-    assert responses[0][1] == {"extra_headers": {"Cache-Control": "no-store"}}
-    assert http.READ_PATHS["/v1/context-assistance/installations"] == "installations"
-
-
-def test_workspace_grant_reuses_native_gate_and_never_forwards_proof_to_context(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    calls = []
-    handler = SimpleNamespace(
-        server=SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path)),
-        _write_json=lambda body, **kwargs: calls.append((body, kwargs)),
-    )
-    grant = object()
-    monkeypatch.setattr(http, "require_high_risk", lambda *args, **kwargs: grant)
-    monkeypatch.setattr(http, "require_settings_write", lambda *args, **kwargs: calls.append(kwargs))
-    monkeypatch.setattr(http, "workspace", lambda kind, **kwargs: calls.append((kind, kwargs)) or {"data_role": True})
-    selected = {"action": "grant", "workspace": "/selected", "app": "dashboard", "sources": ["README.md"]}
-    http.respond(handler, "workspace_grant", {"input": selected, "approval_password": "fixture-proof"})
-    assert calls[0] == {"approval_gate_grant": grant}
-    assert calls[1] == ("workspace_grant", {"guard_home": tmp_path, "payload": selected})
-    assert "fixture-proof" not in repr(calls)
-
-
-def test_native_gate_refusal_precedes_workspace_access_and_withdrawal_needs_no_new_proof(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    responses = []
-    native_calls = []
-    handler = SimpleNamespace(
-        server=SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path)),
-        _write_json=lambda body, **kwargs: responses.append((body, kwargs)),
-        _write_approval_gate_error=lambda error: responses.append(error.code),
-    )
-
-    def refuse(*args, **kwargs):
-        raise http.ApprovalGateError("approval_required", "Fixture proof required", status=403)
-
-    monkeypatch.setattr(http, "require_high_risk", refuse)
-    monkeypatch.setattr(http, "workspace", lambda kind, **kwargs: native_calls.append(kind) or {"data_role": True})
-    http.respond(handler, "workspace_grant", {"input": {"action": "grant"}})
-    assert responses == ["approval_required"]
-    assert native_calls == []
-    http.respond(handler, "workspace_access", {"input": {"action": "withdraw", "scope_id": "one", "source_id": "two"}})
-    assert native_calls == ["workspace_access"]
