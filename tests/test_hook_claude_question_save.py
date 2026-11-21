@@ -9,12 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import library_calls
+from codex_plugin_scanner.guard import library_calls, store_policy_integrity_handoff
 from codex_plugin_scanner.guard.cli import desktop_library_call
 from codex_plugin_scanner.guard.library_call_deadline import LIBRARY_CALL_DEADLINE
 from codex_plugin_scanner.guard.native_claude_question_save import _FEATURE, _write_question
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
-from codex_plugin_scanner.guard.routes import policy_write_calls
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -71,9 +70,10 @@ def test_local_writer_holds_the_generation_lock_during_preparation(
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     calls = 0
 
-    def prepare(owner: GuardStore, _args: object) -> dict[str, object]:
+    def prepare(owner: GuardStore, *, now: str, sign: bool) -> dict[str, object]:
         nonlocal calls
         calls += 1
+        assert now == "2026-11-21T12:00:00Z" and sign
         with (
             pytest.raises(TimeoutError, match="generation lock still held"),
             owner._hold_advisory_file_lock(
@@ -86,7 +86,7 @@ def test_local_writer_holds_the_generation_lock_during_preparation(
             pytest.fail("the writer released the lock before preparation")
         return {}
 
-    monkeypatch.setattr(policy_write_calls, "integrity_begin", prepare)
+    monkeypatch.setattr(store_policy_integrity_handoff, "prepare_policy_integrity_write", prepare)
     args = {"now": "2026-11-21T12:00:00Z"}
     with store.hold_policy_integrity_generation_lock():
         assert not _write_question(store, args, time.monotonic() + 0.25)

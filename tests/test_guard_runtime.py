@@ -8875,10 +8875,10 @@ def test_guard_hook_claude_repeated_notifications_keep_bound_question_without_lo
 
 
 def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_path, capsys, monkeypatch):
-    from codex_plugin_scanner.guard.routes import policy_write_calls
+    from codex_plugin_scanner.guard import store_policy_integrity_handoff
 
     finalized = []
-    original = policy_write_calls.integrity_finalize
+    original = store_policy_integrity_handoff.persist_policy_integrity_write
 
     def check_locked(store, args):
         with pytest.raises(TimeoutError), store.hold_policy_integrity_generation_lock(timeout_seconds=0.1):
@@ -8887,7 +8887,7 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
         finalized.append(result)
         return result
 
-    monkeypatch.setattr(policy_write_calls, "integrity_finalize", check_locked)
+    monkeypatch.setattr(store_policy_integrity_handoff, "persist_policy_integrity_write", check_locked)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -8959,7 +8959,7 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
     assert question_output == ""
-    assert finalized == [{"ok": True}]
+    assert finalized == [True]
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies[0]["source"] == "claude-ask-user-question"

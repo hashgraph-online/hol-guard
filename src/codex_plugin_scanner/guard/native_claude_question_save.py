@@ -11,6 +11,7 @@ from contextlib import suppress
 from queue import Empty, Queue
 from typing import TYPE_CHECKING
 
+from . import store_policy_integrity_handoff
 from .native_hook_authority_state import hook_authority_state
 from .native_hook_decision import _tilde_home
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -42,9 +43,6 @@ def _read_reply(child: subprocess.Popen[bytes], limit: int, deadline: float, req
 
 
 def _write_question(store: GuardStore, request: dict[str, object], deadline: float) -> bool:
-    from .library_calls import LibraryCallError
-    from .routes.policy_write_calls import integrity_begin, integrity_finalize
-
     status = native_runtime_status(deadline_monotonic=deadline)
     remaining_ms = int((deadline - time.monotonic()) * 1000)
     if (
@@ -70,7 +68,10 @@ def _write_question(store: GuardStore, request: dict[str, object], deadline: flo
                     return False
                 if child.poll() is not None or time.monotonic() >= deadline:
                     return False
-                generation = integrity_begin(store, {"now": request["now"], "sign": True})
+                now = request["now"]
+                if not isinstance(now, str):
+                    return False
+                generation = store_policy_integrity_handoff.prepare_policy_integrity_write(store, now=now, sign=True)
                 for field in ("current_generation", "integrity_key_b64", "integrity_key_id"):
                     if field not in generation:
                         return False
@@ -87,7 +88,11 @@ def _write_question(store: GuardStore, request: dict[str, object], deadline: flo
                     return False
                 # The writer keeps the generation lock until stdin closes.
                 # Rust validated this state before committing the policy rows.
-                integrity_finalize(store, result)
+                state = result.get("next_control_state")
+                if not isinstance(state, dict) or not store_policy_integrity_handoff.persist_policy_integrity_write(
+                    store, state
+                ):
+                    return False
                 assert child.stdin is not None
                 child.stdin.close()
                 return child.wait(timeout=max(0.0, deadline - time.monotonic())) == 0
@@ -96,7 +101,7 @@ def _write_question(store: GuardStore, request: dict[str, object], deadline: flo
                     with suppress(ProcessLookupError):
                         child.kill()
                     child.wait()
-    except (Empty, LibraryCallError, OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+    except (Empty, OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
         return False
 
 
