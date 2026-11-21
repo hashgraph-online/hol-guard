@@ -8,7 +8,6 @@ signed Cloud review receipt.
 from __future__ import annotations
 
 import secrets
-import sqlite3
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -341,41 +340,6 @@ def _revoke_binding_drift(store: GuardStore, capability_digest: str, *, now: dat
     )
 
 
-def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) -> tuple[str, ...]:
-    """The exact operations to advertise; none while the consent rows cannot be read."""
-
-    try:
-        return _advertised_operations(store, now=now)
-    except NativeGuardStoreUnavailable:
-        return ()
-
-
-def _revoked_or_unreadable(store: GuardStore) -> bool:
-    """Whether consent is revoked or its rows cannot be read; either way nothing is advertised."""
-
-    try:
-        return _consent_row(store, "revocation") is not None
-    except sqlite3.Error:
-        return True
-
-
-def _advertised_operations(store: GuardStore, *, now: str | None) -> tuple[str, ...]:
-    if _revoked_or_unreadable(store):
-        return ()
-    try:
-        _verified_capability(store, now=now)
-        return (EXACT_CLOUD_REVIEW_OPERATION,)
-    except (AttributeError, ExactCloudReviewError):
-        pass
-    if _revoked_or_unreadable(store):
-        return ()
-    try:
-        _oauth_metadata(store)
-    except (AttributeError, ExactCloudReviewError):
-        return ()
-    return (EXACT_CLOUD_REVIEW_OPERATION,)
-
-
 def _status_failure_reason(error: Exception) -> str:
     """Why the status reports Cloud Review as off; an unavailable store fails closed."""
     if isinstance(error, ExactCloudReviewError):
@@ -508,4 +472,5 @@ def _exact_job_identity(
     return _ask({"op": "job", "job": dict(job), "now": _clock(now)}, "identity", store)
 
 
+from .exact_cloud_review_advertise import exact_cloud_review_operations  # noqa: E402, F401
 from .exact_cloud_review_apply import apply_exact_cloud_review  # noqa: E402, F401

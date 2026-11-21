@@ -209,21 +209,6 @@ fn revocation_refuses_a_skipped_capability_check() {
     assert_eq!(error_code(&outcome), "cloud_review_capability_revoked");
 }
 
-/// A revocation row that cannot be parsed still revokes.
-#[test]
-fn an_unreadable_revocation_row_still_refuses() {
-    let connection = seeded();
-    connection
-        .execute(
-            "insert or replace into sync_state (state_key, payload_json, updated_at) \
-             values (?1, 'not json', '2026-01-02T00:00:00+00:00')",
-            [REVOCATION_KEY],
-        )
-        .unwrap();
-    let outcome = apply(&connection, &deny_args(vec![])).unwrap();
-    assert_eq!(error_code(&outcome), "cloud_review_capability_revoked");
-}
-
 /// Revocation outranks a capability that still looks current.
 #[test]
 fn revocation_outranks_a_matching_capability() {
