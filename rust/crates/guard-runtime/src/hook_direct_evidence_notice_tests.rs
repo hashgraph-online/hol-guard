@@ -1,6 +1,9 @@
 use serde_json::{json, Value};
 
-use super::{approval_notice, approval_notices, message, pending, raise_approvals, Shown};
+use super::{
+    approval_notice, approval_notices, message, pending, pending_connector_row, raise_approvals,
+    Shown,
+};
 
 #[test]
 fn a_connector_notice_reads_as_the_daemon_writes_it() {
@@ -106,6 +109,20 @@ fn a_call_raises_all_its_notices_in_order_or_none() {
     assert_eq!(approval_notices(&mixed), None);
     assert!(!raise_approvals("/nonexistent-guard-home", "test", &mixed));
     assert_eq!(approval_notices(&[]), Some(Vec::new()));
+}
+
+#[test]
+fn a_connector_notice_requires_the_matching_pending_grouped_row() {
+    let mut row = notice(json!({"status": "pending", "queue_group_id": "connector:example"}));
+    let shown = pending_connector_row(&row, "req-1", "Example CLI".to_owned()).unwrap();
+    assert!(shown.connector);
+    assert_eq!(shown.subject, "Example CLI");
+    assert!(pending_connector_row(&row, "req-2", "Example CLI".to_owned()).is_none());
+    row["status"] = json!("resolved");
+    assert!(pending_connector_row(&row, "req-1", "Example CLI".to_owned()).is_none());
+    row["status"] = json!("pending");
+    row["queue_group_id"] = json!("unrelated");
+    assert!(pending_connector_row(&row, "req-1", "Example CLI".to_owned()).is_none());
 }
 
 #[test]

@@ -105,6 +105,23 @@ pub(crate) fn raise_stored_approvals(
     );
 }
 
+/// Send the notice for a connector review after the queue commits.
+pub(crate) fn raise_connector(
+    guard_home: &str,
+    source: &str,
+    request_id: &str,
+    connector_name: &str,
+) {
+    raise(
+        guard_home,
+        source,
+        vec![Notice::Connector {
+            request_id: request_id.to_owned(),
+            connector_name: connector_name.to_owned(),
+        }],
+    );
+}
+
 /// Every notice of one call, in order, or none when any is unreadable.
 fn approval_notices(notices: &[Value]) -> Option<Vec<Shown>> {
     notices.iter().map(approval_notice).collect()
@@ -218,15 +235,28 @@ fn connector_row(
     request_id: &str,
     connector_name: String,
 ) -> Option<Shown> {
-    let queued = store(guard_home, source, "get_approval_request", request_id, None)
-        .filter(Value::is_object)?;
+    let queued = store(guard_home, source, "get_approval_request", request_id, None)?;
+    pending_connector_row(&queued, request_id, connector_name)
+}
+
+fn pending_connector_row(
+    queued: &Value,
+    request_id: &str,
+    connector_name: String,
+) -> Option<Shown> {
     let field = |key: &str| text(queued.get(key));
+    if queued["status"] != "pending"
+        || queued["request_id"].as_str() != Some(request_id)
+        || !field("queue_group_id")?.starts_with("connector:")
+    {
+        return None;
+    }
     Some(Shown {
-        request_id: field("request_id")?,
+        request_id: request_id.to_owned(),
         harness: field("harness")?,
         workspace: field("workspace"),
         approval_url: field("approval_url")?,
-        connector: field("queue_group_id")?.starts_with("connector:"),
+        connector: true,
         subject: connector_name,
     })
 }

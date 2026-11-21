@@ -244,7 +244,17 @@ fn evaluate_tracked(
         .transpose()?;
     // A paused review's hook response is rendered once its row is stored.
     let payload = match &delegated {
-        Some(delegated) => delegated.with_response(payload, &request.guard_home),
+        Some(delegated) => {
+            if let Some((request_id, name)) = delegated.connector_notice(&payload) {
+                crate::hook_direct_evidence::notice::raise_connector(
+                    &request.guard_home,
+                    &request.source,
+                    request_id,
+                    name,
+                );
+            }
+            delegated.with_response(payload, &request.guard_home)
+        }
         None => payload,
     };
     Ok((payload, generation))
