@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+from codex_plugin_scanner.guard import native_payload_facts
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_payload_facts import native_cli_hook_admission
 from codex_plugin_scanner.guard.store import GuardStore
@@ -61,3 +62,27 @@ def test_cli_hook_without_a_hint_reviews_under_the_explicit_maximum():
     # The edge's own default is 0.75 s; a one-shot CLI hook gets the full budget.
     assert event == "PreToolUse"
     assert deadline - before == pytest.approx(9.75)
+
+
+@pytest.mark.parametrize(
+    ("hints", "expected_seconds"),
+    [
+        ({"guard_remaining_ms": 300}, 0.3),
+        ({"guard_remaining_seconds": 0.50, "guard_remaining_ms": 300}, 0.5),
+        ({"guard_remaining_seconds": -1, "guard_remaining_ms": 300}, 0.3),
+        ({"guard_remaining_seconds": 9}, 1.0),
+        ({}, 1.0),
+    ],
+)
+def test_cold_cli_lookup_deadline_stays_within_the_harness_budget(monkeypatch, hints, expected_seconds):
+    started = 100.0
+    deadlines = []
+
+    def unavailable(*_args, deadline, **_kwargs):
+        deadlines.append(deadline)
+        return None
+
+    monkeypatch.setattr(native_payload_facts, "runtime_answer", unavailable)
+    result = native_cli_hook_admission({**_PAYLOAD, **hints}, started_at=started)
+    assert deadlines == [pytest.approx(started + expected_seconds)]
+    assert result == (None, started)

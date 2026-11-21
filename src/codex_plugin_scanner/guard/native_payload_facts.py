@@ -24,7 +24,7 @@ _REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
 _PAYLOAD_FACTS_MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _HOOK_EVENT_KEYS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
-_HOOK_BUDGET_KEYS = ("guard_remaining_seconds", "guard_remaining_ms")
+_HOOK_BUDGET_SCALES = (("guard_remaining_seconds", 1.0), ("guard_remaining_ms", 1000.0))
 _CONNECTOR_FEATURE = "hook-connector-facts-v1"
 _CONNECTOR_REQUEST_SCHEMA = "guard-hook-connector-facts-request.v1"
 _CONNECTOR_RESULT_SCHEMA = "guard-hook-connector-facts-result.v1"
@@ -138,13 +138,27 @@ def native_hook_event(payload: Mapping[str, object], guard_home: Path, *, deadli
 def native_cli_hook_admission(payload: Mapping[str, object], *, started_at: float) -> tuple[str | None, float]:
     """Read CLI admission facts before a resident is necessarily available."""
     wire: dict[str, object] = {key: value for key in _HOOK_EVENT_KEYS if isinstance(value := payload.get(key), str)}
-    for key in _HOOK_BUDGET_KEYS:
+    transport_seconds = None
+    for key, scale in _HOOK_BUDGET_SCALES:
         value = payload.get(key)
-        # Non-finite values cannot travel as JSON. The runtime can still read the other hint.
-        if isinstance(value, int) or (isinstance(value, float) and math.isfinite(value)):
-            wire[key] = value
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or (isinstance(value, float) and not math.isfinite(value))
+        ):
+            continue
+        wire[key] = value
+        # Bound the lookup by the caller's raw time. Rust sets the review budget.
+        if transport_seconds is None and value >= 0:
+            transport_seconds = min(scale, value) / scale
+    if transport_seconds is None:
+        transport_seconds = 1.0
     facts = runtime_answer(
-        "native-hook-cli-admission-v1", "hook-cli-admission", wire, output_limit=64 * 1024, deadline=started_at + 1.0
+        "native-hook-cli-admission-v1",
+        "hook-cli-admission",
+        wire,
+        output_limit=64 * 1024,
+        deadline=started_at + transport_seconds,
     )
     if facts is None:
         return None, started_at
