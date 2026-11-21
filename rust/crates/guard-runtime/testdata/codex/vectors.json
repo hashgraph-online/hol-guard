@@ -8859,6 +8859,49 @@
     {
      "mode": 420,
      "path": "home/.codex/config.toml",
+     "text": "[hooks.state.\"a:b:c\"]\nenabled = false\n[hooks.state.\"d\"]\ntrusted_hash = \"sha256:abababababababababababababababababababababababababababababababab\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.codex/config.toml"
+   ],
+   "name": "toml_state_enabled_without_trust_skipped",
+   "symlinks": [],
+   "warnings": []
+  },
+  {
+   "args": {
+    "authenticated_bindings": [],
+    "contents": null,
+    "harness": "codex",
+    "sources": [
+     {
+      "authenticated": true,
+      "config_legacy": [],
+      "config_path": "<ROOT>/home/.codex/config.toml",
+      "config_scope": "global",
+      "hooks_legacy": [],
+      "hooks_path": "<ROOT>/home/.codex/hooks.json",
+      "hooks_scope": "global"
+     },
+     {
+      "authenticated": false,
+      "config_legacy": [],
+      "config_path": "<ROOT>/work/.codex/config.toml",
+      "config_scope": "project",
+      "hooks_legacy": [],
+      "hooks_path": "<ROOT>/work/.codex/hooks.json",
+      "hooks_scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.codex/config.toml",
      "text": "[hooks.state.\"a\"]\ntrusted_hash = \"sha256:xyz\"\n"
     }
    ],
