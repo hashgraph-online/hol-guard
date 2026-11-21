@@ -34,7 +34,7 @@ def configure_forward(
     aliases: tuple[str, ...] = (),
 ) -> None:
     parser = subparsers.add_parser(name, help=help_text, add_help=False, aliases=list(aliases))
-    parser.set_defaults(runtime_command=name)
+    parser.set_defaults(forward_command=name)
     parser.add_argument("--guard-home")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("-h", "--help", dest="forward_help", action="store_true")
@@ -78,7 +78,7 @@ def run_forward(args: argparse.Namespace, *, output_stream: TextIO | None = None
     try:
         forwarded, raw_home = _guard_home_argument(list(args.forward_args), args.guard_home)
     except _MissingHomeError:
-        print(f"hol-guard {args.runtime_command}: --guard-home needs a folder", file=sys.stderr)
+        print(f"hol-guard {args.forward_command}: --guard-home needs a folder", file=sys.stderr)
         return 2
     argv = list(forwarded)
     if args.json:
@@ -97,7 +97,7 @@ def run_forward(args: argparse.Namespace, *, output_stream: TextIO | None = None
         argv[:0] = ["--guard-home", str(home)]
     try:
         runtime = recovery_runtime_path(FEATURE)
-        completed = subprocess.run([runtime, args.runtime_command, *argv], stdout=subprocess.PIPE, check=False)
+        completed = subprocess.run([runtime, args.forward_command, *argv], stdout=subprocess.PIPE, check=False)
     except (OSError, RuntimeError):
         return _fail(_RUNTIME_UNAVAILABLE, as_json, output)
     output.write(completed.stdout.decode("utf-8", errors="replace"))

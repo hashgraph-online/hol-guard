@@ -109,7 +109,7 @@ def processes(monkeypatch: pytest.MonkeyPatch, prerequisite: list[Path]) -> list
 
 def _args(forward_args: list[str], **overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
-        "runtime_command": "context",
+        "forward_command": "context",
         "guard_home": None,
         "json": False,
         "forward_help": False,

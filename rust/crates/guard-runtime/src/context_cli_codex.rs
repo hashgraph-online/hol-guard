@@ -10,6 +10,10 @@ use serde_json::{json, Value};
 const USAGE_SCHEMA: &str = "guard-context-usage-meter.v1";
 const LEAN_SCHEMA: &str = "guard-codex-lean-sessions.v1";
 const CONFIG_UNAVAILABLE: &str = "codex_config_unavailable";
+/// The request may have reached the resident, but no answer came back.
+const CONFIG_UNCONFIRMED: &str = "codex_config_unconfirmed";
+/// `runner_authority`'s code for a request that got no usable answer.
+const NO_ANSWER: &str = "native_runner_authority_unavailable";
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 /// The first count of a long history runs in the background; ask again until it ends.
 const POLL: Duration = Duration::from_millis(500);
@@ -118,7 +122,7 @@ pub(super) fn lean(
     out: &mut dyn Write,
 ) -> i32 {
     let answer = home_dir()
-        .and_then(|home_dir| {
+        .map(|home_dir| {
             let args = json!({
                 "switch": "lean",
                 "action": action,
@@ -127,13 +131,21 @@ pub(super) fn lean(
                 "limit": limit,
                 "text": !as_json,
             });
+            // A lost answer does not show that the switch was left alone.
             crate::context_assistance_client::runner_authority(
                 home,
                 "codex_config",
                 args,
                 CALL_TIMEOUT,
             )
-            .ok()
+            .unwrap_or_else(|code| {
+                let code = if code == NO_ANSWER {
+                    CONFIG_UNCONFIRMED
+                } else {
+                    CONFIG_UNAVAILABLE
+                };
+                json!({"ok": false, "code": code, "text": null})
+            })
         })
         .filter(Value::is_object)
         .unwrap_or_else(|| json!({"ok": false, "code": CONFIG_UNAVAILABLE, "text": null}));
@@ -161,13 +173,21 @@ pub(super) fn lean(
             json!({"schema": LEAN_SCHEMA, "status": "error", "code": code})
         )
     } else {
-        match text {
-            Some(text) => writeln!(out, "{text}"),
-            None => writeln!(
-                out,
-                "Guard could not change the Codex config ({code}). Nothing was changed."
-            ),
-        }
+        writeln!(
+            out,
+            "{}",
+            text.map_or_else(|| lean_failure(code), str::to_owned)
+        )
     };
     1
+}
+
+/// What to tell a person when the switch gave no text of its own.
+pub(super) fn lean_failure(code: &str) -> String {
+    if code == CONFIG_UNCONFIRMED {
+        return "Guard sent the change but got no answer, so it cannot tell whether the Codex \
+config changed. Check it before trying again."
+            .to_owned();
+    }
+    format!("Guard could not change the Codex config ({code}). Nothing was changed.")
 }

@@ -152,3 +152,10 @@ fn version_text_lists_jobs() {
         "j1: switch · ready (ok)\nReady to select. CIGAR stays off; enable it separately when needed.\n"
     ));
 }
+
+#[test]
+fn a_lost_lean_answer_does_not_claim_nothing_changed() {
+    let lost = super::codex::lean_failure("codex_config_unconfirmed");
+    assert!(!lost.contains("Nothing was changed"), "{lost}");
+    assert!(super::codex::lean_failure("codex_config_busy").ends_with("Nothing was changed."));
+}
