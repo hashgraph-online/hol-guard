@@ -192,6 +192,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "clear_read_state"
         | "set_device_label"
         | "set_sync_payload"
+        | "record_command_queue_lease_limit"
         | "rotate_installation_id"
         | "add_event"
         | "set_managed_install"

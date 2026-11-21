@@ -167,12 +167,14 @@ def record_exact_lease_batch_limit(store: GuardStore, state: dict[str, object], 
 
     A limit that drops back to one is saved even when the poll then fails, so a
     Guard Cloud that stopped accepting batches is never asked for one again.
+    The runtime merges the limit alone into the lane's stored row, so a write
+    made to that row since ``state`` was loaded is kept.
     """
 
     if exact_lease_batch_limit(state) == limit and EXACT_LEASE_BATCH_LIMIT_KEY in state:
         return
     state[EXACT_LEASE_BATCH_LIMIT_KEY] = limit
-    save_command_queue_state(store, state)
+    store.record_command_queue_lease_limit(current_command_queue_lane().state_key, limit, now=command_queue_now())
 
 
 def command_queue_status(
