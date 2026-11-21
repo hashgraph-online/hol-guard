@@ -623,6 +623,10 @@
         "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/store_policy_decision.py",
+        "reason": "Reviewed: reads a saved policy record by id and adds its integrity and source metadata for Guard's policy presentation."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/runtime/contained_authority.py",
           "src/codex_plugin_scanner/guard/runtime/contained_command_prefix.py",

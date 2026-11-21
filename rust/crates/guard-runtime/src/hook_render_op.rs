@@ -31,6 +31,9 @@ use serde_json::{json, Value};
 
 use crate::package_authority_op::request_digest_with_limit;
 
+#[path = "hook_render_saved_approval.rs"]
+mod saved_approval;
+
 #[cfg(test)]
 fn evaluate_hook_render_request(request: &HookRenderRequestV1) -> Result<Vec<u8>, String> {
     evaluate_with_store(request, None)
@@ -49,6 +52,10 @@ pub(crate) fn evaluate_with_store(
                 && params.get("op").and_then(Value::as_str) == Some("answer") =>
         {
             crate::hook_direct::cursor_route::answer(params, &request.request_id, store)
+                .map(|document| cli_payload(CliOutcome::Document(document)))
+        }
+        Some(params) if request.kind == "saved_approval" => {
+            saved_approval::answer(&request.harness, params, store)
                 .map(|document| cli_payload(CliOutcome::Document(document)))
         }
         _ => render(request),

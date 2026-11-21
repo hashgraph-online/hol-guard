@@ -10,6 +10,7 @@
   "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
   "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
@@ -145,6 +146,21 @@
   "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_hook_direct_saved_decision_vectors.py::test_recorded_saved_decision_vectors_match_python",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_saved_decision_tests.rs::verdicts_match_the_daemon_vectors"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_direct_saved_decision_vectors.py::test_vectors_cover_bound_and_unbound_reviews_and_every_outcome",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_saved_decision_tests.rs::verdicts_match_the_daemon_vectors",
+    "rust/crates/guard-runtime/src/hook_direct_saved_query_tests.rs::queries_match_the_daemon_vectors"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "tests/test_mcp_relay_evidence_drain.py::test_a_forward_is_recorded_as_the_proxy_allow",
    "replacement_nodes": [
