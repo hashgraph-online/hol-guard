@@ -67,6 +67,6 @@ def test_skipped_report_returns_shell_pipeline_status(
 def test_echo_options_are_never_replayed_as_report_labels(tmp_path: Path, command: str) -> None:
     try:
         peeled = peel_contained_wrapper(command, workspace=tmp_path)
-    except (OSError, RuntimeError, ValueError):
+    except ValueError:
         return
     assert peeled is None, command
