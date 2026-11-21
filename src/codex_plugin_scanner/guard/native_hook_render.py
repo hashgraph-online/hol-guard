@@ -128,7 +128,7 @@ def native_render_cli(
         )
     elif kind in {"cursor_shell_route", "binding_recording_only"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
-    elif kind in {"hermes_bridge", "muse_bridge"}:
+    elif kind in {"hermes_bridge", "muse_bridge", "saved_approval"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)

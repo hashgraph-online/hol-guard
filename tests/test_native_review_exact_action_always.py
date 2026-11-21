@@ -376,6 +376,9 @@ def test_saved_allow_reuses_every_review(
     allowed = native_saved_decision_response(store, token=token, native_result=result, **kwargs)
     assert allowed is not None and allowed["approval_reuse_status"] == "accepted"
     assert allowed["policy_action"] == "allow"
+    large_verdict = {**result, "observations": "x" * (64 * 1024)}
+    reused = native_saved_decision_response(store, token=token, native_result=large_verdict, **kwargs)
+    assert reused is not None and reused["approval_reuse_status"] == "accepted"
     blocked_verdict, _ = _verdict(policy_action="block", minimum_action="block")
     assert native_saved_decision_response(store, token=token, native_result=blocked_verdict, **kwargs) is None
     for action_type in ("guard_control", "package"):
@@ -710,6 +713,23 @@ def test_unreadable_saved_decision_fails_closed(
     assert response is not None
     assert response["policy_action"] == "block"
     assert response["reason_code"] == "saved_exact_action_unreadable"
+
+
+def test_unreadable_initial_probe_leaves_the_review_pending(tmp_path: Path, native_context_digest: Path) -> None:
+    import sqlite3
+
+    store = GuardStore(tmp_path / "guard-home")
+    verdict, _ = _verdict()
+
+    def lookup():
+        return native_saved_decision_response(
+            store, harness=_HARNESS, token="a" * 64, artifact_id=_ARTIFACT_ID, native_result=verdict, workspace=tmp_path
+        )
+
+    assert lookup() is None
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("alter table policy_decisions rename to unavailable_policy_decisions")
+    assert lookup() is None
 
 
 def test_saved_block_wins_over_a_pending_once_approval(

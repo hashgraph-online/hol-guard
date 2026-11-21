@@ -9,9 +9,11 @@ use guard_contracts::{PolicyDecisionLookupRequestV1, POLICY_DECISION_LOOKUP_REQU
 use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
 
-use crate::hook_direct::saved_decision::{render, saved_verdict};
+use crate::hook_direct::saved_decision::{render_approval, saved_verdict};
 use crate::local_store_read::{open_read_only_cached, STORE_FILE_NAME};
+use crate::policy_decision_lookup_op::{evaluate, with_bundle_identities};
 use crate::policy_store::PolicySnapshotStore;
+use crate::project_identity::{portable_workspace, PortableIdentity};
 
 const INVALID: &str = "native_hook_render_invalid";
 const RETRY_HINT: &str = "Do not retry it; continue with a permitted alternative.";
@@ -55,10 +57,9 @@ pub(super) fn answer(
     let Some(evidence) = inputs.get("evidence") else {
         let needed = match check {
             Check::Action { artifact, token } => {
-                match decision_exists(&store_path, harness, artifact, token) {
-                    Ok(exists) => exists,
-                    Err(()) => return unreadable(harness, verdict, &check),
-                }
+                // An inconclusive probe leaves the existing review in
+                // place. A failed lookup after a match is a saved block.
+                decision_exists(&store_path, harness, artifact, token).unwrap_or(false)
             }
             Check::Command(_) => true,
         };
@@ -69,24 +70,45 @@ pub(super) fn answer(
     }
     let Some(mut lookup) = lookup_request(harness, home, &store_path, text("workspace"), evidence)
     else {
-        return unreadable(harness, verdict, &check);
+        return Ok(unreadable(harness, verdict, &check));
+    };
+    let restrictive = match lookup.workspace.as_deref().map(portable_workspace) {
+        Some(PortableIdentity::Identity(project)) => {
+            lookup.portable_workspace = Some(project);
+            false
+        }
+        Some(PortableIdentity::Unknown) => true,
+        _ => false,
     };
     let found = match check {
         Check::Action { artifact, token } => {
             lookup.artifact_id = Some(artifact.to_owned());
             lookup.artifact_hash = Some(token.to_owned());
-            crate::policy_decision_lookup_op::evaluate_with_bundle(&lookup)
+            evaluate_lookup(&lookup, restrictive)
                 .map(|lookup| saved_verdict(verdict, &lookup, artifact, token))
         }
-        Check::Command(command) => command_block(harness, verdict, command, lookup),
+        Check::Command(command) => command_block(harness, verdict, command, lookup, restrictive),
     };
     match found {
-        Ok(Some((verdict, status))) => render(harness, &verdict, status)
-            .map(|value| document(Some(value), false))
-            .ok_or(INVALID),
+        Ok(Some((verdict, status))) => Ok(document(
+            Some(render_approval(harness, &verdict, status)),
+            false,
+        )),
         Ok(None) => Ok(document(None, false)),
-        Err(_) => unreadable(harness, verdict, &check),
+        Err(_) => Ok(unreadable(harness, verdict, &check)),
     }
+}
+
+fn evaluate_lookup(
+    request: &PolicyDecisionLookupRequestV1,
+    restrictive: bool,
+) -> Result<Value, String> {
+    let response = evaluate(with_bundle_identities(request)?.as_ref())?;
+    Ok(if restrictive {
+        crate::policy_lookup_portable::restrictive_only(response)
+    } else {
+        response
+    })
 }
 
 fn document(value: Option<Value>, needs_lookup: bool) -> Object {
@@ -156,6 +178,7 @@ fn command_block(
     verdict: &Object,
     command: &str,
     mut lookup: PolicyDecisionLookupRequestV1,
+    restrictive: bool,
 ) -> Result<Option<(Object, &'static str)>, String> {
     let keys = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
         command: Some(command),
@@ -166,7 +189,7 @@ fn command_block(
     });
     for key in keys.exact_artifact_ids {
         lookup.artifact_id = Some(key.clone());
-        let result = crate::policy_decision_lookup_op::evaluate_with_bundle(&lookup)?;
+        let result = evaluate_lookup(&lookup, restrictive)?;
         let Some(decision) = result.get("decision").and_then(Value::as_object) else {
             continue;
         };
@@ -197,7 +220,7 @@ fn command_block(
     Ok(None)
 }
 
-fn unreadable(harness: &str, verdict: &Object, check: &Check<'_>) -> Result<Object, &'static str> {
+fn unreadable(harness: &str, verdict: &Object, check: &Check<'_>) -> Object {
     let (code, reason) = match check {
         Check::Action { .. } => (
             "saved_exact_action_unreadable",
@@ -210,9 +233,14 @@ fn unreadable(harness: &str, verdict: &Object, check: &Check<'_>) -> Result<Obje
             ),
         ),
     };
-    render(harness, &blocked(verdict, code, &reason), "blocked")
-        .map(|value| document(Some(value), false))
-        .ok_or(INVALID)
+    document(
+        Some(render_approval(
+            harness,
+            &blocked(verdict, code, &reason),
+            "blocked",
+        )),
+        false,
+    )
 }
 
 fn blocked(verdict: &Object, code: &str, reason: &str) -> Object {

@@ -69,6 +69,8 @@ def test_a_saved_block_denies_the_exact_command(store, source, code, text):
 def test_other_commands_and_tool_actions_keep_their_review(store):
     _save(store)
     assert _respond(store, command="pytest -q tests") is None
+    large_allow = {**_REVIEW, "decision": "allow", "policy_action": "allow", "observations": "x" * (300 * 1024)}
+    assert _respond(store, command="pytest -q tests", verdict=large_allow) is None
     assert _respond(store, command=None) is None
     assert _respond(store, verdict={**_REVIEW, "action": {"action_type": "mcp_tool"}}) is None
 

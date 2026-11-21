@@ -1323,7 +1323,7 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
-    let (status, code, payload) = match evaluate_with_bundle(request) {
+    let (status, code, payload) = match with_bundle_identities(request).and_then(|r| evaluate(&r)) {
         Ok(p) => ("ok".to_owned(), "ok".to_owned(), Some(p)),
         Err(c) => ("error".to_owned(), c, None),
     };
@@ -1337,19 +1337,13 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     })
 }
 
-pub(crate) fn evaluate_with_bundle(
-    request: &PolicyDecisionLookupRequestV1,
-) -> Result<Value, String> {
-    with_bundle_identities(request).and_then(|request| evaluate(&request))
-}
-
 /// Python ships no bundle identities: the resident derives them from the store
 /// the lookup reads. The exception cache is left to fill on the connection
 /// that reads the rows, so an exception never lifts a row stored after the
 /// bundle it came from. A request that carries them, one that never
 /// reads policy rows (a local-once peek, a grant probe with nothing to lift),
 /// or one `evaluate` refuses before opening the store, is left as sent.
-fn with_bundle_identities(
+pub(crate) fn with_bundle_identities(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Cow<'_, PolicyDecisionLookupRequestV1>, String> {
     let grant = request

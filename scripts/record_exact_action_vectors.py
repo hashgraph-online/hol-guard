@@ -19,6 +19,7 @@ same deterministic fakes the Rust test installs.
 from __future__ import annotations
 
 import argparse
+import base64
 import gzip
 import hashlib
 import json
@@ -34,7 +35,11 @@ from unittest import mock
 from exact_action_vector_cases import all_cases
 
 BASE_COMMIT = "8927f7bf57"
-FAKE_TOKEN = "guard-approval-context:v1:AAAA"
+FAKE_TOKEN = "guard-approval-context:v1:" + base64.urlsafe_b64encode(
+    json.dumps(
+        {"version": 1, **dict.fromkeys(("identity", "content", "capabilities", "policy", "sandbox"), "0" * 64)}
+    ).encode()
+).decode().rstrip("=")
 GIT_DIGEST_MARK = "{GIT_CONFIG_DIGEST}"
 FILE_MARK = "{FILE_SHA}"
 
