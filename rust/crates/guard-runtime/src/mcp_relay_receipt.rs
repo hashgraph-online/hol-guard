@@ -20,13 +20,13 @@
 //! written against the package request's artifact, which the resident
 //! rebuilds from the record (`mcp_relay_receipt_package.rs`).
 //!
-//! Everything else is still drained to the daemon: a remembered allow writes
-//! the daemon's policy, and an ask block whose notice the resident could not
-//! read still carries it.
+//! Remembered allows and records with a pending notice still leave the queue
+//! as page entries. The daemon polls and acknowledges pages, and these
+//! variants still need native policy or notice handling.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
-//! ordinary record, so the daemon records it, retrying as it always has.
+//! ordinary record so the bound resident can retry it on the next drain.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
