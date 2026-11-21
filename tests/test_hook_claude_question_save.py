@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,9 @@ def test_hook_finalize_rejects_a_stale_generation_and_commits_the_prepared_one(
 
     assert finalize(7) == {"ok": {"finalized": False}}
     assert finalize(9, remaining_seconds=0.0) == {"ok": {"finalized": False}}
+    with ThreadPoolExecutor(max_workers=1) as executor, store.hold_policy_integrity_generation_lock():
+        blocked = executor.submit(finalize, 9, remaining_seconds=0.05)
+        assert blocked.result(timeout=2.0) == {"ok": {"finalized": False}}
     assert writes == []
     assert finalize(9) == {"ok": {"finalized": True}}
     assert writes == [{**current, "generation": 9, "pending_generation": None}]

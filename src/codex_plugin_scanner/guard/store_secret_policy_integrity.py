@@ -700,7 +700,15 @@ class StoreSecretPolicyIntegrityMixin:
         normalized = self._normalize_policy_integrity_control_state(payload)
         if normalized is None:
             return False
-        with self.hold_policy_integrity_generation_lock():
+        lock_options: dict[str, float] = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            lock_options["timeout_seconds"] = min(remaining, _POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS)
+        with self.hold_policy_integrity_generation_lock(**lock_options):
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
             try:
                 current = self._read_policy_integrity_control_state_uncached(strict=True)
             except Exception:
