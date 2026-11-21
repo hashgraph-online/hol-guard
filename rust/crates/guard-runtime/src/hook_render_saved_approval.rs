@@ -66,28 +66,33 @@ pub(super) fn answer(
         return Ok(document(None, needed));
     };
     if evidence.get("degraded").and_then(Value::as_bool) == Some(true) {
-        return Ok(document(None, false));
+        // The ordinary approval flow must not spend a once approval while
+        // an exact-command block is still possible.
+        return Ok(match check {
+            Check::Command(_) => unreadable(harness, verdict, &check),
+            Check::Action { .. } => document(None, false),
+        });
     }
     let Some(mut lookup) = lookup_request(harness, home, &store_path, text("workspace"), evidence)
     else {
         return Ok(unreadable(harness, verdict, &check));
     };
-    let restrictive = match lookup.workspace.as_deref().map(portable_workspace) {
+    match lookup.workspace.as_deref().map(portable_workspace) {
         Some(PortableIdentity::Identity(project)) => {
             lookup.portable_workspace = Some(project);
-            false
         }
-        Some(PortableIdentity::Unknown) => true,
-        _ => false,
-    };
+        // A local result cannot prove what applies in a project whose
+        // identity was unavailable. Leave any pending approval unspent.
+        Some(PortableIdentity::Unknown) => return Ok(unreadable(harness, verdict, &check)),
+        _ => {}
+    }
     let found = match check {
         Check::Action { artifact, token } => {
             lookup.artifact_id = Some(artifact.to_owned());
             lookup.artifact_hash = Some(token.to_owned());
-            evaluate_lookup(&lookup, restrictive)
-                .map(|lookup| saved_verdict(verdict, &lookup, artifact, token))
+            evaluate_lookup(&lookup).map(|lookup| saved_verdict(verdict, &lookup, artifact, token))
         }
-        Check::Command(command) => command_block(harness, verdict, command, lookup, restrictive),
+        Check::Command(command) => command_block(harness, verdict, command, lookup),
     };
     match found {
         Ok(Some((verdict, status))) => Ok(document(
@@ -99,16 +104,8 @@ pub(super) fn answer(
     }
 }
 
-fn evaluate_lookup(
-    request: &PolicyDecisionLookupRequestV1,
-    restrictive: bool,
-) -> Result<Value, String> {
-    let response = evaluate(with_bundle_identities(request)?.as_ref())?;
-    Ok(if restrictive {
-        crate::policy_lookup_portable::restrictive_only(response)
-    } else {
-        response
-    })
+fn evaluate_lookup(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
+    evaluate(with_bundle_identities(request)?.as_ref())
 }
 
 fn document(value: Option<Value>, needs_lookup: bool) -> Object {
@@ -178,7 +175,6 @@ fn command_block(
     verdict: &Object,
     command: &str,
     mut lookup: PolicyDecisionLookupRequestV1,
-    restrictive: bool,
 ) -> Result<Option<(Object, &'static str)>, String> {
     let keys = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
         command: Some(command),
@@ -189,7 +185,7 @@ fn command_block(
     });
     for key in keys.exact_artifact_ids {
         lookup.artifact_id = Some(key.clone());
-        let result = evaluate_lookup(&lookup, restrictive)?;
+        let result = evaluate_lookup(&lookup)?;
         let Some(decision) = result.get("decision").and_then(Value::as_object) else {
             continue;
         };

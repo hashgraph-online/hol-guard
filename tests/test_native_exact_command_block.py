@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -43,9 +44,10 @@ def _respond(
     command: str | None = _COMMAND,
     verdict: dict[str, object] = _REVIEW,
     edge_hint: bool | None = True,
+    workspace: Path | None = None,
 ) -> dict[str, object] | None:
     return native_exact_command_block_response(
-        store, harness="claude-code", command=command, native_result=verdict, workspace=None, edge_hint=edge_hint
+        store, harness="claude-code", command=command, native_result=verdict, workspace=workspace, edge_hint=edge_hint
     )
 
 
@@ -102,3 +104,23 @@ def test_a_block_the_store_cannot_read_still_denies(store, monkeypatch):
     assert response is not None
     assert response["reason_code"] == "saved_exact_command_unreadable"
     assert response["approval_reuse_status"] == "blocked"
+
+
+def test_degraded_evidence_stops_the_command_before_approval_reuse(store, monkeypatch):
+    _save(store)
+    evidence = store.policy_lookup_evidence()
+    monkeypatch.setattr(
+        store, "policy_lookup_evidence", lambda: replace(evidence, degraded_trust_status={"state": "degraded"})
+    )
+    response = _respond(store)
+    assert response is not None
+    assert response["approval_reuse_status"] == "blocked"
+    assert response["reason_code"] == "saved_exact_command_unreadable"
+
+
+def test_unresolved_project_identity_stops_the_requested_command_check(store, tmp_path):
+    workspace = tmp_path / "gone" / ".." / "app"
+    response = _respond(store, workspace=workspace)
+    assert response is not None
+    assert response["approval_reuse_status"] == "blocked"
+    assert response["reason_code"] == "saved_exact_command_unreadable"

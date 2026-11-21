@@ -52,7 +52,7 @@ pub(crate) fn without_authority_revision(lookup: Value) -> Value {
 /// Fail closed after a saved allow cannot be atomically claimed
 /// (`_restrictive_only_lookup`): only restrictive policy survives, and the
 /// permission can be presented again on the caller's next approval cycle.
-pub(crate) fn restrictive_only(lookup: Value) -> Value {
+fn restrictive_only(lookup: Value) -> Value {
     let restrictive = match lookup.get("decision") {
         Some(Value::Object(decision)) => severity(decision.get("action")) >= REVIEW_FLOOR,
         _ => true,
