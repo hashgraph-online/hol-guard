@@ -233,10 +233,15 @@ def policy_bundle_cloud_exceptions_hash(policy_bundle: dict[str, object]) -> str
 _ORDERING_KEYS = ("bundleVersion", "bundleHash", "payloadHash", "issuedAt", "workspaceId")
 
 
-def _ordering_view(bundle: object) -> object:
+def policy_bundle_ordering_view(bundle: object) -> object:
+    """Return only the signed identity fields a downgrade check compares."""
+
     if not isinstance(bundle, dict):
         return bundle
     return {key: bundle[key] for key in _ORDERING_KEYS if key in bundle}
+
+
+_ordering_view = policy_bundle_ordering_view
 
 
 def policy_bundle_is_version_downgrade(

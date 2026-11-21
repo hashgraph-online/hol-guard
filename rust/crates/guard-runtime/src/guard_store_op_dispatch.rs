@@ -156,6 +156,12 @@ pub(crate) fn dispatch(
                 connection, source, args,
             )
         }
+        "record_policy_bundle_rejection" => {
+            crate::guard_store_receipt_redaction::policy_bundle_rejection::method(connection, args)
+        }
+        "record_sync_summary" => {
+            crate::guard_store_receipt_redaction::sync_summary::method(connection, args)
+        }
         "repair_rejected_review_correlation" => {
             repair_rejected_correlation(connection, source, args)
         }
@@ -418,6 +424,9 @@ pub(crate) fn dispatch(
         "set_device_label" => devices::set_label(connection, args),
         "get_sync_payload" => crate::guard_store_sync_state::get(connection, args),
         "set_sync_payload" => crate::guard_store_sync_state::set(connection, args),
+        "record_command_queue_lease_limit" => {
+            crate::guard_store_sync_state::queue_lease_limit::method(connection, args)
+        }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),

@@ -83,13 +83,6 @@ const MIN_HINT_BUDGET_MS: u64 = 150;
 /// The `local_cli_hook` action the lookup refines.
 const REVIEW_ACTION: &str = "review";
 
-/// The hint a call asks for: how long the daemon can wait for it.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct HintAsk {
-    budget_ms: u32,
-}
-
 /// The launch a non-recognition review paused, as the daemon's
 /// `local_cli_setup_connector` named it to the resident.
 #[derive(Deserialize)]
@@ -243,9 +236,7 @@ pub(crate) fn delegate(
     let connector_value = connector.as_ref().map(Connector::to_value);
     let hint = ask.and_then(|ask| {
         let spent = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-        let budget_ms = u64::from(ask.budget_ms)
-            .min(call_budget_ms.saturating_sub(WRITE_RESERVE_MS))
-            .saturating_sub(spent);
+        let budget_ms = ask.budget_ms(call_budget_ms, spent);
         let least = if connector.is_some() {
             1
         } else {
@@ -475,7 +466,7 @@ fn notice_review(
 
 #[path = "guard_store_native_review_queue_args.rs"]
 mod args;
-use args::{take_ask, take_flag, without_operands};
+use args::{take_ask, take_flag, without_operands, HintAsk};
 
 #[cfg(test)]
 #[path = "guard_store_native_review_queue_tests.rs"]

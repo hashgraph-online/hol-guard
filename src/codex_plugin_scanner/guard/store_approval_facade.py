@@ -90,9 +90,10 @@ class StoreApprovalsMixin:
         same call, and reads the row back in the queue write's own
         transaction. A row it could not read is read separately.
 
-        ``hint`` (``native_review_hint_ask``) bounds the time the resident may
-        spend deciding the review's extension or connector setup hint before
-        the write; ``None`` stores no hint.
+        ``hint`` carries the hook's remaining time in milliseconds, or a null
+        deadline for the resident's default budget. The resident reserves
+        time for the write before deciding the review's extension or connector
+        setup hint. A null ``hint`` skips hint computation.
 
         ``silent`` queues a review the agent never sees: its
         ``approval.created`` event is written in the same transaction, best

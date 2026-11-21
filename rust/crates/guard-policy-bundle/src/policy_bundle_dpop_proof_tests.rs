@@ -54,7 +54,7 @@ fn decoded(segment: &str) -> Value {
 fn signed(extra: Value) -> (String, Vec<u8>, Value) {
     let (pem, point) = generated(&ECDSA_P256_SHA256_FIXED_SIGNING);
     let jwk = jwk_of(&point);
-    let result = proof(&input(&pem, &jwk, extra)).ok().expect("a proof");
+    let result = proof(&input(&pem, &jwk, extra)).expect("a proof");
     let proof = result["proof"].as_str().expect("text").to_owned();
     (proof, point, jwk)
 }

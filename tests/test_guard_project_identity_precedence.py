@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_hook_render import native_saved_decision_response
 from codex_plugin_scanner.guard.project_identity import resolve_portable_project_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_store_support import resolve_policy
@@ -15,6 +17,47 @@ from tests.test_guard_project_identity import (
 )
 
 pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
+
+
+def test_portable_block_keeps_a_saved_hook_allow_pending(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    _init_repository(workspace, "git@example.invalid:owner/repository.git")
+    project_identity = resolve_portable_project_identity(workspace)
+    assert project_identity is not None
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = "codex:native-pretool:Read"
+    token = "a" * 64
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact,
+            artifact_hash=token,
+            source="approval-gate",
+        ),
+        _NOW,
+    )
+
+    def lookup(root: Path = workspace):
+        return native_saved_decision_response(
+            store,
+            harness="codex",
+            token=token,
+            artifact_id=artifact,
+            native_result={"decision": "deny", "policy_action": "review", "minimum_action": "review"},
+            workspace=root,
+        )
+
+    allowed = lookup()
+    assert allowed is not None and allowed["approval_reuse_status"] == "accepted"
+    unresolved = tmp_path / "gone" / ".." / "app"
+    assert lookup(unresolved) is None
+    store.upsert_policy(
+        PolicyDecision(harness="codex", scope="workspace", action="block", workspace=project_identity),
+        _NOW,
+    )
+    assert lookup() is None
 
 
 def test_portable_block_does_not_consume_shadowed_local_one_shot(tmp_path: Path) -> None:

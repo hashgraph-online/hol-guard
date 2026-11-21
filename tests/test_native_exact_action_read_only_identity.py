@@ -8,10 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
-from codex_plugin_scanner.guard.hook_review.hook_native_saved_approval import (
-    ONCE_ONLY_REASON_KEY,
-    native_saved_decision_response,
-)
+from codex_plugin_scanner.guard.native_hook_render import native_saved_decision_response
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_launch_evidence_helpers import native_exact_action as native_exact_action_decision
 from tests.test_native_review_exact_action_always import (
@@ -458,10 +455,10 @@ def test_scope_contract_exposes_once_only_reason_and_tool_target_eligibility() -
         "policy_action": "review",
         "harness": "claude-code",
     }
-    once = request_scope_contract({**base, "action_envelope_json": {ONCE_ONLY_REASON_KEY: "mutable_launcher"}})
+    once = request_scope_contract({**base, "action_envelope_json": {"once_only_reason": "mutable_launcher"}})
     assert once.exact_action_persistence_eligible is False
     assert once.to_dict()["once_only_reason"] == "mutable_launcher"
-    unknown = request_scope_contract({**base, "action_envelope_json": {ONCE_ONLY_REASON_KEY: "made_up"}})
+    unknown = request_scope_contract({**base, "action_envelope_json": {"once_only_reason": "made_up"}})
     assert unknown.once_only_reason == "no_command_identity"
     with_command = request_scope_contract({**base, "raw_command_text": "git status"})
     assert with_command.once_only_reason == "unproven_launch"

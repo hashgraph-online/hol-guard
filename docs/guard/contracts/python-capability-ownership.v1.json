@@ -81,6 +81,33 @@
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
+   "module": "codex_plugin_scanner.guard.hook_review.hook_native_package_review",
+   "source_sha256": "1250222cc52b2a2da9117255a97b5e2b7b589063af7fc282132216f065334a82",
+   "forbidden_symbols": [
+    "_stamped_environment",
+    "_saved_package_approval"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/verified_npm.rs",
+    "rust/crates/guard-runtime/src/package_review_plan_op.rs",
+    "rust/crates/guard-runtime/src/hook_package_review_settlement.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
+   "module": "codex_plugin_scanner.guard.hook_review.hook_native_saved_approval",
+   "source_sha256": "6fe3f43e217e191b23a9eecb0a3316f294c4ee502e19b3e6de4f3ff60e297e56",
+   "forbidden_symbols": [
+    "_saved_block_response",
+    "_native_review_is_approvable"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_render_saved_approval.rs",
+    "rust/crates/guard-runtime/src/hook_direct_saved_decision.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
    "module": "codex_plugin_scanner.guard.hook_review.cursor_shell_route",
    "source_sha256": "bff49f52f1d236ffd3c937942017257684a85a84f88f8c2139e5a2ba8372b19e",
@@ -2095,6 +2122,23 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
+   "module": "codex_plugin_scanner.guard.hook_review.native_review_allow_hint",
+   "source_sha256": "52a45de318f3dc607279132afd1dfdf65b71e5f8e7037fbf377a41ab8c0800b2",
+   "forbidden_symbols": [
+    "live_approval_extension_hint",
+    "recovered_approval_extension_hint",
+    "native_review_hint_ask",
+    "_ask_review_hint",
+    "_live_reviewed_command"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend.rs",
+    "rust/crates/guard-runtime/src/hook_direct_review_hint_op.rs",
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
    "module": "codex_plugin_scanner.guard.hook_review.hook_worker_structured",
    "source_sha256": "ccd0fcfbeedb1ad80b53e41c4be722bd7c66e48f956a03b4433dec9a99bd9f8c",
@@ -2110,6 +2154,8 @@
   }
  ],
  "retired_test_paths": [
+  "tests/test_native_review_allow_hint.py",
+  "tests/test_hook_direct_saved_decision_vectors.py",
   "tests/test_mcp_relay_evidence_drain.py",
   "tests/test_mcp_relay_package_evidence_drain.py",
   "tests/test_mcp_relay_package_evidence_modes.py",
@@ -2322,22 +2368,6 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/cli_runtime_support_op.rs",
     "rust/crates/guard-runtime/src/cli_copilot_resolution.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
-   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
-   "forbidden_symbols": [
-    "verified_npm_version",
-    "_changes_npm",
-    "_loader_paths_outside",
-    "_npmrc_redirects_fetch",
-    "_resolve_executable",
-    "_filters_outside_workspace"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/verified_npm.rs",
-    "rust/crates/guard-runtime/src/package_review_plan_op.rs"
    ]
   },
   {

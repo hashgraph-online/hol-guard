@@ -194,6 +194,18 @@ class StoreCloudEventsMixin:
             return payload
         return None
 
+    def record_command_queue_lease_limit(self, state_key: str, limit: int, *, now: str) -> bool:
+        """Merge a queue lane's exact Review lease batch limit into its stored row.
+
+        Only the limit is written; every other field keeps its stored value.
+        Returns whether the row changed.
+        """
+
+        answer = self._native_store_call(
+            "record_command_queue_lease_limit", {"state_key": state_key, "limit": limit, "now": now}
+        )
+        return isinstance(answer, dict) and answer.get("saved") is True
+
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .native_runner_authority import NativeRunnerAuthorityError
         from .runtime.runner_native_sync import cloud_exceptions

@@ -10,7 +10,7 @@ from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_direct_route import native_or_daemon_edge
-from ..native_hook_render import native_recording_only_for_binding
+from ..native_hook_render import native_exact_command_block_response, native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
 from ..native_policy_fence_window import POLICY_SOURCE_FENCE_ERROR, PolicySourceFenceBusyError
 from ..native_resident_client import (
@@ -22,7 +22,6 @@ from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
 )
-from .hook_native_saved_approval import native_exact_command_block_response
 from .hook_worker_native_evidence import _record_native_pre_activity, _record_unavailable_native
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
@@ -423,6 +422,7 @@ class HookWorkerNativeMixin:
                     native_result=native_result,
                     workspace=workspace,
                     edge_hint=edge_hint,
+                    deadline=deadline,
                 )
                 if command_block is not None:
                     return (

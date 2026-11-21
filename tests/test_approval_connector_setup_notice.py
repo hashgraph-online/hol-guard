@@ -149,7 +149,6 @@ def _queue(monkeypatch: pytest.MonkeyPatch, store: _QueueStore, request_id: str,
     monkeypatch.setattr(review.uuid, "uuid4", lambda: SimpleNamespace(hex=request_id))
     for name, value in {
         "native_review_policy_binding": lambda **_k: None,
-        "native_review_hint_ask": lambda *_a, **_k: None,
         "native_review_query": _native_request,
     }.items():
         monkeypatch.setattr(review, name, value)

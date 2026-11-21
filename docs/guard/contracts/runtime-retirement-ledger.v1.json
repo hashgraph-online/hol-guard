@@ -3,6 +3,7 @@
  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
+  "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
   "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
   "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
@@ -10,6 +11,8 @@
   "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
   "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
@@ -145,6 +148,145 @@
   "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_live_recovery_asks_about_the_command_alone_in_its_launch_directory",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::the_command_falls_back_to_the_envelope",
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_home_relative_directory_expands_against_the_home",
+    "rust/crates/guard-runtime/src/hook_direct_review_hint_op_tests.rs::a_pending_command_recovers_both_hints_from_one_review"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_live_recovery_skips_a_tool_call_that_carried_more_than_the_command",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_tool_input_carrying_content_is_not_reviewed_as_a_command"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_live_recovery_resolves_a_home_relative_launch_directory",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_home_relative_directory_expands_against_the_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_redacted_launch_directory_recovers_neither_hint",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_named_directory_that_cannot_be_traced_back_recovers_nothing"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_live_recovery_asks_only_for_a_pending_shell_command_under_an_admitted_authority",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::only_a_protected_or_never_enrolled_authority_admits_a_live_hint",
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resolved_or_non_shell_row_is_not_reviewed_again"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_never_enrolled_device_still_asks",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::only_a_protected_or_never_enrolled_authority_admits_a_live_hint"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_the_queue_time_ask_carries_only_a_budget_without_a_deadline",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_args.rs::the_hook_hint_budget_reserves_time_for_the_write"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_queue_time_hints_leave_the_hook_time_to_persist_the_review",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_args.rs::the_hook_hint_budget_reserves_time_for_the_write"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_the_query_sends_every_field_the_resident_digests",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_resident_answer_binds_to_its_request",
+    "rust/crates/guard-runtime/src/hook_direct_review_hint_op_tests.rs::the_answer_is_bound_to_its_request"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_spent_budget_never_reaches_the_resident",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_args.rs::the_hook_hint_budget_reserves_time_for_the_write",
+    "rust/crates/guard-runtime/src/hook_direct_review_hint_op_tests.rs::a_spent_budget_keeps_the_coverage_and_drops_the_allow_hint"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_an_answer_is_shape_checked_before_it_is_stored",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/extension_hint_shape_tests.rs::an_allow_hint_is_rebuilt_with_its_relied_permissions_defaulted",
+    "rust/crates/guard-runtime/src/extension_hint_shape_tests.rs::a_coverage_hint_with_a_bad_step_or_total_is_dropped"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_resident_failure_never_reaches_the_review",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_row_without_a_hint_uses_the_live_answer_when_available",
+    "rust/crates/guard-runtime/src/daemon_edge_requests_tests.rs::a_local_detail_without_a_resident_view_drops_the_hint_and_waits_go_to_the_daemon"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_stored_coverage_only_hint_still_re_reviews_for_the_settlement",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::stored_coverage_stays_attached_to_a_recovered_allow"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_stored_settlement_and_a_connector_hint_are_left_alone",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::existing_settlement_and_connector_hints_skip_recovery"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_a_row_with_nothing_stored_keeps_the_read_time_recovery",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/daemon_edge_recommend_tests.rs::a_row_without_a_hint_uses_the_live_answer_when_available"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_an_unchecked_hint_is_dropped_without_failing_the_resident",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The native detail route validates the hint itself. The Python transport's late shape check and circuit-breaker interaction no longer run."
+  },
+  {
+   "old_node": "tests/test_native_review_allow_hint.py::test_python_and_resident_command_only_keys_stay_identical",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Python launch-input allowlist is removed. The native route tests reject extra tool content."
+  },
+  {
+   "old_node": "tests/test_hook_direct_saved_decision_vectors.py::test_recorded_saved_decision_vectors_match_python",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_saved_decision_tests.rs::verdicts_match_the_daemon_vectors"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_direct_saved_decision_vectors.py::test_vectors_cover_bound_and_unbound_reviews_and_every_outcome",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_saved_decision_tests.rs::verdicts_match_the_daemon_vectors",
+    "rust/crates/guard-runtime/src/hook_direct_saved_query_tests.rs::queries_match_the_daemon_vectors"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "tests/test_mcp_relay_evidence_drain.py::test_a_forward_is_recorded_as_the_proxy_allow",
    "replacement_nodes": [
