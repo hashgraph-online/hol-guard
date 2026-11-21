@@ -22,6 +22,7 @@ const INVALID: &str = "native_policy_bundle_authority_invalid";
 const UNKNOWN_KIND: &str = "native_policy_bundle_authority_unknown_kind";
 
 /// Why a handler produced no verdict document.
+#[derive(Debug)]
 pub(crate) enum Fail {
     /// The request itself is malformed: an error result.
     Invalid,
