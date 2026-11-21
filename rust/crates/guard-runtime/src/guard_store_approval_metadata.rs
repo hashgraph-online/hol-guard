@@ -10,10 +10,12 @@ use guard_contracts::RUNNER_AUTHORITY_MAX_BYTES;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
+use crate::approval_extension_recommendation_op::is_caution_risk_class;
 use crate::guard_store_approval_page_reads::ORDER;
 use crate::guard_store_approval_read_rows::json_object;
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, query_one, Row, StoreResult};
+use crate::guard_store_local_cli_inventory::{awaiting_connector_setup, connector_setup_item};
 use crate::hook_direct::saved_decision::review_queue::connector::validated_setup_hint;
 
 const CONNECTOR_GROUP_SCAN_LIMIT: usize = 2000;
@@ -59,15 +61,16 @@ fn scan_connector_group(
 /// Read and validate the sibling hints under the same snapshot as the queue
 /// scan. A hint skipped because of size or time keeps the recommendation
 /// cautious, while an absent or structurally invalid hint contributes no classes.
-pub(crate) fn connector_group_risk_classes(
+fn connector_group_caution(
     connection: &Connection,
     args: &Args<'_>,
-) -> StoreResult<Value> {
+) -> StoreResult<(BTreeSet<String>, bool)> {
     let identity_hash = args.str("identity_hash")?;
     let mut risk_classes: BTreeSet<String> = args
         .strings("risk_classes")?
         .unwrap_or_default()
         .into_iter()
+        .filter(|class| is_caution_risk_class(class))
         .map(str::to_owned)
         .collect();
     let (rows, mut complete) = scan_connector_group(connection, identity_hash)?;
@@ -110,11 +113,41 @@ pub(crate) fn connector_group_risk_classes(
                     .into_iter()
                     .flatten()
                     .filter_map(Value::as_str)
+                    .filter(|class| is_caution_risk_class(class))
                     .map(str::to_owned),
             );
         }
     }
-    Ok(json!({"risk_classes": risk_classes, "complete": complete}))
+    Ok((risk_classes, complete))
+}
+
+/// Check the approval, connector and its siblings inside the one store
+/// snapshot. A resolved or moved request must no longer offer setup.
+pub(crate) fn connector_setup_advice(
+    connection: &Connection,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    let identity_hash = args.str("identity_hash")?;
+    let pending = query_one(
+        connection,
+        "select queue_group_id from approval_requests where request_id = ? and status = 'pending'",
+        &[Value::from(args.str("request_id")?)],
+    )?;
+    let prefix = format!("connector:{identity_hash}:");
+    if !pending
+        .as_ref()
+        .and_then(|row| row.get("queue_group_id"))
+        .and_then(Value::as_str)
+        .is_some_and(|group| group.starts_with(&prefix))
+    {
+        return Ok(Value::Null);
+    }
+    let item = connector_setup_item(connection, args)?;
+    if !awaiting_connector_setup(&item, args.str("surface")?) {
+        return Ok(Value::Null);
+    }
+    let (caution, complete) = connector_group_caution(connection, args)?;
+    Ok(json!({"item": item, "caution_risk_classes": caution, "complete": complete}))
 }
 
 fn has_allow_hint_column(connection: &Connection) -> StoreResult<bool> {

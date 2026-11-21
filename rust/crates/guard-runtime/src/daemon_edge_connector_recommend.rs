@@ -3,7 +3,6 @@
 use guard_contracts::{ApprovalExtensionControlViewV1, ApprovalExtensionRecommendationSnapshotV1};
 use serde_json::{json, Map, Value};
 
-use crate::approval_extension_recommendation_op::caution_risk_classes;
 use crate::approval_gate_settings::public_config_locked;
 use crate::runner_sync_url::urlencode;
 
@@ -18,35 +17,29 @@ pub(super) fn recommendation(
 ) -> Option<Value> {
     let identity = hint["identity_hash"].as_str()?;
     let request_id = eligible_request_id(approval, identity, &view.snapshot)?;
-    let item = reads.store_call(
+    let advice = reads.store_call(
         config,
-        "connector_setup_item",
+        "connector_setup_advice",
         json!({
+            "request_id": request_id,
             "cli_id": hint["cli_id"],
             "identity_hash": identity,
+            "surface": hint["surface"],
+            "risk_classes": hint["risk_classes"],
             "cwd": config.daemon_cwd.as_deref()?,
         }),
     )?;
-    if !awaiting_setup(&item, hint) {
-        return None;
-    }
-    let scan = reads.store_call(
-        config,
-        "connector_group_risk_classes",
-        json!({"identity_hash": identity, "risk_classes": hint["risk_classes"]}),
-    )?;
-    let risk_classes: Vec<String> =
-        serde_json::from_value(scan.get("risk_classes")?.clone()).ok()?;
-    let caution = caution_risk_classes(&risk_classes).ok()?;
+    let item = advice.get("item")?;
+    let caution = serde_json::from_value(advice.get("caution_risk_classes")?.clone()).ok()?;
     let gate = public_config_locked(config.guard_home(), None);
     Some(project(
         request_id,
         hint,
-        &item,
+        item,
         &view.snapshot,
         gate.configured && gate.enabled,
         caution,
-        scan["complete"].as_bool()?,
+        advice["complete"].as_bool()?,
     ))
 }
 
@@ -65,13 +58,6 @@ fn eligible_request_id<'a>(
         .as_str()?
         .starts_with(&format!("connector:{identity}:"))
         .then(|| approval.get("request_id")?.as_str())?
-}
-
-fn awaiting_setup(item: &Value, hint: &Value) -> bool {
-    item.is_object()
-        && item["surface"] == hint["surface"]
-        && (item["state"] == "unset"
-            || (item["state"] == "allowed" && item["stale"] == true && item["surface"] == "cli"))
 }
 
 fn project(
@@ -135,6 +121,7 @@ fn project(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::guard_store_local_cli_inventory::awaiting_connector_setup;
 
     #[test]
     fn advice_requires_a_pending_matching_group_and_respects_lockdown() {
@@ -186,9 +173,9 @@ mod tests {
             ("cli", "unset", false, true),
         ] {
             assert_eq!(
-                awaiting_setup(
+                awaiting_connector_setup(
                     &json!({"surface": surface, "state": state, "stale": stale}),
-                    &json!({"surface": surface}),
+                    surface,
                 ),
                 expected,
                 "{surface} {state} {stale}",

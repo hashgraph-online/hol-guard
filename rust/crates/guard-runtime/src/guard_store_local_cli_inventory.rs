@@ -98,6 +98,13 @@ fn hidden_legacy_connector(row: &Row, cli_id: &str, identity_hash: &str, observe
         })
 }
 
+pub(crate) fn awaiting_connector_setup(item: &Value, surface: &str) -> bool {
+    item.is_object()
+        && item["surface"] == surface
+        && (item["state"] == "unset"
+            || (item["state"] == "allowed" && item["stale"] == true && surface == "cli"))
+}
+
 /// `list_local_cli_items`: observations merged with grants, ranked,
 /// capability-annotated and, for MCP connectors, described.
 ///

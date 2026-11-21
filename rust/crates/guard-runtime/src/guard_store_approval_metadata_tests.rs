@@ -3,7 +3,7 @@
 //! `testdata/guard_store/record_approval_metadata_vectors.py`). Seeds,
 //! results and changed markers all come from Python, never from Rust output.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -106,7 +106,11 @@ fn connector_risk_scan_preserves_a_caution_for_unchecked_hints() {
     let mut invalid = matching.clone();
     invalid["display_name"] = Value::Null;
     invalid["risk_classes"] = json!(["policy_bypass"]);
-    for (id, hint) in [("match", matching), ("other", other), ("invalid", invalid)] {
+    for (id, hint) in [
+        ("match", matching.clone()),
+        ("other", other),
+        ("invalid", invalid),
+    ] {
         connection
             .execute(
                 "insert into approval_requests values (?1, 'pending', ?2, 1, ?3)",
@@ -116,9 +120,29 @@ fn connector_risk_scan_preserves_a_caution_for_unchecked_hints() {
     }
     let request = json!({"identity_hash": identity, "risk_classes": ["network_egress"]});
     let args = super::Args(request.as_object().unwrap());
-    let scan = || super::connector_group_risk_classes(&connection, &args).unwrap();
-    let expected = json!(["destructive", "network_egress"]);
-    assert_eq!(scan(), json!({"risk_classes": expected, "complete": true}));
+    let scan = || super::connector_group_caution(&connection, &args).unwrap();
+    let expected = BTreeSet::from(["destructive".to_owned()]);
+    assert_eq!(scan(), (expected.clone(), true));
+
+    // More distinct ordinary classes than the generic caution wire accepts
+    // should not hide the one caution class on this connector.
+    for row in 0..257 {
+        let mut ordinary = matching.clone();
+        ordinary["risk_classes"] = json!((0..16)
+            .map(|column| format!("ordinary_{row}_{column}"))
+            .collect::<Vec<_>>());
+        connection
+            .execute(
+                "insert into approval_requests values (?1, 'pending', ?2, 1, ?3)",
+                [
+                    format!("row-{row}"),
+                    format!("connector:{identity}:{row}"),
+                    ordinary.to_string(),
+                ],
+            )
+            .unwrap();
+    }
+    assert_eq!(scan(), (expected.clone(), true));
 
     connection
         .execute(
@@ -129,7 +153,7 @@ fn connector_risk_scan_preserves_a_caution_for_unchecked_hints() {
             ],
         )
         .unwrap();
-    assert_eq!(scan(), json!({"risk_classes": expected, "complete": false}));
+    assert_eq!(scan(), (expected, false));
 }
 
 #[test]

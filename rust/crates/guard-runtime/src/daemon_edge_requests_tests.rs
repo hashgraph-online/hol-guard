@@ -416,6 +416,17 @@ fn local_connector_advice_uses_the_current_observation_and_pending_risks() {
         format!("/extensions/local-cli/{cli_id}?setup={request_id}&identity={identity}")
     );
     db.execute(
+        "update approval_requests set status = 'resolved' where request_id = ?",
+        [request_id],
+    )
+    .unwrap();
+    assert!(render().get("connector_recommendation").is_none());
+    db.execute(
+        "update approval_requests set status = 'pending' where request_id = ?",
+        [request_id],
+    )
+    .unwrap();
+    db.execute(
         "update local_cli_observation set identity_hash = ?1 where cli_id = ?2",
         rusqlite::params!["b".repeat(64), cli_id],
     )
