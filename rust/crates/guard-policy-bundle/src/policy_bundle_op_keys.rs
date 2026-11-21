@@ -127,6 +127,9 @@ pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
         "persistable" => persist(input),
         "validate_synced" => crate::policy_bundle_op_synced::synced(input),
         "validate_cached" => crate::policy_bundle_op_synced::cached(input),
+        "sync_acknowledgement" => {
+            crate::policy_bundle_op_synced::sync_ack::sync_acknowledgement(input)
+        }
         _ => return None,
     })
 }

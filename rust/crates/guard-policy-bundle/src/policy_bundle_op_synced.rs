@@ -199,6 +199,9 @@ pub(crate) fn judge(bundle: &Value, verdict: Value, checkpoint: &Value) -> Handl
     Ok(verdict)
 }
 
+#[path = "policy_bundle_op_sync_ack.rs"]
+pub(crate) mod sync_ack;
+
 #[cfg(test)]
 #[path = "policy_bundle_op_synced_tests.rs"]
 mod tests;
