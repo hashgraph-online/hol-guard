@@ -336,14 +336,13 @@ class ReceiptUploadAnswer:
     synced_at: object
     receipts: int
     receipts_stored: int
-    advisories: list[dict[str, object]]
+    advisories_stored: int
     policy_bundle_provided: bool
     policy_bundle_malformed: bool
     policy_bundle: dict[str, object] | None
     policy_bundle_sync_payload: dict[str, object] | None
     policy_bundle_delivery_provided: bool
     policy_bundle_delivery: object
-    alert_preferences: dict[str, object] | None
     review_verification_keys: object
     receipt_cursor_rowid: int | None
     receipt_cursor_backfill: bool
@@ -356,8 +355,6 @@ class ReceiptUploadAnswer:
         sync_payload = bundle.get("sync_payload")
         sync_payload = sync_payload if isinstance(sync_payload, dict) else None
         policy_bundle = None if sync_payload is None else sync_payload.get("policyBundle")
-        advisories = answer.get("advisories")
-        preferences = answer.get("alert_preferences")
         cursor = answer.get("receipt_cursor_rowid")
         now = answer.get("now")
         if not isinstance(now, str) or not now:
@@ -367,14 +364,13 @@ class ReceiptUploadAnswer:
             synced_at=answer.get("synced_at"),
             receipts=_count(answer.get("receipts")),
             receipts_stored=_count(answer.get("receipts_stored")),
-            advisories=[item for item in advisories if isinstance(item, dict)] if isinstance(advisories, list) else [],
+            advisories_stored=_count(answer.get("advisories_stored")),
             policy_bundle_provided=bundle.get("provided") is True,
             policy_bundle_malformed=bundle.get("malformed") is True,
             policy_bundle=policy_bundle if isinstance(policy_bundle, dict) else None,
             policy_bundle_sync_payload=sync_payload,
             policy_bundle_delivery_provided=bundle.get("delivery_provided") is True,
             policy_bundle_delivery=bundle.get("delivery"),
-            alert_preferences=preferences if isinstance(preferences, dict) else None,
             review_verification_keys=answer.get("review_verification_keys"),
             receipt_cursor_rowid=cursor if isinstance(cursor, int) and not isinstance(cursor, bool) else None,
             receipt_cursor_backfill=answer.get("receipt_cursor_backfill") is True,

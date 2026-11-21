@@ -22,6 +22,8 @@ class _CloudHandler(BaseHTTPRequestHandler):
     receipt_bodies: ClassVar[list[dict[str, object]]] = []
     # One status per receipt request; 200 once the list runs out.
     receipt_statuses: ClassVar[list[int]] = []
+    # Extra fields merged into every receipt answer.
+    receipt_extra: ClassVar[dict[str, object]] = {}
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -34,6 +36,7 @@ class _CloudHandler(BaseHTTPRequestHandler):
                 status = type(self).receipt_statuses.pop(0)
             receipts = payload.get("receipts")
             answer["receiptsStored"] = len(receipts) if isinstance(receipts, list) else 0
+            answer.update(type(self).receipt_extra)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -47,6 +50,7 @@ class _CloudHandler(BaseHTTPRequestHandler):
 def cloud_url() -> Iterator[str]:
     _CloudHandler.receipt_bodies = []
     _CloudHandler.receipt_statuses = []
+    _CloudHandler.receipt_extra = {}
     server = HTTPServer(("127.0.0.1", 0), _CloudHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -188,3 +192,37 @@ def test_a_context_only_request_sends_no_receipts_and_keeps_the_cursor(tmp_path,
     assert answer["receipts"] == 0
     assert store.get_sync_payload("receipt_sync_cursor") == saved_cursor
     assert store.get_sync_payload("cloud_receipt_command_detail_backfill_v2") == marker
+
+
+def _advisory_events(store: GuardStore) -> list[dict[str, object]]:
+    return [event["payload"] for event in store.list_events(event_name="premium_advisory")]
+
+
+def test_the_native_upload_applies_advisories_and_alert_preferences(tmp_path, cloud_url) -> None:
+    store = GuardStore(tmp_path / "home")
+    _add_receipts(store, 2)
+    advisory = {"artifactId": "pkg:a", "severity": "high", "reason": "bad"}
+    preferences = {"advisoriesEnabled": True, "watchlistEnabled": False}
+    _CloudHandler.receipt_extra = {"advisories": [advisory, dict(advisory)], "alertPreferences": preferences}
+
+    summary = _sync(store, cloud_url)
+
+    assert summary["advisories_stored"] == 1
+    assert store.get_sync_payload("alert_preferences") == preferences
+    assert _advisory_events(store) == [
+        {"artifact_id": "pkg:a", "artifact_name": "pkg:a", "severity": "high", "reason": "bad"}
+    ]
+
+
+def test_advisory_alerts_turned_off_record_no_events(tmp_path, cloud_url) -> None:
+    store = GuardStore(tmp_path / "home")
+    _add_receipts(store, 1)
+    _CloudHandler.receipt_extra = {
+        "advisories": [{"artifactId": "pkg:b"}],
+        "alertPreferences": {"advisoriesEnabled": False},
+    }
+
+    _sync(store, cloud_url)
+
+    assert _advisory_events(store) == []
+    assert store.get_sync_payload("alert_preferences") == {"advisoriesEnabled": False}

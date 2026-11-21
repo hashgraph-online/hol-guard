@@ -13,7 +13,7 @@ import os
 import socket
 import time
 import urllib.error
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -508,7 +508,6 @@ def sync_receipts(
     policy_bundle_sync_payload = upload_answer.policy_bundle_sync_payload
     policy_bundle_delivery_field_provided = upload_answer.policy_bundle_delivery_provided
     policy_bundle_delivery_payload = upload_answer.policy_bundle_delivery
-    alert_preferences_payload = upload_answer.alert_preferences
     review_verification_keys_payload = upload_answer.review_verification_keys
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
@@ -520,15 +519,14 @@ def sync_receipts(
             aibom_context["workspace_id"] = workspace_id
     if aibom_context:
         store.set_sync_payload("aibom_inventory_context", aibom_context, now)
-    deduped_advisories = _dedupe_sync_payload_items(upload_answer.advisories)
     # Top-level ``policy``, ``teamPolicyPack``, and ``exceptions`` fields are
     # legacy unsigned siblings. They may be present on an authenticated HTTPS
     # response, but they are not covered by the pinned policy-bundle signature
     # and therefore cannot be persisted or materialized as local authority.
     # Only decisions and exceptions inside a validated signed bundle are used.
-    advisories_stored = 0
-    if deduped_advisories:
-        advisories_stored = store.cache_advisories(deduped_advisories, now)
+    # The native upload already cached the advisories, stored the alert
+    # preferences and recorded the advisory events.
+    advisories_stored = upload_answer.advisories_stored
     cloud_workspace_id = store.get_cloud_workspace_id()
     canonical_enforcement = _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
@@ -680,10 +678,6 @@ def sync_receipts(
             stored_last_error = store.get_sync_payload("policy_bundle_last_error")
             if isinstance(stored_last_error, dict):
                 activation_last_error = stored_last_error
-    if alert_preferences_payload is not None:
-        store.set_sync_payload("alert_preferences", alert_preferences_payload, now)
-    else:
-        store.set_sync_payload("alert_preferences", {}, now)
     cloud_exception_items: list[dict[str, object]] = []
     remote_policies_stored = 0
     remote_policy_sync_blocked = False
@@ -929,12 +923,6 @@ def sync_receipts(
         )
         if review_verification_keys_payload is not None
         else None
-    )
-    _record_synced_alert_events(
-        store=store,
-        advisories=deduped_advisories,
-        alert_preferences=alert_preferences_payload,
-        now=now,
     )
     try:
         pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
@@ -2368,18 +2356,6 @@ def _normalized_timestamp_string(value: object) -> str | None:
     return parsed.isoformat()
 
 
-def _dedupe_sync_payload_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
-    seen: set[str] = set()
-    deduped: list[dict[str, object]] = []
-    for item in items:
-        fingerprint = json.dumps(item, sort_keys=True)
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        deduped.append(item)
-    return deduped
-
-
 def _stored_policy_bundle_acknowledgement(store: GuardStore) -> object:
     """A failed acknowledgement describes a dropped bundle; never carry it onto a new one."""
 
@@ -2958,33 +2934,6 @@ def _cloud_package_manager_coverage(
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
     metadata = store.get_device_metadata()
     return str(metadata["installation_id"]), device_display_name(store, str(metadata["device_label"]))
-
-
-def _record_synced_alert_events(
-    *,
-    store: GuardStore,
-    advisories: Sequence[dict[str, object]],
-    alert_preferences: dict[str, object] | None,
-    now: str,
-) -> None:
-    advisories_enabled = not (
-        isinstance(alert_preferences, dict) and alert_preferences.get("advisoriesEnabled") is False
-    )
-    if advisories_enabled:
-        for item in advisories:
-            artifact_id = _optional_string(item.get("artifactId"))
-            if artifact_id is None:
-                continue
-            store.add_event(
-                "premium_advisory",
-                {
-                    "artifact_id": artifact_id,
-                    "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
-                    "severity": _optional_string(item.get("severity")),
-                    "reason": _optional_string(item.get("reason")),
-                },
-                now,
-            )
 
 
 def _sync_timestamp(payload: dict[str, object]) -> str:

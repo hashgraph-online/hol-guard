@@ -1,7 +1,8 @@
 //! Upload local receipts to Guard Cloud (`runner.sync_receipts`, up to the
 //! Cloud answers). The caller builds the sync context, the fleet posture and
-//! the workspace assessment summary, and applies what the answers carry
-//! (advisories, the policy bundle, alert preferences, review keys).
+//! the workspace assessment summary, and applies the policy bundle and review
+//! keys the answers carry. The upload applies the advisories and alert
+//! preferences itself ([`crate::cloud_receipt_answers`]).
 //!
 //! The upload runs inside [`crate::cloud_bundle_fetch::brokered`]. Each round
 //! resumes from [`UploadState`]: batches an earlier round delivered and
@@ -16,6 +17,7 @@ use crate::cloud_event_sync::{
     answer_text, post, route_url, screen_supplied, synced_at, trusted_base, EventStore, Refusal,
     EVENT_TIMEOUTS,
 };
+use crate::cloud_receipt_answers::apply as apply_answers;
 use crate::cloud_receipt_upload_rows::{
     advance_marker, cursor_backfill, fit_to_broker, plan, rowid, Plan, CURSOR_KEY,
     DETAIL_BACKFILL_MARKER,
@@ -149,7 +151,7 @@ pub(crate) fn upload_receipts(
         )?;
         state.processed += 1;
     }
-    finish(store, state, &plan)
+    finish(store, request, state, &plan)
 }
 
 /// The request body for one batch, and the summary it carries.
@@ -418,7 +420,12 @@ impl Tally {
 }
 
 /// Save the backfill marker and the cursor, and report what the upload got.
-fn finish(store: &EventStore<'_>, state: &UploadState, plan: &Plan) -> Result<Value, SyncError> {
+fn finish(
+    store: &EventStore<'_>,
+    request: &UploadRequest,
+    state: &UploadState,
+    plan: &Plan,
+) -> Result<Value, SyncError> {
     let tally = &state.tally;
     let last = Value::Object(tally.last_payload.clone());
     let now = synced_at(&last);
@@ -433,6 +440,20 @@ fn finish(store: &EventStore<'_>, state: &UploadState, plan: &Plan) -> Result<Va
             &now,
         )?;
     }
+    // The policy acknowledgement follow-up ignores what Cloud answers it.
+    let advisories_stored = if request.context_only {
+        0
+    } else {
+        let call = |method: &str, args: Value| store.call(method, args);
+        let save = |key: &str, payload: &Value, at: &str| store.save(key, payload, at);
+        apply_answers(
+            &call,
+            &save,
+            &tally.advisories,
+            tally.alert_preferences.as_ref(),
+            &now,
+        )?
+    };
     // The answer that carried the bundle is returned whole, for its
     // signature check; the bundle is its `policyBundle`.
     Ok(json!({
@@ -442,7 +463,7 @@ fn finish(store: &EventStore<'_>, state: &UploadState, plan: &Plan) -> Result<Va
         // Receipts too large for any request: the cursor moves past them.
         "receipts_skipped": plan.projected.iter().filter(|payload| payload.is_none()).count(),
         "receipts_stored": tally.receipts_stored,
-        "advisories": tally.advisories,
+        "advisories_stored": advisories_stored,
         "policy_bundle": {
             "provided": tally.bundle_provided,
             "malformed": tally.bundle_malformed,
@@ -450,7 +471,6 @@ fn finish(store: &EventStore<'_>, state: &UploadState, plan: &Plan) -> Result<Va
             "delivery_provided": tally.delivery_provided,
             "delivery": tally.delivery,
         },
-        "alert_preferences": tally.alert_preferences,
         "review_verification_keys": tally.review_keys,
         "receipt_cursor_rowid": cursor,
         "receipt_cursor_backfill": cursor_backfill(plan),
