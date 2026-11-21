@@ -457,6 +457,22 @@ pub(crate) fn dispatch(
         "record_workspace_review_enrollment" => {
             crate::guard_store_sync_state::review_enrollment::record_method(connection, args)
         }
+        "fleet_posture_state" => {
+            crate::guard_store_sync_state::fleet_posture_state::state_method(connection, args)
+        }
+        "set_fleet_posture_reporting" => {
+            crate::guard_store_sync_state::fleet_posture_state::set_reporting_method(
+                connection, args,
+            )
+        }
+        "request_full_fleet_inventory" => {
+            crate::guard_store_sync_state::fleet_posture_state::request_full_method(
+                connection, args,
+            )
+        }
+        "commit_fleet_posture_sent" => {
+            crate::guard_store_sync_state::fleet_posture_state::commit_sent_method(connection, args)
+        }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
