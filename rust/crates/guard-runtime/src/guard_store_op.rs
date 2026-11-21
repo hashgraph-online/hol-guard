@@ -176,11 +176,11 @@ fn evaluate_tracked(
     // every other call stays lock-free.
     let args = Args(prepared.as_ref().unwrap_or(request_args));
     // A retry's block check alone writes nothing: it keeps the lock-free read
-    // the separate block lookup had.
-    let kind = if method == "settle_native_review_reuse" && !args.flag("spend")? {
-        Kind::Read
-    } else if method == "receipt_redaction_bookkeeping"
-        && crate::guard_store_receipt_redaction::is_noop(&connection, &args)?
+    // the separate block lookup had. A receipt redaction check that would
+    // change nothing is also a read.
+    let kind = if (method == "settle_native_review_reuse" && !args.flag("spend")?)
+        || (method == "receipt_redaction_bookkeeping"
+            && crate::guard_store_receipt_redaction::is_noop(&connection, &args)?)
     {
         Kind::Read
     } else if (method == "count_receipts"
