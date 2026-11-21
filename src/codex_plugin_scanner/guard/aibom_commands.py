@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -134,9 +135,6 @@ def build_aibom_export_payload(
     return payload
 
 
-_AIBOM_USER_INVENTORY_KEY = "aibom_user_inventory_collection"
-
-
 def remember_user_inventory_if_due(
     store: Any,
     *,
@@ -153,15 +151,11 @@ def remember_user_inventory_if_due(
     from . import aibom_cli as api
     from .runtime.fleet_posture_aibom import remember_aibom_items
 
-    prior = store.get_sync_payload(_AIBOM_USER_INVENTORY_KEY)
-    collected_at = prior.get("collected_at") if isinstance(prior, dict) else None
-    if isinstance(collected_at, str) and collected_at.strip():
-        try:
-            elapsed = (api._aware_utc_timestamp(generated_at) - api._aware_utc_timestamp(collected_at)).total_seconds()
-        except (ValueError, OverflowError, TypeError):
-            elapsed = None
-        if elapsed is not None and 0 <= elapsed < min_interval_seconds:
-            return {"collected": False, "skipped": True, "reason": "recently_collected", "collected_at": collected_at}
+    recent, collected_at = store.aibom_user_inventory_recency(
+        generated_at=generated_at, min_interval_seconds=min_interval_seconds
+    )
+    if recent:
+        return {"collected": False, "skipped": True, "reason": "recently_collected", "collected_at": collected_at}
     context = HarnessContext(
         home_dir=api._resolve_operator_home_dir(home_dir),
         workspace_dir=None,
@@ -180,7 +174,7 @@ def remember_user_inventory_if_due(
         "snapshots": len(snapshots),
         "items": items,
     }
-    store.set_sync_payload(_AIBOM_USER_INVENTORY_KEY, summary, generated_at)
+    store.record_aibom_user_inventory(summary, now=generated_at)
     return summary
 
 
@@ -212,23 +206,19 @@ def sync_aibom_snapshots_if_due(
             "error": "Guard Cloud workspace changed before AIBOM inventory sync.",
         }
     bound_workspace_id = expected_workspace_id or current_workspace_id
-    if api._aibom_guard_events_endpoint_unavailable_recently(store):
+    if store.aibom_guard_events_backoff_active(now=datetime.now(timezone.utc).isoformat()):
         return {
             "synced": False,
             "skipped": True,
             "reason": "guard_events_endpoint_unavailable",
         }
-    if not force and not api._aibom_sync_is_due(
-        store,
-        generated_at=generated_at,
-        min_interval_seconds=min_interval_seconds,
-    ):
-        prior = store.get_sync_payload("aibom_sync_summary")
+    due, last_sync_at = store.aibom_sync_schedule(generated_at=generated_at, min_interval_seconds=min_interval_seconds)
+    if not force and not due:
         return {
             "synced": False,
             "skipped": True,
             "reason": "recently_synced",
-            "last_sync_at": prior.get("synced_at") if isinstance(prior, dict) else None,
+            "last_sync_at": last_sync_at,
         }
     context = api.HarnessContext(
         home_dir=api._resolve_operator_home_dir(home_dir),

@@ -29,15 +29,6 @@ _AIBOM_CLOUD_SYNC_OPTIONS = AibomCliOptions(
 _AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 15 * 60  # 15 min — stale AIBOM data undermines trust surfaces
 
 
-_AIBOM_EMPTY_SYNC_RETRY_SECONDS = 2 * 60
-
-
-_AIBOM_GUARD_EVENTS_BACKOFF_KEY = "aibom_guard_events_backoff"
-
-
-_AIBOM_GUARD_EVENTS_BACKOFF_MINUTES = 5  # matches _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES
-
-
 _AIBOM_SYNC_BATCH_SIZE = 3  # keep each POST under Cloudflare's 100s origin timeout
 
 
