@@ -74,7 +74,7 @@ fn due(state: Option<&Value>, binding: &[String], now: i128) -> bool {
     scheduled - now > i128::from(CHECK_INTERVAL_MICROS) || scheduled <= now
 }
 
-fn aware_now(args: &Args<'_>) -> StoreResult<(&str, i128)> {
+fn aware_now<'a>(args: &Args<'a>) -> StoreResult<(&'a str, i128)> {
     let now = args.str("now")?;
     aware_epoch_micros(now).map_or_else(|| value_error("invalid_now"), |micros| Ok((now, micros)))
 }
@@ -92,7 +92,7 @@ pub(crate) fn due_method(connection: &Connection, args: &Args<'_>) -> StoreResul
     Ok(json!({"binding": binding, "due": due}))
 }
 
-fn stored_binding(args: &Args<'_>) -> StoreResult<Vec<&str>> {
+fn stored_binding<'a>(args: &Args<'a>) -> StoreResult<Vec<&'a str>> {
     let Some(binding) = args.strings("binding")? else {
         return value_error("invalid_binding");
     };

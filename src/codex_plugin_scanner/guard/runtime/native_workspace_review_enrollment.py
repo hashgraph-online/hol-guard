@@ -132,7 +132,8 @@ def refresh_native_workspace_review_authority(
     if binding is None:
         return False
     changed = False
-    outcome: dict[str, object]
+    outcome = "unavailable"
+    detail: dict[str, object]
     try:
         encoded = _fetch_authority(auth_context)
         target = state_base / "workspace-review-authority.v1.json"
@@ -145,18 +146,18 @@ def refresh_native_workspace_review_authority(
             previous = None
         _install_authority(state_base, encoded)
         changed = previous != encoded
-        outcome = {"outcome": "enrolled", "record": encoded.decode("utf-8")}
+        detail = {"record": encoded.decode("utf-8")}
+        outcome = "enrolled"
     except HTTPError as error:
-        outcome = {"outcome": "unavailable", "http_status": error.code}
+        detail = {"http_status": error.code}
         _LOGGER.info("Cloud Review workspace enrollment unavailable: HTTP %d", error.code)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
-        outcome = {
-            "outcome": "unavailable",
+        detail = {
             "error_type": type(error).__name__,
             "error_code": str(error) if isinstance(error, ValueError) else None,
         }
-    state = store.record_workspace_review_enrollment(binding, now=current, **outcome)
-    if "error_type" in outcome:
+    state = store.record_workspace_review_enrollment(binding, outcome=outcome, now=current, **detail)
+    if "error_type" in detail:
         _LOGGER.warning("Cloud Review workspace enrollment failed: %s", state.get("error_code"))
     return changed
 
