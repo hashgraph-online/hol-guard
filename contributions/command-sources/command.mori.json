@@ -36,7 +36,7 @@
     "project_markers": [],
     "delegated_protection": null,
     "homepage": "https://github.com/EntasisLabs/mori",
-    "license": "MIT",
+    "license": "Apache-2.0",
     "icon": {
       "kind": "react-icon",
       "name": "HiMiniFolder",
