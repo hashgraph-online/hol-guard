@@ -113,6 +113,11 @@ def _install_authority(state_base: Path, encoded: bytes) -> None:
             candidate_path.unlink(missing_ok=True)
 
 
+def _state_base(store: GuardStore) -> Path:
+    """The native runtime state directory the enrollment records live in."""
+    return store.guard_home / "native-runtime"
+
+
 def refresh_native_workspace_review_authority(
     store: GuardStore,
     auth_context: dict[str, object],
@@ -122,7 +127,7 @@ def refresh_native_workspace_review_authority(
     """Return true only when a newly verified authority was installed."""
     if EXACT_CLOUD_REVIEW_OPERATION not in exact_cloud_review_operations(store):
         return False
-    state_base = store.guard_home / "native-runtime"
+    state_base = _state_base(store)
     base_authority = state_base / "approval-authority.v1.json"
     if state_base.is_symlink() or base_authority.is_symlink() or not base_authority.is_file():
         return False

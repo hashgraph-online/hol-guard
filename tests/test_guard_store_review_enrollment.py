@@ -79,9 +79,10 @@ def test_a_failed_refresh_records_its_type_name(tmp_path: Path, monkeypatch: pyt
     from tests.guard_exact_cloud_review_support import connected_exact_review_store
 
     store = connected_exact_review_store(tmp_path)
-    state_base = store.guard_home / "native-runtime"
-    state_base.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state_base = tmp_path / "enrollment-state"
+    state_base.mkdir(mode=0o700)
     (state_base / "approval-authority.v1.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(enrollment, "_state_base", lambda _store: state_base)
 
     def broken(_auth: dict[str, object]) -> bytes:
         raise OSError("connection reset")
