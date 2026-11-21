@@ -24,18 +24,21 @@ RECORD = {"schema": "guard-native-workspace-review-authority.v1", "version": 1}
 ENCODED = json.dumps(RECORD, sort_keys=True, separators=(",", ":")).encode()
 
 
-def _store(tmp_path: Path):
+def _store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # The enrollment files live apart from the native runtime's own state
+    # directory: a placeholder authority there would stop the resident store.
     store = connected_exact_review_store(tmp_path)
-    state_base = store.guard_home / "native-runtime"
-    state_base.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state_base = tmp_path / "enrollment-state"
+    state_base.mkdir(mode=0o700)
     (state_base / "approval-authority.v1.json").write_text("{}", encoding="utf-8")
-    return store
+    monkeypatch.setattr(enrollment, "_state_base", lambda _store: state_base)
+    return store, state_base
 
 
 def test_background_enrollment_rechecks_on_binding_change_and_cooldown(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _store(tmp_path)
+    store, _ = _store(tmp_path, monkeypatch)
     fetched: list[str] = []
     installed: list[bytes] = []
     monkeypatch.setattr(
@@ -55,8 +58,8 @@ def test_background_enrollment_rechecks_on_binding_change_and_cooldown(
 def test_unavailable_authority_does_not_block_event_delivery_or_replace_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _store(tmp_path)
-    target = store.guard_home / "native-runtime" / "workspace-review-authority.v1.json"
+    store, state_base = _store(tmp_path, monkeypatch)
+    target = state_base / "workspace-review-authority.v1.json"
     target.write_bytes(b"existing-root-signed-record")
 
     def unavailable(_auth: dict[str, object]) -> bytes:
@@ -75,11 +78,11 @@ def test_unavailable_authority_does_not_block_event_delivery_or_replace_record(
 def test_missing_base_enrollment_or_local_consent_makes_no_network_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _store(tmp_path)
+    store, state_base = _store(tmp_path, monkeypatch)
     monkeypatch.setattr(enrollment, "_fetch_authority", lambda _: pytest.fail("unexpected network request"))
-    (store.guard_home / "native-runtime" / "approval-authority.v1.json").unlink()
+    (state_base / "approval-authority.v1.json").unlink()
     assert not enrollment.refresh_native_workspace_review_authority(store, AUTH, now=NOW)
-    (store.guard_home / "native-runtime" / "approval-authority.v1.json").write_text("{}", encoding="utf-8")
+    (state_base / "approval-authority.v1.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(enrollment, "exact_cloud_review_operations", lambda _: ())
     assert not enrollment.refresh_native_workspace_review_authority(store, AUTH, now=NOW)
 
