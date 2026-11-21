@@ -368,7 +368,13 @@ fn a_metric_name_carrying_a_window_is_not_a_secret() {
     ] {
         assert!(!holds_literal_secret(text), "{text}");
     }
+    // A readable run of letters is not on its own an identifier: these reach
+    // the digit-ratio check and have to stay secrets. The first pair opens
+    // with a word and then carries the generated part; the rest are random
+    // throughout.
     for text in [
+        format!("      apiKey: '{}',", joined(&["prod4930", "17582"])),
+        format!("const token = '{}';", joined(&["stage", "86249713055"])),
         format!("      apiKey: '{}',", joined(&["k7m2q9", "x4vb3n"])),
         format!("const token = '{}';", joined(&["qf4zr8", "wn2kd6"])),
     ] {
