@@ -70,8 +70,9 @@ def test_cli_hook_without_a_hint_reviews_under_the_explicit_maximum():
         ({"guard_remaining_ms": 300}, 0.3),
         ({"guard_remaining_seconds": 0.50, "guard_remaining_ms": 300}, 0.5),
         ({"guard_remaining_seconds": -1, "guard_remaining_ms": 300}, 0.3),
-        ({"guard_remaining_seconds": 9}, 1.0),
-        ({}, 1.0),
+        ({"guard_remaining_seconds": 9}, 9.0),
+        ({"guard_remaining_seconds": 600}, 10.0),
+        ({}, 10.0),
     ],
 )
 def test_cold_cli_lookup_deadline_stays_within_the_harness_budget(monkeypatch, hints, expected_seconds):

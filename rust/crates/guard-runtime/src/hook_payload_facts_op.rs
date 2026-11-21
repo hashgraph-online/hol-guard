@@ -1,4 +1,4 @@
-//! Hook payload facts normalized by the resident.
+//! Hook payload facts normalized by the native runtime.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};

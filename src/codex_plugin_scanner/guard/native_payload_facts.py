@@ -25,6 +25,7 @@ _RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
 _PAYLOAD_FACTS_MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _HOOK_EVENT_KEYS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
 _HOOK_BUDGET_SCALES = (("guard_remaining_seconds", 1.0), ("guard_remaining_ms", 1000.0))
+_CLI_ADMISSION_LOOKUP_LIMIT_SECONDS = 10.0
 _CONNECTOR_FEATURE = "hook-connector-facts-v1"
 _CONNECTOR_REQUEST_SCHEMA = "guard-hook-connector-facts-request.v1"
 _CONNECTOR_RESULT_SCHEMA = "guard-hook-connector-facts-result.v1"
@@ -150,9 +151,9 @@ def native_cli_hook_admission(payload: Mapping[str, object], *, started_at: floa
         wire[key] = value
         # Bound the lookup by the caller's raw time. Rust sets the review budget.
         if transport_seconds is None and value >= 0:
-            transport_seconds = min(scale, value) / scale
+            transport_seconds = min(scale * _CLI_ADMISSION_LOOKUP_LIMIT_SECONDS, value) / scale
     if transport_seconds is None:
-        transport_seconds = 1.0
+        transport_seconds = _CLI_ADMISSION_LOOKUP_LIMIT_SECONDS
     facts = runtime_answer(
         "native-hook-cli-admission-v1",
         "hook-cli-admission",

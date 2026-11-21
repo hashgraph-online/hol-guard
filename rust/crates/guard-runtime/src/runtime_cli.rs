@@ -2,10 +2,14 @@ use super::*;
 
 #[path = "claude_question_save_command.rs"]
 pub(crate) mod claude_question_save_command;
+#[path = "runtime_cli_hook_commands.rs"]
+mod hook_commands;
 
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
-    if let Some(result) = claude_question_save_command::route(&args) {
+    if let Some(result) =
+        hook_commands::route(&args).or_else(|| claude_question_save_command::route(&args))
+    {
         return result;
     }
     match args.as_slice() {
@@ -133,10 +137,6 @@ pub(super) fn run() -> Result<(), String> {
             let response = trust_attestation_key::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
-        [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
-            let response = codex_hook_trust::run_command(io::stdin().lock())?;
-            write_bytes_response(&response)
-        }
         [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
             let response = desktop_notification::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -154,9 +154,6 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
             let response = hook_removal_sweep::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
-        }
-        [command, flag] if command == hook_payload_facts_op::CLI_ADMISSION_COMMAND && flag == "--stdin" => {
-            write_json(&hook_payload_facts_op::cli_admission(&read_stdin_bounded()?)?)
         }
         [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
@@ -433,10 +430,6 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if guard_repair_report::is_command(command) && flag == "--stdin" => {
             let response = guard_repair_report::run_command(io::stdin().lock())?;
-            write_bytes_response(&response)
-        }
-        [command, flag] if hook_launch_scan::is_command(command) && flag == "--stdin" => {
-            let response = hook_launch_scan::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if durable_runtime_collapse::is_command(command) && flag == "--stdin" => {
