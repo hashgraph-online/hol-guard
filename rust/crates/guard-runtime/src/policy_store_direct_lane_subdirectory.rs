@@ -110,7 +110,7 @@ fn publisher_spelling_without_links(candidate: &Path) -> bool {
 
 #[cfg(windows)]
 fn publisher_spelling_without_links(candidate: &Path) -> bool {
-    use crate::daemon_edge_serve::plain_path_text;
+    use crate::daemon_edge::standalone::plain_path_text;
     use std::os::windows::fs::MetadataExt;
     use std::path::Component;
 
