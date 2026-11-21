@@ -75,6 +75,26 @@ def test_peels_verified_cd_and_bounded_filters(tmp_path: Path) -> None:
         ),
         ("pytest -q; echo $?", "pytest -q", OutputFilter("all", 0, False, "")),
         ("pytest -q 2>&1", "pytest -q", OutputFilter("all", 0, True)),
+        (
+            "pytest -q; echo done",
+            "pytest -q",
+            OutputFilter("all", 0, False, success_label="done", failure_label="done"),
+        ),
+        (
+            "pytest -q && echo PASS",
+            "pytest -q",
+            OutputFilter("all", 0, False, success_label="PASS"),
+        ),
+        (
+            "pytest -q || echo FAIL",
+            "pytest -q",
+            OutputFilter("all", 0, False, failure_label="FAIL"),
+        ),
+        (
+            "pytest -q 2>&1 | tail -5 && echo PASS || echo FAIL",
+            "pytest -q",
+            OutputFilter("tail", 5, True, success_label="PASS", failure_label="FAIL"),
+        ),
     ],
 )
 def test_peels_merged_stderr_and_final_status_echo(
@@ -88,6 +108,19 @@ def test_status_echo_reports_the_shell_status() -> None:
     # After a pipe, `$?` is the filter's status, not the producer's.
     assert OutputFilter("tail", 5, True, "exit=").status_line(3) == "exit=0\n"
     assert OutputFilter("all", 0, True).status_line(3) is None
+
+
+def test_a_report_prints_the_arm_the_shell_would_have_reached() -> None:
+    both = OutputFilter("all", 0, False, success_label="PASS", failure_label="FAIL")
+    assert both.status_line(0) == "PASS\n"
+    assert both.status_line(3) == "FAIL\n"
+    # `&& echo PASS` alone runs no echo when the command fails, and `|| echo
+    # FAIL` runs none when it succeeds, so the run keeps its own status.
+    assert OutputFilter("all", 0, False, success_label="PASS").status_line(3) is None
+    assert OutputFilter("all", 0, False, failure_label="FAIL").status_line(0) is None
+    # Behind a bounded filter the shell reads the filter's status, which is 0.
+    filtered = OutputFilter("tail", 5, True, success_label="PASS", failure_label="FAIL")
+    assert filtered.status_line(3) == "PASS\n"
 
 
 @pytest.mark.parametrize(

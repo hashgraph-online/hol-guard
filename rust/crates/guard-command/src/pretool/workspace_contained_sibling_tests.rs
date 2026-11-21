@@ -287,6 +287,15 @@ fn a_status_echo_after_a_sibling_cd_stays_contained() {
             tree.display()
         ),
         format!("cd {}; npm run build; echo rc=$?", tree.display()),
+        // A report that names no status prints its own label however the run
+        // ends, so it reads nothing either.
+        format!("cd {} && npm run build; echo done", tree.display()),
+        format!("cd {} && npm run build && echo PASS", tree.display()),
+        format!("cd {} && npm run build || echo FAIL", tree.display()),
+        format!(
+            "cd {} && npm run build && echo PASS || echo FAIL",
+            tree.display()
+        ),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -295,9 +304,8 @@ fn a_status_echo_after_a_sibling_cd_stays_contained() {
         );
     }
     for command in [
-        // Not the tail the sink peels: no status to print, a quoting the sink
-        // cannot read, or work after the echo that the `cd` would still join.
-        format!("cd {} && npm run build; echo done", tree.display()),
+        // Not the tail the sink peels: a quoting the sink cannot read, or
+        // work after the echo that the `cd` would still join.
         format!("cd {} && npm run build; echo 'rc=$?'", tree.display()),
         format!(
             "cd {} && npm run build; echo \"rc=$?\" && ls dist",

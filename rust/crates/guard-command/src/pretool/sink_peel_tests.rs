@@ -109,3 +109,106 @@ fn an_assignment_the_sink_cannot_read_exactly_is_not_peeled() {
         assert_eq!(peeled(command, &root), None, "{command}");
     }
 }
+
+/// The labels a trailing report prints, as the sink reads them off the text.
+fn reported(
+    command: &str,
+    workspace: &Path,
+) -> (String, Option<String>, Option<String>, Option<String>) {
+    let core = peel(command, workspace.to_str().unwrap(), None, None, false)
+        .unwrap()
+        .expect("the report wraps the command");
+    let output = core.output.expect("a report describes the output");
+    (
+        core.core,
+        output.status_label,
+        output.success_label,
+        output.failure_label,
+    )
+}
+
+/// An agent closes a run with a line of its own. Each arm is read off the
+/// text so the sink prints the one the shell would have reached, and the run
+/// behind it keeps the core it would have had alone.
+#[test]
+fn a_trailing_report_leaves_the_core_alone_and_names_the_arm_it_prints() {
+    let root = fixture("report");
+    for (command, status, success, failure) in [
+        ("bun run build; echo \"exit=$?\"", Some("exit="), None, None),
+        ("bun run build; echo done", None, Some("done"), Some("done")),
+        ("bun run build && echo PASS", None, Some("PASS"), None),
+        ("bun run build || echo FAIL", None, None, Some("FAIL")),
+        (
+            "bun run build && echo PASS || echo FAIL",
+            None,
+            Some("PASS"),
+            Some("FAIL"),
+        ),
+    ] {
+        let (core, read_status, read_success, read_failure) = reported(command, &root);
+        assert_eq!(core, "bun run build", "{command}");
+        assert_eq!(read_status.as_deref(), status, "{command}");
+        assert_eq!(read_success.as_deref(), success, "{command}");
+        assert_eq!(read_failure.as_deref(), failure, "{command}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// A report rides on whatever shaping the command already carries, so the
+/// filter chain and the merge it describes are read beside its labels.
+#[test]
+fn a_trailing_report_keeps_the_shaping_in_front_of_it() {
+    let root = fixture("report-shaped");
+    let core = peel(
+        "bun run build 2>&1 | tail -20 && echo PASS",
+        root.to_str().unwrap(),
+        None,
+        None,
+        false,
+    )
+    .unwrap()
+    .expect("the chain wraps the command");
+    let output = core.output.expect("a filtered run describes its output");
+    assert_eq!(core.core, "bun run build");
+    assert_eq!(output.kind, "tail");
+    assert_eq!(output.count, 20);
+    assert!(output.merge_stderr);
+    assert_eq!(output.success_label.as_deref(), Some("PASS"));
+    assert_eq!(output.failure_label, None);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// An operator inside an argument is text the program reads, not a step the
+/// shell runs. Truncating there would hand the sandbox half a word.
+#[test]
+fn an_operator_inside_a_quoted_argument_is_not_a_report() {
+    let root = fixture("report-quoted");
+    let core = peel(
+        "bun run build --name 'a && echo PASS'",
+        root.to_str().unwrap(),
+        None,
+        None,
+        false,
+    )
+    .unwrap();
+    assert!(core.is_none(), "{core:?}");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// `echo -n`, `-e` and `-E` are options the shell's own echo consumes rather
+/// than prints. The sink would print them as a label, so the text would not
+/// match what the command produces and the run keeps its review.
+#[test]
+fn an_echo_option_word_is_not_a_report() {
+    let root = fixture("report-option");
+    for command in [
+        "bun run build && echo -n PASS",
+        "bun run build; echo -e done",
+        "bun run build || echo -E FAIL",
+        "bun run build; echo -n \"exit=$?\"",
+    ] {
+        let core = peel(command, root.to_str().unwrap(), None, None, false).unwrap();
+        assert!(core.is_none(), "{command}: {core:?}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
