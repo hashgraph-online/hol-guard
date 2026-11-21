@@ -17,6 +17,8 @@ _EDGE = {
     "containment_route": "none",
 }
 
+_LIFECYCLE_EDGE = {"harness_response": {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}}
+
 
 def test_native_hook_direct_decodes_an_answer(monkeypatch, tmp_path: Path) -> None:
     calls: list[dict[str, object]] = []
@@ -63,6 +65,29 @@ def test_native_hook_direct_preserves_defer(monkeypatch, tmp_path: Path) -> None
         home_dir=None,
         deadline=None,
     ) == {"outcome": "defer", "reason": "review_queue"}
+
+
+def test_native_hook_direct_decodes_lifecycle_answer(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        direct, "native_runtime_status", lambda **_kwargs: SimpleNamespace(identity=SimpleNamespace(sha256="a" * 64))
+    )
+    monkeypatch.setattr(
+        direct,
+        "_resident_request",
+        lambda **_kwargs: {"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": _LIFECYCLE_EDGE},
+    )
+
+    assert (
+        direct.native_hook_direct(
+            harness="claude-code",
+            guard_home=tmp_path,
+            payload={"hook_event_name": "PermissionRequest"},
+            workspace=None,
+            home_dir=None,
+            deadline=None,
+        )
+        == _LIFECYCLE_EDGE
+    )
 
 
 def test_native_hook_direct_records_health_after_valid_answer(monkeypatch, tmp_path: Path) -> None:
