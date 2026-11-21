@@ -266,9 +266,7 @@ class NativePolicySnapshotPublicationMixin:
             else:
                 return
             identity, capabilities, master_key, config, command_extensions, client = context
-            evidence_owned = (
-                publisher.direct_evidence_bound() and EVIDENCE_BATCH_FEATURE in capabilities.features
-            )
+            evidence_owned = publisher.direct_evidence_bound() and EVIDENCE_BATCH_FEATURE in capabilities.features
             bound_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
             bound_watch_ends = signed_watch_ends(bound_postures, publisher._compiled_watch_ends)
             # A posture-only change keeps the materialized generation. Move

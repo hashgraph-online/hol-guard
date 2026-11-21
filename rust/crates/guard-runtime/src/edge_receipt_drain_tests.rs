@@ -47,14 +47,14 @@ fn the_resident_keeps_unwritten_evidence_and_commits_it_once_when_the_writer_ret
     let queue = DirectEvidenceQueue::default();
     assert!(offer_direct(&queue, &home, allowed(&edge), true));
     let attempt = |source| {
-        crate::hook_direct_evidence::commit_queued_page(home.to_str().unwrap(), &queue, source)
+        crate::hook_direct_evidence::commit_test_batch(home.to_str().unwrap(), &queue, source)
     };
 
     assert_eq!(attempt(None).unwrap_err(), "direct_hook_evidence_unhandled");
     let committed: Value = serde_json::from_slice(&attempt(Some("guard")).unwrap()).unwrap();
-    assert_eq!(committed["schema"], "guard-hook-direct-evidence-commit.v1");
+    assert_eq!(committed["schema"], "guard-hook-direct-evidence-batch.v1");
     assert_eq!(committed["record_count"], json!(1));
-    assert_eq!(committed["remaining"], json!(0));
+    assert_eq!(committed["more"], json!(false));
     assert!(committed.get("records").is_none());
     assert!(committed.get("through").is_none());
 

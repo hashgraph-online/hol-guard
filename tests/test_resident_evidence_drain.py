@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from codex_plugin_scanner.guard import resident_evidence_drain
 from codex_plugin_scanner.guard.resident_evidence_drain import ResidentEvidenceDrain, _decode_batch
 
 
@@ -46,10 +49,10 @@ def test_resident_drain_uses_one_request_for_all_pages_from_the_resident(tmp_pat
     assert drain.failures == 0
     assert len(requests) == 1
     request = json.loads(requests[0]["payload"])
-    assert request["request"] == {
-        "guard_home": str(tmp_path),
-        "batch": {"budget_ms": request["deadline_budget_ms"], "shutdown": False},
-    }
+    assert request["request"]["guard_home"] == str(tmp_path)
+    batch = request["request"]["batch"]
+    assert batch["shutdown"] is False
+    assert 0 < batch["budget_ms"] < request["deadline_budget_ms"]
 
 
 def test_resident_drain_waits_to_retry_after_a_partial_failure(tmp_path: Path) -> None:
@@ -100,6 +103,24 @@ def test_resident_drain_shutdown_commits_the_final_page_in_one_request(tmp_path:
     assert len(requests) == 1
     assert drain.records == 1
     assert json.loads(requests[0]["payload"])["request"]["batch"]["shutdown"] is True
+
+
+def test_resident_drain_shutdown_uses_the_remaining_budget_for_another_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(resident_evidence_drain, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    deadlines: list[object] = []
+
+    def client(**values: object) -> bytes:
+        deadlines.append(values["deadline_monotonic"])
+        clock[0] += 1.8
+        return _batch(record_count=1, more=len(deadlines) == 1)
+
+    drain = ResidentEvidenceDrain(_host(tmp_path), transport=lambda: (tmp_path / "runtime", client))
+    assert drain.stop(timeout_seconds=3.5)
+    assert deadlines == [2.0, 3.5]
+    assert drain.records == 2
 
 
 def test_resident_drain_does_not_record_page_contents_in_python(tmp_path: Path) -> None:

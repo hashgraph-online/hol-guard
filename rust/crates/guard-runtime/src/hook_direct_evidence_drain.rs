@@ -17,7 +17,7 @@ const UNHANDLED: &str = "direct_hook_evidence_unhandled";
 #[serde(deny_unknown_fields)]
 pub(crate) struct HookDirectEvidenceCommitRequestV1 {
     pub(crate) guard_home: String,
-    batch: Option<Batch>,
+    batch: Batch,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,13 +77,7 @@ pub(crate) fn commit_page(
     store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
     let queue = store.direct_evidence();
-    let Some(batch) = &request.batch else {
-        return commit_queued_page(
-            &request.guard_home,
-            queue,
-            store.direct_lane_writer_source().as_deref(),
-        );
-    };
+    let batch = &request.batch;
     if !(1..=MAX_BATCH_MS).contains(&batch.budget_ms) {
         return Err("direct_hook_evidence_batch_budget_invalid".to_owned());
     }
@@ -114,7 +108,7 @@ fn commit_batch(
                 pages += 1;
                 record_count = record_count.saturating_add(page.record_count);
                 remaining = page.remaining;
-                store_fatal = page.store_fatal;
+                store_fatal = page.store_fatal.filter(|fatal| !fatal.is_null());
                 if remaining == 0 || store_fatal.is_some() {
                     break;
                 }
@@ -132,7 +126,7 @@ fn commit_batch(
             "epoch": queue.epoch,
             "pages": pages,
             "record_count": record_count,
-            "more": !shutdown && pages > 0 && remaining > 0 && !failed && store_fatal.is_none(),
+            "more": pages > 0 && remaining > 0 && !failed,
             "failed": failed,
             "counters": queue.counters.snapshot(),
         }),
@@ -140,21 +134,17 @@ fn commit_batch(
     )
 }
 
-pub(crate) fn commit_queued_page(
+#[cfg(test)]
+pub(crate) fn commit_test_batch(
     home: &str,
     queue: &DirectEvidenceQueue,
     writer_source: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    let page = commit_queued(home, queue, writer_source)?;
-    encode(
-        json!({
-            "schema": "guard-hook-direct-evidence-commit.v1",
-            "epoch": queue.epoch,
-            "record_count": page.record_count,
-            "remaining": page.remaining,
-            "counters": queue.counters.snapshot(),
-        }),
-        page.store_fatal,
+    commit_batch(
+        queue,
+        false,
+        Instant::now() + Duration::from_millis(MAX_BATCH_MS),
+        || commit_queued(home, queue, writer_source),
     )
 }
 
@@ -284,7 +274,7 @@ mod tests {
             Ok(CommittedPage {
                 record_count: 2,
                 remaining,
-                store_fatal: None,
+                store_fatal: Some(Value::Null),
             })
         };
         let deadline = Instant::now() + Duration::from_secs(1);

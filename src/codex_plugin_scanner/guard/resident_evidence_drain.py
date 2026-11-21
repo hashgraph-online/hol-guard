@@ -104,7 +104,10 @@ class ResidentEvidenceDrain:
             thread.join(timeout=max(0.0, deadline - time.monotonic()))
         if thread is not None and thread.is_alive():
             return False
-        self.drain_once(deadline_monotonic=deadline)
+        while self.drain_once(deadline_monotonic=deadline):
+            # Rust reports an unfinished batch. Keep using the caller's
+            # original shutdown deadline across requests.
+            pass
         return True
 
     def drain_once(self, *, deadline_monotonic: float | None = None) -> bool:
@@ -134,13 +137,15 @@ class ResidentEvidenceDrain:
         if remaining <= 0:
             return False
         budget_ms = max(1, int(remaining * 1_000))
+        # Give the final page and the reply time before the client times out.
+        batch_budget_ms = budget_ms - min(250, budget_ms // 4)
         payload = json.dumps(
             {
                 "operation": "hook_direct_evidence_commit",
                 "deadline_budget_ms": budget_ms,
                 "request": {
                     "guard_home": str(self._host.guard_home),
-                    "batch": {"budget_ms": budget_ms, "shutdown": deadline_monotonic is not None},
+                    "batch": {"budget_ms": batch_budget_ms, "shutdown": deadline_monotonic is not None},
                 },
             },
             separators=(",", ":"),

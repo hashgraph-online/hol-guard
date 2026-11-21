@@ -75,7 +75,6 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_direct::HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE.into(),
         crate::policy_store::policy_store_direct_lane::HOOK_DIRECT_REVIEW_FACTS_FEATURE.into(),
         crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),
-        crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_COMMIT_FEATURE.into(),
         crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_BATCH_FEATURE.into(),
         crate::hook_payload_facts_op::HOOK_PAYLOAD_FACTS_FEATURE.into(),
         crate::hook_review_binding_op::HOOK_REVIEW_BINDING_FEATURE.into(),
