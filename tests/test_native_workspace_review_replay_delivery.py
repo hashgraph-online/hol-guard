@@ -12,13 +12,13 @@ from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from codex_plugin_scanner.guard.runtime import native_workspace_review_replay as replay
 from codex_plugin_scanner.guard.runtime import native_workspace_review_replay_delivery as replay_delivery
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.native_replay_store import ReplayStore
 from tests.test_guard_review_event_outbox import _all_events
 from tests.test_native_workspace_review_replay import (
     _accepted_event,
     _binding,
     _connect,
     _native_context,
-    _ReplayStore,
     _request,
 )
 
@@ -473,7 +473,7 @@ def test_real_store_rotation_after_snapshot_compaction_reuses_frozen_snapshot(
 
 
 def test_identity_mismatch_never_lists_or_reassigns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _ReplayStore(tmp_path, ["request-1"])
+    store = ReplayStore(tmp_path, ["request-1"])
     store.binding["oauth_subject_hash"] = "c" * 64
     monkeypatch.setattr(replay, "build_native_workspace_review_context", pytest.fail)
 
