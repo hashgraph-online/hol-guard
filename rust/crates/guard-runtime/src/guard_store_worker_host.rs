@@ -111,19 +111,33 @@ fn write(
 /// coordinator reads, so the row stays small however large the approval
 /// records are: the request id, approval address and workspace, and the
 /// severity of each decision signal. Entries that are not objects are dropped.
+/// Requests that would take the row past [`ATTENTION_BATCH_BYTES`] are left
+/// off the end, so every queued row fits one take's answer and queueing never
+/// fails after the caller has saved its approvals.
 fn queue_attention(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
     let operation_id = text_arg(args, "operation_id", "invalid_operation_id")?;
     let Some(requests) = args.raw("requests").filter(|value| value.is_array()) else {
         return value_error("invalid_requests");
     };
-    let requests: Vec<Value> = requests
+    let mut used = json!({ "operation_id": operation_id, "requests": [] })
+        .to_string()
+        .len();
+    let mut kept = Vec::new();
+    for request in requests
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(Value::as_object)
-        .map(attention_request)
-        .collect();
-    let row = json!({ "operation_id": operation_id, "requests": requests });
+    {
+        let request = attention_request(request);
+        let size = request.to_string().len() + 1;
+        if used + size > ATTENTION_BATCH_BYTES {
+            break;
+        }
+        used += size;
+        kept.push(request);
+    }
+    let row = json!({ "operation_id": operation_id, "requests": kept });
     write(
         connection,
         &format!("{ATTENTION_PREFIX}{operation_id}"),

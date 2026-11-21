@@ -254,6 +254,28 @@ fn an_oversized_stored_row_is_still_delivered_alone() {
 }
 
 #[test]
+fn a_huge_request_list_is_cut_to_fit_one_take() {
+    let connection = store();
+    let requests: Vec<Value> = (0..20_000)
+        .map(|index| json!({"request_id": format!("req-{index:05}-{}", "r".repeat(60))}))
+        .collect();
+    let args = json!({"operation_id": "op", "requests": requests.clone(), "now": NOW});
+    call(&connection, "queue_approval_attention", args).unwrap();
+    let stored: String = connection
+        .query_row(
+            "select payload_json from sync_state where state_key = 'daemon_approval_attention:op'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(stored.len() <= ATTENTION_BATCH_BYTES);
+    let row: Value = serde_json::from_str(&stored).unwrap();
+    let kept = row["requests"].as_array().unwrap();
+    assert!(!kept.is_empty() && kept.len() < 20_000);
+    assert_eq!(kept[0]["request_id"], requests[0]["request_id"]);
+}
+
+#[test]
 fn queued_requests_keep_only_what_attention_reads() {
     let connection = store();
     let request = json!({
