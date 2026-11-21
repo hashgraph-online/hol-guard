@@ -230,15 +230,35 @@ def test_an_unavailable_settlement_cannot_queue_an_evaluated_block(
     assert response["prompted"] is False
 
 
-@pytest.mark.parametrize("lookup", [None, {"argv": ["npm", "ci"], "environment": {}}])
+@pytest.mark.parametrize(
+    ("lookup", "reuse", "approval"),
+    [
+        (None, None, None),
+        ({"argv": ["npm", "ci"], "environment": {}}, None, None),
+        (
+            {"argv": ["npm", "ci"], "environment": {}},
+            {"artifact_hash": KEY["artifact_hash"], "found": False, "policy_action": "review"},
+            KEY,
+        ),
+        (
+            {"argv": ["npm", "ci"], "environment": {}},
+            {"artifact_hash": KEY["artifact_hash"], "found": True, "policy_action": "allow"},
+            KEY,
+        ),
+    ],
+)
 def test_an_unavailable_settlement_keeps_a_review_queued(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lookup: dict[str, object] | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lookup: dict[str, object] | None,
+    reuse: dict[str, object] | None,
+    approval: dict[str, str] | None,
 ) -> None:
     monkeypatch.setattr(
         package_review, "package_review_plan", _plan(package_review.PackageReviewPlan(ARTIFACT, False, tmp_path, True))
     )
     monkeypatch.setattr(package_review, "_evaluate", _plan(SimpleNamespace(review_settlement=("review", None))))
-    monkeypatch.setattr(package_review, "_package_reuse_evidence", _plan(None))
+    monkeypatch.setattr(package_review, "_package_reuse_evidence", _plan(reuse))
     replies = iter(
         [("document", {"response": None, "package_approval": None, "lookup": lookup}), None]
         if lookup is not None
@@ -246,7 +266,7 @@ def test_an_unavailable_settlement_keeps_a_review_queued(
     )
     monkeypatch.setattr(package_review, "native_render_cli", lambda *_a, **_k: next(replies))
 
-    assert _outcome(tmp_path) == package_review.PackageReviewOutcome(None)
+    assert _outcome(tmp_path) == package_review.PackageReviewOutcome(None, approval)
     assert list(replies) == []
 
 

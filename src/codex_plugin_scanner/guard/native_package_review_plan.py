@@ -218,6 +218,7 @@ def native_package_review_response(
             "command": artifact.metadata.get("redacted_command"),
         },
     }
+    fallback_approval: dict[str, str] | None = None
     settled = _settle(harness, request, guard_home, deadline)
     if settled is not None and isinstance(lookup := settled.get("lookup"), dict):
         argv = lookup.get("argv")
@@ -229,7 +230,16 @@ def native_package_review_response(
             and isinstance(environment, dict)
             and all(isinstance(name, str) and isinstance(value, str) for name, value in environment.items())
         ):
-            request["reuse"] = _package_reuse_evidence(store, artifact, evaluation, plan.workspace, argv, environment)
+            reuse = _package_reuse_evidence(store, artifact, evaluation, plan.workspace, argv, environment)
+            request["reuse"] = reuse
+            if reuse is not None and isinstance(artifact_hash := reuse.get("artifact_hash"), str):
+                # The resident requested this key and the package authority
+                # supplied its hash. Keep it if the reply to the lookup is lost.
+                fallback_approval = {
+                    "harness": artifact.harness,
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_hash": artifact_hash,
+                }
             settled = _settle(harness, request, guard_home, deadline)
     if settled is not None and settled.get("lookup") is None:
         response = settled.get("response")
@@ -247,7 +257,7 @@ def native_package_review_response(
     # Keep the original review queued when settlement is unavailable.
     # An explicit evaluator block must still stop without a review card.
     if action != "block":
-        return _UNSETTLED
+        return PackageReviewOutcome(None, fallback_approval)
 
     from .hook_review.hook_fail_closed import fail_closed_pre_tool
 
