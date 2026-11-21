@@ -23,14 +23,14 @@ use crate::cloud_json_request::{send, JsonRequest};
 
 /// The one operation the exact Cloud Review route leases.
 pub(crate) const EXACT_OPERATION: &str = "guard.review.resolveExact";
-const EXACT_PROTOCOL_VERSION: i64 = 2;
-const QUEUE_BASE: &str = "/api/guard/commands";
-const EXACT_BASE: &str = "/api/guard/review/v2/commands";
+pub(crate) const EXACT_PROTOCOL_VERSION: i64 = 2;
+pub(crate) const QUEUE_BASE: &str = "/api/guard/commands";
+pub(crate) const EXACT_BASE: &str = "/api/guard/review/v2/commands";
 const PROTOCOL_UPGRADE: &str = "cloud_review_protocol_upgrade_required";
 /// A lease waits on Guard Cloud's long poll; a gateway error is retried after
 /// a short pause rather than the minute a sync waits.
-const TIMEOUT_SECONDS: f64 = 35.0;
-const RETRY_TIMEOUT_SECONDS: f64 = 60.0;
+pub(crate) const TIMEOUT_SECONDS: f64 = 35.0;
+pub(crate) const RETRY_TIMEOUT_SECONDS: f64 = 60.0;
 
 /// What the caller asks to lease, and the fields every lease body carries.
 #[derive(Debug, Deserialize)]
@@ -330,7 +330,7 @@ fn reply(answer: Value) -> Result<Reply, SyncError> {
 }
 
 /// `scheme://authority` of the trusted sync URL, as `command_api_url` keeps it.
-fn origin(url: &str) -> Option<String> {
+pub(crate) fn origin(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;
     let authority = rest.split(['/', '?', '#']).next()?;
     (!scheme.is_empty() && !authority.is_empty()).then(|| format!("{scheme}://{authority}"))
