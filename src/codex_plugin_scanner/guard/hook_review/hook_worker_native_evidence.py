@@ -32,7 +32,7 @@ def _record_native_pre_activity(
     observation = transition_hook_observation(payload, receipt)
     if observation is not None:
         response = {**response, OBSERVATION_FIELD: observation}
-    submit = getattr(host.activity_writer, "submit_command_activity", None)
+    submit = getattr(host.activity_writer, "submit_pre_tool_activity", None)
     # An edge that queued this activity behind its receipt says so.
     if callable(submit) and not recorded:
         receipt_id = receipt.get("decision_id") if receipt is not None else None
@@ -43,13 +43,10 @@ def _record_native_pre_activity(
             host,
             lambda: submit(
                 harness=harness,
-                event="PreToolUse",
                 payload=payload,
-                succeeded=True,
-                policy_action=response.get("policy_action"),
+                response=response,
+                settled=True,
                 receipt_id=receipt_id,
-                prompted=response.get("prompted") is True,
-                approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
             ),
         )
     return response
@@ -93,17 +90,15 @@ def _record_unavailable_native(
         )
     host.metrics.record_route("native_fail_safe")
     if event_name == "PreToolUse":
-        writer = host.activity_writer
-        submit = getattr(writer, "submit_command_activity", None)
+        submit = getattr(host.activity_writer, "submit_pre_tool_activity", None)
         if callable(submit):
             run_resident_evidence(
                 host,
                 lambda: submit(
                     harness=harness,
-                    event=event_name,
                     payload=payload,
-                    succeeded=str(response.get("policy_action") or "") != "block",
-                    policy_action=response.get("policy_action"),
+                    response=response,
+                    settled=False,
                 ),
             )
     return response
