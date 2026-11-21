@@ -1,8 +1,7 @@
 //! The receipts of plain relayed package calls, written by the resident.
 //!
 //! A package call the native relay answered leaves an `mcp_package_call`
-//! record, and the daemon's `mcp_relay_package_evidence_drain` recorded it as
-//! `_record_package_forward` and the proxy's package blocks do: an
+//! record. The resident writes the same receipt as the proxy's package path: an
 //! `allow_tool_call` or `block_tool_call` receipt against the package
 //! request's own artifact, with the approval-context token that request hashed
 //! to, the evaluation's reason signals, and the package scanner evidence after
@@ -26,9 +25,8 @@
 //! categories. A safe-alternative block projects it with the artifact, as
 //! `_queue_approval_center_response` does, and its silent inbox row follows
 //! the receipt (`_record_unprompted_review`). An ask block still carrying its
-//! notice, an observed forward still carrying
-//! notices, and a safe-alternative block from a binding with no center are
-//! still the daemon's to write.
+//! notice, an observed forward still carrying notices, and a safe-alternative
+//! block from a binding with no center need additional native handling.
 
 use std::path::Path;
 

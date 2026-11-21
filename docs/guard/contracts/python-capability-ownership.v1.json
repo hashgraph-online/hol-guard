@@ -81,6 +81,30 @@
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
   {
+   "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
+   "module": "codex_plugin_scanner.guard.evidence_drains.mcp_relay_evidence_drain",
+   "source_sha256": "3bae02142664765fbaf13d5883284483ae26a1123f6dba68631fd003387685ae",
+   "forbidden_symbols": [
+    "record_mcp_relay_evidence",
+    "is_mcp_relay_evidence"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "The evidence poller only acknowledges pages. Only tests and the retired package drain reached this module."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
+   "module": "codex_plugin_scanner.guard.evidence_drains.mcp_relay_package_evidence_drain",
+   "source_sha256": "9459af1fa39a8f7e0775c17366d0a03375090088f3ec6489b79dec9403c72397",
+   "forbidden_symbols": [
+    "record_mcp_relay_package_evidence",
+    "is_mcp_relay_package_evidence"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "The evidence poller only acknowledges pages. Only tests reached this module."
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
    "module": "codex_plugin_scanner.guard.resident_evidence_fallback",
    "source_sha256": "01af0a3da81096effa93f6760d35b38db9fa376f90bc8c9b4c6df13f4e5c9968",
@@ -2075,6 +2099,9 @@
   }
  ],
  "retired_test_paths": [
+  "tests/test_mcp_relay_evidence_drain.py",
+  "tests/test_mcp_relay_package_evidence_drain.py",
+  "tests/test_mcp_relay_package_evidence_modes.py",
   "tests/test_hook_direct_counters.py",
   "tests/test_hook_evidence_dispatch.py",
   "tests/test_hook_direct_evidence_drain.py",

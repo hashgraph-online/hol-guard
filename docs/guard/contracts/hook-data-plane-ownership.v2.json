@@ -578,8 +578,8 @@
     "src/codex_plugin_scanner/guard/resident_evidence_client.py",
     "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
     "src/codex_plugin_scanner/guard/resident_evidence_dispatch.py",
-    "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
-    "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
+    "rust/crates/guard-runtime/src/mcp_relay_receipt.rs",
+    "rust/crates/guard-runtime/src/mcp_relay_receipt_package.rs",
     "src/codex_plugin_scanner/guard/store.py",
     "src/codex_plugin_scanner/guard/store_native_decision_receipts.py"
    ],

@@ -7,6 +7,8 @@
   "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
   "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
@@ -142,6 +144,28 @@
   "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_mcp_relay_evidence_drain.py::test_a_forward_is_recorded_as_the_proxy_allow",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/mcp_relay_receipt_tests.rs::a_forward_writes_the_allowed_receipt_inventory_and_event",
+    "rust/crates/guard-runtime/src/mcp_relay_receipt_tests.rs::plain_records_land_in_the_store"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_mcp_relay_package_evidence_drain.py::test_a_forward_is_recorded_against_the_package_artifact",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/mcp_relay_receipt_package_tests.rs::a_forward_writes_the_allowed_receipt_against_the_package_artifact"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_mcp_relay_package_evidence_modes.py::test_an_observed_forward_is_recorded_under_the_mode_it_forwarded_in",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/mcp_relay_receipt_package_tests.rs::an_observed_forward_writes_the_allowed_receipt_under_the_mode"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "tests/test_hook_direct_counters.py::test_harness_slots_match_the_direct_harnesses",
    "replacement_nodes": [
