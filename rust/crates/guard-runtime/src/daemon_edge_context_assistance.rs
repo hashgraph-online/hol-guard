@@ -16,18 +16,19 @@ use super::gate::{self, Gate};
 
 #[path = "daemon_edge_codex_config.rs"]
 pub(super) mod codex_config;
-#[path = "daemon_edge_context_assistance_resident.rs"]
-mod resident;
-
-use resident::ask;
+use crate::context_assistance_client as resident;
 #[cfg(test)]
 use resident::{bound, SlowSlot, REQUEST_SCHEMA, RESULT_SCHEMA};
+use resident::{CODE_PREFIX, UNAVAILABLE};
+
+/// One resident request for this daemon's Guard home.
+fn ask(config: &ReadConfig, query: &Value, slow: bool) -> Result<Map<String, Value>, String> {
+    resident::ask(&config.guard_home, query, slow)
+}
 
 const STATUS_SCHEMA: &str = "guard-context-assistance-status.v2";
 const WORKSPACE_SCHEMA: &str = "guard-cigar-workspace-result.v1";
 const VERSIONS_SCHEMA: &str = "guard-cigar-versions-result.v1";
-const CODE_PREFIX: &str = "native_context_assistance_";
-const UNAVAILABLE: &str = "native_context_assistance_unavailable";
 const INVALID: &str = "native_context_assistance_payload_invalid";
 /// Version actions that only read or stop a job; every other one changes
 /// what runs and passes the approval gate.

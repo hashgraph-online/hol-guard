@@ -1,5 +1,6 @@
-//! How the CIGAR routes reach the resident: one framed, time-limited
-//! `context_assistance` request per call, with the reply bound back to it.
+//! How Guard's CIGAR clients (the dashboard routes, `hol-guard context` and
+//! the MCP context tools) reach the resident: one framed, time-limited request
+//! per call, with the reply bound back to it.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,11 +9,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
 
-use super::super::super::ReadConfig;
-use super::{CODE_PREFIX, UNAVAILABLE};
+#[path = "context_assistance_client_calls.rs"]
+mod calls;
+pub(crate) use calls::{agent, runner_authority};
 
-pub(super) const REQUEST_SCHEMA: &str = "guard-context-assistance-request.v1";
-pub(super) const RESULT_SCHEMA: &str = "guard-context-assistance-result.v1";
+pub(crate) const CODE_PREFIX: &str = "native_context_assistance_";
+pub(crate) const UNAVAILABLE: &str = "native_context_assistance_unavailable";
+pub(crate) const REQUEST_SCHEMA: &str = "guard-context-assistance-request.v1";
+pub(crate) const RESULT_SCHEMA: &str = "guard-context-assistance-result.v1";
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 /// Engine control answers from state the resident already holds.
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
@@ -26,8 +30,8 @@ static SLOW_BUSY: Mutex<usize> = Mutex::new(0);
 static SLOW_FREED: Condvar = Condvar::new();
 
 /// One resident request: the `ok` payload bound to it, or the refusal code.
-pub(super) fn ask(
-    config: &ReadConfig,
+pub(crate) fn ask(
+    guard_home: &str,
     query: &Value,
     slow: bool,
 ) -> Result<Map<String, Value>, String> {
@@ -39,7 +43,7 @@ pub(super) fn ask(
         None
     };
     let mut query = query.clone();
-    query["guard_home"] = Value::from(config.guard_home.as_str());
+    query["guard_home"] = Value::from(guard_home);
     let request = json!({
         "schema": REQUEST_SCHEMA,
         "request_id": next_request_id(),
@@ -61,7 +65,7 @@ pub(super) fn ask(
     if encoded.len() > MAX_REQUEST_BYTES {
         return Err(UNAVAILABLE.to_owned());
     }
-    let state_dir = std::fs::canonicalize(Path::new(&config.guard_home))
+    let state_dir = std::fs::canonicalize(Path::new(guard_home))
         .map_err(|_| format!("{CODE_PREFIX}home_unbound"))?
         .join("native-runtime");
     let output = crate::managed_resident::client_request(&state_dir, &encoded, remaining)
@@ -73,7 +77,7 @@ pub(super) fn ask(
 /// The `ok` payload of a reply bound to `request`, or the refusal code. A
 /// reply for another request, or with a code outside the engine's, is the
 /// engine being unavailable.
-pub(super) fn bound(
+pub(crate) fn bound(
     envelope: Value,
     request: &Value,
     digest: &str,
@@ -125,10 +129,10 @@ fn next_request_id() -> String {
 }
 
 /// One of the [`SLOW_SLOTS`] places for a slow request, held until dropped.
-pub(super) struct SlowSlot;
+pub(crate) struct SlowSlot;
 
 impl SlowSlot {
-    pub(super) fn acquire(deadline: Instant) -> Option<Self> {
+    pub(crate) fn acquire(deadline: Instant) -> Option<Self> {
         let mut busy = SLOW_BUSY.lock().ok()?;
         while *busy >= SLOW_SLOTS {
             let wait = deadline.checked_duration_since(Instant::now())?;

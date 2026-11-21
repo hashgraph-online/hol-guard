@@ -346,8 +346,7 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
           "src/codex_plugin_scanner/guard/cli/approval_commands.py",
           "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py",
-          "src/codex_plugin_scanner/guard/cli/context_assistance_commands.py",
-          "src/codex_plugin_scanner/guard/cli/context_assistance_versions_commands.py",
+          "src/codex_plugin_scanner/guard/cli/runtime_forward.py",
           "src/codex_plugin_scanner/guard/cli/codebase_commands.py"
         ]
       },

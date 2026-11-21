@@ -28,7 +28,6 @@ from .commands_parser_local import _configure_guard_local_parsers
 from .commands_parser_mdm import _configure_guard_mdm_parsers
 from .commands_parser_policy import _configure_guard_policy_parsers
 from .commands_parser_risk_report import configure_guard_risk_report_parser
-from .context_assistance_commands import configure_context_parser
 from .extension_builder_commands import configure_extension_builder_parser
 
 
@@ -77,7 +76,9 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _configure_guard_cloud_parsers(guard_subparsers)
     configure_guard_cloud_review_parser(guard_subparsers)
     configure_guard_cloud_actions_parser(guard_subparsers)
-    configure_context_parser(guard_subparsers)
+    from .runtime_forward import configure_forward
+
+    configure_forward(guard_subparsers, "context", "Inspect and control optional local CIGAR context assistance")
 
 __all__ = [
     "_add_aibom_cli_args",

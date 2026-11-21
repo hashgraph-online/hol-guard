@@ -50,6 +50,25 @@ def _create_annotations(read_only: bool = True, destructive: bool = False) -> An
     )
 
 
+def _native_tool(definition: dict[str, Any]) -> Any:
+    """An MCP tool built from the runtime's definition, unchanged."""
+    from mcp import types
+
+    hints = definition.get("annotations")
+    hints = hints if isinstance(hints, dict) else {}
+    return types.Tool(
+        name=str(definition.get("name")),
+        description=str(definition.get("description") or ""),
+        inputSchema=definition.get("input_schema") or {"type": "object"},
+        annotations=types.ToolAnnotations(
+            readOnlyHint=bool(hints.get("read_only")),
+            destructiveHint=bool(hints.get("destructive")),
+            idempotentHint=bool(hints.get("idempotent")),
+            openWorldHint=bool(hints.get("open_world")),
+        ),
+    )
+
+
 class GuardMCPServer:
     """Local MCP server implementing guard-mcp.v1 over stdio.
 
@@ -63,9 +82,9 @@ class GuardMCPServer:
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
         self._store: Any = None
-        from ..native_context_agent import NativeContextAgent
+        from .native_tools import NativeToolSession
 
-        self._context_agent = NativeContextAgent(guard_home)
+        self._native = NativeToolSession(guard_home)
 
     @property
     def store(self) -> Any:
@@ -81,7 +100,7 @@ class GuardMCPServer:
         from mcp import types
 
         tools: list[Any] = []
-        for td in build_tool_registry(context_tools=self._context_agent.tool_names()):
+        for td in build_tool_registry():
             description = _ORIGINAL_TOOL_DESCRIPTIONS.get(td.name, td.description)
             annotations = _create_annotations(
                 read_only=td.annotations.read_only,
@@ -95,24 +114,21 @@ class GuardMCPServer:
                     annotations=annotations,
                 )
             )
+        tools.extend(_native_tool(tool) for tool in self._native.allowed())
         return tools
 
     def call_tool(self, name: str, arguments: dict[str, object]) -> Any:
         from mcp import types
 
-        from ..native_context_agent import CONTEXT_TOOLS
-
-        td = get_tool_definition(name, context_tools=CONTEXT_TOOLS)
+        if name in self._native.names():
+            return types.TextContent(type="text", text=self._native.call(name, arguments))
+        td = get_tool_definition(name)
         if td is None:
             from .tools import _envelope
 
             text = _envelope({"ok": False, "error": {"code": "unknown_tool", "message": f"Unknown tool: {name}"}})
             return types.TextContent(type="text", text=text)
 
-        if name in CONTEXT_TOOLS:
-            from .context_tools import execute
-
-            return types.TextContent(type="text", text=execute(self._context_agent, name, arguments))
         store = self.store
         if name == "search":
             query = str(arguments.get("query", ""))
@@ -183,18 +199,13 @@ class GuardMCPServer:
 
         class ScopedFastMCP(FastMCP):
             async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
-                from ..native_context_agent import CONTEXT_TOOLS
+                import asyncio
 
-                if name in CONTEXT_TOOLS:
-                    import asyncio
-
+                if name in await asyncio.to_thread(owner._native.names):
                     from mcp import types
 
-                    from .context_tools import execute
-
-                    # Preserve every caller argument for native strict DTO
-                    # validation; function conversion must not discard fields.
-                    result = await asyncio.to_thread(execute, owner._context_agent, name, arguments)
+                    # The runtime validates every caller argument itself.
+                    result = await asyncio.to_thread(owner._native.call, name, arguments)
                     with contextlib.suppress(Exception):
                         await self.get_context().session.send_tool_list_changed()
                     return [types.TextContent(type="text", text=result)]
@@ -203,14 +214,8 @@ class GuardMCPServer:
             async def list_tools(self) -> list[Any]:
                 import asyncio
 
-                allowed = await asyncio.to_thread(owner._context_agent.tool_names)
-                from ..native_context_agent import CONTEXT_TOOLS
-
-                return [
-                    tool
-                    for tool in await super().list_tools()
-                    if tool.name not in CONTEXT_TOOLS or tool.name in allowed
-                ]
+                native = await asyncio.to_thread(owner._native.allowed)
+                return [*await super().list_tools(), *(_native_tool(tool) for tool in native)]
 
             async def run_stdio_async(self) -> None:
                 from mcp.server.lowlevel import NotificationOptions
@@ -227,9 +232,7 @@ class GuardMCPServer:
 
         mcp = ScopedFastMCP("hol-guard")
 
-        from ..native_context_agent import CONTEXT_TOOLS
-
-        for td in build_tool_registry(context_tools=CONTEXT_TOOLS):
+        for td in build_tool_registry():
             description = _ORIGINAL_TOOL_DESCRIPTIONS.get(td.name, td.description)
             annotations = _create_annotations(
                 read_only=td.annotations.read_only,
@@ -240,7 +243,7 @@ class GuardMCPServer:
         try:
             mcp.run(transport="stdio")
         finally:
-            self._context_agent.close()
+            self._native.close()
         return 0
 
     def _register_fastmcp_tool(
@@ -251,13 +254,6 @@ class GuardMCPServer:
         annotations: Any,
     ) -> None:
         """Register one tool with FastMCP, preserving per-tool annotations."""
-        from ..native_context_agent import CONTEXT_TOOLS
-
-        if td.name in CONTEXT_TOOLS:
-            from .context_fastmcp import register
-
-            register(mcp, self._context_agent, td.name, description, annotations)
-            return
         store = self.store
 
         if td.name == "search":
