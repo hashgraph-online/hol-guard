@@ -81,6 +81,17 @@
  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
  "retired_modules": [
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
+   "module": "codex_plugin_scanner.guard.hook_review.cursor_shell_route",
+   "source_sha256": "bff49f52f1d236ffd3c937942017257684a85a84f88f8c2139e5a2ba8372b19e",
+   "forbidden_symbols": [
+    "cursor_shell_route_response"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/hook_direct_cursor_route.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
    "module": "codex_plugin_scanner.guard.evidence_drains.mcp_relay_evidence_drain",
    "source_sha256": "3bae02142664765fbaf13d5883284483ae26a1123f6dba68631fd003387685ae",
