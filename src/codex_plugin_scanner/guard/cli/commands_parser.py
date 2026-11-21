@@ -81,7 +81,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     configure_forward(
         guard_subparsers,
         "context",
-        "Inspect and control optional local CIGAR context assistance",
+        "Inspect and control optional local context assistance",
         aliases=("ctx",),
     )
 

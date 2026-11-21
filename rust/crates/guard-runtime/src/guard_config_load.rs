@@ -66,7 +66,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     }
     // A load failure is data, not a crash: the caller maps it to its own error.
     let response = match load(&request) {
-        Ok(config) => json!({"ok": true, "config": config}),
+        Ok(config) => json!({"ok": true, "config": python_view(config)}),
         Err(reason) => json!({"ok": false, "error": reason}),
     };
     serde_json::to_vec(&response).map_err(|_| "guard_config_response_encode_failed".to_owned())
@@ -83,6 +83,23 @@ fn error_reason(error: guard_command::supply_chain_package_eval::EvalError) -> S
             .to_owned(),
         _ => "config_file_unavailable".to_owned(),
     }
+}
+
+/// Settings only the native runtime acts on. Python passes them through to the
+/// settings response untouched under `native_settings`, without naming them.
+const NATIVE_ONLY_KEYS: [&str; 1] = ["harness_cigar"];
+
+fn python_view(mut config: Value) -> Value {
+    let mut native = Map::new();
+    if let Some(fields) = config.as_object_mut() {
+        for key in NATIVE_ONLY_KEYS {
+            if let Some(value) = fields.remove(key) {
+                native.insert(key.to_owned(), value);
+            }
+        }
+        fields.insert("native_settings".to_owned(), Value::Object(native));
+    }
+    config
 }
 
 fn load(request: &LoadRequest) -> Result<Value, String> {
