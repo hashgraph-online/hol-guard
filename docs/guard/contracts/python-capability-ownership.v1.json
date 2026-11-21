@@ -2134,6 +2134,17 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/native_review_records.py",
+   "module": "codex_plugin_scanner.guard.hook_review.native_review_records",
+   "source_sha256": "194bbce31d7c9b2d55f246108a424f3780fff52b15a139e1bc8c2888e457eac6",
+   "forbidden_symbols": [
+    "_DEFAULT_APPROVAL_CENTER_PORT"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_state_ops.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
    "module": "codex_plugin_scanner.guard.hook_review.native_review_allow_hint",
    "source_sha256": "52a45de318f3dc607279132afd1dfdf65b71e5f8e7037fbf377a41ab8c0800b2",

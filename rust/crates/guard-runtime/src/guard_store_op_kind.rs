@@ -58,6 +58,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "count_receipts"
         | "artifact_latest_diff"
         | "oauth_sources_list"
+        | "hook_approval_center_origin"
         | "read_local_cli_grant"
         | "read_local_cli_command_catalog"
         | "read_local_cli_command_states"
