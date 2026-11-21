@@ -252,21 +252,21 @@ pub(crate) fn claude_question_answer(
     };
     let key_b64 = Base64UrlUnpadded::encode_string(&material.raw_key);
     let now = utc_now_isoformat().ok_or(HookDirectDefer::PermissionNotice)?;
-    let settle = authority_request(
-        &store_path,
-        &resolved_home,
-        QUESTION_SETTLE,
-        &now,
-        Some(&session_id),
-        Some((&key_b64, &material.key_id)),
-        Some(Value::String(question)),
-        home_dir,
-    )?;
+    let settle = authority_request(AuthorityRequestInput {
+        store_path: &store_path,
+        guard_home: &resolved_home,
+        op: QUESTION_SETTLE,
+        now: &now,
+        session_id: Some(&session_id),
+        key: Some((&key_b64, &material.key_id)),
+        payload: Some(Value::String(question)),
+        tilde_home: home_dir,
+    })?;
     let reply = hook_authority_state_op::evaluate_within(&settle, remaining(deadline))
         .map_err(|_| HookDirectDefer::PermissionNotice)?;
     match settled_reply(&reply)? {
-        QuestionSettlement::Answered => return Ok(Some(json!({}))),
-        QuestionSettlement::None => return Ok(None),
+        QuestionSettlement::Answered => Ok(Some(json!({}))),
+        QuestionSettlement::None => Ok(None),
         QuestionSettlement::Save(mut save) => {
             let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, &resolved_home);
             let current = match load_policy_integrity_control_state(&mut secrets, &resolved_home) {
@@ -321,16 +321,16 @@ pub(crate) fn claude_question_answer(
             }
             save.insert("session_id".to_owned(), session_id.clone().into());
             save.insert("current_generation".to_owned(), generation.into());
-            let save_request = authority_request(
-                &store_path,
-                &resolved_home,
-                QUESTION_SAVE,
-                &now,
-                Some(&session_id),
-                Some((&key_b64, &material.key_id)),
-                Some(Value::Object(save.clone())),
-                home_dir,
-            )?;
+            let save_request = authority_request(AuthorityRequestInput {
+                store_path: &store_path,
+                guard_home: &resolved_home,
+                op: QUESTION_SAVE,
+                now: &now,
+                session_id: Some(&session_id),
+                key: Some((&key_b64, &material.key_id)),
+                payload: Some(Value::Object(save.clone())),
+                tilde_home: home_dir,
+            })?;
             let saved =
                 hook_authority_state_op::evaluate_within(&save_request, remaining(deadline))
                     .map_err(|_| HookDirectDefer::PermissionNotice)?;
@@ -351,16 +351,16 @@ pub(crate) fn claude_question_answer(
                 )
                 .map_err(|_| HookDirectDefer::PermissionNotice)?;
             drop(lock);
-            let consume_request = authority_request(
-                &store_path,
-                &resolved_home,
-                QUESTION_CONSUME,
-                &now,
-                Some(&session_id),
-                Some((&key_b64, &material.key_id)),
-                Some(Value::Object(save)),
-                home_dir,
-            )?;
+            let consume_request = authority_request(AuthorityRequestInput {
+                store_path: &store_path,
+                guard_home: &resolved_home,
+                op: QUESTION_CONSUME,
+                now: &now,
+                session_id: Some(&session_id),
+                key: Some((&key_b64, &material.key_id)),
+                payload: Some(Value::Object(save)),
+                tilde_home: home_dir,
+            })?;
             let consumed =
                 hook_authority_state_op::evaluate_within(&consume_request, remaining(deadline))
                     .map_err(|_| HookDirectDefer::PermissionNotice)?;
@@ -379,7 +379,10 @@ fn remaining(deadline: Instant) -> Duration {
 
 fn question_wire(payload: &Map<String, Value>) -> Option<String> {
     let tool_name = payload.get("tool_name")?.as_str()?;
-    if python_strip(tool_name).ok()??.to_ascii_lowercase() != "askuserquestion" {
+    if !python_strip(tool_name)
+        .ok()??
+        .eq_ignore_ascii_case("askuserquestion")
+    {
         return None;
     }
     serde_json::to_string(&json!({
@@ -437,15 +440,19 @@ fn settled_reply(reply: &Value) -> Result<QuestionSettlement, HookDirectDefer> {
     Ok(QuestionSettlement::Save(save))
 }
 
-fn authority_request(
-    store_path: &Path,
-    guard_home: &Path,
-    op: &str,
-    now: &str,
-    session_id: Option<&str>,
-    key: Option<(&str, &str)>,
+struct AuthorityRequestInput<'a> {
+    store_path: &'a Path,
+    guard_home: &'a Path,
+    op: &'a str,
+    now: &'a str,
+    session_id: Option<&'a str>,
+    key: Option<(&'a str, &'a str)>,
     payload: Option<Value>,
-    tilde_home: Option<&str>,
+    tilde_home: Option<&'a str>,
+}
+
+fn authority_request(
+    input: AuthorityRequestInput<'_>,
 ) -> Result<HookAuthorityStateRequestV1, HookDirectDefer> {
     let mut nonce = [0u8; 16];
     getrandom::fill(&mut nonce).map_err(|_| HookDirectDefer::PermissionNotice)?;
@@ -456,16 +463,16 @@ fn authority_request(
     let mut request = HookAuthorityStateRequestV1 {
         schema: HOOK_AUTHORITY_STATE_REQUEST_SCHEMA.to_owned(),
         request_id: format!("hook-authority-state-{request_id}"),
-        store_path: store_path.to_string_lossy().into_owned(),
-        guard_home: guard_home.to_string_lossy().into_owned(),
-        op: op.to_owned(),
-        now: now.to_owned(),
-        session_id: session_id.map(str::to_owned),
-        payload,
-        tilde_home: tilde_home.map(str::to_owned),
+        store_path: input.store_path.to_string_lossy().into_owned(),
+        guard_home: input.guard_home.to_string_lossy().into_owned(),
+        op: input.op.to_owned(),
+        now: input.now.to_owned(),
+        session_id: input.session_id.map(str::to_owned),
+        payload: input.payload,
+        tilde_home: input.tilde_home.map(str::to_owned),
         ..HookAuthorityStateRequestV1::default()
     };
-    if let Some((encoded, key_id)) = key {
+    if let Some((encoded, key_id)) = input.key {
         request.integrity_key_b64 = Some(encoded.to_owned());
         request.integrity_key_id = Some(key_id.to_owned());
     }
