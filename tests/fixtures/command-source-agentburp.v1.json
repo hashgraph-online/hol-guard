@@ -221,7 +221,8 @@
                       "project",
                       "delete"
                     ]
-                  ]
+                  ],
+                  "fail_secure_unknown_options": true
                 },
                 "matchers": []
               }
@@ -623,6 +624,47 @@
       ],
       "disabled_permissions": [],
       "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-help-before-project",
+      "command": "agentburp -h=false project delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-help-between-subcommands",
+      "command": "agentburp project -h=false delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.agentburp.project-modify",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "agentburp-disabled-help-permission-off",
+      "command": "agentburp project -h=false delete example-project --force",
+      "enabled_extensions": [
+        "command.agentburp"
+      ],
+      "disabled_permissions": [
+        "command.agentburp.permission.project-modify"
+      ],
+      "expected_action": "block",
       "rule_id": "command.agentburp.project-modify",
       "expected_effective_segments": [
         0

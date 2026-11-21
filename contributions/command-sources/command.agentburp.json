@@ -216,7 +216,8 @@
                 "project",
                 "delete"
               ]
-            ]
+            ],
+            "fail_secure_unknown_options": true
           },
           "matchers": []
         }
