@@ -92,6 +92,7 @@ from .update_release_candidates import newest_live_pypi_version, newest_pypi_ver
 from .update_repair_notes import attach_repair_notes
 from .update_resident_barrier import release_before_post_update_repair, subprocess_failure_summary
 from .update_retirement import retire_native_resident_for_home
+from .update_stale_daemon import restart_stale_live_daemon
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -934,6 +935,18 @@ def _run_guard_update_unlocked(
             return payload, 0
         # Skip force-reinstall/upgrade noise when PyPI already reports current.
         release_before_post_update_repair(resident_update_lock, _bundled_runtime_candidate())
+        if context is not None and not restart_stale_live_daemon(
+            payload,
+            guard_home=context.guard_home,
+            current_version=current_version,
+            refresh=lambda: refresh_guard_daemon_after_update(
+                context, update_context=update_context, minimum_version=current_version
+            ),
+            note=_append_payload_note,
+        ):
+            return payload, 1
+        if payload.get("runtime_artifact_owner") == "newer_runtime":
+            return payload, 0
         package_shims, package_shim_note = _refresh_package_shims_after_update(
             context=context,
             dry_run=dry_run,
