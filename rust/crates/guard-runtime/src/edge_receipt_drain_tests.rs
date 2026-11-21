@@ -41,6 +41,31 @@ fn assert_settled(page: &Value) {
 }
 
 #[test]
+fn the_resident_keeps_unwritten_evidence_and_commits_it_once_when_the_writer_returns() {
+    let home = store_home("native-commit-unwritten-retry");
+    let (_, edge) = answered(&home, true);
+    let queue = DirectEvidenceQueue::default();
+    assert!(offer_direct(&queue, &home, allowed(&edge), true));
+    let attempt = |source| {
+        crate::hook_direct_evidence::commit_queued_page(home.to_str().unwrap(), &queue, source)
+    };
+
+    assert_eq!(attempt(None).unwrap_err(), "direct_hook_evidence_unhandled");
+    let committed: Value = serde_json::from_slice(&attempt(Some("guard")).unwrap()).unwrap();
+    assert_eq!(committed["schema"], "guard-hook-direct-evidence-commit.v1");
+    assert_eq!(committed["record_count"], json!(1));
+    assert_eq!(committed["remaining"], json!(0));
+    assert!(committed.get("records").is_none());
+    assert!(committed.get("through").is_none());
+
+    let repeated: Value = serde_json::from_slice(&attempt(Some("guard")).unwrap()).unwrap();
+    assert_eq!(repeated["record_count"], json!(0));
+    assert_eq!(receipts_accepted(&home), json!(1));
+    assert_eq!(activities_accepted(&home), json!(1));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
 fn the_drain_records_what_a_direct_answer_left_once_and_leaves_it_off_the_page() {
     let home = store_home("drain-records-leftovers");
     let (_, edge) = answered(&home, true);

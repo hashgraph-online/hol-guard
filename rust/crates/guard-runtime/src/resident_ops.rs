@@ -150,6 +150,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     source.as_deref(),
                 )
             }
+            ResidentOperationV1::HookDirectEvidenceCommit(request) => {
+                let store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::hook_direct_evidence::commit_page(&request, store)
+            }
             ResidentOperationV1::HookPayloadFacts(request) => {
                 crate::hook_payload_facts_op::evaluate(&request)
             }
@@ -908,6 +913,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::DirectoryTrust(request) => Some(&request.guard_home),
         ResidentOperationV1::HookDirect(request) => Some(&request.guard_home),
         ResidentOperationV1::HookDirectEvidenceDrain(request) => Some(&request.guard_home),
+        ResidentOperationV1::HookDirectEvidenceCommit(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRelayDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRelayCommit(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRelayReady(request) => Some(&request.guard_home),

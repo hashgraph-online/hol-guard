@@ -32,22 +32,20 @@
 
 use crate::hook_direct_counters::DirectHookCounters;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) const HOOK_DIRECT_EVIDENCE_FEATURE: &str = "hook-direct-evidence-v1";
-const DRAIN_RESULT_SCHEMA: &str = "guard-hook-direct-evidence.v1";
-/// The field of a paged record that says whether its `receipt` is valid.
+pub(crate) const HOOK_DIRECT_EVIDENCE_COMMIT_FEATURE: &str = "hook-direct-evidence-commit-v1";
 const RECEIPT_VALID: &str = "receipt_valid";
 const MAX_QUEUED_RECORDS: usize = 1_024;
 const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
 /// One drain page stays well under the resident response cap.
 const MAX_DRAIN_BYTES: usize = 1536 * 1024;
 pub(crate) const MAX_RECORD_BYTES: usize = 1024 * 1024;
-const DEFAULT_DRAIN_RECORDS: usize = 256;
 /// The records [`DirectEvidenceQueue::has_headroom`] keeps free for hooks
 /// that run concurrently with the one asking.
 const HEADROOM_RECORDS: usize = 64;
@@ -100,6 +98,23 @@ struct QueueState {
 }
 
 impl QueueState {
+    fn acknowledge(&mut self, through: u64) -> Vec<Value> {
+        let mut settled = Vec::new();
+        if through >= self.acked_through {
+            self.acked_through = through;
+            while self.records.front().is_some_and(|next| next.seq <= through) {
+                let Some(next) = self.records.pop_front() else {
+                    break;
+                };
+                self.bytes -= next.bytes;
+                if next.native {
+                    settled.push(next.record);
+                }
+            }
+        }
+        settled
+    }
+
     /// Queue one encoded record, or hand it back when the queue is full.
     fn push(
         &mut self,
@@ -353,35 +368,17 @@ impl DirectEvidenceQueue {
         ack_epoch: Option<&str>,
         max_records: usize,
     ) -> Peeked {
-        let mut settled = Vec::new();
         let Ok(mut state) = self.state.lock() else {
             return Peeked {
                 records: Vec::new(),
                 remaining: 0,
                 through: None,
-                settled,
+                settled: Vec::new(),
             };
         };
-        let ack = ack_through.filter(|_| ack_epoch == Some(self.epoch.as_str()));
-        if let Some(ack) = ack {
-            if ack >= state.acked_through {
-                state.acked_through = ack;
-                while state
-                    .records
-                    .front()
-                    .map(|next| next.seq <= ack)
-                    .unwrap_or(false)
-                {
-                    let Some(next) = state.records.pop_front() else {
-                        break;
-                    };
-                    state.bytes -= next.bytes;
-                    if next.native {
-                        settled.push(next.record);
-                    }
-                }
-            }
-        }
+        let settled = ack_through
+            .filter(|_| ack_epoch == Some(self.epoch.as_str()))
+            .map_or_else(Vec::new, |through| state.acknowledge(through));
         // Only records the daemon receives count toward its page, so a run of
         // the resident's own records never yields an empty page with more
         // queued behind it: the queue's own bound limits the scan.
@@ -416,99 +413,11 @@ impl DirectEvidenceQueue {
     }
 }
 
-pub(crate) fn drain(
-    request: &HookDirectEvidenceDrainRequestV1,
-    queue: &DirectEvidenceQueue,
-    writer_source: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    let max_records = request
-        .max_records
-        .unwrap_or(DEFAULT_DRAIN_RECORDS)
-        .clamp(1, DEFAULT_DRAIN_RECORDS);
-    let recording = queue
-        .recording
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let peeked = queue.acknowledge_and_peek(
-        request.ack_through,
-        request.ack_epoch.as_deref(),
-        max_records,
-    );
-    crate::mcp_relay_receipt::write_detached(
-        &request.guard_home,
-        peeked.settled,
-        queue.unwritten(),
-    );
-    let mut paged: Vec<Paged> = peeked
-        .records
-        .into_iter()
-        .map(|paged| Paged {
-            record: checked_receipt(paged.record),
-            ..paged
-        })
-        .collect();
-    let store_fatal = match writer_source.filter(|_| !request.guard_home.is_empty()) {
-        Some(source) => {
-            let fatal = record::leftovers(queue, &request.guard_home, source, &mut paged);
-            record::drop_settled(&mut paged, &request.guard_home);
-            // A plain relay record can be handed back after a detached write
-            // failed. Retry that write in Rust while the original queue entry
-            // remains unacknowledged. Any direct-hook record still present is
-            // likewise unfinished, so return an error and leave its cursor in
-            // place for the next poll instead of asking Python to record it.
-            let plain: Vec<Value> = paged
-                .iter()
-                .filter(|item| crate::mcp_relay_receipt::is_plain(&item.record))
-                .map(|item| item.record.clone())
-                .collect();
-            if !plain.is_empty() {
-                let unwritten = crate::mcp_relay_receipt::write(&request.guard_home, plain);
-                paged.retain(|item| {
-                    !crate::mcp_relay_receipt::is_plain(&item.record)
-                        || unwritten.iter().any(|record| record == &item.record)
-                });
-            }
-            if paged.iter().any(|item| {
-                crate::mcp_relay_receipt::is_plain(&item.record)
-                    || record::needs_work(item, &request.guard_home)
-            }) {
-                return Err("direct_hook_evidence_unhandled".to_owned());
-            }
-            fatal
-        }
-        None => None,
-    };
-    drop(recording);
-    let sequences: Vec<u64> = paged.iter().map(|paged| paged.seq).collect();
-    let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
-    let mut page = json!({
-        "schema": DRAIN_RESULT_SCHEMA,
-        "epoch": queue.epoch,
-        "records": records,
-        "sequences": sequences,
-        "remaining": peeked.remaining,
-        "through": peeked.through,
-        "counters": queue.counters.snapshot(),
-    });
-    if let Some(fatal) = store_fatal.filter(|fatal| !fatal.is_null()) {
-        // The daemon recovers its store from this, as from a writer reply.
-        page["store_fatal"] = fatal;
-    }
-    serde_json::to_vec(&page).map_err(|_| "direct_hook_evidence_encoding_failed".to_owned())
-}
-
-/// `record`, marked with whether the receipt it carries is one the native
-/// runtime accepts. A record without a receipt object is paged as queued.
-fn checked_receipt(mut record: Value) -> Value {
-    let valid = record
-        .get("receipt")
-        .filter(|receipt| receipt.is_object())
-        .map(|receipt| crate::edge::standalone_receipt(receipt, &Value::Null));
-    if let (Some(valid), Some(fields)) = (valid, record.as_object_mut()) {
-        fields.insert(RECEIPT_VALID.to_owned(), Value::Bool(valid));
-    }
-    record
-}
+#[path = "hook_direct_evidence_drain.rs"]
+mod drain_ops;
+#[cfg(test)]
+pub(crate) use drain_ops::commit_queued_page;
+pub(crate) use drain_ops::{commit_page, drain, HookDirectEvidenceCommitRequestV1};
 
 #[path = "hook_direct_evidence_notice.rs"]
 pub(crate) mod notice;
