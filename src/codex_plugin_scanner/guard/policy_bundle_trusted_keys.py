@@ -311,11 +311,16 @@ def validate_cached_policy_bundle(
     and that the bundle is not older than the acceptance checkpoint.
     """
 
+    from . import policy_bundle_parser
+
+    # Only the ordering fields reach the downgrade check, so a stored field Rust
+    # never reads cannot make the checkpoint unencodable.
+    checkpoint = policy_bundle_parser.policy_bundle_ordering_view(acceptance_checkpoint)
     try:
-        checkpoint_chunks = (
-            policy_bundle_chunks(acceptance_checkpoint) if isinstance(acceptance_checkpoint, dict) else None
-        )
+        checkpoint_chunks = policy_bundle_chunks(checkpoint) if isinstance(checkpoint, dict) else None
     except ValueError:
+        # An ordering field that cannot be encoded leaves no comparable order;
+        # the checkpoint fails closed as it did before the check moved to Rust.
         return None, "bundle_version_downgrade"
     validated, reason, _keys = _native_synced_validation(
         "validate_cached",

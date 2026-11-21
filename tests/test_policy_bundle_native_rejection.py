@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
     PolicyBundleNativeUnavailableError,
+    policy_bundle_chunks,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -45,6 +46,29 @@ def test_cached_validation_keeps_the_native_rejection_code(
 
     assert validated is None
     assert reason == expected
+
+
+def test_cached_validation_sends_only_the_checkpoint_ordering_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    bundle = build_cloud_exception_policy_bundle()
+    sent: dict[str, object] = {}
+
+    def _capture(_kind: str, _bundle: object, extra: dict[str, object], **_kwargs: object) -> object:
+        sent.update(extra)
+        return bundle, None, ()
+
+    monkeypatch.setattr(policy_bundle_trusted_keys, "_native_synced_validation", _capture)
+    checkpoint = {"bundleVersion": 3, "bundleHash": "sha256:accepted", "unreadNote": float("nan")}
+
+    validated, reason = policy_bundle_trusted_keys.validate_cached_policy_bundle(
+        bundle,
+        stored_keyring=None,
+        acceptance_checkpoint=checkpoint,
+    )
+
+    assert (validated, reason) == (bundle, None)
+    assert sent["acceptance_checkpoint_chunks"] == policy_bundle_chunks(
+        {"bundleVersion": 3, "bundleHash": "sha256:accepted"}
+    )
 
 
 def _sync_response(bundle: dict[str, object]):
