@@ -143,7 +143,7 @@ def native_cursor_shell_route(
     binding: Callable[[], Mapping[str, object] | None],
     deadline: float | None,
 ) -> dict[str, object] | None:
-    """Pass the hook and any requested policy binding to the native route."""
+    """Pass the hook and any requested workspace or launcher facts to Rust."""
     from .contained_sink_command import contained_sink_command_prefix
     from .native_hook_edge import _capture_deadline
 
@@ -155,9 +155,6 @@ def native_cursor_shell_route(
         "guard_home": str(guard_home),
         "native_sink": True,
     }
-    if workspace is not None:
-        with suppress(OSError, RuntimeError, ValueError):
-            params["sink_command"] = list(contained_sink_command_prefix())
 
     def query(until: float | None) -> dict[str, object] | None:
         try:
@@ -171,20 +168,24 @@ def native_cursor_shell_route(
     if document is None:
         return None
     value = document.get("value")
-    if document.get("needs_binding") is True:
-        try:
+    needed = document.get("needs")
+    try:
+        if needed == "probe_binding":
             snapshot = binding()
-        except Exception:
-            _LOGGER.warning("Cursor shell route policy binding unavailable", exc_info=True)
-            snapshot = None
-        if snapshot is not None:
-            effective_deadline, budget = _capture_deadline(deadline)
-            params["snapshot"] = {key: snapshot.get(key) for key in ("generation", "policy_digest", "runtime_identity")}
-            params["harness_postures"] = snapshot.get("harness_postures")
-            params["probe_budget_ms"] = budget
-            reviewed = query(effective_deadline)
-            if reviewed is not None and isinstance(reviewed.get("value"), dict):
-                value = reviewed["value"]
+            if snapshot is not None:
+                deadline, budget = _capture_deadline(deadline)
+                params["snapshot"] = {
+                    key: snapshot.get(key) for key in ("generation", "policy_digest", "runtime_identity")
+                }
+                params["harness_postures"] = snapshot.get("harness_postures")
+                params["probe_budget_ms"] = budget
+        if (needed == "sink_command" or "snapshot" in params) and (deadline is None or time.monotonic() < deadline):
+            params["sink_command"] = list(contained_sink_command_prefix())
+            answered = query(deadline)
+            if answered is not None and isinstance(answered.get("value"), dict):
+                value = answered["value"]
+    except Exception:
+        _LOGGER.warning("Cursor shell route inputs unavailable", exc_info=True)
     return dict(value) if isinstance(value, dict) else None
 
 

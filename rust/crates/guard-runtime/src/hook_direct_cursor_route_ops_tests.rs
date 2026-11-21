@@ -31,7 +31,6 @@ fn native_route_requests_the_binding_only_for_a_scoped_probe() {
         "guard_home": fixture.root,
         "home_dir": fixture.root,
         "workspace": fixture.root,
-        "sink_command": ["guard"],
         "native_sink": true,
     });
     let review = |params: &Value| {
@@ -44,18 +43,26 @@ fn native_route_requests_the_binding_only_for_a_scoped_probe() {
     };
     assert_eq!(
         review(&params).unwrap(),
-        json!({"value": ALLOW(), "needs_binding": true})
+        json!({"value": ALLOW(), "needs": "probe_binding"})
     );
     params["snapshot"] = json!({"generation": 1});
     params["probe_budget_ms"] = json!(500);
     assert_eq!(
         review(&params).unwrap(),
-        json!({"value": ALLOW(), "needs_binding": false})
+        json!({"value": ALLOW(), "needs": null})
     );
     params["payload"] = shell(json!({}));
     assert_eq!(
         review(&params).unwrap(),
-        json!({"value": null, "needs_binding": false})
+        json!({"value": null, "needs": null})
+    );
+    params["payload"] = shell(json!({
+        "cursor_source_hook_event": "beforeShellExecution",
+        "tool_input": {"command": "guard execute-contained-test"},
+    }));
+    assert_eq!(
+        review(&params).unwrap(),
+        json!({"value": null, "needs": "sink_command"})
     );
     params["guard_home"] = json!(fixture.root.join("another-home"));
     assert_eq!(review(&params), Err("native_hook_render_invalid"));

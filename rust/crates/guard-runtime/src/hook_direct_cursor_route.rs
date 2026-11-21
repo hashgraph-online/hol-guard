@@ -30,27 +30,29 @@ pub(crate) fn answer(
     let store = store.ok_or(INVALID)?;
     store.require_guard_home(guard_home).map_err(|_| INVALID)?;
     let workspace = params.get("workspace").and_then(Value::as_str);
-    let (value, needs_binding) = match route(payload) {
+    let (value, needs) = match route(payload) {
         Ok(Route::Probe) => {
-            let needs_binding = workspace.is_some()
-                && params.get("sink_command").is_some_and(Value::is_array)
-                && !params.contains_key("snapshot");
+            let needs = (workspace.is_some() && !params.contains_key("snapshot"))
+                .then_some("probe_binding");
             let edge = if let Some(workspace) = workspace {
                 review_probe(params, workspace, payload, request_id, store)
             } else {
                 None
             };
-            (probe_response(edge.as_ref()), needs_binding)
+            (probe_response(edge.as_ref()), needs)
+        }
+        Ok(Route::Sink) if workspace.is_some() && !params.contains_key("sink_command") => {
+            (Value::Null, Some("sink_command"))
         }
         Ok(Route::Sink) if workspace.is_some() => (
             daemon_answer(params).ok().flatten().unwrap_or(Value::Null),
-            false,
+            None,
         ),
-        _ => (Value::Null, false),
+        _ => (Value::Null, None),
     };
     Ok(Map::from_iter([
         ("value".to_owned(), value),
-        ("needs_binding".to_owned(), Value::Bool(needs_binding)),
+        ("needs".to_owned(), json!(needs)),
     ]))
 }
 

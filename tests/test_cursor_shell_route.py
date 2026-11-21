@@ -78,10 +78,13 @@ def test_the_sink_command_accepts_the_cursor_harness(tmp_path: Path) -> None:
     assert args.harness == "cursor"
 
 
-@pytest.mark.parametrize("reply", [None, ("document", {"value": None, "needs_binding": False})])
-def test_an_unanswered_call_uses_ordinary_review(tmp_path, resident, reply):
+@pytest.mark.parametrize("reply", [None, ("document", {"value": None, "needs": None})])
+def test_an_unanswered_call_uses_ordinary_review_without_resolving_a_sink(tmp_path, resident, reply, monkeypatch):
     calls, replies = resident
     replies.append(reply)
+    monkeypatch.setattr(
+        contained_sink_command, "contained_sink_command_prefix", lambda: pytest.fail("the resident did not ask")
+    )
     assert _respond(tmp_path, _SHELL) is None
     assert len(calls) == 1
 
@@ -89,24 +92,26 @@ def test_an_unanswered_call_uses_ordinary_review(tmp_path, resident, reply):
 def test_sink_admission_uses_the_native_answer_and_original_payload(tmp_path, resident):
     calls, replies = resident
     answer = {"policy_action": "allow", "reason_code": "native_contained_execution_sink"}
-    replies.append(("document", {"value": answer, "needs_binding": False}))
+    replies.extend(
+        [
+            ("document", {"value": None, "needs": "sink_command"}),
+            ("document", {"value": answer, "needs": None}),
+        ]
+    )
     payload = {**_SHELL, "cursor_source_hook_event": "beforeShellExecution"}
     deadline = time.monotonic() + 1.0
     assert _respond(tmp_path, payload, deadline=deadline) == answer
+    request = {
+        "op": "answer",
+        "payload": payload,
+        "workspace": str(tmp_path / "work"),
+        "guard_home": str(tmp_path / "guard"),
+        "home_dir": str(tmp_path),
+        "native_sink": True,
+    }
     assert calls == [
-        (
-            {
-                "op": "answer",
-                "payload": payload,
-                "workspace": str(tmp_path / "work"),
-                "guard_home": str(tmp_path / "guard"),
-                "home_dir": str(tmp_path),
-                "sink_command": ["guard"],
-                "native_sink": True,
-            },
-            tmp_path / "guard",
-            deadline,
-        )
+        (request, tmp_path / "guard", deadline),
+        ({**request, "sink_command": ["guard"]}, tmp_path / "guard", deadline),
     ]
 
 
@@ -115,8 +120,8 @@ def test_probe_relays_only_the_requested_binding_under_the_same_deadline(tmp_pat
     routed = {**_ALLOW, "reason_code": "native_contained_execution_routed"}
     replies.extend(
         [
-            ("document", {"value": _ALLOW, "needs_binding": True}),
-            ("document", {"value": routed, "needs_binding": False}),
+            ("document", {"value": _ALLOW, "needs": "probe_binding"}),
+            ("document", {"value": routed, "needs": None}),
         ]
     )
     deadline = time.monotonic() + 7.0
@@ -126,14 +131,16 @@ def test_probe_relays_only_the_requested_binding_under_the_same_deadline(tmp_pat
     assert len(calls) == 2
     assert calls[0][2] == calls[1][2] == deadline
     assert "snapshot" not in calls[0][0]
+    assert "sink_command" not in calls[0][0]
     assert calls[1][0]["snapshot"] == _BINDING
+    assert calls[1][0]["sink_command"] == ["guard"]
     assert calls[1][0]["harness_postures"] == postures
     assert 0 < calls[1][0]["probe_budget_ms"] <= 7000
 
 
 def test_probe_keeps_the_first_native_answer_when_binding_is_unavailable(tmp_path, resident):
     calls, replies = resident
-    replies.append(("document", {"value": _ALLOW, "needs_binding": True}))
+    replies.append(("document", {"value": _ALLOW, "needs": "probe_binding"}))
 
     def binding():
         raise RuntimeError("binding unavailable")
@@ -144,6 +151,6 @@ def test_probe_keeps_the_first_native_answer_when_binding_is_unavailable(tmp_pat
 
 def test_probe_keeps_the_first_native_answer_when_second_call_fails(tmp_path, resident):
     calls, replies = resident
-    replies.extend([("document", {"value": _ALLOW, "needs_binding": True}), RuntimeError("resident stopped")])
+    replies.extend([("document", {"value": _ALLOW, "needs": "probe_binding"}), RuntimeError("resident stopped")])
     assert _respond(tmp_path, _PROBE, binding=lambda: _BINDING) == _ALLOW
     assert len(calls) == 2
