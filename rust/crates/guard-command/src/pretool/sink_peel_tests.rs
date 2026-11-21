@@ -154,14 +154,18 @@ fn a_trailing_report_leaves_the_core_alone_and_names_the_arm_it_prints() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
-
 /// A newline after `;`, `&&` or `||` is ordinary shell whitespace before
 /// the report's echo, and must be read the same way as a horizontal blank.
 #[test]
 fn a_line_break_after_a_report_separator_is_preserved() {
     let root = fixture("report-newline");
     for (command, status, success, failure) in [
-        ("bun run build;\n echo done", None, Some("done"), Some("done")),
+        (
+            "bun run build;\n echo done",
+            None,
+            Some("done"),
+            Some("done"),
+        ),
         ("bun run build &&\n echo PASS", None, Some("PASS"), None),
         ("bun run build ||\n echo FAIL", None, None, Some("FAIL")),
         (
