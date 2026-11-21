@@ -432,7 +432,7 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     })
 }
 
-fn is_recursive_flag(argument: &str) -> bool {
+pub(super) fn is_recursive_flag(argument: &str) -> bool {
     // GNU getopt accepts any unambiguous prefix (`--rec`), so treat them all as recursive.
     argument.strip_prefix("--").is_some_and(|name| {
         name.len() >= 2 && "recursive".starts_with(name.split('=').next().unwrap_or(name))
@@ -488,7 +488,7 @@ fn powershell_hidden(argument: &str) -> bool {
         })
 }
 
-fn follows_links(argument: &str) -> bool {
+pub(super) fn follows_links(argument: &str) -> bool {
     matches!(
         argument,
         "--dereference"

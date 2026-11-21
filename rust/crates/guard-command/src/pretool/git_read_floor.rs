@@ -411,6 +411,10 @@ fn verdict(
                 read_context,
                 deadline,
                 execution_environment,
+                // Anything that ran before the add, a `git fetch` above all,
+                // can have moved the reference it names, so the tree it
+                // checks out is not the one the proof reads.
+                prior > 0,
             )
             || (inspections[prior] == Some(true)
                 && segment.environment_names.is_empty()
