@@ -91,545 +91,134 @@
             "variant_id": "dry-run",
             "title": "AgentBurp project preview",
             "matcher": {
-              "op": "any.v1",
-              "config": {},
-              "matchers": [
-                {
-                  "op": "executable.v1",
-                  "config": {
-                    "executables": [
-                      "agentburp",
-                      "agentburp.cmd",
-                      "agentburp.exe"
-                    ],
-                    "subcommands": [
-                      "project",
-                      "create"
-                    ],
-                    "interspersed_options_with_values": [
-                      "--project",
-                      "-p"
-                    ],
-                    "interspersed_flags": [
-                      "--dry-run",
-                      "--help",
-                      "-h",
-                      "--json",
-                      "--no-color",
-                      "--force"
-                    ],
-                    "required_flags": [
-                      "--dry-run"
-                    ],
-                    "required_flags_in_all_arguments": true,
-                    "fail_secure_unknown_options": true
-                  },
-                  "matchers": []
-                },
-                {
-                  "op": "executable.v1",
-                  "config": {
-                    "executables": [
-                      "agentburp",
-                      "agentburp.cmd",
-                      "agentburp.exe"
-                    ],
-                    "subcommands": [
-                      "project",
-                      "open"
-                    ],
-                    "interspersed_options_with_values": [
-                      "--project",
-                      "-p"
-                    ],
-                    "interspersed_flags": [
-                      "--dry-run",
-                      "--help",
-                      "-h",
-                      "--json",
-                      "--no-color",
-                      "--force"
-                    ],
-                    "required_flags": [
-                      "--dry-run"
-                    ],
-                    "required_flags_in_all_arguments": true,
-                    "fail_secure_unknown_options": true
-                  },
-                  "matchers": []
-                },
-                {
-                  "op": "executable.v1",
-                  "config": {
-                    "executables": [
-                      "agentburp",
-                      "agentburp.cmd",
-                      "agentburp.exe"
-                    ],
-                    "subcommands": [
-                      "project",
-                      "delete"
-                    ],
-                    "interspersed_options_with_values": [
-                      "--project",
-                      "-p"
-                    ],
-                    "interspersed_flags": [
-                      "--dry-run",
-                      "--help",
-                      "-h",
-                      "--json",
-                      "--no-color",
-                      "--force"
-                    ],
-                    "required_flags": [
-                      "--dry-run"
-                    ],
-                    "required_flags_in_all_arguments": true,
-                    "fail_secure_unknown_options": true
-                  },
-                  "matchers": []
-                }
-              ]
+              "op": "executable-path-set.v1",
+              "config": {
+                "executables": [
+                  "agentburp",
+                  "agentburp.cmd",
+                  "agentburp.exe"
+                ],
+                "interspersed_options_with_values": [
+                  "--project",
+                  "-p"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--help",
+                  "-h",
+                  "--json",
+                  "--no-color",
+                  "--force"
+                ],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "paths": [
+                  [
+                    "project",
+                    "create"
+                  ],
+                  [
+                    "project",
+                    "open"
+                  ],
+                  [
+                    "project",
+                    "delete"
+                  ]
+                ]
+              },
+              "matchers": []
             }
           },
           {
             "variant_id": "help",
             "title": "AgentBurp project help",
             "matcher": {
-              "op": "any.v1",
-              "config": {},
-              "matchers": [
-                {
-                  "op": "executable.v1",
-                  "config": {
-                    "executables": [
-                      "agentburp",
-                      "agentburp.cmd",
-                      "agentburp.exe"
-                    ],
-                    "subcommands": [
-                      "project",
-                      "create"
-                    ],
-                    "interspersed_options_with_values": [
-                      "--project",
-                      "-p"
-                    ],
-                    "interspersed_flags": [
-                      "--dry-run",
-                      "--help",
-                      "-h",
-                      "--json",
-                      "--no-color",
-                      "--force"
-                    ],
-                    "required_flags": [
-                      "--help"
-                    ],
-                    "required_flags_in_all_arguments": true,
-                    "fail_secure_unknown_options": true,
-                    "forbidden_flags": [
-                      "-h"
-                    ]
-                  },
-                  "matchers": []
-                },
-                {
-                  "op": "executable.v1",
-                  "config": {
-                    "executables": [
-                      "agentburp",
-                      "agentburp.cmd",
-                      "agentburp.exe"
-                    ],
-                    "subcommands": [
-                      "project",
-                      "open"
-                    ],
-                    "interspersed_options_with_values": [
-                      "--project",
-                      "-p"
-                    ],
-                    "interspersed_flags": [
-                      "--dry-run",
-                      "--help",
-                      "-h",
-                      "--json",
-                      "--no-color",
-                      "--force"
-                    ],
-                    "required_flags": [
-                      "--help"
-                    ],
-                    "required_flags_in_all_arguments": true,
-                    "fail_secure_unknown_options": true,
-                    "forbidden_flags": [
-                      "-h"
-                    ]
-                  },
-                  "matchers": []
-                },
-                {
-                  "op": "executable.v1",
-                  "config": {
-                    "executables": [
-                      "agentburp",
-                      "agentburp.cmd",
-                      "agentburp.exe"
-                    ],
-                    "subcommands": [
-                      "project",
-                      "delete"
-                    ],
-                    "interspersed_options_with_values": [
-                      "--project",
-                      "-p"
-                    ],
-                    "interspersed_flags": [
-                      "--dry-run",
-                      "--help",
-                      "-h",
-                      "--json",
-                      "--no-color",
-                      "--force"
-                    ],
-                    "required_flags": [
-                      "--help"
-                    ],
-                    "required_flags_in_all_arguments": true,
-                    "fail_secure_unknown_options": true,
-                    "forbidden_flags": [
-                      "-h"
-                    ]
-                  },
-                  "matchers": []
-                }
-              ]
-            }
-          },
-          {
-            "variant_id": "short-help",
-            "title": "AgentBurp project help (short flag)",
-            "matcher": {
-              "op": "any.v1",
-              "config": {},
-              "matchers": [
-                {
-                  "op": "all.v1",
-                  "config": {},
-                  "matchers": [
-                    {
-                      "op": "executable.v1",
-                      "config": {
-                        "executables": [
-                          "agentburp",
-                          "agentburp.cmd",
-                          "agentburp.exe"
-                        ],
-                        "subcommands": [
-                          "project",
-                          "create"
-                        ],
-                        "interspersed_options_with_values": [
-                          "--project",
-                          "-p"
-                        ],
-                        "interspersed_flags": [
-                          "--dry-run",
-                          "--help",
-                          "-h",
-                          "--json",
-                          "--no-color",
-                          "--force"
-                        ],
-                        "required_flags_in_all_arguments": true,
-                        "forbidden_flags": [
-                          "--help"
-                        ]
-                      },
-                      "matchers": []
-                    },
-                    {
-                      "op": "executable.v1",
-                      "config": {
-                        "executables": [
-                          "agentburp",
-                          "agentburp.cmd",
-                          "agentburp.exe"
-                        ],
-                        "subcommands": [
-                          "project",
-                          "create"
-                        ],
-                        "interspersed_options_with_values": [
-                          "--project",
-                          "-p"
-                        ],
-                        "interspersed_flags": [
-                          "--dry-run",
-                          "--help",
-                          "-h",
-                          "--json",
-                          "--no-color",
-                          "--force"
-                        ],
-                        "required_flags": [
-                          "-h"
-                        ],
-                        "required_flags_in_all_arguments": true,
-                        "fail_secure_unknown_options": true,
-                        "inverse_flag_pairs": [
-                          [
-                            "-h",
-                            "--help"
-                          ]
-                        ]
-                      },
-                      "matchers": []
-                    }
+              "op": "executable-path-set.v1",
+              "config": {
+                "executables": [
+                  "agentburp",
+                  "agentburp.cmd",
+                  "agentburp.exe"
+                ],
+                "interspersed_options_with_values": [
+                  "--project",
+                  "-p"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--help",
+                  "-h",
+                  "--json",
+                  "--no-color",
+                  "--force"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [
+                  "-h"
+                ],
+                "paths": [
+                  [
+                    "project",
+                    "create"
+                  ],
+                  [
+                    "project",
+                    "open"
+                  ],
+                  [
+                    "project",
+                    "delete"
                   ]
-                },
-                {
-                  "op": "all.v1",
-                  "config": {},
-                  "matchers": [
-                    {
-                      "op": "executable.v1",
-                      "config": {
-                        "executables": [
-                          "agentburp",
-                          "agentburp.cmd",
-                          "agentburp.exe"
-                        ],
-                        "subcommands": [
-                          "project",
-                          "open"
-                        ],
-                        "interspersed_options_with_values": [
-                          "--project",
-                          "-p"
-                        ],
-                        "interspersed_flags": [
-                          "--dry-run",
-                          "--help",
-                          "-h",
-                          "--json",
-                          "--no-color",
-                          "--force"
-                        ],
-                        "required_flags_in_all_arguments": true,
-                        "forbidden_flags": [
-                          "--help"
-                        ]
-                      },
-                      "matchers": []
-                    },
-                    {
-                      "op": "executable.v1",
-                      "config": {
-                        "executables": [
-                          "agentburp",
-                          "agentburp.cmd",
-                          "agentburp.exe"
-                        ],
-                        "subcommands": [
-                          "project",
-                          "open"
-                        ],
-                        "interspersed_options_with_values": [
-                          "--project",
-                          "-p"
-                        ],
-                        "interspersed_flags": [
-                          "--dry-run",
-                          "--help",
-                          "-h",
-                          "--json",
-                          "--no-color",
-                          "--force"
-                        ],
-                        "required_flags": [
-                          "-h"
-                        ],
-                        "required_flags_in_all_arguments": true,
-                        "fail_secure_unknown_options": true,
-                        "inverse_flag_pairs": [
-                          [
-                            "-h",
-                            "--help"
-                          ]
-                        ]
-                      },
-                      "matchers": []
-                    }
-                  ]
-                },
-                {
-                  "op": "all.v1",
-                  "config": {},
-                  "matchers": [
-                    {
-                      "op": "executable.v1",
-                      "config": {
-                        "executables": [
-                          "agentburp",
-                          "agentburp.cmd",
-                          "agentburp.exe"
-                        ],
-                        "subcommands": [
-                          "project",
-                          "delete"
-                        ],
-                        "interspersed_options_with_values": [
-                          "--project",
-                          "-p"
-                        ],
-                        "interspersed_flags": [
-                          "--dry-run",
-                          "--help",
-                          "-h",
-                          "--json",
-                          "--no-color",
-                          "--force"
-                        ],
-                        "required_flags_in_all_arguments": true,
-                        "forbidden_flags": [
-                          "--help"
-                        ]
-                      },
-                      "matchers": []
-                    },
-                    {
-                      "op": "executable.v1",
-                      "config": {
-                        "executables": [
-                          "agentburp",
-                          "agentburp.cmd",
-                          "agentburp.exe"
-                        ],
-                        "subcommands": [
-                          "project",
-                          "delete"
-                        ],
-                        "interspersed_options_with_values": [
-                          "--project",
-                          "-p"
-                        ],
-                        "interspersed_flags": [
-                          "--dry-run",
-                          "--help",
-                          "-h",
-                          "--json",
-                          "--no-color",
-                          "--force"
-                        ],
-                        "required_flags": [
-                          "-h"
-                        ],
-                        "required_flags_in_all_arguments": true,
-                        "fail_secure_unknown_options": true,
-                        "inverse_flag_pairs": [
-                          [
-                            "-h",
-                            "--help"
-                          ]
-                        ]
-                      },
-                      "matchers": []
-                    }
-                  ]
-                }
-              ]
+                ]
+              },
+              "matchers": []
             }
           }
         ],
         "matcher": {
-          "op": "any.v1",
-          "config": {},
-          "matchers": [
-            {
-              "op": "executable.v1",
-              "config": {
-                "executables": [
-                  "agentburp",
-                  "agentburp.cmd",
-                  "agentburp.exe"
-                ],
-                "subcommands": [
-                  "project",
-                  "create"
-                ],
-                "interspersed_options_with_values": [
-                  "--project",
-                  "-p"
-                ],
-                "interspersed_flags": [
-                  "--dry-run",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--no-color",
-                  "--force"
-                ]
-              },
-              "matchers": []
-            },
-            {
-              "op": "executable.v1",
-              "config": {
-                "executables": [
-                  "agentburp",
-                  "agentburp.cmd",
-                  "agentburp.exe"
-                ],
-                "subcommands": [
-                  "project",
-                  "open"
-                ],
-                "interspersed_options_with_values": [
-                  "--project",
-                  "-p"
-                ],
-                "interspersed_flags": [
-                  "--dry-run",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--no-color",
-                  "--force"
-                ]
-              },
-              "matchers": []
-            },
-            {
-              "op": "executable.v1",
-              "config": {
-                "executables": [
-                  "agentburp",
-                  "agentburp.cmd",
-                  "agentburp.exe"
-                ],
-                "subcommands": [
-                  "project",
-                  "delete"
-                ],
-                "interspersed_options_with_values": [
-                  "--project",
-                  "-p"
-                ],
-                "interspersed_flags": [
-                  "--dry-run",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--no-color",
-                  "--force"
-                ]
-              },
-              "matchers": []
-            }
-          ]
+          "op": "executable-path-set.v1",
+          "config": {
+            "executables": [
+              "agentburp",
+              "agentburp.cmd",
+              "agentburp.exe"
+            ],
+            "interspersed_options_with_values": [
+              "--project",
+              "-p"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--help",
+              "-h",
+              "--json",
+              "--no-color",
+              "--force"
+            ],
+            "paths": [
+              [
+                "project",
+                "create"
+              ],
+              [
+                "project",
+                "open"
+              ],
+              [
+                "project",
+                "delete"
+              ]
+            ]
+          },
+          "matchers": []
         }
       }
     ]
