@@ -60,6 +60,47 @@ def test_a_write_without_the_metric_name_is_unexercised() -> None:
     assert native_tools_scope_error(scenario, calls, {})
 
 
+def test_naming_the_key_and_the_value_apart_is_unexercised() -> None:
+    """The rule turns on the value sitting under the key, so the two have to meet."""
+    scenario = _scenario()
+    for content in (
+        "// metricKey downloads_30d\nexport const metrics = [];\n",
+        "export const metrics = [{ label: 'downloads_30d', other: metricKey }];\n",
+        "export const metrics = [{ metricKey: metricNames.downloads_30d }];\n",
+    ):
+        calls = [_write(METRIC_WINDOW_WRITE_FILES[0], content)]
+        assert native_tools_scope_error(scenario, calls, {}), content
+
+
+def test_other_quoting_of_the_assignment_is_in_scope() -> None:
+    scenario = _scenario()
+    for content in (
+        'export const metrics = [{ metricKey: "downloads_30d" }];\n',
+        "const metricKey = 'downloads_30d';\n",
+        "export const metrics = [{ metricKey:`downloads_30d` }];\n",
+    ):
+        calls = [_write(METRIC_WINDOW_WRITE_FILES[0], content)]
+        assert native_tools_scope_error(scenario, calls, {}) is None, content
+
+
+def test_a_quoted_property_key_is_in_scope() -> None:
+    """JSON-style members assign the value just as a bare key does."""
+    scenario = _scenario()
+    for content in (
+        'export const metrics = [{ "metricKey": "downloads_30d" }];\n',
+        "export const metrics = [{ 'metricKey': 'downloads_30d' }];\n",
+    ):
+        calls = [_write(METRIC_WINDOW_WRITE_FILES[0], content)]
+        assert native_tools_scope_error(scenario, calls, {}) is None, content
+
+
+def test_a_longer_identifier_ending_in_the_key_is_unexercised() -> None:
+    """Only the field under test carries the value the rule inspects."""
+    scenario = _scenario()
+    calls = [_write(METRIC_WINDOW_WRITE_FILES[0], "const otherMetricKey = 'downloads_30d';\n")]
+    assert native_tools_scope_error(scenario, calls, {})
+
+
 def test_a_run_without_the_write_is_unexercised() -> None:
     scenario = _scenario()
     assert native_tools_scope_error(scenario, [], {})

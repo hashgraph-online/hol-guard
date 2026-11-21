@@ -212,14 +212,60 @@ fn longest_digit_run(value: &str) -> usize {
 /// `downloads_30d` and `top_100_items` do.
 ///
 /// A readable run of letters alone is not enough: a generated key can open
-/// with one (`prod493017582`), and what follows it is the credential. The
-/// digits therefore have to look like a count as well -- no run longer than a
-/// year, and fewer digits than letters -- so a value only escapes the
-/// randomness check when both halves of it read as an identifier.
+/// with one, and what follows it is the credential. The digits have to read as
+/// a count as well -- no run longer than a year, fewer than the letters,
+/// gathered in one separator-delimited piece, and every piece a word or a
+/// counted window.
 fn reads_as_counted_word(value: &str) -> bool {
     let digits = value.bytes().filter(u8::is_ascii_digit).count();
     let letters = value.bytes().filter(u8::is_ascii_alphabetic).count();
-    longest_digit_run(value) <= MAX_COUNT_DIGITS && digits < letters && reads_as_words(value)
+    let pieces = value.split(['_', '-', '.']);
+    let counted = pieces
+        .clone()
+        .filter(|part| part.bytes().any(|byte| byte.is_ascii_digit()))
+        .count();
+    longest_digit_run(value) <= MAX_COUNT_DIGITS
+        && digits < letters
+        && counted <= 1
+        && pieces.clone().all(counted_segment)
+        && reads_as_words(value)
+}
+
+/// Whether one separator-delimited piece of a value reads as part of a counted
+/// identifier: letters alone, digits alone, or a word carrying one count and
+/// an optional unit, the way `downloads30d` and `window7` do.
+///
+/// Digits that break up short letter fragments (`k7m2q9`) are what a generated
+/// key looks like, and `reads_as_words` cannot score fragments that short, so
+/// a piece that returns to letters after its digits stays under the check.
+fn counted_segment(part: &str) -> bool {
+    let bytes = part.as_bytes();
+    if bytes.is_empty() {
+        return false;
+    }
+    if bytes.iter().all(u8::is_ascii_alphabetic) || bytes.iter().all(u8::is_ascii_digit) {
+        return true;
+    }
+    let word = bytes
+        .iter()
+        .take_while(|byte| byte.is_ascii_alphabetic())
+        .count();
+    let after_word = &bytes[word..];
+    let count = after_word
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count();
+    if count == 0 || count > MAX_COUNT_DIGITS {
+        return false;
+    }
+    match &after_word[count..] {
+        [] => true,
+        [unit] => matches!(
+            unit.to_ascii_lowercase(),
+            b'd' | b'h' | b'm' | b's' | b'w' | b'y'
+        ),
+        _ => false,
+    }
 }
 
 /// A GitHub token whose last six characters are not the CRC32 of its body is
@@ -432,11 +478,11 @@ pub(super) fn looks_random(value: &str) -> bool {
         }
     }
     // The weakest randomness signal left is a value of one letter case with a
-    // few digits in it. An identifier reaches that shape whenever a plain
-    // English word carries a count or a window (`downloads_30d`, `window_7d`,
-    // `top_100_items`), so a value that reads as such a word is not called
-    // random on this signal alone. A generated key has no such shape, and the
-    // stronger checks above keep the ones that mix a word with a random run.
+    // few digits in it. An identifier reaches that shape whenever a word
+    // carries a count or a window (`downloads_30d`, `top_100_items`), so a
+    // value that reads as such a word is not called random on this signal
+    // alone. The stronger checks above keep the ones that mix a word with a
+    // random run.
     if length >= 10
         && classes >= 2
         && has_digit

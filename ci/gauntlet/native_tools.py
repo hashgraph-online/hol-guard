@@ -46,16 +46,26 @@ GITDIR_POINTER_CASE = "read-linked-worktree-gitdir-pointer"
 # the absolute and ``~`` spellings both arrive here as one string.
 GITDIR_POINTER_FILES = ("{{home}}/project/.git/worktrees/project-feature/gitdir",)
 METRIC_WINDOW_WRITE_CASE = "native-metric-window-names-write"
-# The fixture's main checkout is the workspace, so the model may name the file
-# from the workspace root, which ``_path`` reduces to the bare relative
-# spelling, or absolutely, which it leaves under the fixture home.
+# The realistic fixture puts the agent in a linked worktree, and redaction
+# folds that directory to ``{{workspace}}``, which ``_path`` reduces to the
+# bare relative spelling. The absolute entry is the main checkout beside it,
+# which a model that resolves the project name itself may write instead; both
+# carry the value the rule turns on.
 METRIC_WINDOW_WRITE_FILES = (
     "src/connectors/metrics.ts",
     "{{home}}/project/src/connectors/metrics.ts",
 )
-# The value under test is the window-carrying metric name. A write that leaves
-# it out does not reach the rule this case exists for.
-METRIC_WINDOW_WRITE_TEXT = ("metricKey", "downloads_30d")
+# The value under test is the window-carrying metric name under a key-shaped
+# field name. The two have to meet in one assignment: a write that only
+# mentions them separately, in a comment or in unrelated code, never reaches
+# the rule this case exists for.
+# A model may write the property either bare or quoted, and either as an object
+# member or as an assignment, so accept a matching optional quote around the key
+# and require that the name is not the tail of a longer identifier.
+METRIC_WINDOW_WRITE_ASSIGNMENT = re.compile(
+    r"""(?<![\w$])(?P<key_quote>['"`]?)metricKey(?P=key_quote)"""
+    r"""\s*[:=]\s*(?P<quote>['"`])downloads_30d(?P=quote)"""
+)
 
 TMP_ALIAS_READ_CASE = "omp-native-read-tmp-alias-worktree-file"
 SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
@@ -442,8 +452,8 @@ def _metric_window_write_error(calls: list[dict[str, Any]], *, require_write: bo
         if name != "write" or path not in METRIC_WINDOW_WRITE_FILES:
             return "the model used a file other than the metrics source"
         content = call["args"].get("content")
-        if not isinstance(content, str) or any(part not in content for part in METRIC_WINDOW_WRITE_TEXT):
-            return "the write did not carry the metric name under test"
+        if not isinstance(content, str) or not METRIC_WINDOW_WRITE_ASSIGNMENT.search(content):
+            return "the write did not assign the metric name under test"
         wrote = True
     if require_write and not wrote:
         return "the model did not write the metrics source"
@@ -861,6 +871,7 @@ def native_tools_scope_error(
     if scenario.id == ROUTE_SEGMENT_GLOB_CASE and (scope := _route_segment_glob_error(calls)):
         return scope
     if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls, require_read=False)):
+        return scope
     if scenario.id == METRIC_WINDOW_WRITE_CASE and (
         scope := _metric_window_write_error(calls, require_write=False)
     ):
@@ -870,6 +881,7 @@ def native_tools_scope_error(
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls)):
         return scope
     if scenario.id == GITDIR_POINTER_CASE and (scope := _gitdir_pointer_error(calls)):
+        return scope
     if scenario.id == METRIC_WINDOW_WRITE_CASE and (scope := _metric_window_write_error(calls)):
         return scope
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:

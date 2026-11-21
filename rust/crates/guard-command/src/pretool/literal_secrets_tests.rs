@@ -365,6 +365,10 @@ fn a_metric_name_carrying_a_window_is_not_a_secret() {
         "      windowKey: 'window_7d',",
         "      bucketKey: 'top_100_items',",
         "const cacheKey = 'repository_90d';",
+        // The same window written without a separator: one word, one
+        // count and its unit still read as an identifier.
+        "      metricKey: 'downloads30d',",
+        "const cacheKey = 'retention90d';",
     ] {
         assert!(!holds_literal_secret(text), "{text}");
     }
@@ -382,6 +386,22 @@ fn a_metric_name_carrying_a_window_is_not_a_secret() {
         // apart from an identifier.
         format!("      apiKey: '{}',", joined(&["sessionkey1x", "2y3z4w5v"])),
         format!("const token = '{}';", joined(&["requestkey4", "h1t9p3qz"])),
+        // A short word followed by digits that break up one- and two-letter
+        // fragments: no piece of it reads as a count or a window, so the
+        // value stays under the randomness check.
+        format!("      apiKey: '{}',", joined(&["sum", "mer7k2x9"])),
+        format!("const token = '{}';", joined(&["rele", "ase9a3b7c"])),
+        // A word followed by more than one group of digits, with short letter
+        // fragments between them: an identifier carries one count, so a value
+        // that repeats the shape stays under the randomness check.
+        format!(
+            "      apiKey: '{}',",
+            joined(&["winter_4821", "_qk_7193_zt"])
+        ),
+        format!(
+            "const token = '{}';",
+            joined(&["harbor-2074", "-vn-8316-pd"])
+        ),
     ] {
         assert!(holds_literal_secret(&text), "{text}");
     }
