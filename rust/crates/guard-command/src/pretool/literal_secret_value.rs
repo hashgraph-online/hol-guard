@@ -166,6 +166,11 @@ fn has_word_chunk(value: &str) -> bool {
         .any(|chunk| chunk.len() >= 4 && pair_score(&chunk.to_ascii_lowercase()) > -3.0)
 }
 
+/// The longest run of digits a count or a window can carry. A window is one
+/// or two digits (`7d`, `30d`), a count three or four (`100`, `2026`). A
+/// generated key runs longer than that.
+const MAX_COUNT_DIGITS: usize = 4;
+
 /// A letter run that does not read as random on its own is a word. This uses
 /// the same bar `random_letters` applies, so a chunk only fails it when the
 /// value would have been called random on its letters alone.
@@ -173,6 +178,35 @@ fn has_readable_chunk(value: &str) -> bool {
     case_chunks(value, false)
         .iter()
         .any(|chunk| chunk.len() >= 4 && pair_score(&chunk.to_ascii_lowercase()) >= -3.9)
+}
+
+/// The longest run of consecutive digits in a value.
+fn longest_digit_run(value: &str) -> usize {
+    let mut longest = 0;
+    let mut run = 0;
+    for byte in value.bytes() {
+        if byte.is_ascii_digit() {
+            run += 1;
+            longest = longest.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    longest
+}
+
+/// Whether a value reads as a word that carries a count or a window, the way
+/// `downloads_30d` and `top_100_items` do.
+///
+/// A readable run of letters alone is not enough: a generated key can open
+/// with one (`prod493017582`), and what follows it is the credential. The
+/// digits therefore have to look like a count as well -- no run longer than a
+/// year, and fewer digits than letters -- so a value only escapes the
+/// randomness check when both halves of it read as an identifier.
+fn reads_as_counted_word(value: &str) -> bool {
+    let digits = value.bytes().filter(u8::is_ascii_digit).count();
+    let letters = value.bytes().filter(u8::is_ascii_alphabetic).count();
+    longest_digit_run(value) <= MAX_COUNT_DIGITS && digits < letters && has_readable_chunk(value)
 }
 
 /// A GitHub token whose last six characters are not the CRC32 of its body is
@@ -387,15 +421,14 @@ pub(super) fn looks_random(value: &str) -> bool {
     // The weakest randomness signal left is a value of one letter case with a
     // few digits in it. An identifier reaches that shape whenever a plain
     // English word carries a count or a window (`downloads_30d`, `window_7d`,
-    // `top_100_items`), so a value that still reads as a word is not called
-    // random on this signal alone. A generated key has no such word in it,
-    // and the stronger checks above keep the ones that mix a word with a
-    // random run.
+    // `top_100_items`), so a value that reads as such a word is not called
+    // random on this signal alone. A generated key has no such shape, and the
+    // stronger checks above keep the ones that mix a word with a random run.
     if length >= 10
         && classes >= 2
         && has_digit
         && (has_lower || has_upper)
-        && !has_readable_chunk(value)
+        && !reads_as_counted_word(value)
     {
         let ratio = value.bytes().filter(u8::is_ascii_digit).count() as f64 / length as f64;
         if ratio > 0.15 && ratio < 0.85 {
