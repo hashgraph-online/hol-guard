@@ -19,7 +19,7 @@ const DIAGNOSTICS_KEY: &str = "fleet_posture_diagnostics";
 
 /// `parse_timestamp`: trimmed ISO-8601 text, a trailing `Z` read as UTC and
 /// an instant without an offset read as UTC.
-fn instant(value: Option<&Value>) -> Option<i128> {
+pub(super) fn instant(value: Option<&Value>) -> Option<i128> {
     let text = value?.as_str()?.trim();
     if text.is_empty() {
         return None;

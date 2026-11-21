@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from .fleet_posture_common import iso, keyed_digest, parse_timestamp
+from .fleet_posture_common import iso, keyed_digest, utc
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,20 +65,10 @@ def runtimes_section(
     advisory = _advisory_bundle(store)
     scope = _cache_scope(context, hash_key, advisory)
     if ttl_seconds > 0:
-        cached = store.get_sync_payload(RUNTIMES_STATE_KEY)
-        if (
-            isinstance(cached, dict)
-            and cached.get("scope") == scope
-            and isinstance(section := cached.get("section"), dict)
-        ):
-            fetched = parse_timestamp(cached.get("at"))
-            valid_until = cached.get("valid_until")
-            # Matches from a bundle are good only until that bundle expires.
-            fresh_bundle = valid_until is None or (
-                isinstance(valid_until, (int, float)) and now.timestamp() < valid_until
-            )
-            if fetched is not None and fresh_bundle and 0 <= (now - fetched).total_seconds() < ttl_seconds:
-                return cast("dict[str, object]", section)
+        # Full precision, so the age and bundle expiry compare as they did in Python.
+        cached = store.fleet_posture_cached_runtimes(scope=scope, now=utc(now).isoformat(), ttl_seconds=ttl_seconds)
+        if cached is not None:
+            return cached
     try:
         posture = _observe(context, now, advisory)
         section = project_runtime_posture(posture, hash_key=hash_key, guard_home=context.guard_home)
@@ -88,10 +78,10 @@ def runtimes_section(
     if ttl_seconds > 0:
         source = posture.get("advisory_source")
         valid_until = source.get("valid_until") if isinstance(source, Mapping) else None
-        entry: dict[str, object] = {"at": iso(now), "scope": scope, "section": section}
-        entry["valid_until"] = valid_until if isinstance(valid_until, (int, float)) else None
+        if isinstance(valid_until, bool) or not isinstance(valid_until, (int, float)):
+            valid_until = None
         try:
-            store.set_sync_payload(RUNTIMES_STATE_KEY, entry, iso(now))
+            store.record_fleet_posture_runtimes(scope=scope, section=section, valid_until=valid_until, now=iso(now))
         except Exception:
             _LOGGER.debug("fleet posture: runtime posture cache could not be saved", exc_info=True)
     return section
