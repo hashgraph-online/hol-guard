@@ -190,7 +190,10 @@ def hook_integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[
     if not isinstance(next_control_state, dict):
         return {"finalized": False}
     try:
-        stored = store._finalize_policy_integrity_control_state(next_control_state)
+        if "remaining_seconds" in args:
+            stored = store._finalize_policy_integrity_control_state(next_control_state, deadline=_deadline(args))
+        else:
+            stored = store._finalize_policy_integrity_control_state(next_control_state)
     except (OSError, RuntimeError, TypeError, ValueError):
         return {"finalized": False}
     return {"finalized": stored is True}
