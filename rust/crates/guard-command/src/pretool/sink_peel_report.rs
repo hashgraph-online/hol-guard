@@ -120,10 +120,19 @@ fn report_at(characters: &[char], start: usize, separator: &str) -> Option<Trail
     })
 }
 
+/// A report separator can be followed by horizontal whitespace or a shell
+/// line break. Keep this scoped to the report, not the other command peels.
+fn skip_report_gap(characters: &[char], mut index: usize) -> usize {
+    while matches!(characters.get(index).copied(), Some(' ' | '\t' | '\n')) {
+        index += 1;
+    }
+    index
+}
+
 /// One `echo <label>` clause: where it ends, the label, and whether the label
 /// ended in the `$?` the shell expands to a status.
 fn echo_clause(characters: &[char], start: usize) -> Option<(usize, String, bool)> {
-    let mut index = skip_blanks(characters, start);
+    let mut index = skip_report_gap(characters, start);
     index = literal(characters, index, "echo")?;
     index = require_blanks(characters, index)?;
     let quoted = characters.get(index) == Some(&'"');
