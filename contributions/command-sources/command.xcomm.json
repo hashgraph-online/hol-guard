@@ -1,0 +1,450 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.xcomm",
+    "version": "1.0.0",
+    "name": "xcomm",
+    "description": "Reviews xcomm control-socket commands that act on a real serial device: text and bytes sent to the board (ctl send, ctl run), line control (break, DTR/RTS, line settings), zmodem/ymodem/xmodem transfers, and captures written to local files. Commands that only observe (ctl status, read, wait, sessions) are left unmatched. Opening a session directly (xcomm <device>, which also sends piped stdin and raises DTR/RTS) is outside this extension. Boundary reviewed against xcomm 0.1.3.",
+    "action_classes": [
+      "xcomm serial device input",
+      "xcomm serial line control",
+      "xcomm serial file transfer",
+      "xcomm local capture write"
+    ],
+    "risk_classes": [
+      "execution",
+      "local_write"
+    ],
+    "safer_alternatives": [
+      "Use xcomm ctl <device> read --since <offset> or wait to observe the board without sending anything.",
+      "Start the session with --ctl ro so the control socket allows status and reads only."
+    ],
+    "reference_urls": [
+      "https://github.com/cantona/xcomm/blob/v0.1.3/README.md",
+      "https://github.com/cantona/xcomm/blob/v0.1.3/src/cli.rs",
+      "https://github.com/cantona/xcomm/blob/v0.1.3/skills/xcomm/SKILL.md"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "xcomm"
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.cantona",
+      "display_name": "Su Kang Yin",
+      "url": "https://github.com/cantona"
+    },
+    "homepage": "https://github.com/cantona/xcomm",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "GPL-2.0-only",
+    "permissions": [
+      {
+        "permission_id": "command.xcomm.permission.device-input",
+        "implementation_version": "1.0.0",
+        "label": "Send input to a serial device",
+        "description": "Sends text or raw bytes to the board on the session's serial port. Whatever is listening there runs it: a shell, a bootloader such as U-Boot, or firmware. A send cannot be taken back, and a reply prompt is not proof the command ran.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xcomm serial device input"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Read the session's output first (xcomm ctl <device> read --last 4096) to see which prompt the board is at.",
+          "Give run a --fail-on pattern for boot banners or error text so a reboot is not taken as success."
+        ],
+        "example_command": "xcomm ctl ttyUSB1 run 'reboot' --until '# $' --timeout 10"
+      },
+      {
+        "permission_id": "command.xcomm.permission.line-control",
+        "implementation_version": "1.0.0",
+        "label": "Control serial line signals and settings",
+        "description": "Sends a break, sets or pulses DTR/RTS, or changes baud, data bits, parity, stop bits or flow control. On many boards DTR/RTS are wired to reset or boot-mode pins, and a break can stop a bootloader or trigger a console SysRq.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xcomm serial line control"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Check the board's wiring before toggling DTR/RTS; on auto-reset boards a pulse resets the target."
+        ],
+        "example_command": "xcomm ctl ttyUSB1 dtr pulse 200"
+      },
+      {
+        "permission_id": "command.xcomm.permission.transfer",
+        "implementation_version": "1.0.0",
+        "label": "Transfer files over the serial line",
+        "description": "Runs lrzsz on the session's port: send pushes local files to the device; recv writes files from the device. zmodem and ymodem recv write only below the working directory; xmodem recv writes to the path given, wherever it is.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xcomm serial file transfer"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Check the file list and the receiving program on the board before a send; run zmodem or ymodem recv in a scratch directory, and check the target path of an xmodem recv."
+        ],
+        "example_command": "xcomm ctl ttyUSB1 xfer send zmodem firmware.bin"
+      },
+      {
+        "permission_id": "command.xcomm.permission.capture",
+        "implementation_version": "1.0.0",
+        "label": "Write a capture file",
+        "description": "Starts or stops appending the device's output to a local file chosen by the caller.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xcomm local capture write"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Capture into a new file in a scratch directory; the session appends to an existing file."
+        ],
+        "example_command": "xcomm ctl ttyUSB1 capture start boot.log"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.xcomm.device-input",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xcomm.permission.device-input",
+        "title": "xcomm serial device input",
+        "description": "Identifies xcomm ctl send and ctl run, which put text, --hex bytes or a --file's bytes on the serial line. Matches the subcommand word anywhere in an xcomm ctl invocation before `--`, because the device name (or --pane) comes between ctl and the subcommand and the word can follow options. Two limits follow. A subcommand after `--` (xcomm ctl -- ttyUSB1 send ls) is not seen, so it keeps only the unknown-executable review floor and a disabled permission does not block it. A matching word elsewhere in the line counts as the subcommand: option text or a wait pattern (--fail-on set, wait run), the text of a send or run (send set), or xfer's direction (xfer send also hits device input). A disabled permission then also blocks that command; this fails closed. dtr, rts, xfer and capture also need the word xcomm requires after them (on/off/toggle/pulse, send/recv, start/stop), so a status field such as status capture does not match. No help-flag exemption is granted: xcomm takes the word after a value option as its value, so --help can be a --until pattern while the send still happens. xcomm ctl status, read, wait and sessions only observe the session and are outside these rules.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "xcomm serial device input"
+        ],
+        "safer_alternatives": [
+          "Use xcomm ctl <device> wait or read to observe the board without sending."
+        ],
+        "default_mode": "review",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "send"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "run"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "rule_id": "command.xcomm.line-control",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xcomm.permission.line-control",
+        "title": "xcomm serial line control",
+        "description": "Identifies xcomm ctl break, dtr, rts and set. Matches the subcommand word anywhere in an xcomm ctl invocation before `--`, because the device name (or --pane) comes between ctl and the subcommand and the word can follow options. Two limits follow. A subcommand after `--` (xcomm ctl -- ttyUSB1 send ls) is not seen, so it keeps only the unknown-executable review floor and a disabled permission does not block it. A matching word elsewhere in the line counts as the subcommand: option text or a wait pattern (--fail-on set, wait run), the text of a send or run (send set), or xfer's direction (xfer send also hits device input). A disabled permission then also blocks that command; this fails closed. dtr, rts, xfer and capture also need the word xcomm requires after them (on/off/toggle/pulse, send/recv, start/stop), so a status field such as status capture does not match.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "xcomm serial line control"
+        ],
+        "safer_alternatives": [
+          "Use xcomm ctl <device> status to read the line settings and modem lines without changing them."
+        ],
+        "default_mode": "review",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "break"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "set"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "dtr",
+                  "on"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "dtr",
+                  "off"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "dtr",
+                  "toggle"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "dtr",
+                  "pulse"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "rts",
+                  "on"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "rts",
+                  "off"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "rts",
+                  "toggle"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "rts",
+                  "pulse"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "rule_id": "command.xcomm.transfer",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xcomm.permission.transfer",
+        "title": "xcomm serial file transfer",
+        "description": "Identifies xcomm ctl xfer send and recv with zmodem, ymodem or xmodem. Matches the subcommand word anywhere in an xcomm ctl invocation before `--`, because the device name (or --pane) comes between ctl and the subcommand and the word can follow options. Two limits follow. A subcommand after `--` (xcomm ctl -- ttyUSB1 send ls) is not seen, so it keeps only the unknown-executable review floor and a disabled permission does not block it. A matching word elsewhere in the line counts as the subcommand: option text or a wait pattern (--fail-on set, wait run), the text of a send or run (send set), or xfer's direction (xfer send also hits device input). A disabled permission then also blocks that command; this fails closed. dtr, rts, xfer and capture also need the word xcomm requires after them (on/off/toggle/pulse, send/recv, start/stop), so a status field such as status capture does not match.",
+        "severity": "high",
+        "risk_classes": [
+          "execution",
+          "local_write"
+        ],
+        "action_classes": [
+          "xcomm serial file transfer"
+        ],
+        "safer_alternatives": [
+          "Review the files and the board's receiving program before transferring."
+        ],
+        "default_mode": "review",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "xfer",
+                  "send"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "xfer",
+                  "recv"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "rule_id": "command.xcomm.capture",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xcomm.permission.capture",
+        "title": "xcomm local capture write",
+        "description": "Identifies xcomm ctl capture start and stop, which append device output to a caller-chosen local file. Matches the subcommand word anywhere in an xcomm ctl invocation before `--`, because the device name (or --pane) comes between ctl and the subcommand and the word can follow options. Two limits follow. A subcommand after `--` (xcomm ctl -- ttyUSB1 send ls) is not seen, so it keeps only the unknown-executable review floor and a disabled permission does not block it. A matching word elsewhere in the line counts as the subcommand: option text or a wait pattern (--fail-on set, wait run), the text of a send or run (send set), or xfer's direction (xfer send also hits device input). A disabled permission then also blocks that command; this fails closed. dtr, rts, xfer and capture also need the word xcomm requires after them (on/off/toggle/pulse, send/recv, start/stop), so a status field such as status capture does not match.",
+        "severity": "medium",
+        "risk_classes": [
+          "local_write"
+        ],
+        "action_classes": [
+          "xcomm local capture write"
+        ],
+        "safer_alternatives": [
+          "Use xcomm ctl <device> read --from-oldest to fetch the kept output without writing a file."
+        ],
+        "default_mode": "review",
+        "safe_variants": [],
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "capture",
+                  "start"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "xcomm"
+                ],
+                "required_arguments": [
+                  "ctl",
+                  "capture",
+                  "stop"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
