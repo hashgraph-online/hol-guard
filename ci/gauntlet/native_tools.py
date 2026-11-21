@@ -40,13 +40,11 @@ READ_SELECTOR = re.compile(
     r"(.+?):(?:[1-9][0-9]*(?:-[1-9][0-9]*)?(?::raw)?|raw(?::[1-9][0-9]*(?:-[1-9][0-9]*)?)?)"
 )
 GITDIR_POINTER_CASE = "read-linked-worktree-gitdir-pointer"
-# The fixture's main checkout is the workspace, so the model may name the
-# pointer absolutely or from the workspace root, which ``_path`` reduces to the
-# bare relative spelling.
-GITDIR_POINTER_FILES = (
-    "{{home}}/project/.git/worktrees/project-feature/gitdir",
-    ".git/worktrees/project-feature/gitdir",
-)
+# The realistic fixture puts the agent in the linked worktree, whose ``.git``
+# is a pointer file rather than a directory, so only a path through the main
+# checkout names the administrative pointer. ``_path`` folds the home alias, so
+# the absolute and ``~`` spellings both arrive here as one string.
+GITDIR_POINTER_FILES = ("{{home}}/project/.git/worktrees/project-feature/gitdir",)
 TMP_ALIAS_READ_CASE = "omp-native-read-tmp-alias-worktree-file"
 SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
 # The checkout file a session opened in a plain folder reads and edits through its absolute path.
@@ -500,10 +498,10 @@ def _gitdir_pointer_error(calls: list[dict[str, Any]], *, require_read: bool = T
             continue
         path = _edit_path(call["args"]) if name == "edit" else _path(call["args"])
         if isinstance(path, str):
-            # A Windows lane spells the pointer with backslashes, which also
-            # leaves the workspace prefix on it. Fold both here rather than in
-            # the shared helper, which other checks compare unfolded.
-            path = path.replace("\\", "/").removeprefix("{{workspace}}/").removeprefix("./")
+            # A Windows lane spells the pointer with backslashes. Fold them
+            # here rather than in the shared helper, which other checks compare
+            # against unfolded spellings.
+            path = path.replace("\\", "/")
         if name == "read" and isinstance(path, str) and (selector := READ_SELECTOR.fullmatch(path)):
             path = selector.group(1)
         if name != "read" or path not in GITDIR_POINTER_FILES:

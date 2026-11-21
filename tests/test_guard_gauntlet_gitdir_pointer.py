@@ -35,15 +35,13 @@ def test_reading_the_pointer_is_in_scope() -> None:
     scenario = _scenario()
     spellings = (
         *GITDIR_POINTER_FILES,
-        "{{workspace}}/.git/worktrees/project-feature/gitdir",
         "~/project/.git/worktrees/project-feature/gitdir",
-        f"{GITDIR_POINTER_FILES[0]}:1-2",
-        f"{GITDIR_POINTER_FILES[0]}:1",
-        f"{GITDIR_POINTER_FILES[0]}:raw",
-        f"{GITDIR_POINTER_FILES[0]}:1-2:raw",
-        f"{GITDIR_POINTER_FILES[0]}:raw:1-2",
-        GITDIR_POINTER_FILES[1].replace("/", "\\"),
-        "{{workspace}}\\" + GITDIR_POINTER_FILES[1].replace("/", "\\"),
+        f"{POINTER}:1-2",
+        f"{POINTER}:1",
+        f"{POINTER}:raw",
+        f"{POINTER}:1-2:raw",
+        f"{POINTER}:raw:1-2",
+        POINTER.replace("/", "\\"),
     )
     for path in spellings:
         assert native_tools_scope_error(scenario, [_read(path)], {}) is None, path
@@ -54,11 +52,16 @@ def test_reading_another_file_leaves_the_scenario_unexercised() -> None:
     for path in (
         "README.md",
         "{{workspace}}/README.md",
+        # The agent works in the linked worktree, whose ``.git`` is a pointer
+        # file, so a path through the workspace names nothing. Counting it
+        # would let the case pass on a read that never reached the pointer.
+        "{{workspace}}/.git/worktrees/project-feature/gitdir",
+        ".git/worktrees/project-feature/gitdir",
         "{{home}}/project/.git/worktrees/project-feature/HEAD",
         "{{home}}/project/.git/config",
         # A selector-shaped suffix on another file must not be stripped into a
         # match, and a colon-named file is not the pointer either.
-        f"{GITDIR_POINTER_FILES[0]}:raw:extra",
+        f"{POINTER}:raw:extra",
         "{{home}}/project/.git/worktrees/project-feature/gitdir.bak:raw",
     ):
         assert native_tools_scope_error(scenario, [_read(path)], {}), path
