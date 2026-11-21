@@ -70,6 +70,27 @@ pub(crate) const FILE_WRITE_TOOL_NAMES: &[&str] = &[
     "edit_file",
     "apply_patch",
 ];
+/// Read-only search and listing tools. They carry a pattern or a directory
+/// rather than a command, so without them a code search falls through to the
+/// generic `config_change` label: the review card calls a `grep` a config
+/// change, and the scan planner treats it like a file write.
+pub(crate) const SEARCH_TOOL_NAMES: &[&str] = &[
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "ripgrep",
+    "grep_search",
+    "glob",
+    "codebase_search",
+    "search_files",
+    "file_search",
+    "list_dir",
+    "listdir",
+    "list_directory",
+    "ls",
+    "find",
+];
 pub(crate) const CURSOR_NETWORK_TOOL_NAMES: &[&str] = &[
     "webfetch",
     "websearch",
