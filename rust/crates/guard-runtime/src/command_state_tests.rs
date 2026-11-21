@@ -10,7 +10,7 @@ const NOW: &str = "2026-09-27T12:00:00+00:00";
 const LATER: &str = "2026-09-27T12:30:00+00:00";
 const EXPIRES: &str = "2026-09-27T13:00:00+00:00";
 
-fn home() -> tempfile::TempDir {
+pub(super) fn home() -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
     Connection::open(home.path().join(STORE_FILE_NAME))
         .unwrap()
@@ -39,7 +39,7 @@ fn identity(id: &str) -> Map<String, Value> {
     .clone()
 }
 
-fn call(home: &Path, op: &str, now: &str, fields: Value) -> Result<Value, String> {
+pub(super) fn call(home: &Path, op: &str, now: &str, fields: Value) -> Result<Value, String> {
     let mut request = json!({
         "schema": SCHEMA,
         "guard_home": home,

@@ -2044,6 +2044,34 @@
     "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
     "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
+   "module": "codex_plugin_scanner.guard.hook_review.hook_managed_install_state",
+   "source_sha256": "b0ed04428be6e5d8f210cfb33671db7556a4be365bab0de66a87a31c96658b27",
+   "forbidden_symbols": [
+    "_remembered_protected",
+    "_read_harness_is_unmanaged",
+    "_refresh_lock_for"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_managed_installs.rs",
+    "rust/crates/guard-runtime/src/guard_store_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+   "module": "codex_plugin_scanner.guard.hook_review.hook_worker_structured",
+   "source_sha256": "ccd0fcfbeedb1ad80b53e41c4be722bd7c66e48f956a03b4433dec9a99bd9f8c",
+   "forbidden_symbols": [
+    "withhold_stale_forward",
+    "_stale_reason",
+    "_changed_reason"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/edge_structured.rs",
+    "rust/crates/guard-runtime/src/policy_store.rs"
+   ]
   }
  ],
  "retired_test_paths": [

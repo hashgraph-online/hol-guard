@@ -2,17 +2,15 @@ import type { GuardContextAssistanceConfig } from "../guard-types";
 import { ContextAssistanceApiError } from "./api";
 import { contextStatusCopy } from "./status";
 import type { ContextAssistanceStatus } from "./types";
-import { canCommitCigarJob, cigarBuildBlock, cigarJobPending, cigarPythonBlock, cigarVersionJobId } from "./versions-actions";
+import { canCommitCigarJob, cigarJobPending, cigarVersionJobId } from "./versions-actions";
 import type { CigarVersionsReply, CigarVersionsRequest } from "./versions-api";
 import type { CigarVersionsData } from "./versions-data";
 import { parseCigarVersionJob, type CigarVersionJob } from "./versions-jobs";
 import type { ContextProof } from "./workspaces-api";
 import { canStartCigar, type CigarTab } from "./workspace-model";
 
-export type CigarSetupStage = "python" | "download" | "check" | "start";
+export type CigarSetupStage = "check" | "start";
 export const CIGAR_SETUP_STAGE_LABELS: Record<CigarSetupStage, string> = {
-  python: "Getting ready",
-  download: "Downloading CIGAR",
   check: "Making sure it is safe",
   start: "Starting up",
 };
@@ -21,9 +19,6 @@ export type CigarSetupBlock = { title: string; detail: string; tab?: CigarTab; w
 export type CigarSetupRun = {
   kind: "run";
   runtime_id: string | null;
-  build_id: string | null;
-  interpreter_id: string | null;
-  python_build_id: string | null;
   stages: CigarSetupStage[];
   /** False only when the saved preference already permits a start, which needs no proof. */
   approval: boolean;
@@ -32,15 +27,14 @@ export type CigarSetupRun = {
 };
 export type CigarSetupPlan = { kind: "ready" } | { kind: "blocked"; block: CigarSetupBlock } | CigarSetupRun;
 
-const python314 = (version: readonly number[]) => version[0] === 3 && version[1] === 14;
 const blocked = (title: string, detail: string, tab?: CigarTab, wait?: boolean): CigarSetupPlan => ({ kind: "blocked", block: { title, detail, tab, wait } });
 
 /**
- * Choose the shortest path from native metadata. Every input is something
- * Guard already reported; the plan never invents a build, a URL or a path.
+ * Choose the shortest path from native metadata. CIGAR runs on the engine built
+ * into Guard, so setup never downloads anything or needs Python.
  */
 export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean; adopt?: string | null }): CigarSetupPlan {
-  const { state, catalog } = data;
+  const { state } = data;
   if (state.effective_enabled) return { kind: "ready" };
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
   // Committing a held job needs the same clearance as any commit; a lock leaves it to the checks below.
@@ -57,42 +51,18 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
   const selected = state.preferences.runtime_id;
   const installed = data.installations;
   const current = selected && installed.some((item) => item.runtime_id === selected) ? selected : null;
-  const reusable = current ?? (installed.find((item) => item.qualification === "guard_qualified") ?? installed[0])?.runtime_id ?? null;
-  const tail: CigarSetupStage[] = reusable === current && current !== null ? ["start"] : ["check", "start"];
-  if (reusable) {
-    return { kind: "run", runtime_id: reusable, build_id: null, interpreter_id: null, python_build_id: null, stages: tail,
-      approval: tail.length > 1 || !state.preferences.enabled };
+  const reusable = current ?? installed.find((item) => item.builtin === true)?.runtime_id ?? null;
+  if (!reusable) {
+    return blocked("Update Guard to use CIGAR", "This copy of Guard does not include the CIGAR engine. Update Guard, then turn CIGAR on.");
   }
-
-  const host = catalog.host_platform;
-  if (!host) return blocked("Not available for this computer yet", "CIGAR does not have a version for this kind of computer yet. Guard keeps protecting you without it.");
-  const build = catalog.builds.find((item) => cigarBuildBlock(catalog, item, data.updates) === null);
-  if (!build) {
-    const forHost = catalog.builds.filter((item) => !item.withdrawn && item.platforms.some((p) => p.platform === host));
-    if (forHost.length === 0) {
-      return blocked("Not available for this computer yet", "CIGAR does not have a version for this kind of computer yet. Guard keeps protecting you without it.");
-    }
-    if (!catalog.catalog.fresh_for_preparation) {
-      return blocked("Guard needs a fresh version list", "Guard's list of CIGAR versions is out of date. Open Updates to refresh it.", "versions");
-    }
-    return blocked("No version can be installed right now", "Open Updates to see which CIGAR versions are available and why.", "versions");
-  }
-  const interpreter = data.interpreters.find((item) => item.platform === host && python314(item.python_version)
-    && item.implementation.toLowerCase() === "cpython");
-  const pythonBuild = interpreter ? null : catalog.interpreter_builds.find((item) => python314(item.python_version) && cigarPythonBlock(catalog, item) === null);
-  if (!interpreter && !pythonBuild) {
-    return blocked("Not available for this computer yet", "CIGAR cannot run on this kind of computer yet. Guard keeps protecting you without it.");
-  }
-  return { kind: "run", runtime_id: null, build_id: build.identity.build_id, interpreter_id: interpreter?.interpreter_id ?? null,
-    python_build_id: pythonBuild?.build_id ?? null, stages: [...(pythonBuild ? ["python" as const] : []), "download", "check", "start"],
-    approval: true };
+  const tail: CigarSetupStage[] = reusable === current ? ["start"] : ["check", "start"];
+  return { kind: "run", runtime_id: reusable, stages: tail, approval: tail.length > 1 || !state.preferences.enabled };
 }
 
 /** A safety check this tab prepared that Guard still holds open: finish it rather than wait for it to expire. */
 export function planCigarAdopt(job: CigarVersionJob | undefined, state: ContextAssistanceStatus): CigarSetupRun | null {
   if (state.effective_enabled || state.job || job?.family !== "selection" || !canCommitCigarJob(job, state)) return null;
-  return { kind: "run", runtime_id: job.target_runtime_id, build_id: null, interpreter_id: null, python_build_id: null,
-    stages: ["check", "start"], approval: true,
+  return { kind: "run", runtime_id: job.target_runtime_id, stages: ["check", "start"], approval: true,
     commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required } };
 }
 
@@ -130,8 +100,8 @@ export function planCigarHeldJob(job: CigarVersionJob | undefined, state: Contex
 }
 
 export function planCigarStart(status: ContextAssistanceStatus | null, dirty: boolean): CigarSetupRun | null {
-  return status && canStartCigar(status, dirty) ? { kind: "run", runtime_id: status.preferences.runtime_id, build_id: null,
-    interpreter_id: null, python_build_id: null, stages: ["start"], approval: false } : null;
+  return status && canStartCigar(status, dirty) ? { kind: "run", runtime_id: status.preferences.runtime_id,
+    stages: ["start"], approval: false } : null;
 }
 
 export class CigarSetupError extends Error {
@@ -188,9 +158,6 @@ function failedJobCopy(code: string): string {
   if (code.endsWith("deadline_exceeded")) {
     return "This computer took too long to finish this step, so Guard stopped it. Nothing was turned on. Try again when the computer is less busy.";
   }
-  if (code.endsWith("fingerprint_mismatch")) {
-    return "The download did not match what Guard expected, so Guard threw it away. Nothing was turned on. Try again.";
-  }
   if (code.endsWith("inputs_invalid")) {
     return "Guard could not start this step with its current settings. Nothing was turned on. Update Guard, then try again.";
   }
@@ -234,7 +201,7 @@ async function follow(
     if (reply) {
       deps.onState(reply.state);
       const job = parseCigarVersionJob(reply.result);
-      // Some steps, such as setting up Python, get a longer window than others; wait as long as Guard does.
+      // Some steps get a longer window than others; wait as long as Guard does.
       limit = Math.max(limit, job.deadline_at_ms - job.created_at_ms + 60_000);
       if (done(job, reply.state)) { deps.onJob(null); return { job, state: reply.state }; }
       if (failedPhases.has(job.phase)) {
@@ -260,24 +227,8 @@ export function turnOnPreferences(previous: GuardContextAssistanceConfig, runtim
 
 export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssistanceStatus, deps: CigarSetupDeps, proof?: ContextProof): Promise<ContextAssistanceStatus> {
   let state = initial;
-  let interpreter = plan.interpreter_id;
-  let runtime = plan.runtime_id;
-  if (plan.python_build_id) {
-    deps.onStage("python");
-    const { job } = await follow(deps, "python", { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: plan.python_build_id }, proof,
-      (item) => (item.phase === "ready" || item.phase === "completed") && item.family === "preparation" && Boolean(item.interpreter_id));
-    interpreter = job.family === "preparation" ? job.interpreter_id ?? null : null;
-  }
-  if (plan.build_id) {
-    if (!interpreter) throw new CigarSetupError("download", "Guard did not report a Python 3.14 copy for CIGAR.");
-    deps.onStage("download");
-    const { job, state: next } = await follow(deps, "download",
-      { action: "install", job_id: cigarVersionJobId(), build_id: plan.build_id, interpreter_id: interpreter }, proof,
-      (item) => (item.phase === "ready" || item.phase === "completed") && item.family === "preparation" && Boolean(item.runtime_id));
-    runtime = job.family === "preparation" ? job.runtime_id ?? null : null;
-    state = next;
-  }
-  if (!runtime) throw new CigarSetupError("download", "Guard did not report an installed CIGAR copy.");
+  const runtime = plan.runtime_id;
+  if (!runtime) throw new CigarSetupError("check", "Guard did not report the CIGAR engine.");
   if (plan.commit) {
     deps.onStage("check");
     const committed = await follow(deps, "check", { action: "commit", ...plan.commit }, proof, (item) => item.phase === "completed");

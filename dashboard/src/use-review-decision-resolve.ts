@@ -17,6 +17,8 @@ import {
   useShownRequestCheck,
 } from "./review-decision-state";
 import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
+import { GuardDecisionSignInRequiredError, guardDecisionSession } from "./guard-api";
+import type { DecisionSignInReason } from "./dashboard-session-scope";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import type { ReviewWorkspaceProps } from "./review-workspace";
 
@@ -93,6 +95,43 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
+  // Why this tab cannot decide the shown request, or null when it can.
+  const [signInReason, setSignInReason] = useState<DecisionSignInReason | null>(null);
+  const shownRequestId = item?.request_id ?? null;
+
+  const recheckSignIn = useCallback((): boolean => {
+    if (shownRequestId === null) {
+      setSignInReason(null);
+      return true;
+    }
+    const verdict = guardDecisionSession(shownRequestId);
+    if (verdict.kind === "ready") {
+      setSignInReason(null);
+      return true;
+    }
+    // The panel replaces every decision control, so an earlier error, its
+    // Retry, and an open credentials dialog go with it.
+    setSignInReason(verdict.reason);
+    setErrorMessage(null);
+    setPendingAction(null);
+    setPendingContractKey(null);
+    return false;
+  }, [shownRequestId]);
+
+  useEffect(() => {
+    recheckSignIn();
+    // A session opened in another tab (Desktop, `hol-guard approvals open`)
+    // lands in shared storage; pick it up without a reload.
+    const handleStorage = () => {
+      recheckSignIn();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleStorage);
+    };
+  }, [recheckSignIn]);
 
   useEffect(() => {
     setEffectiveApprovalGate(params.approvalGate);
@@ -192,6 +231,13 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
         }
       } catch (err) {
         if (!isStillShown(requestId)) return;
+        if (err instanceof GuardDecisionSignInRequiredError) {
+          setErrorMessage(null);
+          setPendingAction(null);
+          setPendingContractKey(null);
+          setSignInReason(err.reason);
+          return;
+        }
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
         if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
@@ -230,6 +276,8 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
       if (resolutionBlockReason !== null || decisionBusy) return;
+      // Ask for a session that can decide before the gate asks for a password.
+      if (!recheckSignIn()) return;
       if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
@@ -324,6 +372,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       isStillShown,
       item,
       approvalGate,
+      recheckSignIn,
       resolutionBlockReason,
     ]
   );
@@ -398,6 +447,12 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     setCooldownOptOut(false);
   }, []);
 
+  const handleSignInRecheck = useCallback(() => {
+    if (recheckSignIn()) {
+      setErrorMessage(null);
+    }
+  }, [recheckSignIn]);
+
   const handleRetryLastAction = useCallback(() => {
     setErrorMessage(null);
     if (lastAction !== null) {
@@ -428,10 +483,12 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown,
   };

@@ -22,7 +22,7 @@ from ..hook_review.hook_availability_policy import (
 )
 from ..hook_review.hook_fail_closed import fail_closed_response
 from ..hook_review.hook_worker import HookWorker
-from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
+from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
 from ..native_payload_facts import native_hook_event
 from ..resident_evidence_client import ResidentEvidenceClient

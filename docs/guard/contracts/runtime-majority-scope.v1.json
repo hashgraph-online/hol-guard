@@ -383,6 +383,7 @@
           "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
           "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_reallow.py",
           "src/codex_plugin_scanner/guard/local_clis/local_cli_capability_api.py"
         ]
       },
@@ -790,13 +791,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py",
-          "src/codex_plugin_scanner/guard/runtime/jsonc.py"
-        ],
-        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/durable_io.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity and repair writers, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."
@@ -1125,18 +1119,6 @@
         "reason": "Replay of an approved request after the approval is applied: claim lease, store continuation plan, persisted attempt and manual-retry notice. It runs from the cloud command queue and the local approval continuation route, after the hook call has already returned."
       },
       {
-        "id": "observed-mcp-tool-discovery-api",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/runtime/observed_mcp_tools.py",
-        "symbols": [
-          "MAX_OBSERVED_MCP_TOOLS",
-          "discover_observed_mcp_tools"
-        ],
-        "entry_points": [],
-        "evidence": "discover_observed_mcp_tools is called only from daemon/local_cli_api.py (dashboard-control-api); the native store groups the observed tools into connectors and it records them. ObservedMcpTool, observed_mcp_tool and the native MCP tool action builders stay counted. The report validates this reference closure on every run.",
-        "reason": "Discovery of MCP tools observed in recent receipts for the dashboard's local CLI and MCP listing. It reads receipts on request from the dashboard API and returns a list; it makes no decision."
-      },
-      {
         "id": "operator-cli-recognition-api",
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
@@ -1459,19 +1441,14 @@
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/policy_bundle_parser.py",
         "symbols": [
-          "_POLICY_BUNDLE_TRUST_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS",
-          "_POLICY_BUNDLE_VERSION_REMEDIATION_REASONS",
-          "policy_bundle_daemon_version_supported",
+          "_NATIVE_UNAVAILABLE_MESSAGE",
+          "policy_bundle_admission_rejection",
+          "policy_bundle_rejection_payload",
           "policy_bundle_rejection_message"
         ],
         "entry_points": [],
-        "reason": "The daemon version gate and rejection messages are used when Cloud sync accepts or rejects a policy bundle. Bundle parsing used at request time stays counted.",
-        "evidence": "rg -l 'policy_bundle_daemon_version_supported|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and daemon/server_control_sync.py (daemon-control-plane-routes) outside policy_bundle_parser.py."
+        "reason": "The candidate admission call (daemon version, rollout state and downgrade, decided in Rust) and rejection messages are used when Cloud sync accepts or rejects a policy bundle. Bundle parsing used at request time stays counted.",
+        "evidence": "rg -l 'policy_bundle_admission_rejection|policy_bundle_rejection_payload|policy_bundle_rejection_message' src -g '*.py' lists only runtime/runner.py (cloud-sync-transport) and routes/policy_sync_call.py (the daemon policy-sync route) outside policy_bundle_parser.py."
       },
       {
         "id": "package-audit-report-projection",

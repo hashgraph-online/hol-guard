@@ -361,6 +361,9 @@ _GRANT_WRITERS = {
 }
 _KNOWN_WRITE_SITES = {
     ("local_clis/local_cli_api.py", "apply", "record_local_custom_extension_mutation"),
+    # Always allow on a changed script's review moves an existing allow to the
+    # reviewed version only; it never allows a CLI that was not allowed before.
+    ("local_clis/local_cli_reallow.py", "reallow_changed_cli", "record_local_custom_extension_mutation"),
     (
         "runtime/custom_extension_continuity.py",
         "record_local_custom_extension_mutation",

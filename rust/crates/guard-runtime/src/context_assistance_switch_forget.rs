@@ -25,7 +25,7 @@ impl DataRemoval {
         }
     }
     pub(crate) fn acquire(home: &Path) -> Result<Self, RuntimeError> {
-        let lease = preparation::lifecycle_lease(home).map_err(data_error)?;
+        let lease = lifecycle::lease(home).map_err(data_error)?;
         let home = fs::canonicalize(home).map_err(|_| RuntimeError::StorageRepairRequired)?;
         let lock = WriteLock::acquire(&home).map_err(|_| RuntimeError::Busy)?;
         let intent = match lock
@@ -59,6 +59,11 @@ impl DataRemoval {
     pub(crate) fn remove(self) -> Result<(), RuntimeError> {
         crate::policy_store::context_assistance_registry::picked::forget(&self.home)
             .map_err(|_| RuntimeError::StorageRepairRequired)?;
+        self.remove_memory()
+    }
+    /// Deletes saved CIGAR memory but keeps the projects the user picked,
+    /// which do not depend on the engine that wrote the memory.
+    pub(crate) fn remove_memory(self) -> Result<(), RuntimeError> {
         if let Some(cache) = EvidenceCache::existing(&self.home)? {
             cache.forget_all()?;
         }

@@ -19,7 +19,7 @@ import {
   retryCannotReuseApproval,
   retryCannotReuseApprovalHint,
 } from "./approval-retry-guidance";
-import { GuardRequestResolutionError } from "./guard-api";
+import { GuardRequestResolutionError, guardAwareHref } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
   approvalDecisionContractKey,
@@ -33,7 +33,6 @@ import {
   taskCapabilityExplanation,
 } from "./approval-scopes";
 import { ApprovalGateRecommendationNotice, approvalGateNeedsSetup } from "./approval-proof-inline";
-import { guardAwareHref } from "./guard-api";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
 import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
@@ -49,6 +48,7 @@ import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
+import { ReviewDecisionSignIn } from "./review-decision-sign-in";
 import { ContextReviewPanel } from "./context-assistance/review-panel";
 import { ReviewLastTimeCard } from "./review-last-time-card";
 
@@ -137,10 +137,12 @@ export function ReviewDecisionCard(props: {
     handleModalCancel,
     handleModalSubmit,
     handleRetryLastAction,
+    handleSignInRecheck,
     handleUseCooldownChange,
     pendingAction,
     resolved,
     setResolved,
+    signInReason,
     submitting,
     useCooldown,
   } = useReviewDecisionResolve({
@@ -331,7 +333,7 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+        {resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && (
           <ApprovalExtensionRecommendationCard
             key={item.request_id}
             item={item}
@@ -396,7 +398,8 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolutionBlockReason === null && resolved === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {resolutionBlockReason === null && resolved === null && signInReason !== null && <ReviewDecisionSignIn requestId={item.request_id} reason={signInReason} onRecheck={handleSignInRecheck} />}
+        {resolutionBlockReason === null && resolved === null && signInReason === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {hasAllowScope && <ActionButton
             ref={allowButtonRef}
             variant="success"

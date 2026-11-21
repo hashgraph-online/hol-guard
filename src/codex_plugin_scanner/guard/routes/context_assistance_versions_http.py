@@ -1,4 +1,4 @@
-"""Authenticated framing for native CIGAR administration, never SDK policy."""
+"""Authenticated framing for built-in CIGAR setup jobs, never SDK policy."""
 
 from __future__ import annotations
 
@@ -8,18 +8,12 @@ from ..approval_gate import ApprovalGateError, input_from_mapping, require_high_
 from ..native_context_assistance import ContextAssistanceError, versions
 
 READ_PATHS = {
-    "/v1/context-assistance/versions": "versions_releases",
     "/v1/context-assistance/jobs": "versions_jobs",
-    "/v1/context-assistance/interpreters": "versions_interpreters",
-    "/v1/context-assistance/catalog": "versions_catalog",
 }
 _READ_ACTIONS = {
-    "versions_releases": "releases",
     "versions_jobs": "jobs",
-    "versions_interpreters": "interpreters",
-    "versions_catalog": "catalog",
 }
-_NO_EXPANSION = {"releases", "interpreters", "jobs", "job", "cancel", "catalog", "preferences"}
+_NO_EXPANSION = {"jobs", "job", "cancel"}
 
 
 def respond(handler: Any, kind: str, payload: dict[str, object]) -> None:
@@ -54,14 +48,9 @@ def respond(handler: Any, kind: str, payload: dict[str, object]) -> None:
                 "disabled",
                 "switch_busy",
                 "context_stale",
-                "install_busy",
-                "cigar_catalog_busy",
                 "selection_conflict",
                 "recovery_required",
                 "acknowledgement_required",
-                "update_preferences_conflict",
-                "update_preferences_locked",
-                "update_pin_conflict",
                 "config_write_busy",
             )
         ):
@@ -73,8 +62,3 @@ def respond(handler: Any, kind: str, payload: dict[str, object]) -> None:
         )
         return
     handler._write_json(result, extra_headers={"Cache-Control": "no-store"})
-
-
-def request_body_limit(path: str, default_bytes: int) -> int:
-    """Bound JSON escaping around the 1 MiB signed-catalog transport envelope."""
-    return 4 * 1024 * 1024 if path == "/v1/context-assistance/versions" else default_bytes

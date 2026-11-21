@@ -48,6 +48,7 @@ impl Service {
         let Ok(generation) = self.configuration_generation() else {
             return;
         };
+        retire_old_engine(home);
         if let Ok(settings) = crate::guard_config_load::context_assistance_config(home) {
             let _ = self.configure_at(settings, generation);
         }
@@ -125,3 +126,75 @@ impl Service {
 #[cfg(test)]
 #[path = "context_assistance_service_wake_tests.rs"]
 mod tests;
+
+/// Folders only the retired Python engine wrote. The built-in engine keeps its
+/// data under `work`, and `jobs`/`switch-jobs` hold the shared lifecycle lease.
+const RETIRED_DIRS: [&str; 15] = [
+    "installations",
+    "interpreters",
+    "artifacts",
+    "bundles",
+    "staging",
+    "downloads",
+    "python",
+    "python-staging",
+    "python-work",
+    "python-jobs",
+    "python-artifacts",
+    "python-downloads",
+    "catalog-jobs",
+    "catalog-downloads",
+    "verification",
+];
+
+/// A profile that chose the retired Python engine is cleared and moved to the
+/// built-in engine once: switch jobs recorded for the old engine and its saved
+/// CIGAR memory are deleted (the built-in engine cannot read that memory),
+/// then the same on/off choice is kept with `builtin`. Picked projects stay.
+/// Any failure leaves the old choice in place, which the registry reports as
+/// `runtime_retired`; the next start tries again.
+fn retire_old_engine(home: &std::path::Path) {
+    use crate::policy_store::context_assistance_registry::{switching::DataRemoval, BUILTIN_ID};
+    remove_retired_dirs(home);
+    let Ok(Some(raw)) = crate::guard_config_update::read_home_config(home) else {
+        return;
+    };
+    let Ok(config) = crate::guard_config_update::assistance_preferences(&raw) else {
+        return;
+    };
+    if config.runtime_id.is_empty() || config.runtime_id == BUILTIN_ID {
+        return;
+    }
+    let Ok(removal) = DataRemoval::acquire(home) else {
+        return;
+    };
+    // The lifecycle lease is held, so no switch job can run meanwhile. Jobs
+    // saved before this point refer to the retired engine and to records the
+    // removal below deletes; keeping them would leave a job nobody can recover.
+    if remove_dir_if_present(&home.join("context-assistance").join("switch-jobs")).is_err() {
+        return;
+    }
+    if removal.remove_memory().is_err() {
+        return;
+    }
+    let _ = crate::guard_config_update::select_builtin_context_assistance(home);
+}
+
+/// Old-engine folders are removed on every start, whatever is selected, so a
+/// profile that downloaded the Python engine without selecting it, or a
+/// deletion that failed once, is cleaned up the next time Guard starts.
+fn remove_retired_dirs(home: &std::path::Path) {
+    let root = home.join("context-assistance");
+    for name in RETIRED_DIRS {
+        let _ = remove_dir_if_present(&root.join(name));
+    }
+}
+
+fn remove_dir_if_present(path: &std::path::Path) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}

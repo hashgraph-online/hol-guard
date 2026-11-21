@@ -190,8 +190,6 @@ pub(crate) const KNOWN_SUBCOMMANDS: &[&str] = &[
     "contained-workspace-launch",
     "contained-workspace-sink",
     "content-decode",
-    "context-assistance-enroll-local",
-    "context-assistance-install-operator",
     "context-digest",
     "cursor-hook-bridge",
     "daemon-serve",

@@ -4,9 +4,6 @@ use super::*;
 
 #[path = "guard_config_update_io_writer.rs"]
 mod writer;
-pub(crate) use writer::catalog::CatalogPair;
-#[cfg(all(test, unix))]
-pub(crate) use writer::catalog::{fault_next as catalog_fault_next, Fault as CatalogFault};
 #[cfg(all(test, unix))]
 pub(crate) use writer::fail_next_config_write_after_rename;
 pub(crate) use writer::lifecycle::LifecycleFile;

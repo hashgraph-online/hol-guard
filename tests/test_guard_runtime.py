@@ -19340,29 +19340,36 @@ def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
     assert mismatch_events[-1]["payload"]["reasonCodes"] == ["action"]
 
 
+@pytest.mark.parametrize(
+    ("canonical", "step"),
+    [
+        (True, "policy_shadow_verdict"),
+        (False, "policy_shadow_verdict"),
+        (True, "policy_shadow_source"),
+    ],
+)
 def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavailable(
     tmp_path,
     monkeypatch,
+    canonical,
+    step,
 ):
-    for canonical in (True, False):
-        store, legacy = _prepare_shadow_candidate_sync(
-            tmp_path / f"canonical-{canonical}", monkeypatch, canonical=canonical
-        )
+    store, legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, canonical=canonical)
 
-        def _unavailable(_legacy, _canonical):
-            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+    def _unavailable(*_args, **_kwargs):
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-        monkeypatch.setattr(guard_runner_module._authority, "policy_shadow_mismatch", _unavailable)
+    monkeypatch.setattr(guard_runner_module._shadow, step, _unavailable)
 
-        guard_runner_module.sync_receipts(store)
+    guard_runner_module.sync_receipts(store)
 
-        assert store.get_sync_payload("policy_bundle") == legacy
-        assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
-        assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "native_shadow_unavailable"}
-        assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
-        mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
-        assert mismatch_events[-1]["payload"]["reasonCodes"] == ["native_shadow_unavailable"]
-        assert mismatch_events[-1]["payload"]["status"] == "mismatch"
+    assert store.get_sync_payload("policy_bundle") == legacy
+    assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
+    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "native_shadow_unavailable"}
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
+    mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+    assert mismatch_events[-1]["payload"]["reasonCodes"] == ["native_shadow_unavailable"]
+    assert mismatch_events[-1]["payload"]["status"] == "mismatch"
 
 
 def test_sync_receipts_clears_untrusted_cached_canonical_when_flag_is_disabled(

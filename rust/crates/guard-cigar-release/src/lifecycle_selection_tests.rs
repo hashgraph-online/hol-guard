@@ -219,30 +219,3 @@ fn retention_references_are_derived_from_current_last_good_and_pending_pairs() {
         vec!["0".repeat(64), "8".repeat(64)]
     );
 }
-#[test]
-fn same_sdk_catalog_replacement_retains_full_independent_identity() {
-    let catalog = TrustedCatalog::bundled().unwrap();
-    let first = catalog
-        .prepare(
-            &catalog.document().builds[0].identity.build_id,
-            "darwin-arm64",
-            false,
-        )
-        .unwrap();
-    let mut r = record();
-    r.current.runtime.origin = SelectionOrigin::Catalog {
-        release: Box::new(first.binding().unwrap()),
-    };
-    let mut t = transaction(&r);
-    let mut final_binding = first.binding().unwrap();
-    final_binding.identity.build_id = "fixture-final-same-version".into();
-    final_binding.identity.manifest_sha256 = "9".repeat(64);
-    t.to.runtime.origin = SelectionOrigin::Catalog {
-        release: Box::new(final_binding),
-    };
-    assert!(r.begin(t.clone()).is_ok());
-    if let SelectionOrigin::Catalog { release } = &mut t.to.runtime.origin {
-        release.identity.build_id = first.build().identity.build_id.clone();
-    }
-    assert_eq!(t.validate(), Err(SwitchError::InvalidJournal));
-}

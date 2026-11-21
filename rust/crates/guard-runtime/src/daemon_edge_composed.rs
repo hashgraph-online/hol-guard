@@ -31,7 +31,7 @@ const PACKAGE_FIREWALL_OPERATIONS: [&str; 8] = [
 ];
 
 /// `GET` paths whose Guard library handler writes the whole reply.
-const HANDLER_READS: [&str; 13] = [
+const HANDLER_READS: [&str; 11] = [
     "/v1/swarm",
     "/v1/context-assistance",
     "/v1/context-assistance/installations",
@@ -40,8 +40,6 @@ const HANDLER_READS: [&str; 13] = [
     "/v1/context-assistance/usage",
     "/v1/context-assistance/versions",
     "/v1/context-assistance/jobs",
-    "/v1/context-assistance/interpreters",
-    "/v1/context-assistance/catalog",
     "/v1/policy/cloud-exception-requests",
     "/v1/supply-chain/workspace-assessments",
     "/v1/supply-chain/workspace-findings",

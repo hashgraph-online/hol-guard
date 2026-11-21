@@ -10,18 +10,19 @@ from typing import TYPE_CHECKING
 
 from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
+from ..native_policy_fence_window import (
+    POLICY_SOURCE_FENCE_ERROR,
+    POLICY_UPDATE_PENDING_REASON,
+    POLICY_UPDATE_PENDING_REASON_CODE,
+    PolicySourceFenceBusyError,
+    PolicySourceFenceWait,
+)
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_resident_client import native_resident_client_failure_code
 from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_native_review_approval import _native_review_artifact_id
 from .hook_native_review_binding import native_review_settle
 from .hook_native_review_fence import native_review_fence, published_binding_token
-from .hook_policy_fence_window import (
-    POLICY_UPDATE_PENDING_REASON_CODE,
-    PolicySourceFenceBusyError,
-    PolicySourceFenceWait,
-    policy_update_pending_reason,
-)
 
 if TYPE_CHECKING:
     from .hook_worker_native import _HookWorkerNativeHost
@@ -107,7 +108,7 @@ def review_native_edge(
 
     snapshot = policy_snapshot
     refreshed_once = False
-    fence_wait = PolicySourceFenceWait(deadline, store=getattr(worker, "store", None))
+    fence_wait = PolicySourceFenceWait(deadline, guard_home=guard_home)
     try:
         while True:
             try:
@@ -127,7 +128,7 @@ def review_native_edge(
                     claimed_approval_request_id=claimed_approval_request_id,
                     policy_snapshot=snapshot,
                 )
-            except PolicySourceFenceBusyError as busy:
+            except PolicySourceFenceBusyError:
                 # The fence refused admission before any evaluation, so the same
                 # request is retried as-is once it clears, within the deadline.
                 if fence_wait.pause():
@@ -139,9 +140,9 @@ def review_native_edge(
                     event_name=event_name,
                     reason_code=POLICY_UPDATE_PENDING_REASON_CODE,
                     guard_home=guard_home,
-                    reason=policy_update_pending_reason(),
+                    reason=POLICY_UPDATE_PENDING_REASON,
                 )
-                response["native_failure_code"] = busy.code
+                response["native_failure_code"] = POLICY_SOURCE_FENCE_ERROR
                 return response
             except NativePolicyBindingRefreshError as error:
                 # The native engine rejected admission; no tool or approval result
@@ -280,6 +281,7 @@ def _review_native_edge_once(
                 event_name=event_name,
                 guard_home=guard_home,
                 workspace=workspace,
+                deadline=deadline,
             )
         deferred_receipt = deferred_receipts[0] if deferred_receipts else None
         if deferred_receipt is not None:
@@ -328,6 +330,7 @@ def _review_native_edge_once(
                             event_name=event_name,
                             guard_home=guard_home,
                             workspace=workspace,
+                            deadline=deadline,
                         )
                     response = _record_native_pre_activity(worker, harness, payload, response, deferred_receipt)
         if capture_receipts and worker.capture_writer is not None:
@@ -352,6 +355,7 @@ def _review_native_edge_once(
             event_name=event_name,
             guard_home=guard_home,
             workspace=workspace,
+            deadline=deadline,
         )
     except (OSError, NativePolicySnapshotError):
         if fenced is False:
@@ -369,4 +373,5 @@ def _review_native_edge_once(
             event_name=event_name,
             guard_home=guard_home,
             workspace=workspace,
+            deadline=deadline,
         )

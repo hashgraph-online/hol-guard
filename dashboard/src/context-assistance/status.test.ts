@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseContextAssistanceStatus, contextStatusCopy } from "./status";
+import { parseContextAssistanceStatus, contextStatusCopy, engineLabel } from "./status";
 import { withContextProfile, settingsWithContextOff } from "./settings-model";
 import type { GuardSettings } from "../guard-types";
 
@@ -17,6 +17,21 @@ const off = { ...ready, availability: "off", requested_enabled: false, effective
   generation: "9007199254740993", qualification: null };
 assert.equal(parseContextAssistanceStatus(off).generation, "9007199254740993");
 assert.equal(contextStatusCopy(parseContextAssistanceStatus(off)).label, "Off");
+const builtinOption = { runtime_id: "builtin", qualification: "guard_builtin", python_version: null, platform: "darwin-arm64",
+  worker_fingerprint: "b".repeat(64), sdk_version: "0.14.2", core_version: "0.14.2", build_id: null,
+  adapter_id: "guard-cigar-builtin-v1", adapter_revision: 1, managed: false, builtin: true };
+assert.equal(parseContextAssistanceStatus({ ...off, installation_options: [builtinOption] }).installation_options![0].python_version, null);
+const builtinFacts = { schema: "guard-cigar-builtin.v1", implementation: "guard-builtin", version: [0, 0, 0],
+  release_level: "final", abi: "none", platform: "darwin-arm64", free_threaded: false, debug_build: false };
+const builtinReady = { ...ready, runtime: { ...ready.runtime, interpreter: builtinFacts, adapter_id: "guard-cigar-builtin-v1" },
+  last_check: ready.last_check && { ...ready.last_check, interpreter: builtinFacts, adapter_id: "guard-cigar-builtin-v1" } };
+assert.equal(parseContextAssistanceStatus(builtinReady).runtime?.interpreter.schema, "guard-cigar-builtin.v1");
+assert.throws(() => parseContextAssistanceStatus({ ...builtinReady,
+  runtime: { ...builtinReady.runtime, interpreter: { ...builtinFacts, abi: "cp314" } } }));
+assert.throws(() => parseContextAssistanceStatus({ ...builtinReady,
+  runtime: { ...builtinReady.runtime, adapter_id: "guard-cigar-python-sdk-v1" } }), "built-in facts need the built-in adapter");
+assert.equal(engineLabel(builtinFacts), "Built into Guard");
+assert.equal(engineLabel({ schema: "guard-cigar-interpreter.v1", version: [3, 14, 0] }), "Python 3.14.0");
 assert.equal(contextStatusCopy(parseContextAssistanceStatus({ ...off, job: { id: "42", operation: "recheck", phase: "verifying" } })).label, "Checking runtime");
 
 const waiting = parseContextAssistanceStatus({ ...off, availability: "unavailable", requested_enabled: true,
@@ -61,6 +76,9 @@ for (const malformed of [
   { ...ready, effective_preferences: { ...ready.effective_preferences, enabled: false } },
   { ...ready, verification_permitted: false },
   { ...off, installation_options: [{ runtime_id: "unverified" }] },
+  { ...off, installation_options: [{ ...builtinOption, python_version: [3, 14, 0] }] },
+  { ...off, installation_options: [{ ...builtinOption, runtime_id: "other" }] },
+  { ...off, installation_options: [{ ...builtinOption, qualification: "guard_qualified", managed: true, build_id: "b" }] },
   { ...off, job: { id: "42", operation: "activate", phase: "unknown" } },
 ]) assert.throws(() => parseContextAssistanceStatus(malformed));
 

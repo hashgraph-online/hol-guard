@@ -2,8 +2,8 @@
 //!
 //! `normalize_jsonc` blanks comments and trailing commas without moving a
 //! character, and Guard reads untrusted `bun.lock` files through it. Every
-//! case below was produced by Python's `normalize_jsonc`, so an accepted
-//! output is the one the CLI route produces for the same bytes.
+//! case below was recorded from the retired Python `normalize_jsonc`, so the
+//! Rust decoder keeps the exact output that decoder produced for the same bytes.
 
 use guard_command::jsonc::normalize_jsonc;
 use serde_json::Value;

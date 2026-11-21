@@ -334,3 +334,21 @@ fn a_prompt_never_waits_on_a_busy_lock_to_wake_the_worker() {
         "nothing was woken while the lock was busy; a later prompt wakes it"
     );
 }
+
+#[test]
+fn old_engine_folders_are_removed_on_every_start() {
+    let home = tempfile::tempdir().unwrap();
+    let root = home.path().join("context-assistance");
+    for name in ["interpreters", "downloads", "work"] {
+        std::fs::create_dir_all(root.join(name).join("inner")).unwrap();
+    }
+    std::fs::write(root.join("staging"), b"not a folder").unwrap();
+
+    retire_old_engine(home.path());
+    retire_old_engine(home.path());
+
+    assert!(!root.join("interpreters").exists());
+    assert!(!root.join("downloads").exists());
+    assert!(root.join("work/inner").is_dir());
+    assert!(root.join("staging").is_file());
+}

@@ -9,6 +9,7 @@ the CLI already reports.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import http.client
 import io
@@ -16,7 +17,7 @@ import json
 import os
 import tempfile
 import urllib.error
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from email.message import Message
 from pathlib import Path
 from typing import NoReturn
@@ -229,15 +230,7 @@ def _native_cloud_request(
         request["answer"] = "raw"
     if max_response_bytes is not None:
         request["maxResponseBytes"] = int(max_response_bytes)
-    body_file: str | None = None
-    try:
-        if body is not None and len(body) > _INLINE_BODY_LIMIT_BYTES:
-            descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(body)
-            request["bodyFile"] = body_file
-        elif body is not None:
-            request["body"] = body.decode("utf-8")
+    with request_body_fields(body) as fields:
         return run_native_cloud_sync(
             CLOUD_EVENT_SYNC_COMMAND,
             CLOUD_JSON_REQUEST_FEATURE,
@@ -245,11 +238,31 @@ def _native_cloud_request(
             "request",
             auth_context=auth_context,
             subject="Cloud request",
-            extra={"request": request},
+            extra={"request": {**request, **fields}},
         )
+
+
+@contextlib.contextmanager
+def request_body_fields(body: bytes | None) -> Iterator[dict[str, object]]:
+    """The ``body`` or ``bodyFile`` field a native request carries ``body`` in.
+
+    A body too large for the native command's stdin goes in a private file,
+    removed once the command has answered.
+    """
+
+    if body is None:
+        yield {}
+        return
+    if len(body) <= _INLINE_BODY_LIMIT_BYTES:
+        yield {"body": body.decode("utf-8")}
+        return
+    descriptor, body_file = tempfile.mkstemp(prefix="hol-guard-cloud-", suffix=".json")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(body)
+        yield {"bodyFile": body_file}
     finally:
-        if body_file is not None:
-            Path(body_file).unlink(missing_ok=True)
+        Path(body_file).unlink(missing_ok=True)
 
 
 class CloudResponseOversizedError(RuntimeError):
@@ -285,6 +298,12 @@ def cloud_raw_answer(url: str, answer: object) -> tuple[int, bytes]:
 
 
 def _raise_cloud_failure(url: str, answer: Mapping[str, object]) -> NoReturn:
+    raise cloud_failure(url, answer)
+
+
+def cloud_failure(url: str, answer: Mapping[str, object]) -> Exception:
+    """The ``HTTPError`` or ``URLError`` a native ``refusal`` or ``transport`` answer stands for."""
+
     refusal = answer.get("refusal")
     if isinstance(refusal, dict) and isinstance(refusal.get("status"), int):
         headers = Message()
@@ -296,17 +315,17 @@ def _raise_cloud_failure(url: str, answer: Mapping[str, object]) -> NoReturn:
         payload = body.encode("utf-8") if isinstance(body, str) else b""
         status = refusal["status"]
         reason = http.client.responses.get(status, "")
-        raise urllib.error.HTTPError(url, status, reason, headers, io.BytesIO(payload))
+        return urllib.error.HTTPError(url, status, reason, headers, io.BytesIO(payload))
     transport = answer.get("transport")
     if isinstance(transport, dict):
         reason = transport.get("reason")
         text = reason if isinstance(reason, str) else ""
         if transport.get("timeout") is True:
-            raise urllib.error.URLError(TimeoutError(text))
+            return urllib.error.URLError(TimeoutError(text))
         if transport.get("outage") is True:
-            raise urllib.error.URLError(ConnectionError(text))
-        raise urllib.error.URLError(text)
-    raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+            return urllib.error.URLError(ConnectionError(text))
+        return urllib.error.URLError(text)
+    return RuntimeError("Guard Cloud sync returned an invalid response payload.")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -442,6 +461,12 @@ def _failure(response: Mapping[str, object], subject: str) -> RuntimeError:
     if outcome == "not_available":
         return GuardSyncNotAvailableError(text, retryable=response.get("retryable") is True)
     return RuntimeError(text)
+
+
+def sync_failure(response: Mapping[str, object], subject: str) -> RuntimeError:
+    """The exception a native ``{"outcome", "error", "retryable"}`` failure stands for."""
+
+    return _failure(response, subject)
 
 
 def _json_auth_context(supplied: Mapping[str, object]) -> dict[str, object]:

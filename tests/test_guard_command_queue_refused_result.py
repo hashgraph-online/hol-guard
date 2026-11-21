@@ -13,6 +13,10 @@ from tests.test_guard_command_queue import (  # noqa: F401 - autouse fixtures ap
     _isolate_legacy_queue_mechanics,
 )
 
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
+
+
 _LEASED_JOB = {"id": "job-3", "leaseId": "lease-3", "operation": "guard.packageShims.status"}
 _PENDING_STATE = {
     "state": "result_pending",

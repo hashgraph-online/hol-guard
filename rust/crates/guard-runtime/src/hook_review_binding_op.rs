@@ -1,5 +1,6 @@
 //! Rust-owned validation and projection of the committed hook review binding.
 
+use guard_contracts::NativePolicyBindingV1;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -11,6 +12,14 @@ const RESULT_SCHEMA: &str = "guard-hook-review-binding-result.v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct HookReviewPolicyBindingRequestV1 {
+    pub(crate) harness: String,
+    pub(crate) native_result: Value,
+    pub(crate) verified_receipt: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct HookReviewBindingRequestV1 {
     pub(crate) schema: String,
     pub(crate) request_id: String,
@@ -18,6 +27,39 @@ pub(crate) struct HookReviewBindingRequestV1 {
     pub(crate) business_identity_hex: String,
     #[serde(default)]
     pub(crate) cli_revision: Option<u64>,
+    #[serde(default)]
+    pub(crate) policy_binding: Option<HookReviewPolicyBindingRequestV1>,
+}
+
+fn evaluate_policy_binding(
+    request_id: &str,
+    input: &HookReviewPolicyBindingRequestV1,
+) -> Result<Vec<u8>, String> {
+    if input.harness.is_empty() || input.harness.len() > 64 {
+        return Err("hook_review_binding_payload_invalid".to_owned());
+    }
+    let Some(result) = input.native_result.as_object() else {
+        return Err("hook_review_binding_payload_invalid".to_owned());
+    };
+    let Some(receipt) = input.verified_receipt.as_object() else {
+        return Err("hook_review_binding_payload_invalid".to_owned());
+    };
+    let binding =
+        crate::native_exact_action_op::policy_binding_value(&input.harness, result, Some(receipt));
+    let value = match binding {
+        NativePolicyBindingV1::Invalid => {
+            return Err("hook_review_policy_binding_invalid".to_owned());
+        }
+        NativePolicyBindingV1::Unbound => Value::Null,
+        NativePolicyBindingV1::Bound { value } => value,
+    };
+    encode_response(&json!({
+        "schema": RESULT_SCHEMA,
+        "result": {
+            "request_id": request_id,
+            "binding": value,
+        },
+    }))
 }
 
 pub(crate) fn evaluate(request: &HookReviewBindingRequestV1) -> Result<Vec<u8>, String> {
@@ -28,6 +70,9 @@ pub(crate) fn evaluate(request: &HookReviewBindingRequestV1) -> Result<Vec<u8>, 
         || request.business_identity_hex.len() % 2 != 0
     {
         return Err("hook_review_binding_payload_invalid".to_owned());
+    }
+    if let Some(policy_binding) = request.policy_binding.as_ref() {
+        return evaluate_policy_binding(&request.request_id, policy_binding);
     }
     let identity = hex::decode(&request.business_identity_hex)
         .map_err(|_| "hook_review_binding_identity_invalid".to_owned())?;

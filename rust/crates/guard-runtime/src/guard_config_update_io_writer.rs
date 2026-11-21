@@ -2,8 +2,6 @@ use super::*;
 use std::fs::File;
 use std::io::Write;
 
-#[path = "guard_config_update_catalog_io.rs"]
-pub(super) mod catalog;
 #[path = "guard_config_update_dir.rs"]
 mod dir;
 #[path = "guard_config_update_lifecycle_io.rs"]

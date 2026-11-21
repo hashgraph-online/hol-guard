@@ -22,16 +22,29 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use crate::command_capability_op::{envelope_digest, sign_envelope, verify_signed_envelope};
-use crate::sync_state_ledger::{read_payload, write_payload, LedgerCodes, SyncStateLedger};
+use crate::command_queue_repair::queue_repair;
+use crate::sync_state_ledger::{
+    delete_payload, read_payload, write_payload, LedgerCodes, SyncStateLedger,
+};
 
 pub(crate) const COMMAND: &str = "command-state";
-pub(crate) const FEATURE: &str = "native-command-state-v1";
+pub(crate) const FEATURE: &str = "native-command-state-v3";
 const SCHEMA: &str = "command-state.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 
 const PENDING_KEY: &str = "guard_command_pending_approvals_v1";
 const LOCAL_APPROVALS_KEY: &str = "guard_command_local_approvals_v1";
 const REPLAY_KEY: &str = "guard_command_replay_state_v1";
+const CAPABILITY_KEY: &str = "guard_command_capability_v1";
+const QUEUE_RUNTIME_KEY: &str = "guard_command_queue_state";
+/// Every row `clear` removes when the user revokes the command capability.
+const CLEARED_KEYS: [&str; 5] = [
+    CAPABILITY_KEY,
+    LOCAL_APPROVALS_KEY,
+    PENDING_KEY,
+    REPLAY_KEY,
+    QUEUE_RUNTIME_KEY,
+];
 const APPROVALS_MAX_ITEMS: usize = 64;
 const REPLAY_MAX_ITEMS: usize = 512;
 
@@ -48,9 +61,9 @@ const GRANT_IDENTITY_FIELDS: [&str; 9] = [
     "payloadDigest",
 ];
 
-const INVALID: &str = "command_state_request_invalid";
-const UNAVAILABLE: &str = "command_state_unavailable";
-const UNREADABLE: &str = "command_state_unreadable";
+pub(crate) const INVALID: &str = "command_state_request_invalid";
+pub(crate) const UNAVAILABLE: &str = "command_state_unavailable";
+pub(crate) const UNREADABLE: &str = "command_state_unreadable";
 const BUSY: &str = "command_state_busy";
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +96,17 @@ pub(crate) struct Request {
     /// that spends the grant, so a spent grant never lacks its replay row.
     #[serde(default)]
     record_replay: bool,
+    /// `replay_rows`: the job or replay identity a verdict will be asked
+    /// about. Anything but an object keeps every row.
+    #[serde(default)]
+    subject: Option<Value>,
+    /// `issue`: the signed capability envelope to install.
+    #[serde(default)]
+    capability: Option<Map<String, Value>>,
+    /// `queue_repair`: the queue lane's state row. The main worker's row when
+    /// absent.
+    #[serde(default)]
+    state_key: Option<String>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -127,6 +151,15 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
         "approve" => ledger.transact(|tx| approve(tx, request, now)),
         "consume" => ledger.transact(|tx| consume(tx, request, now).map(Value::Bool)),
         "mark_consumed" => ledger.transact(|tx| mark_consumed(tx, request, now)),
+        "replay_rows" if !ledger.store_exists() => Ok(Value::Array(Vec::new())),
+        "replay_rows" => ledger.transact(|tx| replay_rows(tx, request.subject.as_ref())),
+        "clear" if !ledger.store_exists() => Ok(Value::Null),
+        "clear" => ledger.transact(clear),
+        "issue" => ledger.transact(|tx| issue(tx, request)),
+        "queue_repair" if !ledger.store_exists() => Ok(json!({"repaired": []})),
+        "queue_repair" => {
+            ledger.transact(|tx| queue_repair(tx, request.state_key.as_deref(), &request.now))
+        }
         _ => Err(INVALID.to_owned()),
     }
 }
@@ -330,6 +363,72 @@ fn mark_consumed(conn: &Connection, request: &Request, now: i64) -> Result<Value
     Ok(Value::Null)
 }
 
+/// `issue_command_capability`: installs a newly signed capability. A new
+/// capability never inherits a queue result, an active lease, a grant or a
+/// waiting job from the queue before it, so those go in the same
+/// transaction. Replay rows stay: a job that already ran must not run again.
+fn issue(conn: &Connection, request: &Request) -> Result<Value, String> {
+    let capability = request.capability.clone().ok_or(INVALID)?;
+    write_payload(
+        conn,
+        CAPABILITY_KEY,
+        &Value::Object(capability),
+        &request.now,
+    )
+    .map_err(|()| UNAVAILABLE.to_owned())?;
+    for key in [QUEUE_RUNTIME_KEY, LOCAL_APPROVALS_KEY, PENDING_KEY] {
+        delete_payload(conn, key).map_err(|()| UNAVAILABLE.to_owned())?;
+    }
+    Ok(Value::Null)
+}
+
+/// The replay rows a verdict about `subject` could match.
+///
+/// The capability verdict matches a row by identity digest, job id or
+/// idempotency key. Every row records the id and key of the identity its
+/// digest covers, so a row naming neither of the subject's values cannot
+/// match by any of the three. Rows missing either field are kept for the
+/// verdict to judge, and a subject that is not an object keeps them all so
+/// the verdict refuses it.
+fn replay_rows(conn: &Connection, subject: Option<&Value>) -> Result<Value, String> {
+    let items = state_items(conn, REPLAY_KEY)?;
+    let Some(subject) = subject.and_then(Value::as_object) else {
+        return Ok(Value::Array(items.into_iter().map(Value::Object).collect()));
+    };
+    let names: Vec<&str> = ["id", "idempotencyKey"]
+        .iter()
+        .filter_map(|field| subject.get(*field).and_then(Value::as_str))
+        .flat_map(|value| [value, value.trim()])
+        .collect();
+    let named = |item: &Map<String, Value>, field: &str| {
+        item.get(field)
+            .and_then(Value::as_str)
+            .is_some_and(|value| names.contains(&value))
+    };
+    Ok(Value::Array(
+        items
+            .into_iter()
+            .filter(|item| {
+                !item.get("jobId").is_some_and(Value::is_string)
+                    || !item.get("idempotencyKey").is_some_and(Value::is_string)
+                    || named(item, "jobId")
+                    || named(item, "idempotencyKey")
+            })
+            .map(Value::Object)
+            .collect(),
+    ))
+}
+
+/// `revoke_command_capability`: drops the capability and every row of the
+/// ledger in one transaction, so no reader sees a revoked capability with
+/// grants or pending jobs still beside it.
+fn clear(conn: &Connection) -> Result<Value, String> {
+    for key in CLEARED_KEYS {
+        delete_payload(conn, key).map_err(|()| UNAVAILABLE.to_owned())?;
+    }
+    Ok(Value::Null)
+}
+
 /// Python `==` over decoded JSON: an integer equals the same value written as
 /// a float, which `serde_json::Value` equality does not allow.
 fn py_equal(left: &Value, right: &Value) -> bool {
@@ -354,3 +453,11 @@ fn py_equal(left: &Value, right: &Value) -> bool {
 #[cfg(test)]
 #[path = "command_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "command_state_replay_tests.rs"]
+mod replay_tests;
+
+#[cfg(test)]
+#[path = "command_queue_repair_tests.rs"]
+mod queue_repair_tests;

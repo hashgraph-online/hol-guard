@@ -16,7 +16,9 @@ leave the interpreter free for the imports.
 
 The store's first native call needs the runtime status: a hash of the packaged
 runtime and a capability probe that starts it. That also starts here, on a
-thread beside the imports, and the host waits for it before opening the store.
+thread beside the imports, for the worker host and the library children alike:
+each opens a store for its first call, and the reconcile the daemon waits on
+before ready is a library call. They wait for it before opening the store.
 """
 
 from __future__ import annotations
@@ -113,12 +115,11 @@ def _start_runtime_status() -> None:
 def wait_for_early_runtime_status() -> bool:
     """Wait for the runtime status this process started resolving early.
 
-    Only the first caller waits. False when none was started or it was already
-    waited for.
+    Every caller waits until it has resolved, so library calls that arrive
+    together do not each resolve it again. False when none was started.
     """
 
-    global _runtime_status
-    thread, _runtime_status = _runtime_status, None
+    thread = _runtime_status
     if thread is None:
         return False
     thread.join(_RUNTIME_STATUS_WAIT_SECONDS)
@@ -142,8 +143,7 @@ def run_daemon_workers_cli(argv: Sequence[str]) -> int:
     if not is_daemon_workers_fast_path_argv(tokens):
         print("Guard daemon children require --guard-home.", file=sys.stderr)
         return 2
-    if tokens[1] == "daemon-workers":
-        _start_runtime_status()
+    _start_runtime_status()
 
     from ..config import resolve_guard_home
     from ..native_context import bind_context_digest_home

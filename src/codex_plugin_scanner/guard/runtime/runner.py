@@ -39,8 +39,11 @@ from ..native_policy_bundle import (
 )
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
 from ..native_runner_authority import NativeRunnerAuthorityError
-from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
-from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
+from ..oauth_token_claims import (
+    oauth_access_token_expires_at,
+    oauth_binding_from_credentials,
+    oauth_effective_binding,
+)
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -53,17 +56,15 @@ from ..policy_bundle_delivery import (
     is_failed_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    CANONICAL_COMPILE_DOCUMENT_CODES,
     CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
-    policy_bundle_cloud_exceptions_hash,
+    policy_bundle_admission_rejection,
+    policy_bundle_downgrade_verdict,
     policy_bundle_is_enforceable,
-    policy_bundle_is_version_downgrade,
-    policy_bundle_rejection_message,
 )
 from ..policy_bundle_parser import (
-    policy_bundle_daemon_version_supported as _daemon_version_supported,
+    policy_bundle_rejection_payload as _policy_bundle_rejection_payload,
 )
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -73,7 +74,6 @@ from ..policy_bundle_trusted_keys import (
 )
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
-    validate_policy_bundle_v2_transition,
     validated_policy_bundle_v2_acknowledgement,
 )
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
@@ -84,6 +84,7 @@ from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from . import runner_native_authority as _authority
 from . import runner_native_sync as _sync
+from . import runner_policy_shadow as _shadow
 from .extension_catalog_handshake import (
     catalog_runtime_unavailable_summary,
     prepare_extension_catalog_handshake,
@@ -223,43 +224,21 @@ def _policy_bundle_is_version_downgrade(
     *,
     expected_last_good_bundle: dict[str, object] | None = None,
 ) -> bool:
-    if next_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        current_version = existing_bundle.get("bundleVersion") if isinstance(existing_bundle, dict) else None
-        current_hash = existing_bundle.get("bundleHash") if isinstance(existing_bundle, dict) else None
-        expected_version = (
-            expected_last_good_bundle.get("bundleVersion") if isinstance(expected_last_good_bundle, dict) else None
-        )
-        expected_hash = (
-            expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
-        )
-        current_exceptions_issued_at = (
-            existing_bundle.get("cloudExceptionsIssuedAt") if isinstance(existing_bundle, dict) else None
-        )
-        transition_error = validate_policy_bundle_v2_transition(
-            next_bundle,
-            current_bundle_version=(
-                current_version if isinstance(current_version, int) and not isinstance(current_version, bool) else None
-            ),
-            current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
-            expected_last_good_bundle_version=(
-                expected_version
-                if isinstance(expected_version, int) and not isinstance(expected_version, bool)
-                else None
-            ),
-            expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
-            current_cloud_exceptions_issued_at=(
-                current_exceptions_issued_at if isinstance(current_exceptions_issued_at, str) else None
-            ),
-            current_cloud_exceptions_hash=(
-                policy_bundle_cloud_exceptions_hash(existing_bundle) if isinstance(existing_bundle, dict) else None
-            ),
-        )
-        if transition_error == NATIVE_UNAVAILABLE_REJECTION:
-            # The resident could not decide. That is an outage, never a
-            # downgrade verdict and never an implicit allow.
-            raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
-        return transition_error is not None
-    return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
+    return policy_bundle_downgrade_verdict(
+        existing_bundle,
+        next_bundle,
+        expected_last_good=expected_last_good_bundle,
+    )
+
+
+def _policy_bundle_admission_rejection(
+    store: GuardStore,
+    existing_bundle: dict[str, object] | None,
+    candidate: dict[str, object],
+) -> str | None:
+    """The first gate a validated synced candidate fails, or ``None``."""
+
+    return policy_bundle_admission_rejection(candidate, _policy_bundle_downgrade_reference(store, existing_bundle))
 
 
 def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
@@ -287,20 +266,6 @@ def _validate_cached_policy_bundle(
     """Revalidate cached policy authority before any rule is made effective."""
 
     return cached_policy_bundle_validation(store, policy_bundle)
-
-
-def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
-    resolved_reason = reason or "invalid_policy_bundle"
-    payload: dict[str, object] = {"reason": resolved_reason}
-    remediation = policy_bundle_rejection_message(resolved_reason)
-    if remediation is not None:
-        payload["message"] = remediation
-    # One rule refuses to compile and the whole bundle stays unapplied, so the
-    # rejection names that rule: without it an administrator sees only that a
-    # published policy never arrived.
-    if rule_id:
-        payload["ruleId"] = rule_id[:128]
-    return payload
 
 
 def _build_canonical_policy_bundle_decisions(
@@ -333,15 +298,6 @@ def _build_canonical_policy_bundle_decisions(
     ]
 
 
-def _policy_bundle_is_evaluating(policy_bundle: dict[str, object]) -> bool:
-    """Whether the bundle rolls its rules out to watch them, not to enforce them."""
-
-    payload = policy_bundle.get("payload")
-    spec = payload.get("spec") if isinstance(payload, dict) else None
-    defaults = spec.get("defaults") if isinstance(spec, dict) else None
-    return isinstance(defaults, dict) and defaults.get("mode") == "observe"
-
-
 def _build_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -362,19 +318,6 @@ def _build_policy_bundle_decisions(
         device_id=device_id,
         device_name=device_name,
     )
-
-
-def _legacy_shadow_predates_candidate(legacy: Mapping[str, object], candidate: Mapping[str, object]) -> bool:
-    """Whether the stored v1 bundle was issued for an older publication than the candidate.
-
-    Cloud issues a publication's v1 bundle at or after the publication itself,
-    so one issued earlier carries a different policy and cannot show whether
-    the candidate's compiler agrees. Unreadable times keep the comparison.
-    """
-
-    legacy_issued = _parse_iso_timestamp(str(legacy.get("issuedAt") or ""))
-    candidate_issued = _parse_iso_timestamp(str(candidate.get("issuedAt") or ""))
-    return legacy_issued is not None and candidate_issued is not None and legacy_issued < candidate_issued
 
 
 def policy_bundle_candidate_decisions(
@@ -415,21 +358,25 @@ def policy_bundle_candidate_decisions(
             device_name=device_name,
         )
     except PolicyCompilationError as error:
-        rule_id = None if error.code in CANONICAL_COMPILE_DOCUMENT_CODES else error.rule_id
-        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", rule_id
+        # The stored record drops the rule id for a code about the whole document.
+        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", error.rule_id
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
-    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
-    if not isinstance(legacy_payload, dict):
-        legacy_payload = (
-            existing_policy_bundle
-            if isinstance(existing_policy_bundle, dict)
-            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
-            else None
+    stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
+    try:
+        shadow_source, evaluating = _shadow.policy_shadow_source(
+            policy_bundle,
+            stored_legacy=stored_legacy,
+            existing=existing_policy_bundle,
         )
-    if isinstance(legacy_payload, dict) and _legacy_shadow_predates_candidate(legacy_payload, policy_bundle):
-        legacy_payload = None
+    except NativeRunnerAuthorityError:
+        # Rust picks the shadow. Without that choice the candidate cannot be
+        # proven equivalent, so it is held like a missing comparison below.
+        shadow_source, evaluating, native_shadow_unavailable = None, False, True
+    else:
+        native_shadow_unavailable = False
+    legacy_payload = {"stored": stored_legacy, "existing": existing_policy_bundle}.get(shadow_source or "")
     try:
         legacy_decisions = (
             _build_policy_bundle_decisions(
@@ -448,25 +395,29 @@ def policy_bundle_candidate_decisions(
     except PolicyBundleNativeError as error:
         return [], native_rejection_code(error), None
 
-    native_shadow_unavailable = False
-    try:
-        # An Evaluate bundle compiles to no rows on purpose, so an older
-        # bundle's rows say nothing about its drift.
-        mismatch_reasons = (
-            ()
-            if _policy_bundle_is_evaluating(policy_bundle)
-            else _authority.policy_shadow_mismatch(
+    mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
+    rejection: str | None = "native_shadow_unavailable"
+    if not native_shadow_unavailable and evaluating:
+        # An Evaluate bundle keeps its canonical rows empty on purpose, so it
+        # has nothing to drift from and needs no verdict from the resident.
+        # This is the answer the Rust policy_shadow_verdict kind gives for an
+        # evaluating candidate; test_policy_bundle_v2 pins that answer, so the
+        # two stay in step. Asking anyway would refuse the bundle whenever the
+        # resident is unreachable, which the Evaluate rollout must not do.
+        mismatch_reasons, rejection = (), None
+    elif not native_shadow_unavailable:
+        try:
+            mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
                 legacy_decisions,
                 canonical_decisions,
+                evaluating=evaluating,
+                canonical_enforcement=canonical_enforcement,
             )
-        )
-    except NativeRunnerAuthorityError:
-        # Rust owns the shadow comparison. Without its verdict the candidate
-        # cannot be proven equivalent, so treat it as a blocking mismatch: keep
-        # the existing policy and never activate the new bundle.
-        native_shadow_unavailable = True
-        mismatch_reasons = ("native_shadow_unavailable",)
-    blocking_mismatch_reasons = tuple(reason for reason in mismatch_reasons if reason != "legacy_unavailable")
+        except NativeRunnerAuthorityError:
+            # Rust owns the shadow comparison. Without its verdict the candidate
+            # cannot be proven equivalent, so treat it as a blocking mismatch:
+            # keep the existing policy and never activate the new bundle.
+            mismatch_reasons, rejection = ("native_shadow_unavailable",), "native_shadow_unavailable"
     if mismatch_reasons:
         store.add_event(
             "policy_bundle/shadow_mismatch",
@@ -478,11 +429,7 @@ def policy_bundle_candidate_decisions(
             },
             now,
         )
-    if native_shadow_unavailable:
-        return canonical_decisions, "native_shadow_unavailable", None
-    if canonical_enforcement and blocking_mismatch_reasons:
-        return canonical_decisions, "canonical_shadow_mismatch", None
-    return canonical_decisions, None, None
+    return canonical_decisions, rejection, None
 
 
 def sync_receipts(
@@ -633,18 +580,14 @@ def sync_receipts(
             validated_policy_bundle = None
             policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
         try:
-            if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+            admission_rejection = (
+                None
+                if validated_policy_bundle is None
+                else _policy_bundle_admission_rejection(store, existing_policy_bundle, validated_policy_bundle)
+            )
+            if admission_rejection is not None:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = "unsupported_daemon_version"
-            if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = "inactive_rollout_state"
-            if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-                _policy_bundle_downgrade_reference(store, existing_policy_bundle),
-                validated_policy_bundle,
-            ):
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = "bundle_version_downgrade"
+                policy_bundle_rejection_reason = admission_rejection
         except PolicyBundleNativeError as error:
             validated_policy_bundle = None
             policy_bundle_rejection_reason = native_rejection_code(error)
@@ -1629,11 +1572,16 @@ def _refresh_guard_oauth_access_token_once(
     token_type = _optional_string(payload.get("token_type"))
     if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-    access_token_expires_at = _oauth_access_token_expires_at(
-        access_token,
-        payload=payload,
-        now=datetime.now(timezone.utc),
-    )
+    try:
+        access_token_expires_at = oauth_access_token_expires_at(
+            access_token,
+            expires_in=payload.get("expires_in"),
+            now=datetime.now(timezone.utc),
+        )
+    except (NativeRunnerAuthorityError, OSError):
+        # The refreshed token still works; without an expiry it is only
+        # refreshed again before reuse instead of being served from cache.
+        access_token_expires_at = None
     return {
         "access_token": access_token,
         "access_token_expires_at": access_token_expires_at,
@@ -1877,32 +1825,6 @@ def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, o
     return True
 
 
-def _oauth_access_token_expires_at(
-    access_token: str,
-    *,
-    payload: dict[str, object],
-    now: datetime,
-) -> str | None:
-    claims = _decode_oauth_access_token_claims(access_token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and not isinstance(exp, bool) and float(exp) > 0:
-        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-    expires_in = payload.get("expires_in")
-    parsed_expires_in: int | None
-    if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool):
-        parsed_expires_in = int(expires_in)
-    elif isinstance(expires_in, str):
-        try:
-            parsed_expires_in = int(expires_in)
-        except ValueError:
-            parsed_expires_in = None
-    else:
-        parsed_expires_in = None
-    if parsed_expires_in is None or parsed_expires_in <= 0:
-        return None
-    return (now + timedelta(seconds=parsed_expires_in)).isoformat()
-
-
 def _cached_oauth_access_token(credentials: dict[str, object], *, now: datetime) -> str | None:
     access_token = _optional_string(credentials.get("access_token"))
     access_token_expires_at = _optional_string(credentials.get("access_token_expires_at"))
@@ -1955,15 +1877,7 @@ def _persist_rotated_oauth_refresh_token(
             credentials_supply_chain_firewall if isinstance(credentials_supply_chain_firewall, bool) else None
         )
     effective_access_token = access_token or _optional_string(credentials.get("access_token"))
-    if access_token is not None:
-        recovered_binding = oauth_binding_metadata(access_token, issuer=issuer)
-    else:
-        recovered_binding = oauth_binding_from_credentials({**credentials, "access_token": effective_access_token})
-    effective_binding = oauth_refresh_binding(
-        credentials,
-        recovered_binding,
-        refreshed=access_token is not None,
-    )
+    effective_binding = oauth_effective_binding(credentials, access_token=access_token, issuer=issuer)
     store.set_oauth_local_credentials(
         issuer=issuer,
         client_id=client_id,
@@ -2876,9 +2790,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         version=__version__,
     )
     updated_at = str(payload["updatedAt"])
-    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    payload["localIdentity"] = local_identity
-    payload["localIdentitySource"] = _cloud_local_identity_source_payload(local_identity)
+    payload["localIdentity"], payload["localIdentitySource"] = _cloud_local_identity(observed_at=updated_at)
     payload["packageManagerCoverage"] = _cloud_package_manager_coverage(
         store,
         workspace=str(payload["workspace"]),
@@ -3000,67 +2912,21 @@ def _sync_extension_catalog_from_runtime_handshake(
     return summary if unverified is None else unverified
 
 
-def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
-    hostname = _safe_hostname()
-    private_ip = _safe_private_ip()
-    if private_ip is None:
-        private_ip = _safe_private_ipv6()
-    payload: dict[str, object] = {"lastSyncedAt": observed_at}
-    if hostname is not None:
-        payload["hostname"] = hostname
-    if private_ip is not None:
-        payload["ipAddress"] = private_ip
-        payload["privateIpAddress"] = private_ip
-    return payload
+def _cloud_local_identity(*, observed_at: str) -> tuple[dict[str, object], dict[str, str]]:
+    """The host name and private address the session reports, and their source.
 
-
-def _cloud_local_identity_source_payload(local_identity: dict[str, object]) -> dict[str, str]:
-    source: dict[str, str] = {
-        "daemonId": "local-guard",
-        "daemonVersion": "local-guard",
-        "daemonStatus": "local-guard",
-        "relayState": "local-guard",
-    }
-    if "hostname" in local_identity:
-        source["hostname"] = "local-guard"
-    if "ipAddress" in local_identity:
-        source["ipAddress"] = "local-guard"
-    if "privateIpAddress" in local_identity:
-        source["privateIpAddress"] = "local-guard"
-    if "publicIpAddress" in local_identity:
-        source["publicIpAddress"] = "local-guard"
-    return source
-
-
-def _safe_hostname() -> str | None:
-    with suppress(OSError):
-        hostname = socket.gethostname().strip()
-        if hostname:
-            return hostname[:255]
-    return None
-
-
-def _safe_private_ip() -> str | None:
-    with suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.connect(("8.8.8.8", 80))
-        address = sock.getsockname()[0]
-        if isinstance(address, str) and address and not address.startswith("127."):
-            return address[:128]
-    with suppress(OSError):
-        address = socket.gethostbyname(socket.gethostname())
-        if address and not address.startswith("127."):
-            return address[:128]
-    return None
-
-
-def _safe_private_ipv6() -> str | None:
-    with suppress(OSError):
-        addresses = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)
-        for entry in addresses:
-            candidate = entry[4][0]
-            if isinstance(candidate, str) and candidate and candidate != "::1":
-                return candidate[:128]
-    return None
+    The runtime reads both. Without an answer the session still syncs with
+    only its sync time, which every field's absence already means.
+    """
+    try:
+        return _authority.local_identity(observed_at)
+    except NativeRunnerAuthorityError:
+        return {"lastSyncedAt": observed_at}, {
+            "daemonId": "local-guard",
+            "daemonVersion": "local-guard",
+            "daemonStatus": "local-guard",
+            "relayState": "local-guard",
+        }
 
 
 def _cloud_package_manager_coverage(

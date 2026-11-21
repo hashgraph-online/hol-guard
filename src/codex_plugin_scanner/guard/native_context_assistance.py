@@ -134,7 +134,7 @@ def versions(*, guard_home: Path, payload: Mapping[str, object]) -> dict[str, An
         {"state": dict, "data": dict},
         validate,
         operation=_VERSIONS_OPERATION,
-        max_request_bytes=4 * 1024 * 1024 if payload.get("action") == "import_catalog" else 64 * 1024,
+        max_request_bytes=64 * 1024,
         slots=_WORKSPACE_SLOTS,
     )
     return {**answer["data"], "state": answer["state"]}

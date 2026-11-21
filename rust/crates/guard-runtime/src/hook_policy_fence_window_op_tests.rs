@@ -10,6 +10,142 @@ fn request(home: &str, action: &str) -> HookPolicyFenceWindowRequestV1 {
         admitted: None,
         waited_ms: None,
         attempt_until_micros: None,
+        elapsed_ms: None,
+        remaining_ms: None,
+        persist_events: false,
+    }
+}
+
+#[test]
+fn wait_plan_preserves_the_rebuild_cap_and_both_deadline_margins() {
+    let mut call = request("/synthetic/fence-plan", "wait");
+    call.elapsed_ms = Some(7_900);
+    call.remaining_ms = Some(600);
+    let response: Value = serde_json::from_slice(&evaluate(&call).unwrap()).unwrap();
+    assert_eq!(
+        response["result"]["poll"],
+        json!({"sleep_ms": 100, "retry_by_ms": 100, "attempt_budget_ms": 350})
+    );
+    assert!(plan_wait(7_901, 20_000).is_none());
+    assert!(plan_wait(0, 599).is_none());
+    assert!(plan_wait(u64::MAX, 20_000).is_none());
+    assert!(plan_wait(0, 0).is_none());
+}
+
+#[test]
+fn native_wait_plan_registers_one_attempt_lease_for_the_window() {
+    let home = "/synthetic/fence-plan-lease";
+    let enter = request(home, "enter");
+    evaluate(&enter).unwrap();
+    let mut poll = request(home, "wait");
+    poll.request_id.clone_from(&enter.request_id);
+    poll.elapsed_ms = Some(0);
+    poll.remaining_ms = Some(2000);
+    let before = now_micros().unwrap();
+    evaluate(&poll).unwrap();
+    let expiry = || {
+        WINDOWS.get().unwrap().lock().unwrap()[home].waiters[&poll.request_id]
+            .attempt_until_micros
+            .unwrap()
+    };
+    let first = expiry();
+    assert!((before + 1_750_000..=now_micros().unwrap() + 1_750_000).contains(&first));
+    // A later plan can shorten the caller's attempt but cannot prolong the registration.
+    let mut repeated_poll = request(home, "wait");
+    repeated_poll.request_id.clone_from(&poll.request_id);
+    repeated_poll.elapsed_ms = Some(500);
+    repeated_poll.remaining_ms = Some(2000);
+    evaluate(&repeated_poll).unwrap();
+    assert_eq!(expiry(), first);
+}
+
+#[test]
+fn resident_persists_completed_windows_once_after_write_contention() {
+    check_contended_batch(MAX_BATCH_EVENTS, 0);
+}
+
+#[test]
+fn resident_records_a_dropped_window_when_the_pending_queue_is_full() {
+    check_contended_batch(MAX_PENDING_EVENTS, 1);
+}
+
+fn check_contended_batch(queued: usize, dropped: i64) {
+    let dir = tempfile::tempdir().unwrap();
+    let guard_home = dir.path().to_str().unwrap();
+    let connection =
+        rusqlite::Connection::open(dir.path().join(crate::local_store_read::STORE_FILE_NAME))
+            .unwrap();
+    connection
+        .execute_batch(
+            "create table guard_events (event_name text, payload_json text, occurred_at text);",
+        )
+        .unwrap();
+    let gate = std::fs::File::create_new(
+        dir.path()
+            .join(crate::hook_evidence_store_gate::STORAGE_GATE_FILE_NAME),
+    )
+    .unwrap();
+    fs2::FileExt::try_lock_exclusive(&gate).unwrap();
+    let mut enter = request(guard_home, "enter");
+    enter.persist_events = true;
+    evaluate(&enter).unwrap();
+    {
+        let mut windows = WINDOWS.get().unwrap().lock().unwrap();
+        let pending = &mut windows.get_mut(guard_home).unwrap().pending_events;
+        let now = now_micros().unwrap();
+        pending.extend((0..queued).map(|_| event(now, now, 1, 0).unwrap()));
+    }
+    let mut leave = request(guard_home, "leave");
+    leave.persist_events = true;
+    leave.request_id.clone_from(&enter.request_id);
+    leave.admitted = Some(false);
+    assert_eq!(
+        evaluate(&leave).unwrap_err(),
+        "hook_policy_fence_window_write_failed"
+    );
+    fs2::FileExt::unlock(&gate).unwrap();
+    connection.execute_batch("begin immediate;").unwrap();
+    assert_eq!(
+        evaluate(&leave).unwrap_err(),
+        "hook_policy_fence_window_write_failed"
+    );
+    connection.execute_batch("rollback;").unwrap();
+
+    let result: Value = serde_json::from_slice(&evaluate(&leave).unwrap()).unwrap();
+    assert!(result["result"]["window_event"].is_null());
+    assert_eq!(result["result"]["window_events"], json!([]));
+    evaluate(&leave).unwrap();
+    evaluate(&leave).unwrap();
+
+    let count: i64 = connection
+        .query_row(
+            "select count(*) from guard_events where event_name = ?",
+            [EVENT_NAME],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, queued as i64 + 1 - dropped);
+    let reported: i64 = connection
+        .query_row(
+            "select coalesce(sum(json_extract(payload_json, '$.dropped_windows')), 0) \
+             from guard_events where event_name = ?",
+            [OVERFLOW_EVENT_NAME],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(reported, dropped);
+    if dropped == 0 {
+        let (payload, occurred_at): (String, String) = connection
+            .query_row(
+                "select payload_json, occurred_at from guard_events \
+                 where json_extract(payload_json, '$.exhausted_calls') = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let payload: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(payload["ended_at"], occurred_at);
+        assert_eq!(payload["absorbed_calls"], 0);
     }
 }
 

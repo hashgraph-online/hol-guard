@@ -49,9 +49,6 @@ impl InitialTarget {
     pub(crate) fn pointer(&self) -> &SelectionPointer {
         &self.plan.target
     }
-    pub(crate) fn rules(&self) -> &guard_cigar_release::UpdatePreferences {
-        &self.rules
-    }
     pub(crate) fn check(&self) -> Result<(), String> {
         let mut policy = crate::managed_policy_load::ManagedPolicySource::native();
         policy.write_cache = false;

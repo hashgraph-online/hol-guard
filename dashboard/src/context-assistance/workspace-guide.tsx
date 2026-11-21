@@ -16,9 +16,7 @@ export function CigarGuide({ onSelect, walkthroughs }: Props) {
     <section className="cigar-card cigar-faq" aria-labelledby="cigar-faq-heading">
       <h2 id="cigar-faq-heading">Common questions</h2>
       <details><summary>Do I need to install anything?</summary>
-        <p>No. The Turn on CIGAR button gets everything ready: Guard sets up its own copy of Python, downloads the CIGAR version it checked for this computer, confirms the download is the real one and starts it. The Python you already use is left alone.</p>
-        <p>If the button says it is waiting for Guard's safety check, a new CIGAR exists but Guard has not finished checking it. Guard never installs a version it has not checked.</p>
-        <button type="button" className="cigar-text-button" onClick={() => onSelect("versions")}>Choose a version in Updates<HiMiniArrowRight aria-hidden="true" /></button>
+        <p>No. The Turn on CIGAR button gets everything ready: Guard starts the CIGAR engine built into it, which needs no Python and no download. The Python you already use is left alone.</p>
       </details>
       <details><summary>Can CIGAR see all my files?</summary><p>No. It only looks inside the project your AI app is open in, and it always skips secrets, keys, hidden files, build folders and anything your .gitignore leaves out.</p></details>
       <details><summary>Do I have to add my projects?</summary>

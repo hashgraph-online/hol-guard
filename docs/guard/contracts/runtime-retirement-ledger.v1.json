@@ -8,6 +8,8 @@
   "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
   "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
   "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
@@ -7716,8 +7718,6 @@
   {
    "old_node": "tests/test_structured_output_mediation_routes.py::test_binding_recheck_failure_withholds_without_logging_callback_details",
    "replacement_nodes": [
-    "tests/test_structured_output_mediation_routes.py::test_a_forward_is_withheld_when_the_config_cannot_be_read_again",
-    "tests/test_structured_output_mediation.py::test_a_forward_is_withheld_when_the_view_changed_or_cannot_be_confirmed",
     "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_forwards_only_under_the_binding_the_scan_ran_under"
    ],
    "status": "native_behavior_ported_requires_ci"
@@ -7734,7 +7734,7 @@
   {
    "old_node": "tests/test_structured_output_mediation_routes.py::test_native_route_attaches_adapter_field_after_receipt_without_mutating_native_result",
    "replacement_nodes": [
-    "tests/test_structured_output_mediation_routes.py::test_the_edge_is_sent_the_managed_policy_view_and_its_answer_passes_through",
+    "tests/test_structured_output_mediation_routes.py::test_the_edge_uses_the_authenticated_managed_view_and_passes_its_answer_through",
     "rust/crates/guard-runtime/src/edge_structured_tests.rs::the_edge_answers_the_mediation_the_daemon_asked_for"
    ],
    "status": "obsolete_implementation_assertion",
@@ -7743,7 +7743,6 @@
   {
    "old_node": "tests/test_structured_output_mediation_routes.py::test_native_route_load_error_attaches_fail_closed_mediation",
    "replacement_nodes": [
-    "tests/test_structured_output_mediation_routes.py::test_native_route_load_error_sends_an_unreadable_view_the_edge_withholds_under",
     "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_view_the_edge_cannot_resolve_withholds_as_an_unavailable_authority"
    ],
    "status": "native_behavior_ported_requires_ci"
@@ -8732,6 +8731,26 @@
    ],
    "base_commit": "647fb01f6455b97b6fb15ebc296ecc1fd363cb3c",
    "remaining_role": "Applies the resident's review settlement to the native verdict and renders it; which evaluator verdict lets a planned install continue, stops it with guidance, or blocks it is decided in Rust."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
+   "source_sha256": "b0ed04428be6e5d8f210cfb33671db7556a4be365bab0de66a87a31c96658b27",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_managed_installs.rs",
+    "rust/crates/guard-runtime/src/guard_store_op.rs"
+   ],
+   "base_commit": "570b7ebc46",
+   "remaining_role": "The Python cache and fallback scan are retired; hook admission asks the resident for one transactional managed-install answer."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
+   "source_sha256": "ccd0fcfbeedb1ad80b53e41c4be722bd7c66e48f956a03b4433dec9a99bd9f8c",
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/edge_structured.rs",
+    "rust/crates/guard-runtime/src/policy_store.rs"
+   ],
+   "base_commit": "bf1d3e5e57",
+   "remaining_role": "The outage-only structured destination overlay remains in hook_worker_unavailable.py; normal mediation and binding freshness are resident-owned."
   }
  ],
  "retired_bodies": [

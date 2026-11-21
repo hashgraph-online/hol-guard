@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import urllib.error
@@ -8,10 +9,11 @@ from contextlib import AbstractContextManager, nullcontext
 from functools import partial
 from typing import Any
 
-from ...version import __version__  # noqa: F401 - public compatibility export
+from ...version import __version__
 from ..harness_context import HarnessContext
 from ..review_verification_keyring import review_verification_keyring_ready
 from ..store import GuardStore
+from . import cloud_command_lease
 from .auto_update import maybe_auto_update
 from .cloud_policy_revision import cloud_policy_store_key, observe_cloud_policy_revision
 from .command_capability import (
@@ -38,11 +40,12 @@ from .command_queue_activation import (
 )
 from .command_queue_auth import reuse_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
+from .command_queue_authority import command_queue_oauth_target
 from .command_queue_authorization import start_command_authorization, start_overlapped_acknowledgement
 from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, start_review_drains, with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
-from .command_queue_http import request_json as _json_request
+from .command_queue_http import request_json as _json_request  # noqa: F401 - test doubles replay over it
 from .command_queue_lease_ready import lane_lease_ready_operations
 from .command_queue_loop import (
     COMMAND_QUEUE_ERROR_BACKOFF_ENV,  # noqa: F401 - public compatibility export
@@ -51,7 +54,7 @@ from .command_queue_loop import (
 )
 from .command_queue_pending import hold_pending_result as _hold_pending_result
 from .command_queue_pending import retry_pending_result
-from .command_queue_protocol import command_api_url as _command_api_url  # noqa: F401
+from .command_queue_protocol import command_api_url as _command_api_url
 from .command_queue_protocol import job_id as _job_id
 from .command_queue_protocol import lease_id as _lease_id
 from .command_queue_protocol import result_payload as _result_payload
@@ -63,7 +66,6 @@ from .command_queue_state import (
     COMMAND_QUEUE_LEASE_WAIT_MS_ENV,  # noqa: F401 - public compatibility export
     COMMAND_QUEUE_STATE_KEY,  # noqa: F401 - public compatibility export
     command_queue_brief_status,
-    command_queue_lease_payload,
     default_command_context,  # noqa: F401 - public compatibility export
     lane_exact_lease_batch_limit,
     record_exact_lease_batch_limit,
@@ -78,11 +80,11 @@ from .command_queue_state import record_exact_route_failure as _record_exact_rou
 from .command_queue_state import save_command_queue_state as _save_state
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
-    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     exact_cloud_review_operations,
 )
 from .exact_cloud_review_transport import (
     EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
+    LeaseCall,
     lease_next_job,
     uses_exact_transport,
 )
@@ -138,18 +140,6 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
     )
 
 
-def _lease_payload(
-    store: GuardStore,
-    *,
-    operations: tuple[str, ...] | None = None,
-    wait_ms: int | None = None,
-    max_jobs: int = 1,
-) -> dict[str, object]:
-    return command_queue_lease_payload(
-        store, operations=operations, wait_ms=wait_ms, max_jobs=max_jobs, operation_resolver=command_queue_operations
-    )
-
-
 def _exact_json_request(
     auth_context: dict[str, object],
     *,
@@ -157,6 +147,7 @@ def _exact_json_request(
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
+    """Exact-route request the test doubles replay native leases and reports over."""
     return request_json(
         auth_context, method=method, path=path, payload=payload, base_path=EXACT_CLOUD_REVIEW_COMMAND_API_BASE
     )
@@ -190,17 +181,16 @@ def _review_connection_scope(store: GuardStore, job: dict[str, object]) -> Abstr
 
 
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
-    request = _exact_json_request if uses_exact_transport(job) else _json_request
-    path = f"/{_job_id(job)}/ack" if uses_exact_transport(job) else f"/{_job_id(job)}/heartbeat"
-    payload: dict[str, object] = {"leaseId": _lease_id(job)}
-    if uses_exact_transport(job):
-        payload["protocolVersion"] = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    request(auth_context, method="POST", path=path, payload=payload)
+    cloud_command_lease.cloud_command_report(
+        auth_context, job_id=_job_id(job), exact=uses_exact_transport(job), kind="ack", lease_id=_lease_id(job)
+    )
 
 
 def _post_result(auth_context: dict[str, object], job: dict[str, object], payload: dict[str, object]) -> None:
-    request = _exact_json_request if uses_exact_transport(job) else _json_request
-    request(auth_context, method="POST", path=f"/{_job_id(job)}/result", payload=payload)
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    cloud_command_lease.cloud_command_report(
+        auth_context, job_id=_job_id(job), exact=uses_exact_transport(job), kind="result", body=body
+    )
 
 
 def _lease_next_job(
@@ -227,33 +217,30 @@ def _lease_next_job(
     return lease_next_job(
         operations=operations,
         wait_ms=wait_ms,
-        exact_request=lambda options: _exact_json_request(
-            auth_context,
-            method="POST",
-            path="/lease",
-            payload=_lease_payload(
-                store,
-                operations=options["operations"],  # type: ignore[arg-type]
-                wait_ms=options["wait_ms"],  # type: ignore[arg-type]
-                max_jobs=options["max_jobs"],  # type: ignore[arg-type]
-            ),
-        ),
-        queue_request=lambda options: _json_request(
-            auth_context,
-            method="POST",
-            path="/lease",
-            payload=_lease_payload(
-                store,
-                operations=options["operations"],  # type: ignore[arg-type]
-                wait_ms=options["wait_ms"],  # type: ignore[arg-type]
-            ),
-        ),
+        lease=partial(_native_lease, store, auth_context),
+        lease_url=lambda route: _command_api_url(auth_context.get("sync_url"), "/lease", base_path=route),
         exact_route_failure=exact_route_failure,
         exact_route_success=exact_route_success,
         observe_response=partial(observe_cloud_policy_revision, cloud_policy_store_key(store)),
         max_jobs=max_jobs,
         on_extra_jobs=on_extra_jobs,
         observe_lease_batch_limit=observe_lease_batch_limit,
+    )
+
+
+def _native_lease(store: GuardStore, auth_context: dict[str, object], call: LeaseCall) -> dict[str, object]:
+    """Lease through the native runtime, for this device and workspace."""
+
+    device_id, workspace_id = command_queue_oauth_target(store)
+    return cloud_command_lease.cloud_command_lease(
+        auth_context,
+        {
+            **call,
+            "workspaceId": workspace_id,
+            "deviceId": device_id,
+            "daemonVersion": __version__,
+            "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
+        },
     )
 
 

@@ -69,7 +69,7 @@ export function ContextReviewPanel({ item }: { item: GuardApprovalRequest }) {
       const status = await fetchContextAssistance(controller.signal);
       if (controller.signal.aborted) return;
       if (!status.effective_enabled || !status.effective_preferences.features.review_briefs) {
-        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Settings.");
+        throw new Error("Enable review context in CIGAR → Settings, then turn CIGAR on.");
       }
       generation.current = status.generation;
       const scopes = await listContextWorkspaces(controller.signal);

@@ -25,6 +25,7 @@ def _no_real_hook_worker(monkeypatch):
     """Keeps the real hook worker out of these tests; a test can set its own build."""
 
     monkeypatch.setattr(worker_host.WorkerHost, "_build_hook_worker", lambda self: None)
+    monkeypatch.setattr(worker_host.WorkerHost, "_start_private_state_resident", lambda self: None)
 
 
 class _StopError(Exception):
@@ -308,3 +309,29 @@ def test_worker_host_builds_the_publisher_again_when_the_early_build_failed(tmp_
 
     assert attempts == ["guard-worker-policy-prepare", threading.current_thread().name]
     assert store.calls == ["migrate", "publish"]
+
+
+class _WarmPublisher:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def warm_first_publication(self) -> None:
+        self.calls.append(f"warm:{threading.current_thread().name}")
+
+
+def test_worker_host_warms_the_first_publication_beside_admission(tmp_path, monkeypatch):
+    store = _Store(tmp_path)
+
+    def build(self):
+        worker = _PreparedWorker(store.calls)
+        worker.policy_snapshot_publisher = _WarmPublisher(store.calls)  # pyright: ignore[reportAttributeAccessIssue]
+        return worker
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_build_hook_worker", build)
+    host = worker_host.WorkerHost(store, home_dir=tmp_path)  # pyright: ignore[reportArgumentType]
+
+    host.start()
+
+    # The compiles run on the prepare thread; publishing still waits for the admission.
+    assert sorted(store.calls[:2]) == ["migrate", "warm:guard-worker-policy-prepare"]
+    assert store.calls[2:] == ["publish"]

@@ -17,7 +17,7 @@ def configure_context_parser(subparsers: argparse._SubParsersAction[argparse.Arg
     actions = parser.add_subparsers(dest="context_command", required=True, parser_class=FriendlyArgumentParser)
     for name, kind, help_text in (
         ("status", "status", "Show requested and verified runtime availability without probing CIGAR"),
-        ("runtimes", "installations", "List enrolled runtime metadata without launching CIGAR"),
+        ("runtimes", "installations", "Show the built-in engine without launching CIGAR"),
         ("check", "recheck", "Schedule verification of the saved runtime in the background"),
         ("start", "activate", "Start the saved, explicitly enabled runtime after native verification"),
         ("off", "stop", "Cancel context work and persist opt-out; retain Guard approvals"),
@@ -76,7 +76,7 @@ def run_context_command(
         if args.context_kind == "versions":
             from .context_assistance_versions_commands import execute
 
-            state = execute(args, home, input_text=input_text)
+            state = execute(args, home)
         else:
             state = control(args.context_kind, guard_home=home)
     except ContextAssistanceError as error:
@@ -121,16 +121,16 @@ def run_context_command(
     if state["diagnostic"]:
         print(f"Diagnostic: {state['diagnostic']}", file=output)
     if state["installation_options"] is not None:
-        for option in state["installation_options"]:
-            version = ".".join(str(part) for part in option["python_version"])
+        builtin = [option for option in state["installation_options"] if option["qualification"] == "guard_builtin"]
+        for option in builtin:
             print(
-                f"  {option['runtime_id']}: Python {version} · {option['platform']} · {option['qualification']}",
+                f"  {option['runtime_id']}: Built into Guard · {option['platform']} · {option['qualification']}",
                 file=output,
             )
-        if not state["installation_options"]:
-            print("No verified runtimes are enrolled.", file=output)
+        if not builtin:
+            print("The built-in engine is unavailable on this machine.", file=output)
     print(
-        "Requires a verified final CPython 3.14 runtime and a qualified CIGAR build. "
+        "CIGAR runs on the engine built into Guard; no Python or download is needed. "
         "Choose preferences in Protection → Context assistance.",
         file=output,
     )

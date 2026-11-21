@@ -14,6 +14,9 @@ from codex_plugin_scanner.guard.runtime.command_executors import (
     execute_guard_command_job,
 )
 
+# Every job is planned by the native runtime before it runs.
+pytestmark = pytest.mark.usefixtures("native_command_capability_runtime")
+
 
 def _make_context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(

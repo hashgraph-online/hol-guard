@@ -76,10 +76,22 @@ def _validate_exact_action(payload: dict[str, Any]) -> None:
 
 
 def _policy_binding_valid(
-    harness: str, native_result: Mapping[str, object], native_receipt: Mapping[str, object] | None
+    harness: str,
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    guard_home: Path | None,
 ) -> bool:
+    if guard_home is None:
+        return "command_extensions" not in native_result and not (
+            isinstance(native_receipt, Mapping) and "command_extensions" in native_receipt
+        )
     try:
-        native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+        native_review_policy_binding(
+            harness=harness,
+            native_result=native_result,
+            verified_receipt=native_receipt,
+            guard_home=guard_home,
+        )
     except ValueError:
         return False
     return True
@@ -120,7 +132,7 @@ def resident_review_evidence(
         )
     except (NativeExactActionError, OSError, RuntimeError, TypeError, ValueError):
         return {
-            "policy_binding_valid": _policy_binding_valid(harness, native_result, native_receipt),
+            "policy_binding_valid": _policy_binding_valid(harness, native_result, native_receipt, guard_home),
             "binding": None,
             "token": None,
             "once_only_reason": UNPROVEN_LAUNCH,

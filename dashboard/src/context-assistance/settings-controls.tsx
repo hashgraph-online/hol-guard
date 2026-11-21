@@ -3,7 +3,7 @@ import { HiMiniArrowPath, HiMiniCheckCircle, HiMiniChevronRight, HiMiniExclamati
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { SelectMenu } from "../select-menu";
 import { SettingsFormSection, SettingsMenuRow, SettingsToggleRow } from "../settings/settings-row-primitives";
-import { contextStatusCopy } from "./status";
+import { contextStatusCopy, engineLabel } from "./status";
 import { withContextProfile } from "./settings-model";
 import type { ContextAssistanceStatus, ContextControlAction, ContextInstallation } from "./types";
 import { ContextExecutionPanel } from "./execution-panel";
@@ -23,7 +23,6 @@ export type ContextSettingsControlsProps = {
   onChange: (value: GuardContextAssistanceConfig) => void;
   onRefresh: () => void;
   onChooseRuntime: () => void;
-  onManageVersions?: () => void;
   onControl: (action: ContextControlAction) => void;
   /** Settings that sit right under the status card, ahead of the form. */
   lean?: ReactNode;
@@ -85,7 +84,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
               <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75" role="status" aria-live="polite">
                 {availabilityText(props.loading, statusCopy)}
               </p>
-              <p className={caption}>CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR.</p>
+              <p className={caption}>CIGAR is built into Guard and needs no Python. Guard gets it ready when you click Turn on CIGAR.</p>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -114,7 +113,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
               disabled={editingDisabled || (!value.enabled && !selected)}
               onChange={(enabled) => props.onChange({ ...value, enabled })} />
             <CigarRuntimeSelection value={value} status={status} installations={installations} disabled={disabled}
-              onManage={props.onManageVersions} onRefresh={props.onChooseRuntime}
+              onRefresh={props.onChooseRuntime}
               onRestore={() => { if (status) props.onChange({ ...value, runtime_id: status.preferences.runtime_id,
                 enabled: value.enabled && Boolean(status.preferences.runtime_id) }); }} />
           </SettingsFormSection>
@@ -220,7 +219,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                   <Fact term="Storage">{value.storage.mode === "memory" ? "Memory only" : "Private persistence requested"}</Fact>
                   {runtimeId ? <Fact term="Runtime ID"><span className="break-all font-mono text-xs">{runtimeId}</span></Fact> : null}
                   {runtime ? <>
-                    <Fact term="Last verified Python">{runtime.interpreter.version.join(".")} · {runtime.interpreter.platform}</Fact>
+                    <Fact term="Last verified engine">{engineLabel(runtime.interpreter)} · {runtime.interpreter.platform}</Fact>
                     <Fact term="Qualification">Local development candidate</Fact>
                     {value.features.shared_agents ? <Fact term="Shared context check">{runtime.shared_compile_verified ? "Verified with an independent local client" : "Check and start the selected runtime"}</Fact> : null}
                     {value.storage.mode === "sqlite" ? <Fact term="Saved evidence check">{runtime.persistence_compile_verified ? "Verified write, restart and fresh-grant recovery" : "Check and start the selected runtime"}</Fact> : null}

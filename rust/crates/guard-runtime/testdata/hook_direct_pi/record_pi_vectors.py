@@ -4,8 +4,8 @@ Four groups, each recorded from the daemon code itself:
 
 * ``source_ref_external_allowed``: the flag ``_review_native_edge_with_snapshot``
   passes the edge for a route harness spelling, captured at its edge call.
-* ``structured_mediation``: whether the daemon reads the managed
-  structured-output config for a harness and event, as
+* ``structured_mediation``: whether the native route carries a managed
+  structured-output destination for a harness and event, as
   ``withholds_structured_destination`` decides.
 * ``structured_output``: for a managed policy and a ``pi`` or ``omp``
   ``PostToolUse``, the view the publisher binds (``null`` when it binds
@@ -33,7 +33,7 @@ from types import SimpleNamespace
 
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
-from codex_plugin_scanner.guard.hook_review.hook_worker_structured import (
+from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import (
     read_structured_view,
     structured_destination_required,
     withholds_structured_destination,

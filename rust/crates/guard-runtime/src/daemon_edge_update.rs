@@ -5,6 +5,7 @@
 //! status, recording a Desktop hand-off and starting the detached update
 //! runner are `update.*` Guard library calls (`routes/update_calls.py`).
 
+use pep440_rs::Version;
 use serde_json::{json, Map, Value};
 
 use super::super::super::library::{self, CallError};
@@ -112,7 +113,7 @@ fn update(host: &mut Host<'_, '_>, payload: &Map<String, Value>) -> Result<Reply
     let force = truthy(payload.get("force_pypi_reinstall"));
     let status = host.step("update.status", Value::Null)?;
     if payload.get("handoff_to_desktop") == Some(&Value::Bool(true)) {
-        return handoff(host, &status);
+        return handoff(host, &status, payload.get("latest_version"));
     }
     let flag = |key: &str| status.get(key) == Some(&Value::Bool(true));
     if flag("python_update_required") {
@@ -151,20 +152,29 @@ fn update(host: &mut Host<'_, '_>, payload: &Map<String, Value>) -> Result<Reply
 /// Records the dashboard's request for Desktop to open its updater. Only a
 /// Desktop-managed install with a newer release has one to hand off to;
 /// Desktop re-verifies the release itself.
-fn handoff(host: &mut Host<'_, '_>, status: &Map<String, Value>) -> Result<Reply, Stop> {
+///
+/// The release check behind `status` can briefly lose sight of a release
+/// the dashboard already offered (an alpha whose tag lookup was rate
+/// limited, say). The offered version is then handed off as long as it is
+/// newer than the running Core: Desktop re-checks its own feeds and
+/// verifies signatures, so the request is a hint, never an install.
+fn handoff(
+    host: &mut Host<'_, '_>,
+    status: &Map<String, Value>,
+    offered: Option<&Value>,
+) -> Result<Reply, Stop> {
     if status.get("installer").and_then(Value::as_str) != Some("desktop") {
         return Ok(refused(
             "desktop_handoff_unavailable",
             json!("This install is not managed by the HOL Guard app."),
         ));
     }
-    let latest = status
+    let checked = status
         .get("latest_version")
-        .filter(|latest| latest.is_string());
-    let (true, Some(latest)) = (
-        status.get("update_available") == Some(&Value::Bool(true)),
-        latest,
-    ) else {
+        .and_then(Value::as_str)
+        .filter(|_| status.get("update_available") == Some(&Value::Bool(true)));
+    let current = status.get("current_version").and_then(Value::as_str);
+    let Some(latest) = checked.or_else(|| offered_newer_version(offered, current)) else {
         return Ok(refused("update_not_available", json!(LATEST)));
     };
     let recorded = host.step("update.handoff", json!({ "latest_version": latest }))?;
@@ -185,6 +195,18 @@ fn handoff(host: &mut Host<'_, '_>, status: &Map<String, Value>) -> Result<Reply
             "latest_version": latest,
         }),
     ))
+}
+
+/// The version the dashboard offered, when it is a well-formed release
+/// strictly newer than the running Core.
+fn offered_newer_version<'a>(offered: Option<&'a Value>, current: Option<&str>) -> Option<&'a str> {
+    let offered = offered?.as_str()?.trim();
+    if offered.is_empty() || offered.len() > 64 {
+        return None;
+    }
+    let offered_version = offered.parse::<Version>().ok()?;
+    let current_version = current?.trim().parse::<Version>().ok()?;
+    (offered_version > current_version).then_some(offered)
 }
 
 #[cfg(test)]

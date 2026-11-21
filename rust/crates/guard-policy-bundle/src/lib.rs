@@ -18,6 +18,9 @@ mod policy_bundle_json;
 mod policy_bundle_keys;
 mod policy_bundle_keys_ctx;
 mod policy_bundle_op;
+mod policy_bundle_op_admission;
+#[cfg(test)]
+mod policy_bundle_op_admission_tests;
 mod policy_bundle_op_delivery;
 mod policy_bundle_op_keys;
 mod policy_bundle_op_page;
@@ -33,6 +36,9 @@ mod policy_bundle_op_validate;
 #[cfg(test)]
 mod policy_bundle_op_vectors_tests;
 mod policy_bundle_py;
+mod policy_bundle_rejection;
+#[cfg(test)]
+mod policy_bundle_rejection_tests;
 mod policy_bundle_time;
 mod policy_bundle_v1;
 mod policy_bundle_v1_rules;

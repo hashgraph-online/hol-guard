@@ -9068,6 +9068,57 @@
       "expect": "allow"
     },
     {
+      "id": "gh-api-explicit-get-with-typed-field",
+      "fix_area": "gh-api",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/example/app/commits/0123456789abcdef0123456789abcdef01234567/check-runs --method GET -F per_page=100 --jq '[.check_runs[] | select(.name|test(\"build|required\";\"i\")) | {name,status,conclusion}]'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gh-api-explicit-get-short-flag-with-typed-field",
+      "fix_area": "gh-api",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api -X GET repos/example/app/actions/runs -f event=pull_request -F per_page=50 --jq '.workflow_runs[] | {id, name, status, conclusion}'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-gh-api-typed-field-without-method-posts",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/example/app/commits/0123456789abcdef0123456789abcdef01234567/check-runs -F per_page=100 --jq '[.check_runs[] | {name,status}]'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gh-api-contents-base64-decode-head",
       "fix_area": "gh-api",
       "harnesses": [
@@ -18607,6 +18658,54 @@
       "expect": "allow"
     },
     {
+      "id": "cd-home-variable-sibling-then-worktree-add-and-enter",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git worktree add ../other-project-entry -b entry-lane HEAD && cd ../other-project-entry && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sequenced-entry-then-worktree-add-and-enter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project; git worktree add ../other-project-entry-sequenced -b entry-lane-sequenced HEAD && cd ../other-project-entry-sequenced && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-or-fallback-entry-then-worktree-add-and-enter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git fetch origin main || git worktree add ../other-project-entry-fallback -b entry-lane-fallback HEAD && cd ../other-project-entry-fallback && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-worktree-add-home-variable-destination",
       "fix_area": "worktree-add",
       "harnesses": [
@@ -18914,6 +19013,22 @@
       "tool": "shell",
       "tool_input": {
         "command": "which git 2>/dev/null; type -p git 2>/dev/null; echo DONE"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-zsh-path-lookup",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "whence git 2>/dev/null; whence -p node 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
       "expect": "allow"

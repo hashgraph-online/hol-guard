@@ -27,7 +27,6 @@ from ..native_command_state import (
 from ..portable_command import render_portable_command
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
-from .command_replay_rows import replay_rows_naming
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -77,15 +76,6 @@ def command_environment_allows_queue(environ: Mapping[str, str] | None = None) -
 
 
 _parse_timestamp = parse_utc_timestamp
-
-
-def _state_items(payload: object) -> list[dict[str, object]]:
-    if not isinstance(payload, dict):
-        return []
-    raw_items = payload.get("items")
-    if not isinstance(raw_items, list):
-        return []
-    return [{str(key): value for key, value in item.items()} for item in raw_items if isinstance(item, dict)]
 
 
 def _envelope(
@@ -214,12 +204,9 @@ def issue_command_capability(
         },
         create_key=True,
     )
-    store.set_sync_payload(COMMAND_CAPABILITY_STATE_KEY, capability, issued_at.isoformat())
-    # Never inherit a result or active lease from the historical always-on
-    # queue or from an earlier revoked capability.
-    store.delete_sync_payload(COMMAND_QUEUE_RUNTIME_STATE_KEY)
-    store.delete_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY)
+    # The runtime installs it and, in the same transaction, drops any result,
+    # lease, grant or waiting job left by an earlier queue or capability.
+    _ledger(store, "issue", now=issued_at.isoformat(), capability=capability)
     _audit(
         store,
         "cloud_command.capability_issued",
@@ -270,6 +257,18 @@ def _binding_for_resident(store: GuardStore) -> tuple[str | None, str | None, st
     return device_id, workspace_id, None
 
 
+def _replay_subject(subject: object) -> object:
+    """Send the replay lookup only the fields it filters on.
+
+    A job payload can be far larger than the ledger's request limit, and the
+    lookup reads nothing but the job id and the idempotency key.
+    """
+
+    if not isinstance(subject, Mapping):
+        return subject
+    return {key: subject[key] for key in ("id", "idempotencyKey") if key in subject}
+
+
 def _capability_verdict(
     store: GuardStore,
     *,
@@ -290,9 +289,17 @@ def _capability_verdict(
     home = _resident_home(store)
     key_b64, key_id = _signing_material_for_resident(store)
     device_id, workspace_id, oauth_error = _binding_for_resident(store)
+    current = now if now is not None else datetime.now(timezone.utc).isoformat()
     subject = job if job is not None else replay_identity
     replay_items = (
-        replay_rows_naming(_state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY)), subject)
+        _ledger_rows(
+            _ledger(
+                store,
+                "replay_rows",
+                now=current,
+                subject=_replay_subject(subject),
+            )
+        )
         if subject is not None
         else []
     )
@@ -303,7 +310,7 @@ def _capability_verdict(
         device_id=device_id,
         workspace_id=workspace_id,
         oauth_error=oauth_error,
-        now=now if now is not None else datetime.now(timezone.utc).isoformat(),
+        now=current,
         job=job,
         schema_versions=dict(schema_versions or {}),
         replay_items=replay_items,
@@ -392,11 +399,8 @@ def revoke_command_capability(
 ) -> dict[str, object]:
     revoked_at = _now_datetime(now).isoformat()
     previous = command_capability_status(store, now=revoked_at)
-    store.delete_sync_payload(COMMAND_CAPABILITY_STATE_KEY)
-    store.delete_sync_payload(COMMAND_LOCAL_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY)
-    store.delete_sync_payload(COMMAND_REPLAY_STATE_KEY)
-    store.delete_sync_payload(COMMAND_QUEUE_RUNTIME_STATE_KEY)
+    # The capability and every ledger row go in one runtime transaction.
+    _ledger(store, "clear", now=revoked_at)
     _audit(
         store,
         "cloud_command.capability_revoked",

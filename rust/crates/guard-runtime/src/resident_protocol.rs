@@ -80,6 +80,8 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_policy_admission_op::HOOK_POLICY_ADMISSION_FEATURE.into(),
         crate::hook_connector_facts_op::HOOK_CONNECTOR_FACTS_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE.into(),
         crate::directory_trust::DIRECTORY_TRUST_FEATURE.into(),
         crate::directory_trust::HOOK_PATH_RULES_FEATURE.into(),
         crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
@@ -94,6 +96,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // The edge mediates a Pi or Oh My Pi `PostToolUse` against the managed
         // structured-output policy the envelope carries.
         "edge-structured-output-v1".into(),
+        crate::edge_structured::DIRECT_LANE_FEATURE.into(),
         "git-execution-context-v1".into(),
         "native-resident-client-v1".into(),
         "shell-helpers-v1".into(),
@@ -111,6 +114,8 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::cloud_event_command::FEATURE.into(),
         crate::cloud_event_command::RECEIPTS_FEATURE.into(),
         crate::cloud_event_command::REQUEST_FEATURE.into(),
+        crate::cloud_event_command::COMMAND_LEASE_FEATURE.into(),
+        crate::cloud_event_command::COMMAND_REPORT_FEATURE.into(),
         crate::cloud_event_command::OAUTH_REFRESH_FEATURE.into(),
         crate::cloud_event_command::OAUTH_REFRESH_CIRCUIT_FEATURE.into(),
         crate::plugin_telemetry_host::FEATURE.into(),
@@ -233,6 +238,7 @@ pub(crate) enum ResidentOperationV1 {
     ),
     ApprovalExtensionRecommendation(guard_contracts::ApprovalExtensionRecommendationRequestV1),
     GithubCliClassify(GithubCliClassifyRequestV1),
+    CommandJobPlan(guard_contracts::CommandJobPlanRequestV1),
     GithubWorkflowPrepare(guard_contracts::GithubWorkflowPrepareRequestV1),
     ProtectRequest(ProtectRequestRequestV1),
     ProtectAdvisoryMerge(guard_contracts::ProtectAdvisoryMergeRequestV1),

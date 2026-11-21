@@ -21,8 +21,10 @@ from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
+_AGENTIC_LINKEDIN = _FILESYSTEM.with_name("mcp.agentic-linkedin.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_WEBCRAWL = _FILESYSTEM.with_name("mcp.webcrawl.json")
 _LIENZO_UI = _FILESYSTEM.with_name("mcp.lienzo-ui.json")
 _KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
@@ -39,6 +41,12 @@ def _filesystem_payload() -> dict[str, object]:
 def _tether_payload() -> dict[str, object]:
     """Read the authored Tether manifest so missing tools cannot hide behind fallback defaults."""
     payload = json.loads(_TETHER.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _agentic_linkedin_payload() -> dict[str, object]:
+    payload = json.loads(_AGENTIC_LINKEDIN.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -71,6 +79,57 @@ def _rei_skills_payload() -> dict[str, object]:
     payload = json.loads(_REI_SKILLS.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _webcrawl_payload() -> dict[str, object]:
+    payload = json.loads(_WEBCRAWL.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_webcrawl_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed webcrawl launch on the exact npm version."""
+    payload = _webcrawl_payload()
+    validate_mcp_contribution(payload, filename=_WEBCRAWL.name)
+    assert payload["id"] == "mcp.webcrawl"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "@webcrawl/mcp@1.4.5",
+    }
+
+
+def test_webcrawl_unlisted_tools_require_review_once_locally_enabled() -> None:
+    payload = _webcrawl_payload()
+    assert mcp_tool_state(payload, "web_monitor") == "review"
+    assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
+    assert mcp_tool_state(payload, "web_parse_status") == "inherit"
+
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "@webcrawl/mcp@1.4.5"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="webcrawl",
+        tool_name="unlisted_future_tool",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    catalog_id = "command.mcp-webcrawl"
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    cloud_only = _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),))
+    assert apply_contributed_mcp_decision(cloud_only, artifact, "allow") is None
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED),))
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_rei_skills_launch_package_is_version_pinned() -> None:
@@ -135,6 +194,62 @@ def test_tether_contribution_is_external_opt_in() -> None:
     assert payload["trustClass"] == "external"
     assert payload["activation"] == "opt-in"
     assert payload["launch"] == {"kind": "package-launcher", "command": "uvx", "package": "tether-memory"}
+
+
+def test_agentic_linkedin_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed agentic-linkedin launch on the exact npm version."""
+    payload = _agentic_linkedin_payload()
+    validate_mcp_contribution(payload, filename=_AGENTIC_LINKEDIN.name)
+    assert payload["id"] == "mcp.agentic-linkedin"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "agentic-linkedin@0.1.0",
+    }
+
+
+def test_agentic_linkedin_private_reads_require_review() -> None:
+    payload = _agentic_linkedin_payload()
+    defaults = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert defaults["get_posts"] == "review"
+    assert defaults["get_voice_profile"] == "review"
+    assert mcp_tool_state(payload, "get_posts") == "review"
+    assert mcp_tool_state(payload, "get_voice_profile") == "review"
+
+
+def test_agentic_linkedin_stays_inert_until_local_admin_enable() -> None:
+    """Keep LinkedIn tools inert until a local admin enables the external catalog entry."""
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "agentic-linkedin@0.1.0"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="agentic-linkedin",
+        tool_name="get_posts",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    catalog_id = "command.mcp-agentic-linkedin"
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    assert (
+        apply_contributed_mcp_decision(
+            _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),)),
+            artifact,
+            "allow",
+        )
+        is None
+    )
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED),))
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")
 
 
 def test_tether_declares_every_memory_tool_with_inherited_policy() -> None:
@@ -418,3 +533,50 @@ def test_frozen_mcp_payloads_fail_closed_without_package_data(tmp_path: Path, mo
     monkeypatch.setattr(mcp_loader.resources, "files", missing_package)
     with pytest.raises(FileNotFoundError, match="contributions"):
         mcp_loader._load_packaged_payloads()
+
+
+def test_apple_docs_only_inherits_policy_for_tools_in_the_pinned_release() -> None:
+    manifest = _FILESYSTEM.with_name("mcp.apple-docs-2.0-mcp.json")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    validate_mcp_contribution(payload, filename=manifest.name)
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "apple-docs-2.0-mcp@3.0.0",
+    }
+    assert {tool["name"]: tool["state"] for tool in payload["tools"]} == {
+        "search_apple_docs": "inherit",
+        "get_apple_doc_content": "inherit",
+        "list_technologies": "inherit",
+        "search_docs_map": "inherit",
+        "list_wwdc_videos": "inherit",
+        "search_wwdc_content": "inherit",
+        "get_wwdc_video": "inherit",
+        "other": "review",
+    }
+
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-y", "apple-docs-2.0-mcp@3.0.0"),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="apple-docs-2.0-mcp",
+        tool_name="search_framework_symbols",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    catalog_id = "command.mcp-apple-docs-2.0-mcp"
+    assert apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow") is None
+    cloud_only = _AuthorityStore((_layer(ControlLayerKind.SIGNED_CLOUD, catalog_id, ControlState.ENABLED),))
+    assert apply_contributed_mcp_decision(cloud_only, artifact, "allow") is None
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED),))
+    decision = apply_contributed_mcp_decision(enabled, artifact, "allow")
+    assert decision is not None
+    assert decision[:2] == ("review", "catalog-mcp-extension")

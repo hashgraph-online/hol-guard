@@ -10,8 +10,10 @@ from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
+from ..native_hook_direct_route import native_or_daemon_edge
 from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
+from ..native_policy_fence_window import POLICY_SOURCE_FENCE_ERROR, PolicySourceFenceBusyError
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -25,7 +27,6 @@ from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
 )
 from .hook_native_saved_approval import native_exact_command_block_response
-from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -33,13 +34,7 @@ from .hook_worker_native_review import (
     review_native_edge,
     superseded_post_tool_snapshot,
 )
-from .hook_worker_structured import (
-    read_structured_view,
-    structured_destination_required,
-    withhold_stale_forward,
-    withhold_structured_destination,
-    withholds_structured_destination,
-)
+from .hook_worker_unavailable import structured_outage_overlay
 
 
 def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
@@ -223,6 +218,7 @@ class HookWorkerNativeMixin:
         event_name: str,
         guard_home: Path,
         workspace: Path | None,
+        deadline: float | None = None,
     ) -> dict[str, object]:
         """Withhold a managed structured destination when native proof is absent.
 
@@ -231,14 +227,14 @@ class HookWorkerNativeMixin:
         structured destination keeps the existing availability response.
         """
 
-        if not withholds_structured_destination(harness=harness, event_name=event_name):
-            return response
-        # The edge never answered, so nothing resolved the policy. Read it
-        # again: one activated while the edge was tried must still apply.
-        resolved = read_structured_view(lambda: self._load_config(guard_home, workspace))
-        if not structured_destination_required(resolved, harness=harness):
-            return response
-        return withhold_structured_destination(response)
+        overlay = structured_outage_overlay(
+            harness=harness,
+            event_name=event_name,
+            guard_home=guard_home,
+            deadline=deadline,
+            load_config=lambda: self._load_config(guard_home, workspace),
+        )
+        return {**response, **overlay} if overlay else response
 
     def _review_native_edge(
         self: _HookWorkerNativeHost,
@@ -298,38 +294,32 @@ class HookWorkerNativeMixin:
         # Worker threads are reused, so clear any failure code left by an
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
-        # The edge mediates a managed structured destination itself, from the
-        # managed policy only this daemon reads. It is read once, ahead of the
-        # call, and does not depend on the native decision.
-        structured_view = (
-            read_structured_view(lambda: self._load_config(guard_home, workspace))
-            if withholds_structured_destination(harness=harness, event_name=event_name)
-            else None
-        )
         for retried in (False, True):
-            edge = self._review_raw_hook_native(
+            edge, direct_answer = native_or_daemon_edge(
+                self,
                 payload=payload,
                 harness=harness,
-                event=event_name,
-                guard_home=guard_home,
+                event_name=event_name,
+                default_harness=default_harness,
                 home_dir=home_dir,
-                cwd=workspace,
-                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-                observe_mode=recording_only,
+                guard_home=guard_home,
+                workspace=workspace,
                 deadline=deadline,
                 policy_snapshot=policy_snapshot,
-                **({"request_id": probe[1]} if probe is not None else {}),
-                local_cli_rules=True,
-                observe_local_cli=True,
-                record_receipt=(
-                    not defer_accepted_recording
-                    and callable(getattr(self.activity_writer, "submit_native_decision_receipt", None))
-                ),
-                # The edge rewrites a call it routes to the contained sink in
-                # the same answer.
-                containment_sink=True,
-                **({"structured_output_config": structured_view} if structured_view is not None else {}),
+                recording_only=recording_only,
+                defer_accepted_recording=defer_accepted_recording,
+                probe=probe,
+                claim_saved_approval=claim_saved_approval,
             )
+            if direct_answer:
+                if edge is None:
+                    break
+                receipt = self._record_native_decision_receipt(edge.get("receipt"))
+                if receipt is not None and defer_accepted_recording and deferred_receipts is not None:
+                    deferred_receipts.append(receipt)
+                if receipt is not None and capture_receipts is not None and edge.get("harness") == "codex":
+                    capture_receipts.append(receipt)
+                return _edge_harness_response(edge), True
             refreshed = (
                 None
                 if edge is not None or retried
@@ -348,8 +338,8 @@ class HookWorkerNativeMixin:
             record_native_resident_client_failure_code(None)
         if edge is None:
             failure = native_resident_client_failure_code()
-            if failure in POLICY_SOURCE_FENCE_ERRORS and event_name in {"PreToolUse", "UserPromptSubmit"}:
-                raise PolicySourceFenceBusyError(failure, recording_only=recording_only)
+            if failure == POLICY_SOURCE_FENCE_ERROR and event_name in {"PreToolUse", "UserPromptSubmit"}:
+                raise PolicySourceFenceBusyError(failure)
             if (
                 isinstance(failure, str)
                 and event_name in {"PreToolUse", "UserPromptSubmit"}
@@ -386,6 +376,7 @@ class HookWorkerNativeMixin:
                     event_name=event_name,
                     guard_home=guard_home,
                     workspace=workspace,
+                    deadline=deadline,
                 ),
                 False,
             )
@@ -564,17 +555,7 @@ class HookWorkerNativeMixin:
                 payload=payload,
                 succeeded=hook_post_succeeded(native_event, payload),
             )
-        response = _edge_harness_response(edge)
-        if structured_view is not None:
-            edge_result = edge.get("result")
-            response = withhold_stale_forward(
-                response,
-                view=structured_view,
-                load_config=lambda: self._load_config(guard_home, workspace),
-                deadline=deadline,
-                allowed=isinstance(edge_result, dict) and edge_result.get("decision") == "allow",
-            )
-        return (response, True)
+        return (_edge_harness_response(edge), True)
 
     def _record_native_decision_receipt(self: _HookWorkerNativeHost, receipt: object) -> Mapping[str, object] | None:
         """Hold the edge's receipt for this hook; the edge checked it before answering."""

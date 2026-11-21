@@ -207,6 +207,16 @@ only validates the stored hint, builds the wire view of the control layers it
 already holds, and shape-checks the answer; with no resident there is no
 recommendation and no Python evaluation.
 
+Always allow on a review held only because an allowed script changed moves the
+script's allow to the new version (`local_clis/local_cli_reallow.py`). This stays
+in Python for now because it runs inside approval resolution
+(`apply_approval_resolution`), which has no Rust equivalent yet. It reads the
+stored hint and the listed custom extension, then writes through the existing
+grant writer with the revision read first, so a newer block makes the write
+fail. The hook side's idea of a changed script (`allowed_earlier_version`,
+`rust/crates/guard-runtime/src/connector_setup.rs`) remains the one that names
+the card. When approval resolution moves to Rust, this check moves with it.
+
 What a local Extension control draft may change is the resident's too. Three
 `extension_control` queries (`mutation_bounds`, `mutation_validate` and
 `mutability_validate`,

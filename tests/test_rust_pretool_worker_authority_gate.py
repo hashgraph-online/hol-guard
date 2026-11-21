@@ -50,7 +50,7 @@ def test_current_worker_reaches_native_authority_through_review_helper() -> None
         ),
         (
             "hook_worker_native.py",
-            "edge = self._review_raw_hook_native(",
+            "edge, direct_answer = native_or_daemon_edge(",
             "edge = self.unavailable_review(",
             "HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge",
         ),
@@ -85,9 +85,8 @@ def test_missing_native_authority_link_fails_closed(
             "does not return the native edge harness response",
         ),
         (
-            "        response = _edge_harness_response(edge)\n        if structured_view is not None:",
-            "        response = harness_json_from_native_post_tool(native_harness, native_result)\n"
-            "        if structured_view is not None:",
+            "            rendered = _edge_harness_response(edge)",
+            "            rendered = harness_json_from_native_post_tool(native_harness, native_result)",
             "renders PostToolUse in Python",
         ),
     ],

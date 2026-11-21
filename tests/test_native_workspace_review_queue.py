@@ -19,10 +19,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     disable_exact_cloud_review,
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_executor import execute_exact_cloud_review_operation
-from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
-    exact_result,
-    exact_transport_job,
-)
+from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_transport_job
 from codex_plugin_scanner.guard.runtime.native_workspace_review import NativeWorkspaceReviewError
 from codex_plugin_scanner.guard.runtime.native_workspace_review_queue import (
     NativeWorkspaceReviewQueueError,
@@ -35,6 +32,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import (
     add_review_request,
     connected_exact_review_store,
+    exact_result,
     exact_review_job,
     review_request,
 )
@@ -327,6 +325,7 @@ def test_native_executor_applies_receipt_without_external_resume(
     assert data["localRequestId"] == "request-1"
 
 
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_native_exact_result_binds_server_request_and_receipt() -> None:
     job: dict[str, object] = {
         "id": "native-job-1",

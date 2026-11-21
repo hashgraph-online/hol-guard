@@ -42,7 +42,7 @@ def _stale_companion(tmp_path: Path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file mode contract")
 def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.jsonc import loads_jsonc
+    from codex_plugin_scanner.json_comment_stripping import strip_jsonc_comments
     from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
@@ -59,7 +59,7 @@ def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> N
     assert "// launcher note" in result
     assert stat.S_IMODE(config.stat().st_mode) == 0o640
     expected = payload["mcp"]["hol-guard::test"]["command"]
-    actual = loads_jsonc(result)
+    actual = json.loads(strip_jsonc_comments(result))
     actual["mcp"]["hol-guard::test"]["command"] = expected
     assert actual == payload
 

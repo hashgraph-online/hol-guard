@@ -28,9 +28,10 @@ _RESPONSE_FEATURE = "hook-harness-response-v1"
 # Python no longer re-checks the edge result or receipt; only a resident that
 # checks its own answer may be trusted with it.
 _SELF_CHECK_FEATURE = "edge-self-check-v1"
-# The edge answers the Oh My Pi / Pi structured-output mediation itself when
-# the envelope carries the daemon's managed-policy view.
+# The edge answers the Oh My Pi / Pi structured-output mediation itself from
+# the resident-authenticated direct-lane binding.
 STRUCTURED_OUTPUT_FEATURE = "edge-structured-output-v1"
+STRUCTURED_OUTPUT_BINDING_FEATURE = "edge-structured-output-binding-v1"
 _UNSUPPORTED_EVENT_CODE = "native_hook_event_unsupported"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _LOCAL_CLI_RULE_FEATURE = "edge-local-cli-rule-v1"
@@ -259,9 +260,23 @@ def review_raw_hook_native(
     status = runtime_status if runtime_status is not None else native_runtime_status()
     event_key = event.strip().lower().replace("_", "").replace("-", "")
     required_features = {_EDGE_FEATURE, _CLIENT_FEATURE, _RESPONSE_FEATURE, _SELF_CHECK_FEATURE}
-    if structured_output_config is not None:
-        # A resident that cannot mediate would ignore the view and answer an
-        # allow the policy never covered, so it is refused rather than trusted.
+    normalized_harness = harness.strip().lower().replace("_", "-")
+    if event_key in {
+        "posttool",
+        "posttooluse",
+        "posttoolcall",
+        "aftershellexecution",
+        "afterreadfile",
+        "afterwritefile",
+        "aftermcpexecution",
+    } and normalized_harness in {"pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"}:
+        # The resident resolves the managed structured-output view from its
+        # authenticated direct-lane binding. Older residents without that
+        # binding capability cannot be trusted with this hook path.
+        required_features.add(STRUCTURED_OUTPUT_BINDING_FEATURE)
+    elif structured_output_config is not None:
+        # Compatibility callers that still carry the view use the original
+        # envelope capability until their caller is migrated.
         required_features.add(STRUCTURED_OUTPUT_FEATURE)
     if event_key in {
         "pretool",
