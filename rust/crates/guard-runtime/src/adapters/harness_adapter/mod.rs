@@ -94,6 +94,7 @@ mod cursor_surfaces;
 mod describe;
 mod describe_env;
 mod desktop_core;
+pub(crate) use desktop_core::frozen_sink_launcher;
 mod detect_merged;
 mod durable_runtime;
 mod files;
