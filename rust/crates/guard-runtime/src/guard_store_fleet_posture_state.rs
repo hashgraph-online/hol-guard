@@ -29,6 +29,8 @@ pub(crate) fn handles(method: &str) -> bool {
             | "set_fleet_posture_reporting"
             | "request_full_fleet_inventory"
             | "commit_fleet_posture_sent"
+            | "fleet_posture_cached_diagnostics"
+            | "record_fleet_posture_diagnostics"
     )
 }
 
@@ -42,6 +44,8 @@ pub(crate) fn dispatch(
         "set_fleet_posture_reporting" => set_reporting_method(connection, args),
         "request_full_fleet_inventory" => request_full_method(connection, args),
         "commit_fleet_posture_sent" => commit_sent_method(connection, args),
+        "fleet_posture_cached_diagnostics" => diagnostics::cached_method(connection, args),
+        "record_fleet_posture_diagnostics" => diagnostics::record_method(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }
@@ -144,6 +148,9 @@ fn joined_items(next_state: &Map<String, Value>) -> StoreResult<Value> {
     }
     Ok(Value::Object(state))
 }
+
+#[path = "guard_store_fleet_posture_diagnostics.rs"]
+mod diagnostics;
 
 #[cfg(test)]
 #[path = "guard_store_fleet_posture_state_tests.rs"]
