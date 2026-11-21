@@ -340,18 +340,23 @@ pub(crate) fn evaluate_package_review_plan(
         ),
         None => (Value::Null, false, None, false),
     };
+    let mut payload = json!({
+        "artifact": artifact,
+        "may_allow": may_allow,
+        "workspace": moved,
+        "keyed": keyed,
+    });
+    if may_allow && request.include_registry_retry == Some(true) {
+        payload["registry_retry"] =
+            crate::hook_package_review_settlement::registry_retry(&request.harness);
+    }
     crate::encode_response(&SupplyChainEvalResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),
-        payload: Some(json!({
-            "artifact": artifact,
-            "may_allow": may_allow,
-            "workspace": moved,
-            "keyed": keyed,
-        })),
+        payload: Some(payload),
     })
 }
 

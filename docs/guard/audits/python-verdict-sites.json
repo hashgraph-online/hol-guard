@@ -131,26 +131,6 @@
       "note": "The fixed deny render_pre_tool falls back to when the resident cannot compose the silent block."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
-      "func": "_blocked",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "Renders the block response."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
-      "func": "native_package_review_response",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "Renders the resident's review_settlement: an allow only where the resident settled the review as allow and the package review plan's may_allow still holds. Closed MAJ-AC-01 finding: the script-free watch widening now lives in the resident."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",

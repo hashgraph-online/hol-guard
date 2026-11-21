@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.native_supply_chain_egress as egress_module
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import LAUNCHER_ARGS
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
@@ -245,6 +246,7 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    native_hook_force: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -262,7 +264,12 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
 
     isolate_terminal_block_patches(monkeypatch, unexpected_browser_approval)
 
-    def fail_subprocess(*args: object, **kwargs: object) -> object:
+    real_run = guard_commands_module.subprocess.run
+
+    def fail_subprocess(command: object, *args: object, **kwargs: object) -> object:
+        # Policy publication needs the native launcher to build the contained sink command.
+        if command == [str(native_hook_force), *LAUNCHER_ARGS]:
+            return real_run(command, *args, **kwargs)  # type: ignore[call-overload]
         raise AssertionError("blocked package request must not launch a subprocess")
 
     monkeypatch.setattr(guard_commands_module.subprocess, "run", fail_subprocess)

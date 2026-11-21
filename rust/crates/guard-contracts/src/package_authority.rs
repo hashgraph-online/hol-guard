@@ -446,6 +446,9 @@ pub struct PackageReviewPlanRequestV1 {
     /// and only a block verdict applies to it. Absent means a package review.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review_reason: Option<String>,
+    /// Return a pre-rendered retry when the plan can settle an install.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_registry_retry: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------
