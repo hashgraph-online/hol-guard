@@ -89,6 +89,8 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             policy_store.require_store_path(store_path)?;
         }
     }
+    let require_policy_store =
+        || policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned());
     match request {
         ResidentRequestV1::Edge(request) => {
             let policy_store =
@@ -131,18 +133,13 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 crate::oneshot::evaluate_pre_tool_request(&request)
             }
             ResidentOperationV1::PolicySnapshotPush(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                policy_store.push(&request)
+                require_policy_store()?.push(&request)
             }
             ResidentOperationV1::HookDirect(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::hook_direct::evaluate(request, policy_store)
+                crate::hook_direct::evaluate(request, require_policy_store()?)
             }
             ResidentOperationV1::HookDirectEvidenceDrain(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let policy_store = require_policy_store()?;
                 let source = policy_store.direct_lane_writer_source();
                 crate::hook_direct_evidence::drain(
                     &request,
@@ -165,15 +162,14 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::HookPolicyFenceWindow(request) => {
                 crate::hook_policy_fence_window_op::evaluate(&request)
             }
+            ResidentOperationV1::HookWorkspaceOverlayReadiness(request) => {
+                crate::policy_store::policy_store_direct_lane::subdirectory::evaluate_workspace_overlay_readiness(&request)
+            }
             ResidentOperationV1::McpRelayDecide(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::mcp_relay_decide::evaluate(request, policy_store)
+                crate::mcp_relay_decide::evaluate(request, require_policy_store()?)
             }
             ResidentOperationV1::McpRelayReady(request) => {
-                let policy_store =
-                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::mcp_relay_ready::evaluate(&request, policy_store)
+                crate::mcp_relay_ready::evaluate(&request, require_policy_store()?)
             }
             ResidentOperationV1::McpRelayCommit(request) => {
                 let policy_store =
