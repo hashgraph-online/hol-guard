@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -50,6 +51,7 @@ def _pause(
     native_result: Mapping[str, object],
     local_cli_rule: Mapping[str, object] | None = None,
     review_evidence: Mapping[str, object] | None = None,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     return review.pause_native_pre_tool_for_approval(
         object(),
@@ -58,7 +60,7 @@ def _pause(
         native_result=native_result,
         native_receipt=None,
         workspace=tmp_path,
-        guard_home=tmp_path / "guard-home",
+        guard_home=tmp_path / "guard-home" if guard_home is None else guard_home,
         local_cli_rule=local_cli_rule,
         review_evidence=review_evidence,
     )
@@ -101,3 +103,43 @@ def test_missing_or_rejected_evidence_is_denied_before_any_saved_decision(
 
     assert response["reason_code"] == "native_review_policy_binding_invalid"
     assert response["policy_action"] == "block"
+
+
+def _settled_retry(monkeypatch: pytest.MonkeyPatch, reuse: str):
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
+
+    facts = SimpleNamespace(command="make build", launch_target="make build", tool_name="Bash")
+    monkeypatch.setattr(review, "native_hook_facts", lambda *_a, **_k: facts)
+    monkeypatch.setattr(review, "native_exact_command_block_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(review, "native_saved_decision_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(review, "native_review_settle", lambda *_a, **_k: reuse)
+    monkeypatch.setattr(review, "native_package_review_response", lambda *_a, **_k: pytest.fail("requeued"))
+    return review
+
+
+@pytest.mark.parametrize(
+    ("reuse", "action", "status"),
+    [("allowed", "allow", "accepted"), ("blocked", "block", "blocked")],
+)
+def test_a_settled_retry_uses_the_resident_reply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, reuse: str, action: str, status: str
+) -> None:
+    review = _settled_retry(monkeypatch, reuse)
+
+    response = _pause(review, tmp_path, _REVIEW, review_evidence=_evidence(), guard_home=native_context_digest)
+
+    assert response["policy_action"] == action
+    assert response["approval_reuse_status"] == status
+
+
+@pytest.mark.parametrize("reuse", ["allowed", "blocked"])
+def test_unavailable_retry_rendering_does_not_accept_or_requeue_the_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reuse: str
+) -> None:
+    review = _settled_retry(monkeypatch, reuse)
+    monkeypatch.setattr(review, "native_render_cli", lambda *_a, **_k: None)
+
+    response = _pause(review, tmp_path, _REVIEW, review_evidence=_evidence())
+
+    assert response["policy_action"] == "block"
+    assert "approval_reuse_status" not in response

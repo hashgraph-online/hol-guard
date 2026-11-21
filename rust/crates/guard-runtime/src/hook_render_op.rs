@@ -96,6 +96,22 @@ fn cli_payload(outcome: CliOutcome) -> Value {
 
 fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
+    if request.kind == "review_reuse" {
+        use crate::hook_direct::saved_decision::{consume::reuse_response, render_approval};
+
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let verdict = object_of(params.get("verdict")).ok_or("native_hook_render_invalid")?;
+        let outcome = params
+            .get("outcome")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        return match reuse_response(harness, verdict, outcome, |harness, verdict, status| {
+            Some(render_approval(harness, verdict, status))
+        }) {
+            Some(Value::Object(document)) => Ok(cli_payload(CliOutcome::Document(document))),
+            _ => Err("native_hook_render_invalid"),
+        };
+    }
     if request.kind == "package_review_settle" {
         let inputs = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         return Ok(cli_payload(CliOutcome::Document(

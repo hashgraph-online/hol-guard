@@ -164,12 +164,11 @@
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "pause_native_pre_tool_for_approval",
       "root": "hook",
-      "reading": "records-approval",
+      "reading": "fails-closed",
       "actions": [
-        "allow",
         "block"
       ],
-      "note": "Blocks while the review is pending, and allows only on the two saved-approval matches native_review_settle finds in the store."
+      "note": "Uses the fixed deny envelope when the resident cannot render a settled retry."
     },
     {
       "file": "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
