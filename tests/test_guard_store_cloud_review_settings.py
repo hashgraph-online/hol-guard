@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -27,7 +28,7 @@ def test_an_empty_store_reads_an_idle_view(tmp_path: Path) -> None:
         ({"state": "error", "last_error_code": "cloud_auth_expired"}, True),
         ({"state": "error", "last_error_code": "cloud_unreachable"}, False),
         ({"state": "error", "last_error_code": None, "last_error": "HTTP Error 401: Unauthorized"}, False),
-        ({"state": "error", "last_error": "HTTP Error 401: Unauthorized"}, True),
+        ({"state": "error", "last_error": "HTTP Error 401: Unauthorized"}, False),
         ({"state": "idle", "last_error_code": "cloud_connect_required"}, False),
     ],
 )
@@ -60,3 +61,13 @@ def test_a_malformed_recovery_is_refused_without_a_write(tmp_path: Path) -> None
     with pytest.raises(ValueError, match="invalid_error"):
         store.record_cloud_review_recovery(binding=_BINDING, error="", now=_NOW)
     assert store.get_sync_payload("guard_cloud_review_settings_recovery") is None
+
+
+def test_a_binding_that_is_not_a_mapping_is_refused_without_a_write(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    pairs: Any = [("workspace_id", "ws-1")]
+    with pytest.raises(ValueError, match="invalid_binding"):
+        store.record_cloud_review_recovery(binding=pairs, error="worker_refresh_failed", now=_NOW)
+    assert store.get_sync_payload("guard_cloud_review_settings_recovery") is None
+    with pytest.raises(ValueError, match="invalid_binding"):
+        store.cloud_review_settings_state(binding=pairs)

@@ -114,15 +114,13 @@ fn a_recorded_code_decides_whether_sign_in_is_needed() {
 }
 
 #[test]
-fn rows_without_a_code_fall_back_to_the_message() {
-    for prefix in AUTH_ERROR_PREFIXES {
-        let error = format!("{prefix} Sign in again.");
-        assert!(reconnect(&json!({"state": "error", "last_error": error})));
-    }
+fn the_message_text_never_decides() {
     assert!(!reconnect(
-        &json!({"state": "error", "last_error": "Guard Cloud timed out."})
+        &json!({"state": "error", "last_error": "HTTP Error 401: Unauthorized"})
     ));
-    assert!(!reconnect(&json!({"state": "error", "last_error": 401})));
+    assert!(!reconnect(
+        &json!({"state": "error", ERROR_CODE: 401, "last_error": "HTTP Error 401: Unauthorized"})
+    ));
     assert!(!reconnect(&json!({"state": "error"})));
 }
 

@@ -21,12 +21,6 @@ const SYNC_KEY: &str = "guard_cloud_review_sync_state";
 const ERROR_CODE: &str = "last_error_code";
 /// Codes that say sign-in is still required.
 const AUTH_CODES: [&str; 2] = ["cloud_auth_expired", "cloud_connect_required"];
-/// Error texts older sync runs stored before they recorded a code.
-const AUTH_ERROR_PREFIXES: [&str; 3] = [
-    "Guard authorization expired.",
-    "Guard Cloud sign-in on this device is no longer valid.",
-    "HTTP Error 401:",
-];
 
 /// Whether `method` is one of the Cloud Review settings methods.
 pub(crate) fn handles(method: &str) -> bool {
@@ -69,25 +63,14 @@ fn binding(args: &Args<'_>) -> StoreResult<Value> {
 /// The sync-row half of `cloud_review_reconnect_required`: whether the last
 /// sync run failed in a way that asks for a new sign-in.
 ///
-/// A recorded code decides. A run that cleared the code (the key is present
-/// but not text) means sign-in worked, so an older 401 message no longer
-/// counts. Rows from before the code existed fall back to the message text.
+/// Only a recorded code decides; the error message text never does.
 fn sync_reconnect_required(sync: &serde_json::Map<String, Value>) -> bool {
     if sync.get("state").and_then(Value::as_str) != Some("error") {
         return false;
     }
-    match sync.get(ERROR_CODE) {
-        Some(Value::String(code)) => AUTH_CODES.contains(&code.as_str()),
-        Some(_) => false,
-        None => sync
-            .get("last_error")
-            .and_then(Value::as_str)
-            .is_some_and(|error| {
-                AUTH_ERROR_PREFIXES
-                    .iter()
-                    .any(|prefix| error.starts_with(prefix))
-            }),
-    }
+    sync.get(ERROR_CODE)
+        .and_then(Value::as_str)
+        .is_some_and(|code| AUTH_CODES.contains(&code))
 }
 
 /// `cloud_review_settings_state`: the Cloud Review sync row for `source` (an

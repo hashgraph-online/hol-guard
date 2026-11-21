@@ -15,6 +15,14 @@ class _NativeStore(Protocol):
     ) -> Any: ...
 
 
+def _binding_arg(binding: object) -> object:
+    """A mapping as a plain dict; anything else unchanged, so the native store refuses it."""
+
+    if isinstance(binding, Mapping):
+        return dict(binding)
+    return binding
+
+
 class StoreCloudReviewSettingsMixin:
     """The Cloud Review sync view and the settings recovery row, kept by the native store."""
 
@@ -28,7 +36,7 @@ class StoreCloudReviewSettingsMixin:
 
         answer = self._native_store_call(
             "cloud_review_settings_state",
-            {"source": self.guard_source, "binding": None if binding is None else dict(binding)},
+            {"source": self.guard_source, "binding": _binding_arg(binding)},
         )
         sync = answer.get("sync") if isinstance(answer, dict) else None
         if not isinstance(sync, dict):
@@ -46,5 +54,5 @@ class StoreCloudReviewSettingsMixin:
 
         self._native_store_call(
             "record_cloud_review_recovery",
-            {"binding": None if binding is None else dict(binding), "error": error, "now": now},
+            {"binding": _binding_arg(binding), "error": error, "now": now},
         )
