@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 
@@ -19,10 +20,16 @@ def isolate_terminal_block_patches(monkeypatch: Any, unexpected: Callable[..., o
         monkeypatch.setattr(module, "wait_for_approval_requests", unexpected)
     monkeypatch.setattr(interaction, "wait_for_approval_requests", unexpected)
     real_run = commands_module.subprocess.run
+    launcher_path = Path(launcher).resolve()
 
     def run_launcher(command: object, *args: Any, **kwargs: Any) -> object:
         # Publication needs the native launcher to build the contained sink command.
-        if command == [launcher, *LAUNCHER_ARGS]:
+        if (
+            isinstance(command, list)
+            and tuple(command[1:]) == LAUNCHER_ARGS
+            and isinstance(command[0], str)
+            and Path(command[0]).resolve() == launcher_path
+        ):
             return real_run(command, *args, **kwargs)  # type: ignore[call-overload]
         raise AssertionError("blocked request must not launch a tool subprocess")
 

@@ -40,7 +40,7 @@ pub(crate) fn answer(harness: &str, inputs: &Object) -> Object {
     let mut key = None;
     if keyed {
         if let Some(reuse) = inputs.get("reuse") {
-            key = package_key(package, reuse);
+            key = text(reuse, "artifact_hash").and_then(|hash| package_key(package, Some(hash)));
             if key.is_some()
                 && reuse.get("found") == Some(&Value::Bool(true))
                 && text(reuse, "policy_action") == Some("allow")
@@ -88,15 +88,22 @@ fn approval_inputs(package: &Value, stamp: Option<&Value>) -> Option<Value> {
             }
         }
     }
-    Some(json!({ "argv": argv, "environment": environment }))
+    Some(json!({
+        "argv": argv,
+        "environment": environment,
+        "approval_key": package_key(package, None)?,
+    }))
 }
 
-fn package_key(package: &Value, reuse: &Value) -> Option<Value> {
-    Some(json!({
+fn package_key(package: &Value, artifact_hash: Option<&str>) -> Option<Value> {
+    let mut key = json!({
         "harness": text(package, "harness")?,
         "artifact_id": text(package, "artifact_id")?,
-        "artifact_hash": text(reuse, "artifact_hash")?,
-    }))
+    });
+    if let Some(hash) = artifact_hash {
+        key["artifact_hash"] = json!(hash);
+    }
+    Some(key)
 }
 
 fn allowed(harness: &str, verdict: &Object) -> Value {

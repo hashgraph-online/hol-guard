@@ -230,20 +230,24 @@ def test_an_unavailable_settlement_cannot_queue_an_evaluated_block(
     assert response["prompted"] is False
 
 
+_APPROVAL_KEY_FROM_LOOKUP = {"harness": "omp", "artifact_id": "omp:project:package-request:resident"}
+_LOOKUP = {"argv": ["npm", "ci"], "environment": {}, "approval_key": _APPROVAL_KEY_FROM_LOOKUP}
+
+
 @pytest.mark.parametrize(
     ("lookup", "reuse", "approval"),
     [
         (None, None, None),
-        ({"argv": ["npm", "ci"], "environment": {}}, None, None),
+        (_LOOKUP, None, None),
         (
-            {"argv": ["npm", "ci"], "environment": {}},
+            _LOOKUP,
             {"artifact_hash": KEY["artifact_hash"], "found": False, "policy_action": "review"},
-            KEY,
+            {**_APPROVAL_KEY_FROM_LOOKUP, "artifact_hash": KEY["artifact_hash"]},
         ),
         (
-            {"argv": ["npm", "ci"], "environment": {}},
+            _LOOKUP,
             {"artifact_hash": KEY["artifact_hash"], "found": True, "policy_action": "allow"},
-            KEY,
+            {**_APPROVAL_KEY_FROM_LOOKUP, "artifact_hash": KEY["artifact_hash"]},
         ),
     ],
 )

@@ -65,6 +65,7 @@ fn key_lookup_uses_the_planned_argv_and_the_stamped_path_and_home() {
         json!({
             "argv": ["npm", "install", "name@1.0.0", "--ignore-scripts"],
             "environment": {"PATH": "/opt/example/bin", "HOME": "/example/agent"},
+            "approval_key": {"harness": "omp", "artifact_id": "omp:project:package-request:example"},
         })
     );
     assert!(result["response"].is_null());

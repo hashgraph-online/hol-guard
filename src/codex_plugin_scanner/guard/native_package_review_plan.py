@@ -223,23 +223,22 @@ def native_package_review_response(
     if settled is not None and isinstance(lookup := settled.get("lookup"), dict):
         argv = lookup.get("argv")
         environment = lookup.get("environment")
+        approval_key = lookup.get("approval_key")
         if (
             isinstance(argv, list)
             and argv
             and all(isinstance(token, str) for token in argv)
             and isinstance(environment, dict)
             and all(isinstance(name, str) and isinstance(value, str) for name, value in environment.items())
+            and isinstance(approval_key, dict)
+            and set(approval_key) == {"harness", "artifact_id"}
+            and all(isinstance(value, str) for value in approval_key.values())
         ):
             reuse = _package_reuse_evidence(store, artifact, evaluation, plan.workspace, argv, environment)
             request["reuse"] = reuse
             if reuse is not None and isinstance(artifact_hash := reuse.get("artifact_hash"), str):
-                # The resident requested this key and the package authority
-                # supplied its hash. Keep it if the reply to the lookup is lost.
-                fallback_approval = {
-                    "harness": artifact.harness,
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_hash": artifact_hash,
-                }
+                # Keep the resident's key if the final reply is lost.
+                fallback_approval = {**cast("dict[str, str]", approval_key), "artifact_hash": artifact_hash}
             settled = _settle(harness, request, guard_home, deadline)
     if settled is not None and settled.get("lookup") is None:
         response = settled.get("response")
