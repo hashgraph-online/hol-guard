@@ -27,6 +27,12 @@ pub(super) fn run() -> Result<(), String> {
         [command, rest @ ..] if command == contained_workspace_sink::LAUNCH_COMMAND => {
             std::process::exit(contained_workspace_sink::launch(rest))
         }
+        [command, rest @ ..] if command == context_cli::COMMAND => {
+            std::process::exit(context_cli::run(rest))
+        }
+        [command, rest @ ..] if command == context_mcp::COMMAND => {
+            std::process::exit(context_mcp::run(rest))
+        }
         [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
             std::process::exit(codex_sandbox_check::run(rest))
         }

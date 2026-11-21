@@ -175,7 +175,7 @@ _GET_POLICY_CREATION_SCHEMA: dict[str, object] = {
 }
 
 
-def build_tool_registry(*, context_tools: tuple[str, ...] = ()) -> list[ToolDefinition]:
+def build_tool_registry() -> list[ToolDefinition]:
     """Build the complete typed tool registry.
 
     Returns all six tools with their schemas, annotations, and handlers.
@@ -245,15 +245,11 @@ def build_tool_registry(*, context_tools: tuple[str, ...] = ()) -> list[ToolDefi
             handler=execute_get_policy_creation,
         ),
     ]
-    if context_tools:
-        from .context_tools import definitions
-
-        tools.extend(tool for tool in definitions() if tool.name in context_tools)
     return tools
 
 
-def get_tool_definition(name: str, *, context_tools: tuple[str, ...] = ()) -> ToolDefinition | None:
-    for tool in build_tool_registry(context_tools=context_tools):
+def get_tool_definition(name: str) -> ToolDefinition | None:
+    for tool in build_tool_registry():
         if tool.name == name:
             return tool
     return None
