@@ -206,6 +206,26 @@ pub(crate) fn ensure_resync(
     store.write(RELAXED_RESYNC_MARKER, &level_marker(level, now), now)
 }
 
+/// A `ensure_projection` or `ensure_resync` call that would change nothing:
+/// the store runs it as a read so a no-op sync check takes no write lock. The
+/// action repeats its own check, so a call that does change rows still writes.
+pub(crate) fn is_noop(connection: &Connection, args: &Args<'_>) -> StoreResult<bool> {
+    let Some(level) = args.opt_str("level")? else {
+        return Ok(false);
+    };
+    let marker = match args.opt_str("action")? {
+        Some("ensure_projection") => PRIVACY_PROJECTION_MARKER,
+        Some("ensure_resync") if rank(Some(level)) <= rank(Some("full")) => return Ok(true),
+        Some("ensure_resync") => RELAXED_RESYNC_MARKER,
+        _ => return Ok(false),
+    };
+    let mut store = Store {
+        connection,
+        source: "",
+    };
+    Ok(marker_level(&mut store, marker)?.as_deref() == Some(level))
+}
+
 fn level_arg<'a>(args: &Args<'a>, key: &str) -> StoreResult<&'a str> {
     let level = args.str(key)?;
     if valid_level(level) {

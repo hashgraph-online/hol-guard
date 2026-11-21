@@ -179,6 +179,10 @@ fn evaluate_tracked(
     // the separate block lookup had.
     let kind = if method == "settle_native_review_reuse" && !args.flag("spend")? {
         Kind::Read
+    } else if method == "receipt_redaction_bookkeeping"
+        && crate::guard_store_receipt_redaction::is_noop(&connection, &args)?
+    {
+        Kind::Read
     } else if (method == "count_receipts"
         && kind == Kind::Read
         && receipt_rollups::rebuild_pending(&connection)?)

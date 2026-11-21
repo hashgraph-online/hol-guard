@@ -178,3 +178,89 @@ fn the_method_rejects_an_unknown_action_and_an_invalid_level() {
     assert!(run(json!({"action": "other", "now": T1})).is_err());
     assert!(run(json!({"action": "ensure_resync", "level": "loose", "now": T1})).is_err());
 }
+
+fn sync_state_only() -> Connection {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table sync_state (
+               state_key text primary key, payload_json text not null,
+               updated_at text not null);",
+        )
+        .unwrap();
+    connection
+}
+
+fn args(value: Value) -> serde_json::Map<String, Value> {
+    let Value::Object(map) = value else {
+        unreachable!()
+    };
+    map
+}
+
+#[test]
+fn a_matching_or_full_ensure_check_is_a_no_op_read() {
+    let connection = sync_state_only();
+    let noop = |value: Value| is_noop(&connection, &Args(&args(value))).unwrap();
+    assert!(noop(
+        json!({"action": "ensure_resync", "level": "full", "now": T1})
+    ));
+    assert!(!noop(
+        json!({"action": "ensure_resync", "level": "none", "now": T1})
+    ));
+    assert!(!noop(
+        json!({"action": "ensure_projection", "level": "none", "now": T1})
+    ));
+    assert!(!noop(
+        json!({"action": "persist", "level": "none", "local_level": "none", "now": T1})
+    ));
+    write_encoded(
+        &connection,
+        PRIVACY_PROJECTION_MARKER,
+        "{\"level\": \"none\", \"requeued\": 0}",
+        T1,
+    )
+    .unwrap();
+    write_encoded(
+        &connection,
+        RELAXED_RESYNC_MARKER,
+        "{\"level\": \"none\"}",
+        T1,
+    )
+    .unwrap();
+    assert!(noop(
+        json!({"action": "ensure_projection", "level": "none", "now": T2})
+    ));
+    assert!(!noop(
+        json!({"action": "ensure_projection", "level": "full", "now": T2})
+    ));
+    assert!(noop(
+        json!({"action": "ensure_resync", "level": "none", "now": T2})
+    ));
+}
+
+#[test]
+fn a_failed_requeue_rolls_back_the_cursor_and_level_written_before_it() {
+    // Without the Review outbox tables the requeue fails after the cursor and
+    // level rows are written; the store transaction must undo both.
+    let connection = sync_state_only();
+    write_encoded(&connection, CURSOR_KEY, "{\"last_rowid\": 17}", T1).unwrap();
+    write_encoded(&connection, LEVEL_KEY, "{\"level\": \"full\"}", T1).unwrap();
+    connection.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let request =
+        args(json!({"action": "persist", "level": "none", "local_level": "full", "now": T2}));
+    assert!(method(&connection, "hol-guard", &Args(&request)).is_err());
+    connection.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(
+        read_payload(&connection, CURSOR_KEY).unwrap(),
+        Some(json!({"last_rowid": 17}))
+    );
+    assert_eq!(
+        read_payload(&connection, LEVEL_KEY).unwrap(),
+        Some(json!({"level": "full"}))
+    );
+    assert_eq!(
+        read_payload(&connection, RELAXED_RESYNC_MARKER).unwrap(),
+        None
+    );
+}
