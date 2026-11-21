@@ -17572,14 +17572,14 @@ def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
             }
         )
 
-    real_validate = guard_runner_module.validate_synced_policy_bundle
+    real_cached_validate = synced_policy_module.validate_cached_policy_bundle
     cached_validation_calls = 0
     final_validation_calls = 0
 
     def _initial_anchor(*args, **kwargs):
         nonlocal cached_validation_calls
         cached_validation_calls += 1
-        return real_validate(*args, **kwargs)
+        return real_cached_validate(*args, **kwargs)
 
     def _revoked_anchor(*args, **kwargs):
         nonlocal final_validation_calls
@@ -17588,7 +17588,7 @@ def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
 
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "validate_synced_policy_bundle", _revoked_anchor)
-    monkeypatch.setattr(synced_policy_module, "validate_synced_policy_bundle", _initial_anchor)
+    monkeypatch.setattr(synced_policy_module, "validate_cached_policy_bundle", _initial_anchor)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)

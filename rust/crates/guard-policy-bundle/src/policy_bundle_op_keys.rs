@@ -126,6 +126,7 @@ pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
         "migrate_legacy" => migrate(input),
         "persistable" => persist(input),
         "validate_synced" => crate::policy_bundle_op_synced::synced(input),
+        "validate_cached" => crate::policy_bundle_op_synced::cached(input),
         _ => return None,
     })
 }

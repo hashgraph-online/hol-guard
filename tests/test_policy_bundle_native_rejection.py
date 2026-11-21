@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import synced_policy
+from codex_plugin_scanner.guard import policy_bundle_trusted_keys, synced_policy
 from codex_plugin_scanner.guard.native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
@@ -39,8 +39,7 @@ def test_cached_validation_keeps_the_native_rejection_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: PolicyBundleNativeError, expected: str
 ) -> None:
     bundle = build_cloud_exception_policy_bundle()
-    monkeypatch.setattr(synced_policy, "validate_synced_policy_bundle", lambda *_a, **_k: (bundle, None, ()))
-    monkeypatch.setattr(synced_policy, "policy_bundle_is_enforceable", _raising(error))
+    monkeypatch.setattr(policy_bundle_trusted_keys, "native_policy_bundle", _raising(error))
 
     validated, reason = synced_policy.cached_policy_bundle_validation(GuardStore(tmp_path / "guard-home"), bundle)
 

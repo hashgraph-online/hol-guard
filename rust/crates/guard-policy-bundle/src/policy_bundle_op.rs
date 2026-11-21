@@ -191,7 +191,7 @@ fn with_evidence(kind: &str, input: &Obj, hasher: PayloadHasher) -> Option<Handl
 }
 
 fn needs_evidence(kind: &str, input: &Obj, outcome: &Option<Handled>) -> bool {
-    matches!(kind, "validate_synced" | "validate_v2")
+    matches!(kind, "validate_synced" | "validate_cached" | "validate_v2")
         && input.get("evidence").is_none_or(Value::is_null)
         && matches!(outcome, Some(Ok(value)) if *value == json!({ "needs_evidence": true }))
 }
