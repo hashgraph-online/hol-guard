@@ -28,7 +28,6 @@ from .hook_fail_closed import (
     render_silent_review_block,
 )
 from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
-from .native_review_connector import raise_connector_setup_notice
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -367,7 +366,6 @@ def queue_native_pre_tool_review(
         reason = error.reason if isinstance(error, NativeGuardStoreUnavailable) else type(error).__name__
         _LOGGER.warning("Native review queue failed for %s (%s)", request_id, reason)
         return None
-    raise_connector_setup_notice(store, stored)
     return stored if isinstance(stored, dict) else None
 
 

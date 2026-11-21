@@ -16,6 +16,7 @@
   "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
   "src/codex_plugin_scanner/guard/hook_review/native_review_records.py",
+  "src/codex_plugin_scanner/guard/hook_review/native_review_connector.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_worker_structured.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py",
@@ -309,6 +310,22 @@
    "old_node": "tests/test_mcp_relay_package_evidence_modes.py::test_an_observed_forward_is_recorded_under_the_mode_it_forwarded_in",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/mcp_relay_receipt_package_tests.rs::an_observed_forward_writes_the_allowed_receipt_under_the_mode"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_approval_connector_setup_notice.py::test_a_queued_native_connector_review_raises_one_setup_notice",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_review_notifies_only_once_per_pending_group",
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_context_tests.rs::a_committed_connector_request_can_notify_without_a_returned_row"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_approval_connector_setup_notice.py::test_a_native_review_without_a_connector_raises_no_setup_notice",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/guard_store_native_review_queue_context_tests.rs::a_committed_connector_request_can_notify_without_a_returned_row",
+    "rust/crates/guard-runtime/src/hook_direct_evidence_notice_tests.rs::a_connector_notice_requires_the_matching_pending_grouped_row"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
