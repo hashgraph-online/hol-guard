@@ -13,7 +13,7 @@
   },
   "icon": {
     "kind": "react-icon",
-    "name": "HiMiniCreditCard",
+    "name": "HiMiniBolt",
     "background": "#009EE3"
   },
   "homepage": "https://github.com/DevModee/mercadopago-mcp",
