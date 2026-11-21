@@ -4,6 +4,7 @@
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
   "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
   "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
   "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",

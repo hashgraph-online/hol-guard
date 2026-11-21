@@ -2122,6 +2122,18 @@
    ]
   },
   {
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
+   "module": "codex_plugin_scanner.guard.hook_review.hook_native_exact_action",
+   "source_sha256": "78e8f6f9e1f897226bb38babd20de55d3c38e131317cae058480feae110e422d",
+   "forbidden_symbols": [
+    "_ONCE_ONLY_REASONS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/native_exact_action_op/reasons.rs",
+    "rust/crates/guard-runtime/src/edge_review_evidence.rs"
+   ]
+  },
+  {
    "path": "src/codex_plugin_scanner/guard/hook_review/native_review_allow_hint.py",
    "module": "codex_plugin_scanner.guard.hook_review.native_review_allow_hint",
    "source_sha256": "52a45de318f3dc607279132afd1dfdf65b71e5f8e7037fbf377a41ab8c0800b2",

@@ -12,18 +12,40 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import (
-    _ONCE_ONLY_REASONS,
-    UNPROVEN_LAUNCH,
-)
 from codex_plugin_scanner.guard.hook_review.hook_native_review_binding import native_review_policy_binding
 from codex_plugin_scanner.guard.native_daemon_route import _decide
+from codex_plugin_scanner.guard.native_hook_edge import review_evidence_parts
 from codex_plugin_scanner.guard.native_resident_decision import ResidentOperation
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import current_extension_control_binding_digest
 
 NATIVE_EXACT_ACTION_FEATURE = "native-exact-action-v6"
 _BUDGET_MS = 4000
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
+UNPROVEN_LAUNCH = "unproven_launch"
+DIAGNOSTIC_UNAVAILABLE_REASONS = frozenset(
+    {
+        "no_command_identity",
+        "mutable_launcher",
+        "compound_command",
+        "guard_control",
+        "package_action",
+        "non_overridable",
+        UNPROVEN_LAUNCH,
+        "sensitive_path",
+        "broad_scope",
+        "destructive_command",
+        "git_helper_config",
+        "node_package_manifest_unproven",
+        "node_package_entrypoint_unproven",
+        "node_package_exports_unproven",
+        "node_package_native_addon_unproven",
+        "node_runtime_package_mutation_unproven",
+        "runner_code_closure_unproven",
+        "python_runtime_module_unproven",
+        "python_runtime_bootstrap_unproven",
+        "script_execution_binding_unavailable",
+    }
+)
 
 
 class NativeExactActionError(RuntimeError):
@@ -71,7 +93,7 @@ def _hook_review_query(
 
 def _validate_exact_action(payload: dict[str, Any]) -> None:
     reason = payload["once_only_reason"]
-    if reason is not None and reason not in _ONCE_ONLY_REASONS:
+    if reason is not None and reason not in DIAGNOSTIC_UNAVAILABLE_REASONS:
         raise NativeExactActionError(_OPERATION.invalid)
 
 
@@ -142,8 +164,6 @@ def resident_review_evidence(
 
 def native_review_evidence(**kwargs: Any) -> tuple[bool, str | None, str | None, str | None]:
     """The decoded evidence the daemon's pause reads from the edge."""
-
-    from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
 
     parts = review_evidence_parts(resident_review_evidence(**kwargs))
     assert parts is not None

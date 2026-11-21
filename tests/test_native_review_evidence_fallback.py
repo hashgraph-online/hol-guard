@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.hook_review import hook_native_exact_action as exact
+from codex_plugin_scanner.guard import native_hook_edge as exact
 
 
 def _evidence(**overrides: object) -> dict[str, object]:
@@ -22,8 +22,8 @@ def test_the_edge_evidence_is_read_as_sent() -> None:
 
 
 def test_the_resident_decides_the_policy_binding() -> None:
-    rejected = _evidence(policy_binding_valid=False, binding=None, token=None, once_only_reason=exact.UNPROVEN_LAUNCH)
-    assert exact.review_evidence_parts(rejected) == (False, None, None, exact.UNPROVEN_LAUNCH)
+    rejected = _evidence(policy_binding_valid=False, binding=None, token=None, once_only_reason="unproven_launch")
+    assert exact.review_evidence_parts(rejected) == (False, None, None, "unproven_launch")
 
 
 @pytest.mark.parametrize(
@@ -31,13 +31,12 @@ def test_the_resident_decides_the_policy_binding() -> None:
     [
         {"token": None, "once_only_reason": None},
         {"token": "t", "once_only_reason": "compound_command"},
-        {"token": None, "once_only_reason": "compound_command_allow"},
         {"token": "t", "once_only_reason": "allow"},
         {"token": 7, "once_only_reason": None},
     ],
 )
-def test_an_ambiguous_or_unknown_answer_stays_once_only(overrides: dict[str, object]) -> None:
-    assert exact.review_evidence_parts(_evidence(**overrides)) == (True, "b", None, exact.UNPROVEN_LAUNCH)
+def test_a_wire_answer_without_one_identity_is_rejected(overrides: dict[str, object]) -> None:
+    assert exact.review_evidence_parts(_evidence(**overrides)) is None
 
 
 @pytest.mark.parametrize("evidence", [None, {}, _evidence(policy_binding_valid="yes"), _evidence(binding=1)])
