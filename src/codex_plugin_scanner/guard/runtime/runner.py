@@ -950,10 +950,7 @@ def sync_receipts(
         }
     if persist_sync_summary or persist_connect_state:
         store.record_sync_summary(
-            summary,
-            now=now,
-            persist_summary=persist_sync_summary,
-            record_connect=persist_connect_state,
+            summary, now=now, persist_summary=persist_sync_summary, record_connect=persist_connect_state
         )
     return summary
 
