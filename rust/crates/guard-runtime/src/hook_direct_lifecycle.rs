@@ -269,6 +269,9 @@ pub(crate) fn claude_question_answer(
         QuestionSettlement::None => Ok(None),
         QuestionSettlement::Save(mut save) => {
             let control_ref = build_scoped_secret_ref(POLICY_INTEGRITY_CONTROL_REF, &resolved_home);
+            let lock_wait = remaining(deadline).min(QUESTION_LOCK_WAIT);
+            let lock = policy_generation_lock::acquire(&resolved_home, lock_wait)
+                .ok_or(HookDirectDefer::PermissionNotice)?;
             let current = match load_policy_integrity_control_state(&mut secrets, &resolved_home) {
                 Some(current) => current,
                 None => {
@@ -305,9 +308,6 @@ pub(crate) fn claude_question_answer(
                 "pending_generation": next_generation,
                 "version": 1,
             });
-            let lock_wait = remaining(deadline).min(QUESTION_LOCK_WAIT);
-            let lock = policy_generation_lock::acquire(&resolved_home, lock_wait)
-                .ok_or(HookDirectDefer::PermissionNotice)?;
             if secrets
                 .set_secret(
                     &control_ref,
@@ -321,7 +321,7 @@ pub(crate) fn claude_question_answer(
             }
             save.insert("session_id".to_owned(), session_id.clone().into());
             save.insert("current_generation".to_owned(), generation.into());
-            let save_request = authority_request(AuthorityRequestInput {
+            let save_request = match authority_request(AuthorityRequestInput {
                 store_path: &store_path,
                 guard_home: &resolved_home,
                 op: QUESTION_SAVE,
@@ -330,26 +330,59 @@ pub(crate) fn claude_question_answer(
                 key: Some((&key_b64, &material.key_id)),
                 payload: Some(Value::Object(save.clone())),
                 tilde_home: home_dir,
-            })?;
-            let saved =
-                hook_authority_state_op::evaluate_within(&save_request, remaining(deadline))
-                    .map_err(|_| HookDirectDefer::PermissionNotice)?;
+            }) {
+                Ok(request) => request,
+                Err(error) => {
+                    restore_control_state(&mut secrets, &control_ref, &current);
+                    drop(lock);
+                    return Err(error);
+                }
+            };
+            let saved = match hook_authority_state_op::evaluate_within(
+                &save_request,
+                remaining(deadline),
+            ) {
+                Ok(saved) => saved,
+                Err(_) => {
+                    restore_control_state(&mut secrets, &control_ref, &current);
+                    drop(lock);
+                    return Err(HookDirectDefer::PermissionNotice);
+                }
+            };
             if saved.get("saved") != Some(&Value::Bool(true)) {
+                restore_control_state(&mut secrets, &control_ref, &current);
                 drop(lock);
                 return Err(HookDirectDefer::PermissionNotice);
             }
-            let proposed = saved
-                .get("next_control_state")
-                .ok_or(HookDirectDefer::PermissionNotice)?;
-            let finalized = finalization_state(Some(&pending), proposed)
-                .ok_or(HookDirectDefer::PermissionNotice)?;
-            secrets
-                .set_secret(
-                    &control_ref,
-                    &serde_json::to_string(&finalized)
-                        .map_err(|_| HookDirectDefer::PermissionNotice)?,
-                )
-                .map_err(|_| HookDirectDefer::PermissionNotice)?;
+            let proposed = match saved.get("next_control_state") {
+                Some(proposed) => proposed,
+                None => {
+                    restore_control_state(&mut secrets, &control_ref, &current);
+                    drop(lock);
+                    return Err(HookDirectDefer::PermissionNotice);
+                }
+            };
+            let finalized = match finalization_state(Some(&pending), proposed) {
+                Some(finalized) => finalized,
+                None => {
+                    restore_control_state(&mut secrets, &control_ref, &current);
+                    drop(lock);
+                    return Err(HookDirectDefer::PermissionNotice);
+                }
+            };
+            let finalized_json = match serde_json::to_string(&finalized) {
+                Ok(finalized_json) => finalized_json,
+                Err(_) => {
+                    restore_control_state(&mut secrets, &control_ref, &current);
+                    drop(lock);
+                    return Err(HookDirectDefer::PermissionNotice);
+                }
+            };
+            if secrets.set_secret(&control_ref, &finalized_json).is_err() {
+                restore_control_state(&mut secrets, &control_ref, &current);
+                drop(lock);
+                return Err(HookDirectDefer::PermissionNotice);
+            }
             drop(lock);
             let consume_request = authority_request(AuthorityRequestInput {
                 store_path: &store_path,
@@ -370,6 +403,12 @@ pub(crate) fn claude_question_answer(
                 Err(HookDirectDefer::PermissionNotice)
             }
         }
+    }
+}
+
+fn restore_control_state(secrets: &mut EncryptedFileSecretStore, control_ref: &str, state: &Value) {
+    if let Ok(serialized) = serde_json::to_string(state) {
+        let _ = secrets.set_secret(control_ref, &serialized);
     }
 }
 

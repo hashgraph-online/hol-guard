@@ -159,6 +159,10 @@ pub(crate) struct HookDirectRequestV1 {
     /// the ordinary lane.
     #[serde(default)]
     pub(crate) emergency_safe_only: bool,
+    /// Ask only the Claude approval-question lifecycle path. An unsettled
+    /// question defers so the caller can run the ordinary daemon review once.
+    #[serde(default)]
+    pub(crate) lifecycle_only: bool,
     pub(crate) payload: Value,
 }
 
@@ -222,6 +226,25 @@ fn answer(
             policy_store,
         );
     };
+    if request.lifecycle_only {
+        if request.harness == CLAUDE_CODE && event == POST_TOOL_USE {
+            if let Some(answer) = lifecycle::claude_question_answer(
+                &request.guard_home,
+                request.home_dir.as_deref(),
+                &payload,
+                started
+                    + Duration::from_millis(
+                        request
+                            .deadline_budget_ms
+                            .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
+                            .clamp(1, MAX_DEADLINE_BUDGET_MS),
+                    ),
+            )? {
+                return Ok(json!({"harness_response": answer}));
+            }
+        }
+        return Err(HookDirectDefer::LifecycleUnsettled);
+    }
     if request.harness == CLAUDE_CODE && event == POST_TOOL_USE {
         if let Some(answer) = lifecycle::claude_question_answer(
             &request.guard_home,

@@ -16,6 +16,7 @@ fn emergency(lane: &Lane, harness: &str, command: &str) -> Value {
         workspace: None,
         deadline_budget_ms: None,
         emergency_safe_only: true,
+        lifecycle_only: false,
         payload: json!({
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",

@@ -333,6 +333,7 @@ class HookWorker(HookWorkerNativeMixin):
                 deadline=deadline,
             )
         question_tool_name = payload.get("tool_name")
+        lifecycle_settlement_attempted = False
         if (
             event_name.strip().lower().replace("_", "") == "posttooluse"
             and harness.strip().lower().replace("_", "-") == "claude-code"
@@ -351,9 +352,12 @@ class HookWorker(HookWorkerNativeMixin):
                 workspace=workspace,
                 home_dir=home_dir,
                 deadline=deadline,
+                lifecycle_only=True,
             )
             if isinstance(settled, Mapping) and settled.get("harness_response") == {}:
                 return {}
+            if isinstance(settled, Mapping) and settled.get("outcome") == "defer":
+                lifecycle_settlement_attempted = True
         if (
             event_name in {"PermissionRequest", "copilotPermissionRequest"}
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
@@ -391,9 +395,9 @@ class HookWorker(HookWorkerNativeMixin):
                 home_dir=home_dir,
                 workspace=workspace,
                 deadline=deadline,
-                claim_saved_approval=claim_saved_approval,
                 claimed_saved_allow_hash=claimed_saved_allow_hash,
                 claimed_approval_request_id=claimed_approval_request_id,
+                claim_saved_approval=claim_saved_approval and not lifecycle_settlement_attempted,
             )
 
     def _record_post_tool_activity(

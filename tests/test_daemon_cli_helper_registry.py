@@ -20,7 +20,9 @@ with tempfile.TemporaryDirectory() as directory:
         response = worker.review_http_payload(
             payload={
                 "hook_event_name": "PostToolUse",
-                "tool_name": "Read",
+                "tool_name": "AskUserQuestion",
+                "session_id": "fresh-interpreter-session",
+                "tool_input": {"questions": []},
                 "tool_response": {"answers": {}},
             },
             params={},

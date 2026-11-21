@@ -24,6 +24,7 @@ def native_hook_direct(
     home_dir: Path | None,
     deadline: float | None,
     emergency_safe_only: bool = False,
+    lifecycle_only: bool = False,
 ) -> dict[str, object] | None:
     """Ask Rust to answer or defer one direct hook request."""
 
@@ -42,6 +43,8 @@ def native_hook_direct(
         "emergency_safe_only": emergency_safe_only,
         "payload": dict(payload),
     }
+    if lifecycle_only:
+        request["lifecycle_only"] = True
     try:
         response = _resident_request(
             operation="hook_direct",

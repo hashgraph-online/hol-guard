@@ -43,6 +43,7 @@ pub(crate) enum HookDirectDefer {
     /// the profile does not continue, so the bridge pauses it as it would
     /// have without asking.
     EmergencySafeProfile,
+    LifecycleUnsettled,
 }
 
 impl HookDirectDefer {
@@ -75,6 +76,7 @@ impl HookDirectDefer {
             Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
             Self::StructuredMediation => "direct_hook_structured_mediation",
             Self::EmergencySafeProfile => "direct_hook_emergency_safe_profile",
+            Self::LifecycleUnsettled => "direct_hook_lifecycle_unsettled",
         }
     }
 }
