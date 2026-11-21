@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -29,6 +30,7 @@ class _Identity:
 
 class _Status:
     identity = _Identity()
+    capabilities: SimpleNamespace | None = None
 
 
 class _Store:
@@ -155,6 +157,37 @@ def test_a_reply_bound_to_another_request_is_never_read_as_queued(
 
     with pytest.raises(ResidentEvidenceUnavailableError):
         writer.submit_native_decision_receipt({"receipt": "shaped"})
+
+
+def test_post_tool_submission_leaves_result_interpretation_to_the_resident(
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer = _answer({"queued": True})
+
+    def respond(*, required_feature: str, **kwargs: Any) -> dict[str, Any]:
+        assert required_feature == "hook-evidence-post-tool-v1"
+        return answer(**kwargs)
+
+    _install(monkeypatch, respond)
+    payload = {"tool_name": "Bash", "exit_code": 3}
+    assert writer.submit_post_tool_activity(harness="claude-code", event="PostToolUseFailure", payload=payload)
+    (request,) = answer.sent
+    assert request["action"] == "submit_post_tool_activity"
+    assert request["event"] == "PostToolUseFailure"
+    assert request["payload"] == payload
+    assert "succeeded" not in request
+
+
+def test_post_tool_submission_reports_a_missing_runtime_feature(
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    status = _Status()
+    status.capabilities = SimpleNamespace(features=("hook-evidence-writer-v1",))
+    monkeypatch.setattr(resident_evidence_client, "native_runtime_status", lambda: status)
+    _install(monkeypatch, lambda **_kwargs: None)
+
+    with pytest.raises(ResidentEvidenceUnavailableError, match="post_tool_feature_missing"):
+        writer.submit_post_tool_activity(harness="pi", event="PostToolUse", payload={})
 
 
 def test_a_resident_error_raises_the_store_exception_its_code_names(

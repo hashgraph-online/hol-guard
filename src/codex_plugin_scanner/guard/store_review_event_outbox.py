@@ -167,6 +167,40 @@ class StoreReviewEventOutboxMixin:
             )
         )
 
+    def receipt_redaction_bookkeeping(
+        self,
+        action: str,
+        *,
+        now: str,
+        level: str | None = None,
+        local_level: str | None = None,
+    ) -> int | None:
+        """Run one receipt-redaction bookkeeping action in a native write transaction."""
+        result = self._native_store_call(
+            "receipt_redaction_bookkeeping",
+            {"action": action, "now": now, "level": level, "local_level": local_level},
+        )
+        return int(result) if isinstance(result, int) else None
+
+    def record_policy_bundle_activation(
+        self,
+        policy_bundle: Mapping[str, object],
+        *,
+        now: str,
+        local_level: str,
+        rollback_reason: str | None = None,
+    ) -> None:
+        """Store the activated bundle's last-good copy, rollback event and redaction level in one write."""
+        self._native_store_call(
+            "record_policy_bundle_activation",
+            {
+                "bundle": dict(policy_bundle),
+                "now": now,
+                "local_level": local_level,
+                "rollback_reason": rollback_reason,
+            },
+        )
+
     def list_pending_review_request_ids(
         self,
         *,

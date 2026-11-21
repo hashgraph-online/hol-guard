@@ -846,45 +846,16 @@ def sync_receipts(
                     persist_activation_rejection(store, activation_last_error, now)
                 else:
                     remote_policies_stored = len(remote_decisions)
-                    if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                        canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
-                        if isinstance(canonical_last_good, dict) and canonical_last_good.get(
-                            "bundleHash"
-                        ) != effective_policy_bundle.get("bundleHash"):
-                            store.set_sync_payload(
-                                "policy_bundle_canonical_previous_good",
-                                canonical_last_good,
-                                now,
-                            )
-                        store.set_sync_payload(
-                            "policy_bundle_canonical_last_good",
-                            effective_policy_bundle,
-                            now,
-                        )
-                    else:
-                        store.set_sync_payload(
-                            "policy_bundle_legacy_last_good",
-                            effective_policy_bundle,
-                            now,
-                        )
-                    if validated_policy_bundle is None and policy_bundle_field_provided:
-                        store.add_event(
-                            "policy_bundle/rollback",
-                            {
-                                "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
-                                "restored": "policy_bundle_last_good",
-                            },
-                            now,
-                        )
-                    cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
-                    if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                        _persist_cloud_receipt_redaction_level(
-                            store,
-                            level=cloud_redaction_level,
-                            synced_at=now,
-                        )
-                    else:
-                        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+                    store.record_policy_bundle_activation(
+                        effective_policy_bundle,
+                        now=now,
+                        local_level=local_receipt_redaction_level(store.guard_home),
+                        rollback_reason=(
+                            str(activation_last_error.get("reason", "invalid_policy_bundle"))
+                            if validated_policy_bundle is None and policy_bundle_field_provided
+                            else None
+                        ),
+                    )
             except PolicyBundleNativeError as error:
                 cloud_exception_items = []
                 activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
@@ -2619,125 +2590,40 @@ def _receipt_sync_context(
     return context
 
 
-_RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
-    "full": 0,
-    "partial": 1,
-    "none": 2,
-}
 _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
 _CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER = "cloud_review_privacy_projection_v2"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER = "cloud_receipt_command_detail_backfill_v2"
 
 
-def _receipt_redaction_level_rank(level: str | None) -> int:
-    if level is None:
-        return _RECEIPT_REDACTION_LEVEL_RANK["full"]
-    return _RECEIPT_REDACTION_LEVEL_RANK.get(level, _RECEIPT_REDACTION_LEVEL_RANK["full"])
-
-
-def _stored_cloud_receipt_redaction_level(store: GuardStore) -> str | None:
-    payload = store.get_sync_payload("cloud_receipt_redaction_level")
-    if not isinstance(payload, dict):
-        return None
-    level = payload.get("level")
-    return level if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS else None
-
-
 def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, synced_at: str) -> None:
-    previous_level = _stored_cloud_receipt_redaction_level(store) or local_receipt_redaction_level(store.guard_home)
-    if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank(previous_level):
-        store.set_sync_payload(
-            "receipt_sync_cursor",
-            {
-                "last_rowid": 0,
-                "synced_at": synced_at,
-                "reason": "cloud_receipt_redaction_level_relaxed",
-                "receipt_redaction_level": level,
-            },
-            synced_at,
-        )
-    store.set_sync_payload(
-        "cloud_receipt_redaction_level",
-        {"level": level, "updated_at": synced_at},
-        synced_at,
+    store.receipt_redaction_bookkeeping(
+        "persist",
+        now=synced_at,
+        level=level,
+        local_level=local_receipt_redaction_level(store.guard_home),
     )
-    if level != previous_level:
-        _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
-    if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank("full"):
-        store.set_sync_payload(
-            _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
-            {"level": level, "updated_at": synced_at},
-            synced_at,
-        )
 
 
 def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: str) -> None:
     """Reset relaxation bookkeeping when no signed override is effective."""
 
-    previous_level = _stored_cloud_receipt_redaction_level(store)
-    local_level = local_receipt_redaction_level(store.guard_home)
-    store.set_sync_payload(
-        "cloud_receipt_redaction_level",
-        {"level": local_level, "updated_at": synced_at},
-        synced_at,
-    )
-    if previous_level is not None and previous_level != local_level:
-        _requeue_cloud_review_privacy_projection(store, level=local_level, changed_at=synced_at)
-    store.delete_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
-    store.delete_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
-
-
-def _ensure_cloud_review_privacy_projection(
-    store: GuardStore,
-    *,
-    level: str,
-    synced_at: str,
-) -> None:
-    marker = store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER)
-    if isinstance(marker, dict) and marker.get("level") == level:
-        return
-    _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
-
-
-def _requeue_cloud_review_privacy_projection(
-    store: GuardStore,
-    *,
-    level: str,
-    changed_at: str,
-) -> int:
-    return store.requeue_pending_review_events_with_marker(
-        changed_at=changed_at,
-        marker_key=_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER,
-        marker_payload={"level": level, "updated_at": changed_at},
+    store.receipt_redaction_bookkeeping(
+        "reset",
+        now=synced_at,
+        local_level=local_receipt_redaction_level(store.guard_home),
     )
 
 
-def _ensure_relaxed_receipt_redaction_resync(
-    store: GuardStore,
-    *,
-    level: str,
-    synced_at: str,
-) -> None:
-    if _receipt_redaction_level_rank(level) <= _receipt_redaction_level_rank("full"):
-        return
-    marker = store.get_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
-    if isinstance(marker, dict) and marker.get("level") == level:
-        return
-    store.set_sync_payload(
-        "receipt_sync_cursor",
-        {
-            "last_rowid": 0,
-            "synced_at": synced_at,
-            "reason": "cloud_receipt_redaction_level_relaxed_existing",
-            "receipt_redaction_level": level,
-        },
-        synced_at,
-    )
-    store.set_sync_payload(
-        _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
-        {"level": level, "updated_at": synced_at},
-        synced_at,
-    )
+def _ensure_cloud_review_privacy_projection(store: GuardStore, *, level: str, synced_at: str) -> None:
+    store.receipt_redaction_bookkeeping("ensure_projection", now=synced_at, level=level)
+
+
+def _requeue_cloud_review_privacy_projection(store: GuardStore, *, level: str, changed_at: str) -> int:
+    return store.receipt_redaction_bookkeeping("requeue_projection", now=changed_at, level=level) or 0
+
+
+def _ensure_relaxed_receipt_redaction_resync(store: GuardStore, *, level: str, synced_at: str) -> None:
+    store.receipt_redaction_bookkeeping("ensure_resync", now=synced_at, level=level)
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:

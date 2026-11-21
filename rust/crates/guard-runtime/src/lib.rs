@@ -651,6 +651,8 @@ mod guard_store_native_review_consume_tests;
 mod guard_store_native_review_queue;
 mod guard_store_observed_mcp;
 mod guard_store_op;
+mod guard_store_op_dispatch;
+mod guard_store_op_kind;
 mod guard_store_outbox_append;
 mod guard_store_outbox_binding;
 mod guard_store_outbox_decode;
@@ -677,6 +679,7 @@ mod guard_store_receipt_decision;
 mod guard_store_receipt_envelope;
 mod guard_store_receipt_events;
 mod guard_store_receipt_reads;
+mod guard_store_receipt_redaction;
 mod guard_store_receipt_rollups;
 mod guard_store_receipt_writes;
 #[cfg(test)]

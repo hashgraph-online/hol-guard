@@ -16,15 +16,19 @@ const OAUTH_CREDENTIALS_KEY: &str = "oauth_local_credentials";
 
 /// `get_sync_payload`: the stored object or array, else `null`.
 pub(crate) fn get(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
+    Ok(read_payload(connection, args.str("state_key")?)?.unwrap_or(Value::Null))
+}
+
+/// The stored object or array under `state_key`, if any.
+pub(crate) fn read_payload(connection: &Connection, state_key: &str) -> StoreResult<Option<Value>> {
     let row = query_one(
         connection,
         "select payload_json from sync_state where state_key = ?",
-        &[Value::from(args.str("state_key")?)],
+        &[Value::from(state_key)],
     )?;
     Ok(row
         .and_then(|row| serde_json::from_str::<Value>(text(&row, "payload_json")).ok())
-        .filter(|payload| payload.is_object() || payload.is_array())
-        .unwrap_or(Value::Null))
+        .filter(|payload| payload.is_object() || payload.is_array()))
 }
 
 /// `set_sync_payload` for every key but the OAuth credential rows.
@@ -39,6 +43,18 @@ pub(crate) fn set(connection: &Connection, args: &Args<'_>) -> StoreResult<Value
         .map_or_else(|| value_error("invalid_payload"), Ok)?;
     let encoded =
         serde_json::to_string(payload).map_or_else(|_| value_error("invalid_payload"), Ok)?;
+    write_encoded(connection, state_key, &encoded, args.str("now")?)?;
+    Ok(Value::Null)
+}
+
+/// Upsert already-encoded payload text under `state_key`. Callers keep the
+/// OAuth credential rows out, as `set` does.
+pub(crate) fn write_encoded(
+    connection: &Connection,
+    state_key: &str,
+    encoded: &str,
+    now: &str,
+) -> StoreResult<()> {
     exec(
         connection,
         "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) \
@@ -47,10 +63,10 @@ pub(crate) fn set(connection: &Connection, args: &Args<'_>) -> StoreResult<Value
         &[
             Value::from(state_key),
             Value::from(encoded),
-            Value::from(args.str("now")?),
+            Value::from(now),
         ],
     )?;
-    Ok(Value::Null)
+    Ok(())
 }
 
 fn is_credential_key(state_key: &str) -> bool {
