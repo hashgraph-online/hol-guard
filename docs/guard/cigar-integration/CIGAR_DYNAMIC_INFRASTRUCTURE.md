@@ -1,5 +1,7 @@
 # CIGAR dynamic infrastructure readiness
 
+> Historical record. This page describes the downloaded Python engine, which Guard no longer uses.
+
 The user clarified on 2026-10-28 that 0.14.1 is the newest available CIGAR build and that 80–90% reusable infrastructure, without hardcoded SDK releases in application logic, meets the current target. The engineering estimate is approximately 85% for this infrastructure scope. This is a qualitative implementation estimate, not a measured production-readiness or platform-certification score. The full P0–P10 release roadmap remains available for later hardening and qualification.
 
 ## How a compatible build is added
@@ -37,4 +39,4 @@ The remaining work includes production trust/feed provisioning, installed/frozen
 
 The earlier masked configuration-read SDK failure remains recorded and its exact cause is unconfirmed. The new typed Changed-read retry has deterministic regression coverage and the subsequent six-workflow run passes; this is not proof that all earlier workspace/broker/transport load observations are resolved. These limitations remain part of release hardening rather than a reason to invent a newer build or reintroduce version-specific application pins.
 
-Use [the release-maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md) for the next compatible build. The current core target is met; the extended roadmap is not claimed complete.
+Guard now runs only the CIGAR engine compiled into it, so a new CIGAR version ships in a Guard release. The downloaded-engine catalog and its release-maintenance runbook described on this page have been removed. The current core target is met; the extended roadmap is not claimed complete.

@@ -11,7 +11,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::policy_store_persistence::{is_lower_hex, persist_private_bytes, read_private_json};
-use guard_cigar_release::SealedInstallationReceipt;
 #[path = "context_assistance_lifecycle_files.rs"]
 mod lifecycle;
 #[path = "context_assistance_picked_folders.rs"]
@@ -41,8 +40,6 @@ pub(crate) struct Installation {
     pub(crate) selection: RuntimeSelection,
     pub(crate) approval: BundleApproval,
     interpreter: InterpreterFacts,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    receipt: Option<SealedInstallationReceipt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     managed_slot: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

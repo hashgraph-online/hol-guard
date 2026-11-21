@@ -18,7 +18,6 @@ guard-swarm = { path = "../guard-swarm" }
 guard-cigar-release = { path = "../guard-cigar-release" }
 guard-cigar-artifacts = { path = "../guard-cigar-artifacts" }
 guard-cigar-native = { path = "../guard-cigar-native" }
-guard-cigar-install = { path = "../guard-cigar-install" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-yanez-pulse = { path = "../guard-yanez-pulse" }

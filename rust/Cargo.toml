@@ -7,7 +7,6 @@ members = [
     "crates/guard-contained-process",
     "crates/guard-context-assistance",
     "crates/guard-cigar-release",
-    "crates/guard-cigar-install",
     "crates/guard-cigar-artifacts",
     "crates/guard-cigar-native",
     "crates/guard-command",

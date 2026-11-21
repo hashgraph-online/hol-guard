@@ -46,7 +46,6 @@ pub(super) fn installation(home: &Path) -> Result<Installation, String> {
         selection: guard_context_assistance::builtin_selection(program, work_dir(home)?),
         approval: guard_context_assistance::builtin_approval(),
         interpreter: guard_context_assistance::builtin_interpreter(),
-        receipt: None,
         managed_slot: None,
         verification_job_id: None,
     })
@@ -130,7 +129,6 @@ mod tests {
             .selection
             .work_dir
             .ends_with("context-assistance/work/builtin"));
-        assert!(record.selection.python_bundle.is_none());
         assert!(installation(Path::new("relative")).is_err());
         assert_eq!(choice()["builtin"], true);
         assert!(matches!(origin(), SelectionOrigin::Builtin { .. }));

@@ -146,7 +146,3 @@ fn roundtrip(
     *opened = None;
     Ok(())
 }
-
-#[cfg(all(test, unix))]
-#[path = "broker_persistence_doctor_tests.rs"]
-mod tests;

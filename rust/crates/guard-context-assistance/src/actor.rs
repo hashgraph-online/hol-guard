@@ -356,7 +356,3 @@ impl<S: Send + 'static> Drop for RuntimeActor<S> {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "actor_tests.rs"]
-mod tests;

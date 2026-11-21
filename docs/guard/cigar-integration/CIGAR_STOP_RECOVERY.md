@@ -1,5 +1,7 @@
 # CIGAR recovery preserves a later Stop and current settings
 
+> Historical record. Parts of this page describe the downloaded Python engine, which Guard no longer uses.
+
 Status: locally implemented and verified 2026-10-28; partial P6/P7/P8/P9. [Evidence](evidence/receipts.json) binds current sources and checks. The full P0–P10 goal remains unfinished.
 
 ## Current disabled intent wins
@@ -30,7 +32,7 @@ The CIGAR-only home reader now takes at most three fresh descriptor-verified sna
 
 Recovery details now distinguish the renewed recovery deadline from the original preparation deadline and explicitly say that recovery keeps CIGAR off. Installed cards show reported core identity and distinguish selected/running state. SDK/Python cards have accessible version/build names, with unavailable-action explanations linked to their buttons. Keyboard preference edits preserve focus and perform no native action until the explicit save.
 
-[The release maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md) describes compatible catalog/lock/qualification changes, same-version rebuilds, private Python patches, adapter-change boundaries and the authorized qualification/signing/publishing process. The new read-only catalog CI workflow runs native contracts and maintainer tests. A deterministic fixture drafts three synthetic builds, including a same-version rebuild, through the unchanged generator/profile with distinct source/manifest/wheel/tree identities. They remain upstream-only and unqualified. Hosted CI and a real three-release installed/switch exercise are not claimed.
+The release maintenance runbook described compatible catalog/lock/qualification changes, same-version rebuilds, private Python patches, adapter-change boundaries and the authorized qualification/signing/publishing process. A read-only catalog CI workflow ran native contracts and maintainer tests. The runbook and that workflow were later removed along with the downloaded Python engine. A deterministic fixture drafts three synthetic builds, including a same-version rebuild, through the unchanged generator/profile with distinct source/manifest/wheel/tree identities. They remain upstream-only and unqualified. Hosted CI and a real three-release installed/switch exercise are not claimed.
 
 ## Evidence and practical limits
 

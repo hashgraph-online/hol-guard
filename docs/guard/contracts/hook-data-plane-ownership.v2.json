@@ -630,16 +630,6 @@
    "target": "same"
   },
   {
-   "id": "optional_cigar_sdk_transport",
-   "class": "python_transport",
-   "paths": [
-    "integrations/cigar/bridge.py",
-    "integrations/cigar/broker_client.py"
-   ],
-   "current": "isolated optional public-SDK dispatch and serialization; native Rust owns opt-in, runtime verification, scopes, source admission and supervision; unreachable from synchronous hooks",
-   "target": "same"
-  },
-  {
    "id": "native_workspace",
    "class": "rust_semantic",
    "paths": [
@@ -692,7 +682,6 @@
     "rust/crates/guard-hook-core/**",
     "rust/crates/guard-secure-fs/**",
     "rust/crates/guard-cigar-artifacts/**",
-    "rust/crates/guard-cigar-install/**",
     "rust/crates/guard-seatbelt/**",
     "rust/crates/guard-contained-process/**",
     "rust/crates/guard-runtime-windows-process/**",
@@ -704,7 +693,6 @@
   }
  ],
  "protected_change_globs": [
-  "integrations/cigar/bridge.py",
   "rust/**",
   "rust/crates/*/src/approval*.rs",
   "rust/crates/guard-runtime/src/resident_protocol.rs",
