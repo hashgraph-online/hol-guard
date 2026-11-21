@@ -347,6 +347,8 @@ pub fn action_type(
         "file_write"
     } else if SHELL_TOOL_NAMES.contains(&tool) || command.is_some() {
         "shell_command"
+    } else if SEARCH_TOOL_NAMES.contains(&tool) {
+        "file_read"
     } else {
         "config_change"
     }
