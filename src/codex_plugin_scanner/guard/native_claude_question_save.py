@@ -110,7 +110,7 @@ def save_claude_guard_question(
         return False
     state = result.get("next_control_state")
     try:
-        finalized = isinstance(state, dict) and store._finalize_policy_integrity_control_state(state)
+        finalized = isinstance(state, dict) and store._finalize_policy_integrity_control_state(state, deadline=expires)
     except (OSError, RuntimeError, ValueError):
         return False
     if not finalized:

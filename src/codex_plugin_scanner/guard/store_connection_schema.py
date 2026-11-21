@@ -579,7 +579,9 @@ class StoreConnectionSchemaMixin:
             yield
 
     @contextmanager
-    def hold_policy_integrity_generation_lock(self) -> Iterator[None]:
+    def hold_policy_integrity_generation_lock(
+        self, *, timeout_seconds: float = _POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS
+    ) -> Iterator[None]:
         """Serialize one policy integrity generation advance against the rest.
 
         The advance reads the trusted control state, marks the next generation
@@ -588,13 +590,9 @@ class StoreConnectionSchemaMixin:
         generation and stamp its pending record over a finalized one, leaving
         saved decisions signed above the generation the store trusts.
 
-        Take it before opening the store connection. Every holder acquires it in
-        that order, so it never waits on a connection that is waiting on it. An
-        open connection scope shares a connection without sharing a transaction,
-        so it serializes nothing here; a route that advanced the generation
-        under one would race the routes that take this lock, and taking the lock
-        under it would invert the order every other holder uses. Both are
-        refused rather than silently allowed.
+        Acquire this lock before opening a store connection. A connection
+        scope shares a connection without a transaction. Advancing under that
+        scope would race the generation writer and invert the lock order.
         """
 
         if store_connection_scope.owns_scope(cast("GuardStore", self)):
@@ -614,7 +612,7 @@ class StoreConnectionSchemaMixin:
             return
         with self._hold_advisory_file_lock(
             path=lock_path,
-            timeout_seconds=_POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
             poll_seconds=_POLICY_INTEGRITY_GENERATION_LOCK_POLL_SECONDS,
             timeout_message="Timed out waiting for the Guard policy integrity generation lock.",
         ):
