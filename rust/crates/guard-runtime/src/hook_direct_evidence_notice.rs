@@ -153,6 +153,30 @@ fn notify(guard_home: &str, source: &str, notice: Notice) {
     if disabled_by_env() {
         return;
     }
+    notify_with(
+        guard_home,
+        source,
+        notice,
+        crate::desktop_notification::send_approval,
+    );
+}
+
+#[cfg(test)]
+pub(crate) fn notify_stored_for_test(
+    guard_home: &str,
+    source: &str,
+    request_id: String,
+    send: impl FnOnce(&str, &str, &str, &str) -> bool,
+) {
+    notify_with(guard_home, source, Notice::StoredApproval(request_id), send);
+}
+
+fn notify_with(
+    guard_home: &str,
+    source: &str,
+    notice: Notice,
+    send: impl FnOnce(&str, &str, &str, &str) -> bool,
+) {
     let shown = match notice {
         Notice::Connector {
             request_id,
@@ -177,7 +201,7 @@ fn notify(guard_home: &str, source: &str, notice: Notice) {
             shown
         }
     };
-    show(guard_home, source, shown);
+    show(guard_home, source, shown, send);
 }
 
 fn pending_approval_row(row: &Value, request_id: &str) -> Option<Shown> {
@@ -207,7 +231,12 @@ fn connector_row(
     })
 }
 
-fn show(guard_home: &str, source: &str, shown: Shown) {
+fn show(
+    guard_home: &str,
+    source: &str,
+    shown: Shown,
+    send: impl FnOnce(&str, &str, &str, &str) -> bool,
+) {
     let Shown {
         request_id,
         harness,
@@ -250,8 +279,7 @@ fn show(guard_home: &str, source: &str, shown: Shown) {
         .unwrap_or(approval_url);
     let title = if connector { TITLE } else { APPROVAL_TITLE };
     let message = message(&harness, &subject, connector);
-    let shown =
-        crate::desktop_notification::send_approval(&request_id, title, &message, &approval_url);
+    let shown = send(&request_id, title, &message, &approval_url);
     settle(&request_id, shown);
     if shown {
         let notified_at = Timestamp::now_utc().isoformat();

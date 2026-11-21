@@ -140,6 +140,14 @@ fn take(slot: &Mutex<Option<Vec<Value>>>) -> Vec<Value> {
 /// stayed closed, or a write that failed. Records that are not plain are
 /// dropped.
 pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
+    write_with_notices(guard_home, records, notice::schedule)
+}
+
+fn write_with_notices(
+    guard_home: &str,
+    records: Vec<Value>,
+    schedule: impl FnOnce(&str, Vec<String>),
+) -> Vec<Value> {
     let composed: Vec<Composed> = records
         .into_iter()
         .filter_map(|record| {
@@ -154,9 +162,10 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
     if !home.join(STORE_FILE_NAME).is_file() {
         return records_of(composed);
     }
-    let _writer = WRITER.lock().unwrap_or_else(PoisonError::into_inner);
     let timeout_ms = sqlite_timeout_ms();
+    let mut notices = Vec::new();
     let unwritten = {
+        let _writer = WRITER.lock().unwrap_or_else(PoisonError::into_inner);
         let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
             return records_of(composed);
         };
@@ -173,12 +182,15 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
                 if let Some(row) = row {
                     store(guard_home, busy_timeout_ms, QUEUE_METHOD, row);
                 }
-                notice::schedule(guard_home, &record);
+                notices.extend(notice::request_ids(&record).map(str::to_owned));
                 None
             })
             .collect()
     };
     repair_store_permissions(home);
+    if !notices.is_empty() {
+        schedule(guard_home, notices);
+    }
     unwritten
 }
 
